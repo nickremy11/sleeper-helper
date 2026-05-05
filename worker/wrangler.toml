@@ -13,9 +13,9 @@ routes = [
 ]
 
 # ── KV Namespace ──────────────────────────────────────────────────────────────
-# 1. Run: wrangler kv namespace create SLEEPER_KV
+# 1. Run: wrangler kv:namespace create SLEEPER_KV
 #    Paste the returned id below.
-# 2. Run: wrangler kv namespace create SLEEPER_KV --preview
+# 2. Run: wrangler kv:namespace create SLEEPER_KV --preview
 #    Paste the returned id into preview_id.
 [[kv_namespaces]]
 binding    = "SLEEPER_KV"

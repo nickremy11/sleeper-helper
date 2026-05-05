@@ -146,10 +146,6 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .trade-player   { padding: 2px 0; color: var(--text); }
 .trade-pick     { padding: 2px 0; color: var(--info); }
 
-/* Settings grid */
-.settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
-.settings-grid .row { font-size: 12px; }
-
 /* Tab header row (title + refresh button) */
 .tab-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .tab-header h2 { font-size: 14px; font-weight: 500; color: var(--muted); }
@@ -181,7 +177,6 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
     <button class="tab"        id="tab-lineups" onclick="sw('lineups')">Lineup check</button>
     <button class="tab"        id="tab-avail"   onclick="sw('avail')">Availability</button>
     <button class="tab"        id="tab-drafts"  onclick="sw('drafts')">Draft queue</button>
-    <button class="tab"        id="tab-leagues" onclick="sw('leagues')">League settings</button>
   </div>
 
   <div class="content" id="content">
@@ -196,21 +191,10 @@ const API_BASE    = IS_LOCAL ? 'https://api.sleeper.app/v1' : '/api/sleeper';
 const PLAYERS_URL = IS_LOCAL ? 'https://api.sleeper.app/v1/players/nfl' : '/api/players';
 const SEASON      = '2025';
 
-const SETTINGS_MAP = [
-  { key: 'scoring_settings.rec',        label: 'Rec pts',        fmt: v => v == null ? '—' : v === 1 ? 'PPR' : v === 0.5 ? 'Half PPR' : v === 0 ? 'Standard' : String(v) },
-  { key: 'settings.num_teams',          label: 'Teams',          fmt: v => v ?? '—' },
-  { key: 'settings.draft_rounds',       label: 'Draft rounds',   fmt: v => v ?? '—' },
-  { key: 'settings.taxi_slots',         label: 'Taxi spots',     fmt: v => v ?? '0' },
-  { key: 'settings.reserve_slots',      label: 'IR slots',       fmt: v => v ?? '0' },
-  { key: 'settings.playoff_teams',      label: 'Playoff teams',  fmt: v => v ?? '—' },
-  { key: 'settings.playoff_week_start', label: 'Playoffs start', fmt: v => v ? 'Wk ' + v : '—' },
-  { key: 'settings.waiver_type',        label: 'Waiver type',    fmt: v => ({ 0:'Rolling', 1:'FAAB', 2:'Sleeper score' })[v] ?? '—' },
-  { key: 'settings.trade_deadline',     label: 'Trade deadline', fmt: v => v ? 'Wk ' + v : 'None' },
-  { key: 'settings.max_keepers',        label: 'Max keepers',    fmt: v => v === 0 ? 'None' : (v ?? '—') },
-];
+
 
 // ── State ─────────────────────────────────────────────────────────────────────
-const S = { userId: null, leagues: [], players: {}, tab: 'trades' };
+const S = { userId: null, leagues: [], leagueDetails: {}, players: {}, tab: 'trades' };
 
 // ── Fetch helpers ─────────────────────────────────────────────────────────────
 async function api(path) {
@@ -223,9 +207,6 @@ async function loadPlayers() {
   const r = await fetch(PLAYERS_URL);
   if (!r.ok) throw new Error('Could not load player data');
   S.players = await r.json();
-}
-function getVal(obj, dotPath) {
-  return dotPath.split('.').reduce((o, k) => o?.[k], obj);
 }
 function currentWeek() {
   const ms = Date.now() - new Date('2025-09-04').getTime();
@@ -259,6 +240,10 @@ async function loadUser() {
     S.userId  = user.user_id;
     const leagues = await api('/user/' + S.userId + '/leagues/nfl/' + SEASON);
     S.leagues = leagues || [];
+    // Fetch full league objects (scoring settings etc) in background — used by trades tab
+    Promise.all(S.leagues.map(lg =>
+      api('/league/' + lg.league_id).then(d => { S.leagueDetails[lg.league_id] = d; }).catch(() => {})
+    ));
     st.textContent = S.leagues.length + ' leagues loaded for ' + esc(user.display_name || u);
     st.className   = 'setup-status ok';
     render(S.tab);
@@ -279,7 +264,7 @@ function sw(tab) {
 function render(tab) {
   if (!S.userId) { setC('<div class="empty">enter your username to get started</div>'); return; }
   ({ trades: renderTrades, player: renderPlayerSearch, lineups: renderLineupCheck,
-     avail: renderAvailability, drafts: renderDraftQueue, leagues: renderLeagueSettings })[tab]?.();
+     avail: renderAvailability, drafts: renderDraftQueue })[tab]?.();
 }
 function setC(html) { document.getElementById('content').innerHTML = html; }
 
@@ -312,13 +297,19 @@ async function renderTrades() {
     }));
 
     setC(all.map(t => {
-      const rMap  = rMaps[t._lgId] || {};
-      const sides = tradeSides(t, rMap);
+      const rMap   = rMaps[t._lgId] || {};
+      const sides  = tradeSides(t, rMap);
+      const detail = S.leagueDetails[t._lgId];
+      const flags  = detail ? leagueFlags(detail) : [];
+      const flagHtml = flags.length
+        ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;">${flags.map(f=>`<span class="badge badge-gray" style="font-size:10px;">${esc(f)}</span>`).join('')}</div>`
+        : '';
       return `<div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
           <span class="card-title">${esc(t._lgName)}</span>
           <span class="badge badge-yellow">pending · ${t.created ? timeAgo(t.created) : ''}</span>
         </div>
+        ${flagHtml}
         <div class="trade-sides">
           <div><div class="trade-side-lbl">${esc(sides[0].name)}</div>${sides[0].items.map(i=>`<div class="${i.cls}">${esc(i.txt)}</div>`).join('')}</div>
           <div class="trade-arrow">⇄</div>
@@ -576,30 +567,50 @@ function picksUntilMyTurn(info, picks, userId) {
   return -1;
 }
 
-// ── 6. League settings ────────────────────────────────────────────────────────
-async function renderLeagueSettings() {
-  setC(loading('loading league settings'));
-  try {
-    const full = await Promise.all(S.leagues.map(lg => api('/league/' + lg.league_id).catch(() => null)));
-    const html = full.filter(Boolean).map(lg => {
-      const rows = SETTINGS_MAP.map(s => {
-        const v = getVal(lg, s.key);
-        return `<div class="row"><span class="row-label">${esc(s.label)}</span><span class="row-val">${esc(s.fmt(v))}</span></div>`;
-      }).join('');
-      const rp = (lg.roster_positions || []).filter(p => p !== 'BN').join(' · ') || '—';
-      return `<div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
-          <span class="card-title">${esc(lg.name)}</span>
-          <span class="badge badge-gray">${esc(lg.status || '—')}</span>
-        </div>
-        <div class="sect">starters</div>
-        <div style="font-size:12px;color:var(--muted);font-family:var(--mono);line-height:1.9;margin-bottom:4px;">${esc(rp)}</div>
-        <div class="sect" style="margin-top:10px;">settings</div>
-        <div class="settings-grid">${rows}</div>
-      </div>`;
-    }).join('');
-    setC(html || '<div class="empty">no league data found</div>');
-  } catch(e) { setC(errHtml(e)); }
+// ── leagueFlags — compact notifiers shown on trade cards ─────────────────────
+function leagueFlags(lg) {
+  const sc  = lg.scoring_settings || {};
+  const st  = lg.settings          || {};
+  const rp  = lg.roster_positions  || [];
+  const flags = [];
+
+  // Team count × starter count  e.g. "12x9"
+  const numTeams = st.num_teams ?? 0;
+  const starters = rp.filter(p => p !== 'BN' && p !== 'IR' && p !== 'TAXI').length;
+  if (numTeams) flags.push(numTeams + 'x' + starters);
+
+  // PPR — only flag if NOT full PPR (full PPR is default/standard)
+  const rec = sc.rec ?? 1;
+  if (rec === 0)   flags.push('Std');
+  else if (rec < 1) flags.push(rec + 'PPR');
+  // rec === 1 → full PPR, no flag needed
+
+  // WR reception premium (bonus on top of base rec)
+  const wrBonus = sc.bonus_rec_wr ?? 0;
+  if (wrBonus > 0) flags.push('+' + wrBonus + 'WRP');
+
+  // TE reception premium
+  const teBonus = sc.bonus_rec_te ?? 0;
+  if (teBonus > 0) flags.push('+' + teBonus + 'TEP');
+
+  // Points per carry/rush attempt
+  const ppc = sc.rush_att ?? sc.rush_attempt ?? 0;
+  if (ppc > 0) flags.push('PPC');
+
+  // Passing TDs — flag only if 4pt (5 and 6 are standard range, no flag)
+  const passTd = sc.pass_td ?? 4; // Sleeper default is 4 but many leagues set 6
+  if (passTd === 4) flags.push('4ptTD');
+
+  // Return yards (KR or PR scoring)
+  const hasRet = (sc.kr_yd ?? 0) > 0 || (sc.pr_yd ?? 0) > 0
+              || (sc.kr_td ?? 0) > 0 || (sc.pr_td ?? 0) > 0;
+  if (hasRet) flags.push('Ret');
+
+  // 2-TE start
+  const teStarts = rp.filter(p => p === 'TE').length;
+  if (teStarts >= 2) flags.push('2xTE');
+
+  return flags;
 }
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
