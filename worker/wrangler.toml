@@ -1,0 +1,26 @@
+# Sleeper Helper — Worker config
+# Docs: https://developers.cloudflare.com/workers/wrangler/configuration/
+
+name               = "sleeper-helper-worker"
+main               = "src/index.js"
+compatibility_date = "2024-09-23"
+workers_dev        = false
+
+# Only /api/* on the subdomain hits this Worker.
+# Everything else (static HTML) is served by Pages.
+routes = [
+  { pattern = "helper.ffhistorian.com/api/*", zone_name = "ffhistorian.com" }
+]
+
+# ── KV Namespace ──────────────────────────────────────────────────────────────
+# 1. Run: wrangler kv:namespace create SLEEPER_KV
+#    Paste the returned id below.
+# 2. Run: wrangler kv:namespace create SLEEPER_KV --preview
+#    Paste the returned id into preview_id.
+[[kv_namespaces]]
+binding    = "SLEEPER_KV"
+id         = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+preview_id = "REPLACE_WITH_YOUR_KV_PREVIEW_NAMESPACE_ID"
+
+[observability]
+enabled = true

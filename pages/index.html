@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sleeper Helper — ffhistorian.com</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:          #0d0f12;
+  --surface:     #13161b;
+  --surface2:    #1a1e25;
+  --border:      #252a33;
+  --border2:     #2f3540;
+  --text:        #e8eaf0;
+  --muted:       #6b7280;
+  --dim:         #3d4450;
+  --accent:      #4ade80;
+  --accent-dim:  #16532d;
+  --warn:        #fbbf24;
+  --warn-dim:    #4a3000;
+  --danger:      #f87171;
+  --danger-dim:  #4a1515;
+  --info:        #60a5fa;
+  --info-dim:    #1a3060;
+  --mono:        'DM Mono', monospace;
+  --sans:        'Sora', sans-serif;
+  --r:           8px;
+  --rl:          12px;
+}
+
+html { font-family: var(--sans); background: var(--bg); color: var(--text); font-size: 15px; }
+body { min-height: 100vh; }
+
+input, select, button {
+  font-family: var(--sans);
+  font-size: 14px;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  color: var(--text);
+  border-radius: var(--r);
+  padding: 8px 12px;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+input:focus { border-color: var(--accent); }
+button { cursor: pointer; font-weight: 500; padding: 8px 16px; }
+button:hover { background: var(--border2); border-color: var(--dim); }
+button.primary { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+button.primary:hover { background: #1a6b38; }
+button.ghost { background: none; border-color: var(--border); color: var(--muted); font-size: 12px; padding: 5px 10px; }
+button.ghost:hover { color: var(--text); border-color: var(--border2); background: var(--surface2); }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.shell { max-width: 860px; margin: 0 auto; padding: 0 20px 60px; }
+
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 22px 0 28px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 28px;
+}
+.logo { display: flex; align-items: baseline; gap: 10px; }
+.logo-mark { font-family: var(--mono); font-size: 18px; font-weight: 500; color: var(--accent); }
+.logo-sub  { font-size: 12px; color: var(--muted); letter-spacing: 0.04em; }
+.logo-link { font-size: 12px; color: var(--muted); text-decoration: none; }
+.logo-link:hover { color: var(--text); }
+
+.setup {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--rl);
+  padding: 20px 24px;
+  margin-bottom: 28px;
+}
+.setup-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px; }
+.setup-row   { display: flex; gap: 8px; }
+.setup-row input { flex: 1; }
+.setup-status { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 8px; min-height: 18px; }
+.setup-status.ok  { color: var(--accent); }
+.setup-status.err { color: var(--danger); }
+
+.tabs {
+  display: flex; gap: 2px; flex-wrap: wrap;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--rl); padding: 4px; margin-bottom: 24px;
+}
+.tab {
+  flex: 1; min-width: 100px; padding: 8px 10px;
+  font-size: 12px; font-weight: 500; text-align: center;
+  background: none; border: 1px solid transparent;
+  border-radius: 6px; color: var(--muted); cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.tab:hover  { background: var(--surface2); color: var(--text); border-color: transparent; }
+.tab.active { background: var(--surface2); color: var(--accent); border-color: var(--border2); }
+
+.content { min-height: 300px; }
+
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--rl); padding: 16px 20px; margin-bottom: 10px;
+}
+.card-title { font-size: 14px; font-weight: 500; color: var(--text); }
+.card-meta  { font-size: 12px; color: var(--muted); }
+
+.badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 500; font-family: var(--mono); }
+.badge-green  { background: var(--accent-dim); color: var(--accent); }
+.badge-yellow { background: var(--warn-dim);   color: var(--warn); }
+.badge-red    { background: var(--danger-dim); color: var(--danger); }
+.badge-blue   { background: var(--info-dim);   color: var(--info); }
+.badge-gray   { background: var(--surface2);   color: var(--muted); border: 1px solid var(--border2); }
+
+.sect { font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin: 12px 0 6px; }
+
+.row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.row:last-child { border-bottom: none; }
+.row-label { color: var(--muted); }
+.row-val   { color: var(--text); font-family: var(--mono); }
+
+.search-wrap { display: flex; gap: 8px; margin-bottom: 16px; }
+.search-wrap input { flex: 1; }
+
+.empty   { text-align: center; padding: 48px 0; color: var(--muted); font-size: 13px; font-family: var(--mono); }
+.err-msg { background: var(--danger-dim); border: 1px solid var(--danger); border-radius: var(--r); padding: 10px 14px; font-size: 13px; color: var(--danger); margin-bottom: 12px; }
+
+.loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 40px 0; color: var(--muted); font-size: 13px; font-family: var(--mono); }
+.spinner { width: 16px; height: 16px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Draft */
+.draft-grid  { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.draft-count { font-family: var(--mono); font-size: 32px; font-weight: 500; color: var(--accent); line-height: 1; }
+.draft-count.up { color: var(--warn); }
+.draft-bar   { height: 4px; background: var(--surface2); border-radius: 2px; margin-top: 10px; }
+.draft-bar-fill { height: 4px; background: var(--accent); border-radius: 2px; transition: width 0.4s; }
+
+/* Trade sides */
+.trade-sides { display: grid; grid-template-columns: 1fr 24px 1fr; gap: 8px; align-items: start; margin-top: 10px; font-size: 12px; }
+.trade-side-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+.trade-arrow    { display: flex; align-items: center; justify-content: center; color: var(--dim); padding-top: 16px; font-size: 14px; }
+.trade-player   { padding: 2px 0; color: var(--text); }
+.trade-pick     { padding: 2px 0; color: var(--info); }
+
+/* Settings grid */
+.settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+.settings-grid .row { font-size: 12px; }
+
+/* Tab header row (title + refresh button) */
+.tab-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.tab-header h2 { font-size: 14px; font-weight: 500; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <header class="topbar">
+    <div class="logo">
+      <span class="logo-mark">sleeper-helper</span>
+      <span class="logo-sub">helper.ffhistorian.com</span>
+    </div>
+    <a class="logo-link" href="https://ffhistorian.com">← ffhistorian.com</a>
+  </header>
+
+  <div class="setup">
+    <div class="setup-label">Sleeper username</div>
+    <div class="setup-row">
+      <input type="text" id="u-input" placeholder="your sleeper username…" />
+      <button class="primary" id="load-btn" onclick="loadUser()">Load leagues</button>
+    </div>
+    <div class="setup-status" id="u-status"></div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" id="tab-trades"  onclick="sw('trades')">Trades</button>
+    <button class="tab"        id="tab-player"  onclick="sw('player')">Player finder</button>
+    <button class="tab"        id="tab-lineups" onclick="sw('lineups')">Lineup check</button>
+    <button class="tab"        id="tab-avail"   onclick="sw('avail')">Availability</button>
+    <button class="tab"        id="tab-drafts"  onclick="sw('drafts')">Draft queue</button>
+    <button class="tab"        id="tab-leagues" onclick="sw('leagues')">League settings</button>
+  </div>
+
+  <div class="content" id="content">
+    <div class="empty">enter your username to get started</div>
+  </div>
+
+</div>
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+const IS_LOCAL    = location.protocol === 'file:' || location.hostname === 'localhost';
+const API_BASE    = IS_LOCAL ? 'https://api.sleeper.app/v1' : '/api/sleeper';
+const PLAYERS_URL = IS_LOCAL ? 'https://api.sleeper.app/v1/players/nfl' : '/api/players';
+const SEASON      = '2025';
+
+const SETTINGS_MAP = [
+  { key: 'scoring_settings.rec',        label: 'Rec pts',        fmt: v => v == null ? '—' : v === 1 ? 'PPR' : v === 0.5 ? 'Half PPR' : v === 0 ? 'Standard' : String(v) },
+  { key: 'settings.num_teams',          label: 'Teams',          fmt: v => v ?? '—' },
+  { key: 'settings.draft_rounds',       label: 'Draft rounds',   fmt: v => v ?? '—' },
+  { key: 'settings.taxi_slots',         label: 'Taxi spots',     fmt: v => v ?? '0' },
+  { key: 'settings.reserve_slots',      label: 'IR slots',       fmt: v => v ?? '0' },
+  { key: 'settings.playoff_teams',      label: 'Playoff teams',  fmt: v => v ?? '—' },
+  { key: 'settings.playoff_week_start', label: 'Playoffs start', fmt: v => v ? 'Wk ' + v : '—' },
+  { key: 'settings.waiver_type',        label: 'Waiver type',    fmt: v => ({ 0:'Rolling', 1:'FAAB', 2:'Sleeper score' })[v] ?? '—' },
+  { key: 'settings.trade_deadline',     label: 'Trade deadline', fmt: v => v ? 'Wk ' + v : 'None' },
+  { key: 'settings.max_keepers',        label: 'Max keepers',    fmt: v => v === 0 ? 'None' : (v ?? '—') },
+];
+
+// ── State ─────────────────────────────────────────────────────────────────────
+const S = { userId: null, leagues: [], players: {}, tab: 'trades' };
+
+// ── Fetch helpers ─────────────────────────────────────────────────────────────
+async function api(path) {
+  const r = await fetch(API_BASE + path);
+  if (!r.ok) throw new Error('HTTP ' + r.status + ' — ' + path);
+  return r.json();
+}
+async function loadPlayers() {
+  if (Object.keys(S.players).length) return;
+  const r = await fetch(PLAYERS_URL);
+  if (!r.ok) throw new Error('Could not load player data');
+  S.players = await r.json();
+}
+function getVal(obj, dotPath) {
+  return dotPath.split('.').reduce((o, k) => o?.[k], obj);
+}
+function currentWeek() {
+  const ms = Date.now() - new Date('2025-09-04').getTime();
+  return Math.min(Math.max(Math.floor(ms / 6048e5) + 1, 1), 18);
+}
+function timeAgo(ts) {
+  const h = Math.floor((Date.now() - ts) / 36e5);
+  return h < 1 ? 'just now' : h < 24 ? h + 'h ago' : Math.floor(h / 24) + 'd ago';
+}
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function errHtml(e) {
+  return `<div class="err-msg">error: ${esc(e.message)}</div>`;
+}
+function loading(msg = 'loading') {
+  return `<div class="loading"><div class="spinner"></div>${esc(msg)}</div>`;
+}
+
+// ── Load user ─────────────────────────────────────────────────────────────────
+async function loadUser() {
+  const u   = document.getElementById('u-input').value.trim();
+  if (!u) return;
+  const btn = document.getElementById('load-btn');
+  const st  = document.getElementById('u-status');
+  btn.disabled = true; btn.textContent = 'Loading…';
+  st.className = 'setup-status';
+  try {
+    const user = await api('/user/' + u);
+    if (!user?.user_id) throw new Error('user not found');
+    S.userId  = user.user_id;
+    const leagues = await api('/user/' + S.userId + '/leagues/nfl/' + SEASON);
+    S.leagues = leagues || [];
+    st.textContent = S.leagues.length + ' leagues loaded for ' + esc(user.display_name || u);
+    st.className   = 'setup-status ok';
+    render(S.tab);
+  } catch(e) {
+    st.textContent = 'error: ' + e.message;
+    st.className   = 'setup-status err';
+  }
+  btn.disabled = false; btn.textContent = 'Load leagues';
+}
+
+// ── Tab router ────────────────────────────────────────────────────────────────
+function sw(tab) {
+  S.tab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  render(tab);
+}
+function render(tab) {
+  if (!S.userId) { setC('<div class="empty">enter your username to get started</div>'); return; }
+  ({ trades: renderTrades, player: renderPlayerSearch, lineups: renderLineupCheck,
+     avail: renderAvailability, drafts: renderDraftQueue, leagues: renderLeagueSettings })[tab]?.();
+}
+function setC(html) { document.getElementById('content').innerHTML = html; }
+
+// ── 1. Pending trades ─────────────────────────────────────────────────────────
+async function renderTrades() {
+  setC(loading('scanning leagues for pending trades'));
+  try {
+    await loadPlayers();
+    const w = currentWeek();
+    const all = [];
+    for (const lg of S.leagues) {
+      try {
+        const weeks = w > 1 ? [w, w - 1] : [w];
+        const results = await Promise.all(weeks.map(wk => api('/league/' + lg.league_id + '/transactions/' + wk)));
+        results.flat().filter(t => t.type === 'trade' && t.status === 'pending')
+          .forEach(t => all.push({ ...t, _lgId: lg.league_id, _lgName: lg.name }));
+      } catch(_) {}
+    }
+    if (!all.length) { setC('<div class="empty">no pending trades found</div>'); return; }
+
+    // Resolve roster → display name for involved leagues
+    const lgIds = [...new Set(all.map(t => t._lgId))];
+    const rMaps = {};
+    await Promise.all(lgIds.map(async id => {
+      try {
+        const [rosters, users] = await Promise.all([api('/league/' + id + '/rosters'), api('/league/' + id + '/users')]);
+        const uMap = Object.fromEntries((users || []).map(u => [u.user_id, u.display_name || u.username]));
+        rMaps[id] = Object.fromEntries((rosters || []).map(r => [r.roster_id, uMap[r.owner_id] || 'Team ' + r.roster_id]));
+      } catch(_) {}
+    }));
+
+    setC(all.map(t => {
+      const rMap  = rMaps[t._lgId] || {};
+      const sides = tradeSides(t, rMap);
+      return `<div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+          <span class="card-title">${esc(t._lgName)}</span>
+          <span class="badge badge-yellow">pending · ${t.created ? timeAgo(t.created) : ''}</span>
+        </div>
+        <div class="trade-sides">
+          <div><div class="trade-side-lbl">${esc(sides[0].name)}</div>${sides[0].items.map(i=>`<div class="${i.cls}">${esc(i.txt)}</div>`).join('')}</div>
+          <div class="trade-arrow">⇄</div>
+          <div><div class="trade-side-lbl">${esc(sides[1].name)}</div>${sides[1].items.map(i=>`<div class="${i.cls}">${esc(i.txt)}</div>`).join('')}</div>
+        </div>
+      </div>`;
+    }).join(''));
+  } catch(e) { setC(errHtml(e)); }
+}
+
+function tradeSides(t, rMap) {
+  const sides = {};
+  for (const [pid, rid] of Object.entries(t.adds || {})) {
+    if (!sides[rid]) sides[rid] = { name: rMap[rid] || 'Team ' + rid, items: [] };
+    const p = S.players[pid];
+    sides[rid].items.push({ cls: 'trade-player', txt: p ? p.full_name : pid });
+  }
+  for (const pk of (t.draft_picks || [])) {
+    const rid = pk.owner_id;
+    if (!sides[rid]) sides[rid] = { name: rMap[rid] || 'Team ' + rid, items: [] };
+    sides[rid].items.push({ cls: 'trade-pick', txt: `Rd ${pk.round} ${pk.season} pick` });
+  }
+  const vals = Object.values(sides);
+  return [vals[0] || { name: '—', items: [] }, vals[1] || { name: '—', items: [] }];
+}
+
+// ── 2. Player finder ──────────────────────────────────────────────────────────
+function renderPlayerSearch() {
+  setC(`<div>
+    <div class="search-wrap">
+      <input type="text" id="ps" placeholder="search player name…" oninput="doPlayerSearch()" />
+    </div>
+    <div id="ps-r"><div class="empty">search to see which of your rosters a player is on</div></div>
+  </div>`);
+}
+async function doPlayerSearch() {
+  const q = document.getElementById('ps').value.trim().toLowerCase();
+  const r = document.getElementById('ps-r');
+  if (q.length < 2) return;
+  await loadPlayers();
+  const matches = Object.entries(S.players).filter(([,p]) => p.full_name?.toLowerCase().includes(q)).slice(0, 12);
+  if (!matches.length) { r.innerHTML = '<div class="empty">no players found</div>'; return; }
+  r.innerHTML = loading('loading rosters');
+  try {
+    const rData = await Promise.all(S.leagues.map(lg =>
+      api('/league/' + lg.league_id + '/rosters').then(rs => ({ lg, rs: rs || [] })).catch(() => null)
+    ));
+    let html = '';
+    for (const [pid, player] of matches) {
+      const found = [];
+      for (const rd of rData) {
+        if (!rd) continue;
+        for (const r of rd.rs) {
+          if (r.players?.includes(pid)) found.push({ name: rd.lg.name, starter: r.starters?.includes(pid) });
+        }
+      }
+      if (!found.length) continue;
+      html += `<div class="card">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span class="card-title">${esc(player.full_name)}</span>
+          <span class="card-meta">${esc(player.position||'')} · ${esc(player.team||'FA')}</span>
+          ${injuryBadge(player.injury_status)}
+        </div>
+        <div style="margin-top:10px;">${found.map(f=>`<div class="row">
+          <span class="row-label">${esc(f.name)}</span>
+          <span class="badge ${f.starter ? 'badge-blue' : 'badge-gray'}">${f.starter ? 'starting' : 'bench'}</span>
+        </div>`).join('')}</div>
+      </div>`;
+    }
+    r.innerHTML = html || '<div class="empty">player found but not on any of your rosters</div>';
+  } catch(e) { r.innerHTML = errHtml(e); }
+}
+
+// ── 3. Lineup check ───────────────────────────────────────────────────────────
+async function renderLineupCheck() {
+  setC(loading('scanning starting lineups'));
+  try {
+    await loadPlayers();
+    const w = currentWeek();
+    let html = '';
+    for (const lg of S.leagues) {
+      try {
+        const [rosters, matchups] = await Promise.all([
+          api('/league/' + lg.league_id + '/rosters'),
+          api('/league/' + lg.league_id + '/matchups/' + w),
+        ]);
+        const mine = (rosters || []).find(r => r.owner_id === S.userId);
+        if (!mine) continue;
+        const mup      = matchups?.find(m => m.roster_id === mine.roster_id);
+        const starters = (mup ? mup.starters : mine.starters) || [];
+        const issues   = [];
+        for (const pid of starters) {
+          if (!pid || pid === '0') { issues.push({ name: 'Empty slot', s: 'EMPTY', pos: '' }); continue; }
+          const p = S.players[pid];
+          if (!p) continue;
+          if (['Q','O','D','IR'].includes(p.injury_status))
+            issues.push({ name: p.full_name, s: p.injury_status, pos: p.position || '' });
+        }
+        if (!issues.length) continue;
+        html += `<div class="card">
+          <span class="card-title">${esc(lg.name)}</span>
+          <div style="margin-top:10px;">${issues.map(i=>`<div class="row">
+            <span style="display:flex;gap:6px;align-items:center;">
+              <span style="font-size:10px;color:var(--muted);font-family:var(--mono);">${esc(i.pos)}</span>
+              <span style="font-size:13px;">${esc(i.name)}</span>
+            </span>
+            <span class="badge ${statusBadgeCls(i.s)}">${statusLabel(i.s)}</span>
+          </div>`).join('')}</div>
+        </div>`;
+      } catch(_) {}
+    }
+    setC(html || '<div class="empty">no lineup issues found across your leagues</div>');
+  } catch(e) { setC(errHtml(e)); }
+}
+
+// ── 4. Player availability ────────────────────────────────────────────────────
+function renderAvailability() {
+  setC(`<div>
+    <div class="search-wrap">
+      <input type="text" id="av" placeholder="search player name…" oninput="doAvailSearch()" />
+    </div>
+    <div id="av-r"><div class="empty">search to see where a player is available</div></div>
+  </div>`);
+}
+async function doAvailSearch() {
+  const q = document.getElementById('av').value.trim().toLowerCase();
+  const r = document.getElementById('av-r');
+  if (q.length < 2) return;
+  await loadPlayers();
+  const matches = Object.entries(S.players).filter(([,p]) => p.full_name?.toLowerCase().includes(q)).slice(0, 10);
+  if (!matches.length) { r.innerHTML = '<div class="empty">no players found</div>'; return; }
+  r.innerHTML = loading('checking availability');
+  try {
+    const rData = await Promise.all(S.leagues.map(lg =>
+      api('/league/' + lg.league_id + '/rosters').then(rs => ({ lg, rs: rs || [] })).catch(() => null)
+    ));
+    let html = '';
+    for (const [pid, player] of matches) {
+      const avail = [], taken = [];
+      for (const rd of rData) {
+        if (!rd) continue;
+        (rd.rs.some(r => r.players?.includes(pid)) ? taken : avail).push(rd.lg.name);
+      }
+      html += `<div class="card">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span class="card-title">${esc(player.full_name)}</span>
+          <span class="card-meta">${esc(player.position||'')} · ${esc(player.team||'FA')}</span>
+          ${injuryBadge(player.injury_status)}
+        </div>
+        ${avail.length ? `<div class="sect">available in</div>${avail.map(n=>`<div class="row"><span class="row-label">${esc(n)}</span><span class="badge badge-green">free agent</span></div>`).join('')}` : ''}
+        ${taken.length ? `<div class="sect" style="margin-top:${avail.length?'10px':'0'};">rostered in</div>${taken.map(n=>`<div class="row"><span class="row-label">${esc(n)}</span><span class="badge badge-gray">rostered</span></div>`).join('')}` : ''}
+      </div>`;
+    }
+    r.innerHTML = html;
+  } catch(e) { r.innerHTML = errHtml(e); }
+}
+
+// ── 5. Draft queue ────────────────────────────────────────────────────────────
+async function renderDraftQueue(isRefresh = false) {
+  if (!isRefresh) {
+    setC(`<div>
+      <div class="tab-header">
+        <span class="card-meta">active rookie / startup drafts</span>
+        <button class="ghost" onclick="renderDraftQueue(true)">↻ refresh</button>
+      </div>
+      <div id="draft-body">${loading('loading active drafts')}</div>
+    </div>`);
+  } else {
+    const body = document.getElementById('draft-body');
+    if (body) body.innerHTML = loading('refreshing');
+  }
+
+  try {
+    const drafts = await api('/user/' + S.userId + '/drafts/nfl/' + SEASON);
+    const active = (drafts || []).filter(d => d.status === 'drafting');
+
+    const target = document.getElementById('draft-body');
+    if (!target) return;
+
+    if (!active.length) {
+      target.innerHTML = '<div class="empty">no active drafts right now</div>';
+      return;
+    }
+
+    const details = await Promise.all(active.map(async d => {
+      const [picks, info] = await Promise.all([
+        api('/draft/' + d.draft_id + '/picks'),
+        api('/draft/' + d.draft_id),
+      ]);
+      return { d, picks: picks || [], info: info || d };
+    }));
+
+    const cards = details.map(({ d, picks, info }) => {
+      const teams  = d.settings?.teams ?? 12;
+      const rounds = d.settings?.rounds ?? 5;
+      const total  = teams * rounds;
+      const done   = picks.length;
+      const pct    = Math.round((done / total) * 100);
+      const pos    = picksUntilMyTurn(info, picks, S.userId);
+
+      let countHtml;
+      if (pos === 0) {
+        countHtml = `<div class="draft-count up" style="margin-bottom:4px;">ON CLOCK</div><div style="font-size:12px;color:var(--warn);">you're up now</div>`;
+      } else if (pos > 0) {
+        countHtml = `<div style="display:flex;align-items:baseline;gap:6px;margin-bottom:4px;">
+          <span class="draft-count">${pos}</span>
+          <span style="font-size:12px;color:var(--muted);">pick${pos===1?'':'s'} until your turn</span>
+        </div>`;
+      } else {
+        countHtml = `<div style="font-size:13px;color:var(--muted);margin-bottom:4px;">position unavailable</div>`;
+      }
+
+      return `<div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:12px;">
+          <div>
+            <div class="card-title">${esc(d.metadata?.name || 'Draft')}</div>
+            <div class="card-meta" style="margin-top:2px;">${teams} teams · ${rounds} rds · ${esc(d.type || 'snake')}</div>
+          </div>
+          <span class="badge badge-green">live</span>
+        </div>
+        ${countHtml}
+        <div style="margin-top:12px;">
+          <div class="row"><span class="row-label">picks made</span><span class="row-val">${done} / ${total}</span></div>
+          <div class="row"><span class="row-label">current round</span><span class="row-val">${Math.min(Math.floor(done / teams) + 1, rounds)}</span></div>
+        </div>
+        <div class="draft-bar" style="margin-top:10px;"><div class="draft-bar-fill" style="width:${pct}%"></div></div>
+      </div>`;
+    }).join('');
+
+    target.innerHTML = `<div class="draft-grid">${cards}</div>`;
+  } catch(e) {
+    const t = document.getElementById('draft-body');
+    if (t) t.innerHTML = errHtml(e);
+  }
+}
+
+function picksUntilMyTurn(info, picks, userId) {
+  const draftOrder = info?.draft_order ?? {};
+  const mySlot     = draftOrder[userId];
+  if (!mySlot) return -1;
+
+  const teams = info?.settings?.teams ?? 12;
+  const done  = picks.length;
+  const type  = info?.type;
+
+  for (let offset = 0; offset < teams * 5; offset++) {
+    const overall    = done + offset;
+    const round      = Math.floor(overall / teams);
+    const posInRound = overall % teams;
+    const slot = (type === 'snake' && round % 2 === 1)
+      ? teams - posInRound
+      : posInRound + 1;
+    if (slot === mySlot) return offset;
+  }
+  return -1;
+}
+
+// ── 6. League settings ────────────────────────────────────────────────────────
+async function renderLeagueSettings() {
+  setC(loading('loading league settings'));
+  try {
+    const full = await Promise.all(S.leagues.map(lg => api('/league/' + lg.league_id).catch(() => null)));
+    const html = full.filter(Boolean).map(lg => {
+      const rows = SETTINGS_MAP.map(s => {
+        const v = getVal(lg, s.key);
+        return `<div class="row"><span class="row-label">${esc(s.label)}</span><span class="row-val">${esc(s.fmt(v))}</span></div>`;
+      }).join('');
+      const rp = (lg.roster_positions || []).filter(p => p !== 'BN').join(' · ') || '—';
+      return `<div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+          <span class="card-title">${esc(lg.name)}</span>
+          <span class="badge badge-gray">${esc(lg.status || '—')}</span>
+        </div>
+        <div class="sect">starters</div>
+        <div style="font-size:12px;color:var(--muted);font-family:var(--mono);line-height:1.9;margin-bottom:4px;">${esc(rp)}</div>
+        <div class="sect" style="margin-top:10px;">settings</div>
+        <div class="settings-grid">${rows}</div>
+      </div>`;
+    }).join('');
+    setC(html || '<div class="empty">no league data found</div>');
+  } catch(e) { setC(errHtml(e)); }
+}
+
+// ── Shared helpers ────────────────────────────────────────────────────────────
+function injuryBadge(s) {
+  if (!s) return '';
+  if (s === 'Q')  return '<span class="badge badge-yellow">Q</span>';
+  if (s === 'O')  return '<span class="badge badge-red">OUT</span>';
+  if (s === 'D')  return '<span class="badge badge-yellow">Doubtful</span>';
+  if (s === 'IR') return '<span class="badge badge-red">IR</span>';
+  return '';
+}
+function statusBadgeCls(s) {
+  if (s === 'EMPTY' || s === 'O' || s === 'IR') return 'badge-red';
+  if (s === 'Q' || s === 'D') return 'badge-yellow';
+  return 'badge-gray';
+}
+function statusLabel(s) {
+  return ({ EMPTY:'empty slot', Q:'questionable', D:'doubtful', O:'out', IR:'IR' })[s] || s;
+}
+
+document.getElementById('u-input').addEventListener('keydown', e => { if (e.key === 'Enter') loadUser(); });
+</script>
+</body>
+</html>
