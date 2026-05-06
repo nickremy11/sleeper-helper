@@ -94,7 +94,7 @@ async function handleGraphQL(request) {
   });
 }
 
-
+async function handleProxy(url) {
   const path       = url.pathname.replace('/api/sleeper', '');
   const upstream   = await fetch(`${SLEEPER_BASE}${path}${url.search}`, {
     headers: { 'User-Agent': 'sleeper-helper/1.0 (helper.ffhistorian.com)' },
