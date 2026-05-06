@@ -290,7 +290,6 @@ async function loadUser() {
     // Sleeper returns all leagues in a single call (confirmed up to 70+)
     const allLeagues = await api('/user/' + S.userId + '/leagues/nfl/' + season);
     S.leagues = allLeagues || [];
-
     // Fetch full league detail objects in background — used by trades flags
     Promise.all(S.leagues.map(lg =>
       api('/league/' + lg.league_id).then(d => { S.leagueDetails[lg.league_id] = d; }).catch(() => {})
@@ -361,6 +360,9 @@ async function renderTrades() {
       }
     }`;
 
+    const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+    const cutoff = Date.now() - SEVEN_DAYS;
+
     const results = await Promise.allSettled(S.leagues.map(async lg => {
       const rid = rosterIds[lg.league_id];
       if (!rid) return [];
@@ -370,11 +372,14 @@ async function renderTrades() {
       const data = await gql('league_transactions_filtered', query);
       const txns = data?.league_transactions_filtered || [];
       return txns
-        .filter(t => t.status === 'proposed')
-        .map(t => ({ ...t, _lgId: lg.league_id, _lgName: lg.name }));
+        .filter(t => t.status === 'proposed' && t.created >= cutoff)
+        .map(t => ({ ...t, _lgId: lg.league_id, _lgName: lg.name, _myRid: rid }));
     }));
 
-    const all = results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
+    // Sort all trades by created desc (most recent first)
+    const all = results
+      .flatMap(r => r.status === 'fulfilled' ? r.value : [])
+      .sort((a, b) => b.created - a.created);
 
     if (!all.length) {
       setC('<div class="empty">no pending trades found across your leagues</div>');
@@ -403,10 +408,22 @@ async function renderTrades() {
       const flagHtml = flags.length
         ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;">${flags.map(f => `<span class="badge badge-gray" style="font-size:10px;">${esc(f)}</span>`).join('')}</div>`
         : '';
+
+      // Incoming = my roster_id is in consenter_ids (I still need to approve)
+      // Outgoing = I am the creator
+      const isIncoming = (t.consenter_ids || []).includes(t._myRid);
+      const dirDot  = isIncoming
+        ? `<span title="incoming" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-right:5px;flex-shrink:0;"></span>`
+        : `<span title="outgoing" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--danger);margin-right:5px;flex-shrink:0;"></span>`;
+      const dirLabel = isIncoming ? 'incoming' : 'outgoing';
+
       return `<div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
-          <span class="card-title">${esc(t._lgName)}</span>
-          <span class="badge badge-yellow">pending · ${t.created ? timeAgo(t.created) : ''}</span>
+          <span style="display:flex;align-items:center;">${dirDot}<span class="card-title">${esc(t._lgName)}</span></span>
+          <span style="display:flex;align-items:center;gap:6px;">
+            <span style="font-size:11px;color:var(--muted);">${dirLabel}</span>
+            <span class="badge badge-yellow">${t.created ? timeAgo(t.created) : ''}</span>
+          </span>
         </div>
         ${flagHtml}
         <div class="trade-sides">
@@ -438,10 +455,12 @@ function tradeSides(t, rMap) {
       // parts: [slot, season, round, from_roster_id, to_roster_id]
       const round    = parts[2];
       const season   = parts[1];
-      const toRoster = parts[4];
+      const toRoster = parts[3];  // parts[3] = receiving roster, parts[4] = sending roster
       const key = String(toRoster);
       if (!sides[key]) sides[key] = { name: rMap[toRoster] || 'Team ' + toRoster, items: [] };
-      sides[key].items.push({ cls: 'trade-pick', txt: `${season} Rd ${round} pick` });
+      const originalOwner = rMap[parts[0]] || (parts[0] !== toRoster ? 'Roster ' + parts[0] : null);
+      const viaStr = originalOwner ? ` (via ${originalOwner})` : '';
+      sides[key].items.push({ cls: 'trade-pick', txt: `${season} Rd ${round} pick${viaStr}` });
     } else if (pk && typeof pk === 'object') {
       // fallback for object format
       const rid = String(pk.owner_id);
@@ -755,47 +774,73 @@ function picksUntilMyTurn(info, completedPicks, tradedPicks, userId, myRosterId)
   const done   = completedPicks.length;
   const type   = info?.type; // 'snake' or 'linear'
 
-  // Build a map: "round.slot" → current owner_roster_id after all trades
-  // tradedPick shape: { round, roster_id (original slot owner), owner_id (current owner after trade), previous_owner_id }
+  // draft_order: { user_id → slot (1-based) }
+  // slot_to_roster: built from completed picks — draft_slot → roster_id of who actually owns that slot
+  // This is the most reliable source: a completed pick tells us definitively which
+  // roster_id sat in which draft_slot (accounting for any pre-draft slot trades too).
+  const slotToRoster = {};
+  for (const p of completedPicks) {
+    if (p.draft_slot != null && p.roster_id != null) {
+      slotToRoster[p.draft_slot] = p.roster_id;
+    }
+  }
+
+  // For slots we haven't seen a completed pick for yet, fall back to draft_order.
+  // draft_order maps user_id → slot; we need slot → roster_id.
+  // Rosters aren't in the draft object, but we stored rosterIdByLeague[league_id] = myRosterId.
+  // We only need to know OUR slot, so find it via draft_order[userId].
+  const draftOrder = info?.draft_order ?? {};
+  const mySlot = draftOrder[userId]; // our slot number (1-based)
+
+  if (!mySlot && !Object.values(slotToRoster).includes(myRosterId)) return -1;
+
+  // Build traded picks map: "round.originalSlot" → current owner roster_id
+  // tradedPick from API: { round, roster_id (original owner roster), owner_id (current owner roster) }
   const tradeMap = {};
   for (const tp of tradedPicks) {
-    tradeMap[`${tp.round}.${tp.roster_id}`] = tp.owner_id; // owner_id here is roster_id of new owner
+    // Find what slot the original roster_id occupied
+    // We use the inverse of slotToRoster, or fall back to draft_order inverse
+    const originalSlot = Object.entries(slotToRoster).find(([, r]) => r === tp.roster_id)?.[0]
+      ?? Object.entries(draftOrder).find(([uid]) => {
+        // find the slot for this roster — we don't have user→roster here so use slot directly
+        return false;
+      })?.[1]
+      ?? tp.roster_id; // last resort: assume slot == roster_id
+    tradeMap[`${tp.round}.${originalSlot}`] = tp.owner_id;
   }
 
-  // draft_order maps user_id → slot number (1-based)
-  // We need the reverse: slot → original roster_id
-  // Sleeper's draft_order is user_id → slot, but slot owners correspond to roster positions.
-  // The slot number == roster_id in most standard leagues. Confirm with pick data.
-  // Completed picks have pick_no, round, draft_slot, roster_id (who made the pick = current owner's roster)
-  // For future picks we derive slot from position in round, then look up traded_picks to find actual owner.
-
-  // Build slot → roster_id map from completed picks (slot is stable, roster_id may have changed via trade)
-  // We actually want: for each upcoming pick position, who currently owns it?
-  const slotToRosterId = {};
-  // Completed picks: draft_slot is the column, roster_id is who actually picked (after trades)
-  for (const p of completedPicks) {
-    if (p.draft_slot && p.roster_id) slotToRosterId[p.draft_slot] = p.roster_id;
-  }
-
-  // For remaining picks, walk pick positions and determine owner
+  // Walk upcoming picks
   for (let offset = 0; offset < teams * rounds; offset++) {
     const overall    = done + offset;
     if (overall >= teams * rounds) break;
-    const round      = Math.floor(overall / teams) + 1;        // 1-based
-    const posInRound = overall % teams;                         // 0-based
-    const slot       = (type === 'snake' && round % 2 === 0)   // even rounds go right-to-left
-      ? teams - posInRound
-      : posInRound + 1;                                         // 1-based slot
+    const round      = Math.floor(overall / teams) + 1;  // 1-based
+    const posInRound = overall % teams;                   // 0-based
+    const slot       = (type === 'snake' && round % 2 === 0)
+      ? teams - posInRound       // even rounds reverse
+      : posInRound + 1;          // 1-based slot
 
-    // Check if this slot was traded; traded_picks uses the original roster_id as the key
-    // In standard leagues slot == original roster_id, but we use draft_order as fallback
-    const originalRosterId = slot; // standard assumption: slot n = roster_id n
-    const tradeKey = `${round}.${originalRosterId}`;
-    const currentOwnerRosterId = tradeMap[tradeKey] ?? originalRosterId;
+    // Who owns this pick right now?
+    // First check traded picks for this round+slot
+    const tradeKey = `${round}.${slot}`;
+    let ownerRosterId;
+    if (tradeMap[tradeKey] != null) {
+      ownerRosterId = tradeMap[tradeKey];
+    } else if (slotToRoster[slot] != null) {
+      // Use completed pick history to know who owns this slot
+      ownerRosterId = slotToRoster[slot];
+    } else {
+      // Fall back: assume slot == roster_id (holds true in most leagues)
+      ownerRosterId = slot;
+    }
 
-    if (currentOwnerRosterId === myRosterId) return offset; // 0 = on the clock
+    // Check if it's us — compare against myRosterId if available, else mySlot
+    const isMe = myRosterId != null
+      ? ownerRosterId === myRosterId
+      : slot === mySlot;
+
+    if (isMe) return offset; // 0 = on the clock
   }
-  return -1; // no more picks found
+  return -1;
 }
 
 // ── leagueFlags — compact notifiers shown on trade cards ─────────────────────
