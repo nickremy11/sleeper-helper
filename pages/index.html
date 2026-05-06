@@ -411,7 +411,7 @@ async function renderTrades() {
 
       // Incoming = my roster_id is in consenter_ids (I still need to approve)
       // Outgoing = I am the creator
-      const isIncoming = (t.consenter_ids || []).includes(t._myRid);
+      const isIncoming = t.creator !== S.userId;
       const dirDot  = isIncoming
         ? `<span title="incoming" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-right:5px;flex-shrink:0;"></span>`
         : `<span title="outgoing" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--danger);margin-right:5px;flex-shrink:0;"></span>`;
