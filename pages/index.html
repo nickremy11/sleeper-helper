@@ -286,8 +286,18 @@ async function loadUser() {
     S.userId = user.user_id;
     // league_create_season is the active season for league endpoints
     const season = nflState.league_create_season || nflState.season || new Date().getFullYear().toString();
-    const leagues = await api('/user/' + S.userId + '/leagues/nfl/' + season);
-    S.leagues = leagues || [];
+
+    // Sleeper caps league responses at 50 — paginate with offset until we have all
+    const allLeagues = [];
+    let offset = 0;
+    while (true) {
+      const page = await api('/user/' + S.userId + '/leagues/nfl/' + season + '?offset=' + offset);
+      const batch = page || [];
+      allLeagues.push(...batch);
+      if (batch.length < 50) break;   // last page
+      offset += 50;
+    }
+    S.leagues = allLeagues;
     // Fetch full league detail objects in background — used by trades flags
     Promise.all(S.leagues.map(lg =>
       api('/league/' + lg.league_id).then(d => { S.leagueDetails[lg.league_id] = d; }).catch(() => {})
@@ -367,7 +377,7 @@ async function renderTrades() {
       const data = await gql('league_transactions_filtered', query);
       const txns = data?.league_transactions_filtered || [];
       return txns
-        .filter(t => t.status === 'pending')
+        .filter(t => t.status === 'proposed')
         .map(t => ({ ...t, _lgId: lg.league_id, _lgName: lg.name }));
     }));
 
@@ -418,16 +428,35 @@ async function renderTrades() {
 
 function tradeSides(t, rMap) {
   const sides = {};
+
+  // adds: { player_id: destination_roster_id }
   for (const [pid, rid] of Object.entries(t.adds || {})) {
-    if (!sides[rid]) sides[rid] = { name: rMap[rid] || 'Team ' + rid, items: [] };
+    const key = String(rid);
+    if (!sides[key]) sides[key] = { name: rMap[rid] || 'Team ' + rid, items: [] };
     const p = S.players[pid];
-    sides[rid].items.push({ cls: 'trade-player', txt: p ? p.full_name : pid });
+    sides[key].items.push({ cls: 'trade-player', txt: p ? p.full_name : 'Player ' + pid });
   }
+
+  // draft_picks: array of strings "slot,season,round,teamA_roster,teamB_roster"
+  // format appears to be: "original_slot, season, round, from_roster, to_roster"
   for (const pk of (t.draft_picks || [])) {
-    const rid = pk.owner_id;
-    if (!sides[rid]) sides[rid] = { name: rMap[rid] || 'Team ' + rid, items: [] };
-    sides[rid].items.push({ cls: 'trade-pick', txt: `Rd ${pk.round} ${pk.season} pick` });
+    if (typeof pk === 'string') {
+      const parts = pk.split(',');
+      // parts: [slot, season, round, from_roster_id, to_roster_id]
+      const round    = parts[2];
+      const season   = parts[1];
+      const toRoster = parts[4];
+      const key = String(toRoster);
+      if (!sides[key]) sides[key] = { name: rMap[toRoster] || 'Team ' + toRoster, items: [] };
+      sides[key].items.push({ cls: 'trade-pick', txt: `${season} Rd ${round} pick` });
+    } else if (pk && typeof pk === 'object') {
+      // fallback for object format
+      const rid = String(pk.owner_id);
+      if (!sides[rid]) sides[rid] = { name: rMap[pk.owner_id] || 'Team ' + pk.owner_id, items: [] };
+      sides[rid].items.push({ cls: 'trade-pick', txt: `${pk.season} Rd ${pk.round} pick` });
+    }
   }
+
   const vals = Object.values(sides);
   return [vals[0] || { name: '—', items: [] }, vals[1] || { name: '—', items: [] }];
 }
@@ -629,10 +658,26 @@ async function renderDraftQueue(isRefresh = false) {
   }
 
   try {
-    const nflState = await getNflState();
-    const season   = nflState.league_create_season || nflState.season;
-    const drafts   = await api('/user/' + S.userId + '/drafts/nfl/' + season);
-    const active   = (drafts || []).filter(d => d.status === 'drafting');
+    // Get draft IDs from leagues directly — the /user/drafts endpoint is capped at 50.
+    // Each league object has a draft_id field. leagueDetails are fetched at load time;
+    // fall back to a fresh fetch for any that haven't loaded yet.
+    const draftIds = new Set();
+    await Promise.all(S.leagues.map(async lg => {
+      try {
+        let detail = S.leagueDetails[lg.league_id];
+        if (!detail) {
+          detail = await api('/league/' + lg.league_id);
+          S.leagueDetails[lg.league_id] = detail;
+        }
+        if (detail?.draft_id) draftIds.add(detail.draft_id);
+      } catch(_) {}
+    }));
+
+    // Fetch each draft to check status
+    const allDrafts = await Promise.all([...draftIds].map(id =>
+      api('/draft/' + id).catch(() => null)
+    ));
+    const active = allDrafts.filter(d => d?.status === 'drafting');
 
     const target = document.getElementById('draft-body');
     if (!target) return;
@@ -643,12 +688,11 @@ async function renderDraftQueue(isRefresh = false) {
     }
 
     const details = await Promise.all(active.map(async d => {
-      const [picks, info, tradedPicks] = await Promise.all([
+      const [picks, tradedPicks] = await Promise.all([
         api('/draft/' + d.draft_id + '/picks'),
-        api('/draft/' + d.draft_id),
         api('/draft/' + d.draft_id + '/traded_picks'),
       ]);
-      return { d, picks: picks || [], info: info || d, tradedPicks: tradedPicks || [] };
+      return { d, picks: picks || [], info: d, tradedPicks: tradedPicks || [] };
     }));
 
     // We need our roster_id per league to match traded pick ownership
