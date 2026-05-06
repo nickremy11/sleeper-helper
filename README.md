@@ -24,7 +24,21 @@ sleeper-helper/
     └── deploy.yml          ← deploys Worker then Pages on push to main
 ```
 
-## First-time setup
+## Finding your Sleeper auth token
+
+The Trades tab requires your Sleeper session token to access pending trades via Sleeper's internal API. The token lives in memory only — it is never written to storage and clears when you close the tab.
+
+1. Go to [sleeper.com](https://sleeper.com) and log in
+2. Open DevTools → **Network** tab
+3. Click on any league or navigate to your trade inbox
+4. Filter requests by `graphql`
+5. Click any request to `sleeper.com/graphql`
+6. Under **Request Headers**, copy the value of the **`Authorization`** header
+7. Paste it into the token field on the app and press Enter
+
+Tokens expire periodically — if trades stop loading, repeat the steps above.
+
+
 
 ### 1. Create KV namespaces
 

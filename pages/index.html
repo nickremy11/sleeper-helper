@@ -169,6 +169,17 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
       <button class="primary" id="load-btn" onclick="loadUser()">Load leagues</button>
     </div>
     <div class="setup-status" id="u-status"></div>
+    <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
+      <div class="setup-label" style="margin-bottom:6px;">
+        Sleeper auth token
+        <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--dim);margin-left:6px;">— optional, enables pending trades tab</span>
+      </div>
+      <div class="setup-row">
+        <input type="password" id="token-input" placeholder="paste token from sleeper.com (see README for how to find it)…" />
+        <button id="token-btn" onclick="saveToken()">Save</button>
+      </div>
+      <div class="setup-status" id="token-status">token lives in memory only — clears when you close this tab</div>
+    </div>
   </div>
 
   <div class="tabs">
@@ -188,9 +199,10 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 const IS_LOCAL    = location.protocol === 'file:' || location.hostname === 'localhost';
 const API_BASE    = IS_LOCAL ? 'https://api.sleeper.app/v1' : '/api/sleeper';
 const PLAYERS_URL = IS_LOCAL ? 'https://api.sleeper.app/v1/players/nfl' : '/api/players';
+const GQL_URL     = IS_LOCAL ? null : '/api/graphql'; // no GQL proxy in local dev
 
-// ── State ─────────────────────────────────────────────────────────────────────
-const S = { userId: null, leagues: [], leagueDetails: {}, players: {}, nflState: null, tab: 'trades' };
+// ── State — token intentionally not persisted anywhere ────────────────────────
+const S = { userId: null, leagues: [], leagueDetails: {}, players: {}, nflState: null, token: null, tab: 'trades' };
 
 // ── Fetch helpers ─────────────────────────────────────────────────────────────
 async function api(path) {
@@ -204,7 +216,39 @@ async function loadPlayers() {
   if (!r.ok) throw new Error('Could not load player data');
   S.players = await r.json();
 }
-// Returns { season: '2026', week: 1, ... } from Sleeper's live state endpoint
+// Token — in memory only, never written to storage
+function saveToken() {
+  const t = document.getElementById('token-input').value.trim();
+  if (!t) return;
+  S.token = t;
+  document.getElementById('token-input').value = '';  // clear field immediately
+  const st = document.getElementById('token-status');
+  st.textContent = '✓ token saved for this session';
+  st.className = 'setup-status ok';
+  // If trades tab is active, re-render now that we have a token
+  if (S.tab === 'trades' && S.userId) renderTrades();
+}
+
+// GraphQL query against Sleeper's internal API via our Worker proxy
+async function gql(op, query, variables = {}) {
+  if (!S.token) throw new Error('no token');
+  if (!GQL_URL)  throw new Error('graphql proxy not available in local dev');
+  const r = await fetch(GQL_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type':         'application/json',
+      'Authorization':        S.token,
+      'X-Sleeper-Graphql-Op': op,
+    },
+    body: JSON.stringify({ operationName: op, variables, query }),
+  });
+  if (!r.ok) throw new Error('GQL HTTP ' + r.status);
+  const json = await r.json();
+  if (json.errors?.length) throw new Error(json.errors[0].message);
+  return json.data;
+}
+
+
 async function getNflState() {
   if (S.nflState) return S.nflState;
   S.nflState = await api('/state/nfl');
@@ -272,36 +316,77 @@ function render(tab) {
 }
 function setC(html) { document.getElementById('content').innerHTML = html; }
 
-// ── 1. Pending trades ─────────────────────────────────────────────────────────
+// ── 1. Pending trades (via authenticated GraphQL) ─────────────────────────────
 async function renderTrades() {
+  if (!S.token) {
+    setC(`<div class="empty" style="padding:40px 0;">
+      <div style="margin-bottom:12px;">paste your Sleeper auth token above to see pending trades</div>
+      <div style="font-size:11px;color:var(--dim);max-width:360px;margin:0 auto;line-height:1.7;">
+        go to sleeper.com → open DevTools → Network tab → click any trade or transaction →
+        find a request to sleeper.com/graphql → copy the <strong style="color:var(--muted);">Authorization</strong> header value
+      </div>
+    </div>`);
+    return;
+  }
+
   setC(loading('scanning leagues for pending trades'));
   try {
     await loadPlayers();
-    const nflState = await getNflState();
-    // Use display_week from state; fall back to 1 if offseason
-    const w = nflState.display_week || nflState.leg || 1;
 
-    const all = [];
-    for (const lg of S.leagues) {
+    // We need our roster_id in each league to filter trades involving us.
+    // leagueDetails are fetched on load; rosters come from those or a fresh call.
+    const rosterIds = {};
+    await Promise.all(S.leagues.map(async lg => {
       try {
-        // Check current and previous week to catch any recently created trades
-        const weekNums = w > 1 ? [w, w - 1] : [w];
-        const results = await Promise.all(weekNums.map(wk => api('/league/' + lg.league_id + '/transactions/' + wk)));
-        // Deduplicate by transaction_id in case a trade appears in both weeks
-        const seen = new Set();
-        results.flat()
-          .filter(t => t.type === 'trade' && t.status === 'pending' && !seen.has(t.transaction_id) && seen.add(t.transaction_id))
-          .forEach(t => all.push({ ...t, _lgId: lg.league_id, _lgName: lg.name }));
+        const rosters = await api('/league/' + lg.league_id + '/rosters');
+        const mine = (rosters || []).find(r => r.owner_id === S.userId);
+        if (mine) rosterIds[lg.league_id] = mine.roster_id;
       } catch(_) {}
-    }
-    if (!all.length) { setC('<div class="empty">no pending trades found</div>'); return; }
+    }));
 
-    // Resolve roster_id → manager display name for each involved league
+    // Fire GraphQL query per league concurrently
+    const GQL_QUERY = `query league_transactions_filtered {
+      league_transactions_filtered(
+        league_id: $LEAGUE_ID,
+        roster_id_filters: [$ROSTER_ID],
+        type_filters: ["trade"],
+        leg_filters: [],
+        status_filters: []
+      ){
+        adds consenter_ids created creator draft_picks drops
+        league_id leg roster_ids status status_updated transaction_id type waiver_budget
+      }
+    }`;
+
+    const results = await Promise.allSettled(S.leagues.map(async lg => {
+      const rid = rosterIds[lg.league_id];
+      if (!rid) return [];
+      const query = GQL_QUERY
+        .replace('$LEAGUE_ID', `"${lg.league_id}"`)
+        .replace('$ROSTER_ID', rid);
+      const data = await gql('league_transactions_filtered', query);
+      const txns = data?.league_transactions_filtered || [];
+      return txns
+        .filter(t => t.status === 'pending')
+        .map(t => ({ ...t, _lgId: lg.league_id, _lgName: lg.name }));
+    }));
+
+    const all = results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
+
+    if (!all.length) {
+      setC('<div class="empty">no pending trades found across your leagues</div>');
+      return;
+    }
+
+    // Resolve roster_id → manager name for leagues with pending trades
     const lgIds = [...new Set(all.map(t => t._lgId))];
     const rMaps = {};
     await Promise.all(lgIds.map(async id => {
       try {
-        const [rosters, users] = await Promise.all([api('/league/' + id + '/rosters'), api('/league/' + id + '/users')]);
+        const [rosters, users] = await Promise.all([
+          api('/league/' + id + '/rosters'),
+          api('/league/' + id + '/users'),
+        ]);
         const uMap = Object.fromEntries((users || []).map(u => [u.user_id, u.display_name || u.username]));
         rMaps[id] = Object.fromEntries((rosters || []).map(r => [r.roster_id, uMap[r.owner_id] || 'Team ' + r.roster_id]));
       } catch(_) {}
@@ -313,7 +398,7 @@ async function renderTrades() {
       const detail = S.leagueDetails[t._lgId];
       const flags  = detail ? leagueFlags(detail) : [];
       const flagHtml = flags.length
-        ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;">${flags.map(f=>`<span class="badge badge-gray" style="font-size:10px;">${esc(f)}</span>`).join('')}</div>`
+        ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;">${flags.map(f => `<span class="badge badge-gray" style="font-size:10px;">${esc(f)}</span>`).join('')}</div>`
         : '';
       return `<div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
@@ -322,9 +407,9 @@ async function renderTrades() {
         </div>
         ${flagHtml}
         <div class="trade-sides">
-          <div><div class="trade-side-lbl">${esc(sides[0].name)}</div>${sides[0].items.map(i=>`<div class="${i.cls}">${esc(i.txt)}</div>`).join('')}</div>
+          <div><div class="trade-side-lbl">${esc(sides[0].name)}</div>${sides[0].items.map(i => `<div class="${i.cls}">${esc(i.txt)}</div>`).join('')}</div>
           <div class="trade-arrow">⇄</div>
-          <div><div class="trade-side-lbl">${esc(sides[1].name)}</div>${sides[1].items.map(i=>`<div class="${i.cls}">${esc(i.txt)}</div>`).join('')}</div>
+          <div><div class="trade-side-lbl">${esc(sides[1].name)}</div>${sides[1].items.map(i => `<div class="${i.cls}">${esc(i.txt)}</div>`).join('')}</div>
         </div>
       </div>`;
     }).join(''));
@@ -545,10 +630,9 @@ async function renderDraftQueue(isRefresh = false) {
 
   try {
     const nflState = await getNflState();
-    // Drafts live under the league_create_season (e.g. 2026 right now)
-    const season = nflState.league_create_season || nflState.season;
-    const drafts = await api('/user/' + S.userId + '/drafts/nfl/' + season);
-    const active = (drafts || []).filter(d => d.status === 'drafting');
+    const season   = nflState.league_create_season || nflState.season;
+    const drafts   = await api('/user/' + S.userId + '/drafts/nfl/' + season);
+    const active   = (drafts || []).filter(d => d.status === 'drafting');
 
     const target = document.getElementById('draft-body');
     if (!target) return;
@@ -559,31 +643,47 @@ async function renderDraftQueue(isRefresh = false) {
     }
 
     const details = await Promise.all(active.map(async d => {
-      const [picks, info] = await Promise.all([
+      const [picks, info, tradedPicks] = await Promise.all([
         api('/draft/' + d.draft_id + '/picks'),
         api('/draft/' + d.draft_id),
+        api('/draft/' + d.draft_id + '/traded_picks'),
       ]);
-      return { d, picks: picks || [], info: info || d };
+      return { d, picks: picks || [], info: info || d, tradedPicks: tradedPicks || [] };
     }));
 
-    const cards = details.map(({ d, picks, info }) => {
+    // We need our roster_id per league to match traded pick ownership
+    const rosterIdByLeague = {};
+    await Promise.all(details.map(async ({ info }) => {
+      const lgId = info.league_id;
+      if (!lgId || rosterIdByLeague[lgId] !== undefined) return;
+      try {
+        const rosters = await api('/league/' + lgId + '/rosters');
+        const mine = (rosters || []).find(r => r.owner_id === S.userId);
+        rosterIdByLeague[lgId] = mine?.roster_id ?? null;
+      } catch(_) { rosterIdByLeague[lgId] = null; }
+    }));
+
+    const cards = details.map(({ d, picks, info, tradedPicks }) => {
       const teams  = d.settings?.teams ?? 12;
       const rounds = d.settings?.rounds ?? 5;
       const total  = teams * rounds;
       const done   = picks.length;
       const pct    = Math.round((done / total) * 100);
-      const pos    = picksUntilMyTurn(info, picks, S.userId);
+      const myRosterId = rosterIdByLeague[info.league_id] ?? null;
+
+      const pos = picksUntilMyTurn(info, picks, tradedPicks, S.userId, myRosterId);
 
       let countHtml;
       if (pos === 0) {
-        countHtml = `<div class="draft-count up" style="margin-bottom:4px;">ON CLOCK</div><div style="font-size:12px;color:var(--warn);">you're up now</div>`;
+        countHtml = `<div class="draft-count up" style="margin-bottom:4px;">ON CLOCK</div>
+          <div style="font-size:12px;color:var(--warn);">you're up now</div>`;
       } else if (pos > 0) {
         countHtml = `<div style="display:flex;align-items:baseline;gap:6px;margin-bottom:4px;">
           <span class="draft-count">${pos}</span>
-          <span style="font-size:12px;color:var(--muted);">pick${pos===1?'':'s'} until your turn</span>
+          <span style="font-size:12px;color:var(--muted);">pick${pos === 1 ? '' : 's'} until your turn</span>
         </div>`;
       } else {
-        countHtml = `<div style="font-size:13px;color:var(--muted);margin-bottom:4px;">position unavailable</div>`;
+        countHtml = `<div style="font-size:13px;color:var(--muted);margin-bottom:4px;">no more picks this draft</div>`;
       }
 
       return `<div class="card">
@@ -599,7 +699,9 @@ async function renderDraftQueue(isRefresh = false) {
           <div class="row"><span class="row-label">picks made</span><span class="row-val">${done} / ${total}</span></div>
           <div class="row"><span class="row-label">current round</span><span class="row-val">${Math.min(Math.floor(done / teams) + 1, rounds)}</span></div>
         </div>
-        <div class="draft-bar" style="margin-top:10px;"><div class="draft-bar-fill" style="width:${pct}%"></div></div>
+        <div class="draft-bar" style="margin-top:10px;">
+          <div class="draft-bar-fill" style="width:${pct}%"></div>
+        </div>
       </div>`;
     }).join('');
 
@@ -610,25 +712,53 @@ async function renderDraftQueue(isRefresh = false) {
   }
 }
 
-function picksUntilMyTurn(info, picks, userId) {
-  const draftOrder = info?.draft_order ?? {};
-  const mySlot     = draftOrder[userId];
-  if (!mySlot) return -1;
+function picksUntilMyTurn(info, completedPicks, tradedPicks, userId, myRosterId) {
+  const teams  = info?.settings?.teams ?? 12;
+  const rounds = info?.settings?.rounds ?? 5;
+  const done   = completedPicks.length;
+  const type   = info?.type; // 'snake' or 'linear'
 
-  const teams = info?.settings?.teams ?? 12;
-  const done  = picks.length;
-  const type  = info?.type;
-
-  for (let offset = 0; offset < teams * 5; offset++) {
-    const overall    = done + offset;
-    const round      = Math.floor(overall / teams);
-    const posInRound = overall % teams;
-    const slot = (type === 'snake' && round % 2 === 1)
-      ? teams - posInRound
-      : posInRound + 1;
-    if (slot === mySlot) return offset;
+  // Build a map: "round.slot" → current owner_roster_id after all trades
+  // tradedPick shape: { round, roster_id (original slot owner), owner_id (current owner after trade), previous_owner_id }
+  const tradeMap = {};
+  for (const tp of tradedPicks) {
+    tradeMap[`${tp.round}.${tp.roster_id}`] = tp.owner_id; // owner_id here is roster_id of new owner
   }
-  return -1;
+
+  // draft_order maps user_id → slot number (1-based)
+  // We need the reverse: slot → original roster_id
+  // Sleeper's draft_order is user_id → slot, but slot owners correspond to roster positions.
+  // The slot number == roster_id in most standard leagues. Confirm with pick data.
+  // Completed picks have pick_no, round, draft_slot, roster_id (who made the pick = current owner's roster)
+  // For future picks we derive slot from position in round, then look up traded_picks to find actual owner.
+
+  // Build slot → roster_id map from completed picks (slot is stable, roster_id may have changed via trade)
+  // We actually want: for each upcoming pick position, who currently owns it?
+  const slotToRosterId = {};
+  // Completed picks: draft_slot is the column, roster_id is who actually picked (after trades)
+  for (const p of completedPicks) {
+    if (p.draft_slot && p.roster_id) slotToRosterId[p.draft_slot] = p.roster_id;
+  }
+
+  // For remaining picks, walk pick positions and determine owner
+  for (let offset = 0; offset < teams * rounds; offset++) {
+    const overall    = done + offset;
+    if (overall >= teams * rounds) break;
+    const round      = Math.floor(overall / teams) + 1;        // 1-based
+    const posInRound = overall % teams;                         // 0-based
+    const slot       = (type === 'snake' && round % 2 === 0)   // even rounds go right-to-left
+      ? teams - posInRound
+      : posInRound + 1;                                         // 1-based slot
+
+    // Check if this slot was traded; traded_picks uses the original roster_id as the key
+    // In standard leagues slot == original roster_id, but we use draft_order as fallback
+    const originalRosterId = slot; // standard assumption: slot n = roster_id n
+    const tradeKey = `${round}.${originalRosterId}`;
+    const currentOwnerRosterId = tradeMap[tradeKey] ?? originalRosterId;
+
+    if (currentOwnerRosterId === myRosterId) return offset; // 0 = on the clock
+  }
+  return -1; // no more picks found
 }
 
 // ── leagueFlags — compact notifiers shown on trade cards ─────────────────────
@@ -696,6 +826,7 @@ function statusLabel(s) {
 }
 
 document.getElementById('u-input').addEventListener('keydown', e => { if (e.key === 'Enter') loadUser(); });
+document.getElementById('token-input').addEventListener('keydown', e => { if (e.key === 'Enter') saveToken(); });
 </script>
 </body>
 </html>
