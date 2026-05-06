@@ -175,7 +175,6 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
     <button class="tab active" id="tab-trades"  onclick="sw('trades')">Trades</button>
     <button class="tab"        id="tab-player"  onclick="sw('player')">Player finder</button>
     <button class="tab"        id="tab-lineups" onclick="sw('lineups')">Lineup check</button>
-    <button class="tab"        id="tab-avail"   onclick="sw('avail')">Availability</button>
     <button class="tab"        id="tab-drafts"  onclick="sw('drafts')">Draft queue</button>
   </div>
 
@@ -189,12 +188,9 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 const IS_LOCAL    = location.protocol === 'file:' || location.hostname === 'localhost';
 const API_BASE    = IS_LOCAL ? 'https://api.sleeper.app/v1' : '/api/sleeper';
 const PLAYERS_URL = IS_LOCAL ? 'https://api.sleeper.app/v1/players/nfl' : '/api/players';
-const SEASON      = '2025';
-
-
 
 // ── State ─────────────────────────────────────────────────────────────────────
-const S = { userId: null, leagues: [], leagueDetails: {}, players: {}, tab: 'trades' };
+const S = { userId: null, leagues: [], leagueDetails: {}, players: {}, nflState: null, tab: 'trades' };
 
 // ── Fetch helpers ─────────────────────────────────────────────────────────────
 async function api(path) {
@@ -208,9 +204,11 @@ async function loadPlayers() {
   if (!r.ok) throw new Error('Could not load player data');
   S.players = await r.json();
 }
-function currentWeek() {
-  const ms = Date.now() - new Date('2025-09-04').getTime();
-  return Math.min(Math.max(Math.floor(ms / 6048e5) + 1, 1), 18);
+// Returns { season: '2026', week: 1, ... } from Sleeper's live state endpoint
+async function getNflState() {
+  if (S.nflState) return S.nflState;
+  S.nflState = await api('/state/nfl');
+  return S.nflState;
 }
 function timeAgo(ts) {
   const h = Math.floor((Date.now() - ts) / 36e5);
@@ -235,16 +233,22 @@ async function loadUser() {
   btn.disabled = true; btn.textContent = 'Loading…';
   st.className = 'setup-status';
   try {
-    const user = await api('/user/' + u);
+    // Fetch NFL state and user in parallel — state gives us the correct season
+    const [nflState, user] = await Promise.all([
+      getNflState(),
+      api('/user/' + u),
+    ]);
     if (!user?.user_id) throw new Error('user not found');
-    S.userId  = user.user_id;
-    const leagues = await api('/user/' + S.userId + '/leagues/nfl/' + SEASON);
+    S.userId = user.user_id;
+    // league_create_season is the active season for league endpoints
+    const season = nflState.league_create_season || nflState.season || new Date().getFullYear().toString();
+    const leagues = await api('/user/' + S.userId + '/leagues/nfl/' + season);
     S.leagues = leagues || [];
-    // Fetch full league objects (scoring settings etc) in background — used by trades tab
+    // Fetch full league detail objects in background — used by trades flags
     Promise.all(S.leagues.map(lg =>
       api('/league/' + lg.league_id).then(d => { S.leagueDetails[lg.league_id] = d; }).catch(() => {})
     ));
-    st.textContent = S.leagues.length + ' leagues loaded for ' + esc(user.display_name || u);
+    st.textContent = S.leagues.length + ' leagues loaded for ' + esc(user.display_name || u) + ' (' + season + ')';
     st.className   = 'setup-status ok';
     render(S.tab);
   } catch(e) {
@@ -264,7 +268,7 @@ function sw(tab) {
 function render(tab) {
   if (!S.userId) { setC('<div class="empty">enter your username to get started</div>'); return; }
   ({ trades: renderTrades, player: renderPlayerSearch, lineups: renderLineupCheck,
-     avail: renderAvailability, drafts: renderDraftQueue })[tab]?.();
+     drafts: renderDraftQueue })[tab]?.();
 }
 function setC(html) { document.getElementById('content').innerHTML = html; }
 
@@ -273,19 +277,26 @@ async function renderTrades() {
   setC(loading('scanning leagues for pending trades'));
   try {
     await loadPlayers();
-    const w = currentWeek();
+    const nflState = await getNflState();
+    // Use display_week from state; fall back to 1 if offseason
+    const w = nflState.display_week || nflState.leg || 1;
+
     const all = [];
     for (const lg of S.leagues) {
       try {
-        const weeks = w > 1 ? [w, w - 1] : [w];
-        const results = await Promise.all(weeks.map(wk => api('/league/' + lg.league_id + '/transactions/' + wk)));
-        results.flat().filter(t => t.type === 'trade' && t.status === 'pending')
+        // Check current and previous week to catch any recently created trades
+        const weekNums = w > 1 ? [w, w - 1] : [w];
+        const results = await Promise.all(weekNums.map(wk => api('/league/' + lg.league_id + '/transactions/' + wk)));
+        // Deduplicate by transaction_id in case a trade appears in both weeks
+        const seen = new Set();
+        results.flat()
+          .filter(t => t.type === 'trade' && t.status === 'pending' && !seen.has(t.transaction_id) && seen.add(t.transaction_id))
           .forEach(t => all.push({ ...t, _lgId: lg.league_id, _lgName: lg.name }));
       } catch(_) {}
     }
     if (!all.length) { setC('<div class="empty">no pending trades found</div>'); return; }
 
-    // Resolve roster → display name for involved leagues
+    // Resolve roster_id → manager display name for each involved league
     const lgIds = [...new Set(all.map(t => t._lgId))];
     const rMaps = {};
     await Promise.all(lgIds.map(async id => {
@@ -336,50 +347,124 @@ function tradeSides(t, rMap) {
   return [vals[0] || { name: '—', items: [] }, vals[1] || { name: '—', items: [] }];
 }
 
-// ── 2. Player finder ──────────────────────────────────────────────────────────
+// ── 2. Player finder (combined roster + availability) ─────────────────────────
 function renderPlayerSearch() {
   setC(`<div>
     <div class="search-wrap">
-      <input type="text" id="ps" placeholder="search player name…" oninput="doPlayerSearch()" />
+      <input type="text" id="ps" placeholder="search player name…" oninput="doPlayerSearch()" autofocus />
     </div>
-    <div id="ps-r"><div class="empty">search to see which of your rosters a player is on</div></div>
+    <div id="ps-r"><div class="empty">search to see where a player stands across all your leagues</div></div>
   </div>`);
 }
+
 async function doPlayerSearch() {
   const q = document.getElementById('ps').value.trim().toLowerCase();
   const r = document.getElementById('ps-r');
   if (q.length < 2) return;
   await loadPlayers();
-  const matches = Object.entries(S.players).filter(([,p]) => p.full_name?.toLowerCase().includes(q)).slice(0, 12);
+
+  // Match against full name, sort exact-start matches first
+  const matches = Object.entries(S.players)
+    .filter(([, p]) => p.full_name?.toLowerCase().includes(q))
+    .sort((a, b) => {
+      const aStarts = a[1].full_name.toLowerCase().startsWith(q) ? 0 : 1;
+      const bStarts = b[1].full_name.toLowerCase().startsWith(q) ? 0 : 1;
+      return aStarts - bStarts || a[1].full_name.localeCompare(b[1].full_name);
+    })
+    .slice(0, 10);
+
   if (!matches.length) { r.innerHTML = '<div class="empty">no players found</div>'; return; }
-  r.innerHTML = loading('loading rosters');
+  r.innerHTML = loading('checking all leagues');
+
   try {
+    // Fetch rosters + users for all leagues concurrently
     const rData = await Promise.all(S.leagues.map(lg =>
-      api('/league/' + lg.league_id + '/rosters').then(rs => ({ lg, rs: rs || [] })).catch(() => null)
+      Promise.all([
+        api('/league/' + lg.league_id + '/rosters'),
+        api('/league/' + lg.league_id + '/users'),
+      ]).then(([rs, us]) => {
+        const uMap = Object.fromEntries((us || []).map(u => [u.user_id, u.display_name || u.username]));
+        return { lg, rs: rs || [], uMap };
+      }).catch(() => null)
     ));
+
     let html = '';
     for (const [pid, player] of matches) {
-      const found = [];
+      // Categorise each league: mine (on my roster), theirs (on someone else's), or free agent
+      const mine = [], theirs = [], free = [];
+
       for (const rd of rData) {
         if (!rd) continue;
-        for (const r of rd.rs) {
-          if (r.players?.includes(pid)) found.push({ name: rd.lg.name, starter: r.starters?.includes(pid) });
+        let found = false;
+        for (const roster of rd.rs) {
+          if (!roster.players?.includes(pid)) continue;
+          found = true;
+          if (roster.owner_id === S.userId) {
+            // It's on MY roster
+            mine.push({
+              lgName:  rd.lg.name,
+              starter: roster.starters?.includes(pid),
+            });
+          } else {
+            // Someone else's roster — show their name
+            const ownerName = rd.uMap[roster.owner_id] || 'Unknown';
+            theirs.push({ lgName: rd.lg.name, ownerName });
+          }
+          break;
         }
+        if (!found) free.push(rd.lg.name);
       }
-      if (!found.length) continue;
+
+      // Only render if the player appears somewhere (mine or theirs)
+      if (!mine.length && !theirs.length) continue;
+
+      // Sort alphabetically within each group
+      mine.sort((a, b) => a.lgName.localeCompare(b.lgName));
+      theirs.sort((a, b) => a.lgName.localeCompare(b.lgName));
+      free.sort();
+
+      const mineHtml = mine.map(f => `
+        <div class="row">
+          <span style="display:flex;align-items:center;gap:6px;">
+            <span class="row-label">${esc(f.lgName)}</span>
+          </span>
+          <span style="display:flex;align-items:center;gap:5px;">
+            ${injuryBadge(player.injury_status)}
+            <span class="badge ${f.starter ? 'badge-blue' : 'badge-gray'}">${f.starter ? 'starting' : 'bench'}</span>
+          </span>
+        </div>`).join('');
+
+      const theirsHtml = theirs.length ? `
+        <div class="sect" style="margin-top:10px;">on other rosters</div>
+        <div style="background:var(--surface2);border-radius:var(--r);padding:2px 10px;">
+          ${theirs.map(f => `
+            <div class="row">
+              <span class="row-label">${esc(f.lgName)}</span>
+              <span style="font-size:12px;color:var(--muted);">${esc(f.ownerName)}</span>
+            </div>`).join('')}
+        </div>` : '';
+
+      const freeHtml = free.length ? `
+        <div class="sect" style="margin-top:10px;">free agent in</div>
+        <div style="background:var(--surface2);border-radius:var(--r);padding:2px 10px;">
+          ${free.map(n => `
+            <div class="row">
+              <span class="row-label">${esc(n)}</span>
+              <span class="badge badge-green">available</span>
+            </div>`).join('')}
+        </div>` : '';
+
       html += `<div class="card">
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:${mine.length ? '10px' : '0'};">
           <span class="card-title">${esc(player.full_name)}</span>
-          <span class="card-meta">${esc(player.position||'')} · ${esc(player.team||'FA')}</span>
-          ${injuryBadge(player.injury_status)}
+          <span class="card-meta">${esc(player.position || '')} · ${esc(player.team || 'FA')}</span>
         </div>
-        <div style="margin-top:10px;">${found.map(f=>`<div class="row">
-          <span class="row-label">${esc(f.name)}</span>
-          <span class="badge ${f.starter ? 'badge-blue' : 'badge-gray'}">${f.starter ? 'starting' : 'bench'}</span>
-        </div>`).join('')}</div>
+        ${mine.length ? `<div>${mineHtml}</div>` : ''}
+        ${theirsHtml}
+        ${freeHtml}
       </div>`;
     }
-    r.innerHTML = html || '<div class="empty">player found but not on any of your rosters</div>';
+    r.innerHTML = html || '<div class="empty">player not found in any of your leagues</div>';
   } catch(e) { r.innerHTML = errHtml(e); }
 }
 
@@ -388,30 +473,48 @@ async function renderLineupCheck() {
   setC(loading('scanning starting lineups'));
   try {
     await loadPlayers();
-    const w = currentWeek();
+    const nflState = await getNflState();
+    const w = nflState.display_week || nflState.leg || 1;
+    const isOffseason = nflState.season_type !== 'regular';
+
     let html = '';
     for (const lg of S.leagues) {
       try {
-        const [rosters, matchups] = await Promise.all([
-          api('/league/' + lg.league_id + '/rosters'),
-          api('/league/' + lg.league_id + '/matchups/' + w),
-        ]);
+        const rosters = await api('/league/' + lg.league_id + '/rosters');
         const mine = (rosters || []).find(r => r.owner_id === S.userId);
         if (!mine) continue;
-        const mup      = matchups?.find(m => m.roster_id === mine.roster_id);
-        const starters = (mup ? mup.starters : mine.starters) || [];
-        const issues   = [];
+
+        let starters = [];
+        if (!isOffseason) {
+          // In season: get live matchup starters which reflect any changes made this week
+          try {
+            const matchups = await api('/league/' + lg.league_id + '/matchups/' + w);
+            const mup = matchups?.find(m => m.roster_id === mine.roster_id);
+            starters = mup?.starters || mine.starters || [];
+          } catch(_) {
+            starters = mine.starters || [];
+          }
+        } else {
+          // Offseason: matchups endpoint returns nothing; use roster starters directly
+          starters = mine.starters || [];
+        }
+
+        const issues = [];
         for (const pid of starters) {
-          if (!pid || pid === '0') { issues.push({ name: 'Empty slot', s: 'EMPTY', pos: '' }); continue; }
+          if (!pid || pid === '0') {
+            issues.push({ name: 'Empty slot', s: 'EMPTY', pos: '' });
+            continue;
+          }
           const p = S.players[pid];
           if (!p) continue;
           if (['Q','O','D','IR'].includes(p.injury_status))
             issues.push({ name: p.full_name, s: p.injury_status, pos: p.position || '' });
         }
         if (!issues.length) continue;
+
         html += `<div class="card">
           <span class="card-title">${esc(lg.name)}</span>
-          <div style="margin-top:10px;">${issues.map(i=>`<div class="row">
+          <div style="margin-top:10px;">${issues.map(i => `<div class="row">
             <span style="display:flex;gap:6px;align-items:center;">
               <span style="font-size:10px;color:var(--muted);font-family:var(--mono);">${esc(i.pos)}</span>
               <span style="font-size:13px;">${esc(i.name)}</span>
@@ -425,49 +528,7 @@ async function renderLineupCheck() {
   } catch(e) { setC(errHtml(e)); }
 }
 
-// ── 4. Player availability ────────────────────────────────────────────────────
-function renderAvailability() {
-  setC(`<div>
-    <div class="search-wrap">
-      <input type="text" id="av" placeholder="search player name…" oninput="doAvailSearch()" />
-    </div>
-    <div id="av-r"><div class="empty">search to see where a player is available</div></div>
-  </div>`);
-}
-async function doAvailSearch() {
-  const q = document.getElementById('av').value.trim().toLowerCase();
-  const r = document.getElementById('av-r');
-  if (q.length < 2) return;
-  await loadPlayers();
-  const matches = Object.entries(S.players).filter(([,p]) => p.full_name?.toLowerCase().includes(q)).slice(0, 10);
-  if (!matches.length) { r.innerHTML = '<div class="empty">no players found</div>'; return; }
-  r.innerHTML = loading('checking availability');
-  try {
-    const rData = await Promise.all(S.leagues.map(lg =>
-      api('/league/' + lg.league_id + '/rosters').then(rs => ({ lg, rs: rs || [] })).catch(() => null)
-    ));
-    let html = '';
-    for (const [pid, player] of matches) {
-      const avail = [], taken = [];
-      for (const rd of rData) {
-        if (!rd) continue;
-        (rd.rs.some(r => r.players?.includes(pid)) ? taken : avail).push(rd.lg.name);
-      }
-      html += `<div class="card">
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          <span class="card-title">${esc(player.full_name)}</span>
-          <span class="card-meta">${esc(player.position||'')} · ${esc(player.team||'FA')}</span>
-          ${injuryBadge(player.injury_status)}
-        </div>
-        ${avail.length ? `<div class="sect">available in</div>${avail.map(n=>`<div class="row"><span class="row-label">${esc(n)}</span><span class="badge badge-green">free agent</span></div>`).join('')}` : ''}
-        ${taken.length ? `<div class="sect" style="margin-top:${avail.length?'10px':'0'};">rostered in</div>${taken.map(n=>`<div class="row"><span class="row-label">${esc(n)}</span><span class="badge badge-gray">rostered</span></div>`).join('')}` : ''}
-      </div>`;
-    }
-    r.innerHTML = html;
-  } catch(e) { r.innerHTML = errHtml(e); }
-}
-
-// ── 5. Draft queue ────────────────────────────────────────────────────────────
+// ── 4. Draft queue ────────────────────────────────────────────────────────────
 async function renderDraftQueue(isRefresh = false) {
   if (!isRefresh) {
     setC(`<div>
@@ -483,7 +544,10 @@ async function renderDraftQueue(isRefresh = false) {
   }
 
   try {
-    const drafts = await api('/user/' + S.userId + '/drafts/nfl/' + SEASON);
+    const nflState = await getNflState();
+    // Drafts live under the league_create_season (e.g. 2026 right now)
+    const season = nflState.league_create_season || nflState.season;
+    const drafts = await api('/user/' + S.userId + '/drafts/nfl/' + season);
     const active = (drafts || []).filter(d => d.status === 'drafting');
 
     const target = document.getElementById('draft-body');
