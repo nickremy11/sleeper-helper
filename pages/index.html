@@ -287,17 +287,10 @@ async function loadUser() {
     // league_create_season is the active season for league endpoints
     const season = nflState.league_create_season || nflState.season || new Date().getFullYear().toString();
 
-    // Sleeper caps league responses at 50 — paginate with offset until we have all
-    const allLeagues = [];
-    let offset = 0;
-    while (true) {
-      const page = await api('/user/' + S.userId + '/leagues/nfl/' + season + '?offset=' + offset);
-      const batch = page || [];
-      allLeagues.push(...batch);
-      if (batch.length < 50) break;   // last page
-      offset += 50;
-    }
-    S.leagues = allLeagues;
+    // Sleeper returns all leagues in a single call (confirmed up to 70+)
+    const allLeagues = await api('/user/' + S.userId + '/leagues/nfl/' + season);
+    S.leagues = allLeagues || [];
+
     // Fetch full league detail objects in background — used by trades flags
     Promise.all(S.leagues.map(lg =>
       api('/league/' + lg.league_id).then(d => { S.leagueDetails[lg.league_id] = d; }).catch(() => {})
