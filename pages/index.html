@@ -180,7 +180,7 @@ a.row-link:hover { color: var(--gold-light); }
 .tracker-player.picked .tp-name { text-decoration: line-through; }
 .tp-pos  { font-family: 'Rye', serif; font-size: 0.38rem; letter-spacing: 0.1em; flex-shrink: 0; line-height: 1.4; }
 .tp-name { font-family: 'Crimson Text', serif; font-size: 0.82rem; color: var(--parchment); line-height: 1.25; word-break: break-word; overflow-wrap: break-word; white-space: normal; }
-.tp-team { font-family: 'Rye', serif; font-size: 0.35rem; letter-spacing: 0.08em; color: var(--brown-light); line-height: 1.4; }
+.tp-team { font-family: 'Rye', serif; font-size: 0.48rem; letter-spacing: 0.1em; color: var(--brown-light); line-height: 1.4; }
 /* Position colors */
 .pos-qb { border-left-color: #e8b84b; } .pos-qb .tp-pos { color: #e8b84b; }
 .pos-rb { border-left-color: #5cb85c; } .pos-rb .tp-pos { color: #5cb85c; }
@@ -934,25 +934,15 @@ function renderTrackerBody() {
     ${T.draft ? `<span class="card-meta">Round ${Math.floor(pickedCount/teams)+1} · Pick ${(pickedCount%teams)+1} of ${teams}</span>` : ''}
   </div>`;
 
-  // "F. Lastname" on one line, "TEAM" on the next
-  const shortName = p => {
-    const parts = p.name.trim().split(/\s+/);
-    if (parts.length < 2) return { name: p.name, team: p.team || '' };
-    const first = parts[0][0] + '.';
-    const last  = parts.slice(1).join(' ');
-    return { name: `${first} ${last}`, team: p.team || '' };
-  };
-
   const playerTile = (p) => {
     const isPicked  = T.picked.has(String(p.sleeper_id));
     const pc        = posClass(p.pos);
     const tierNum   = parseInt(p.tier) || 0;
     const tierCls   = hasTiers && tierNum && tierNum % 2 === 0 ? 'tier-even' : '';
-    const { name, team } = shortName(p);
     return `<div class="tracker-player ${isPicked?'picked':''} ${pc} ${tierCls}">
       <span class="tp-pos">${esc(p.pos)}</span>
-      <span class="tp-name">${esc(name)}</span>
-      ${team ? `<span class="tp-team">${esc(team)}</span>` : ''}
+      <span class="tp-name">${esc(p.name)}</span>
+      ${p.team ? `<span class="tp-team">${esc(p.team)}</span>` : ''}
     </div>`;
   };
 
