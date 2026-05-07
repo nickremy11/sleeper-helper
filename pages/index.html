@@ -174,12 +174,13 @@ a.row-link:hover { color: var(--gold-light); }
 .tracker-snake { display: grid; gap: 3px; overflow-x: auto; padding-bottom: 8px; }
 .tracker-round-label { grid-column: 1 / -1; font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.2em; color: var(--gold); padding: 8px 0 2px; border-top: 1px solid var(--brown-mid); margin-top: 4px; }
 .tracker-round-label:first-child { border-top: none; margin-top: 0; }
-.tracker-player { background: var(--brown-dark); border: 1px solid var(--brown-mid); border-left: 3px solid var(--brown-mid); border-radius: 2px; padding: 7px 9px; display: flex; flex-direction: column; gap: 3px; transition: opacity 0.2s; min-width: 0; overflow: hidden; width: 100%; }
+.tracker-player { background: var(--brown-dark); border: 1px solid var(--brown-mid); border-left: 3px solid var(--brown-mid); border-radius: 2px; padding: 6px 7px; display: flex; flex-direction: column; gap: 2px; transition: opacity 0.2s; min-width: 0; min-height: 58px; }
 .tracker-player.tier-even { background: #5a3e28; }
 .tracker-player.picked { opacity: 0.22; }
 .tracker-player.picked .tp-name { text-decoration: line-through; }
-.tp-pos  { font-family: 'Rye', serif; font-size: 0.4rem; letter-spacing: 0.1em; flex-shrink: 0; line-height: 1.4; }
-.tp-name { font-family: 'Crimson Text', serif; font-size: 0.92rem; color: var(--parchment); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tp-pos  { font-family: 'Rye', serif; font-size: 0.38rem; letter-spacing: 0.1em; flex-shrink: 0; line-height: 1.4; }
+.tp-name { font-family: 'Crimson Text', serif; font-size: 0.82rem; color: var(--parchment); line-height: 1.25; word-break: break-word; overflow-wrap: break-word; white-space: normal; }
+.tp-team { font-family: 'Rye', serif; font-size: 0.35rem; letter-spacing: 0.08em; color: var(--brown-light); line-height: 1.4; }
 /* Position colors */
 .pos-qb { border-left-color: #e8b84b; } .pos-qb .tp-pos { color: #e8b84b; }
 .pos-rb { border-left-color: #5cb85c; } .pos-rb .tp-pos { color: #5cb85c; }
@@ -933,13 +934,13 @@ function renderTrackerBody() {
     ${T.draft ? `<span class="card-meta">Round ${Math.floor(pickedCount/teams)+1} · Pick ${(pickedCount%teams)+1} of ${teams}</span>` : ''}
   </div>`;
 
-  // Shorten name to "F. Last - TEAM"
+  // "F. Lastname" on one line, "TEAM" on the next
   const shortName = p => {
     const parts = p.name.trim().split(/\s+/);
-    if (parts.length < 2) return p.name;
+    if (parts.length < 2) return { name: p.name, team: p.team || '' };
     const first = parts[0][0] + '.';
     const last  = parts.slice(1).join(' ');
-    return `${first} ${last}${p.team ? ' — ' + p.team : ''}`;
+    return { name: `${first} ${last}`, team: p.team || '' };
   };
 
   const playerTile = (p) => {
@@ -947,9 +948,11 @@ function renderTrackerBody() {
     const pc        = posClass(p.pos);
     const tierNum   = parseInt(p.tier) || 0;
     const tierCls   = hasTiers && tierNum && tierNum % 2 === 0 ? 'tier-even' : '';
+    const { name, team } = shortName(p);
     return `<div class="tracker-player ${isPicked?'picked':''} ${pc} ${tierCls}">
       <span class="tp-pos">${esc(p.pos)}</span>
-      <span class="tp-name">${esc(shortName(p))}</span>
+      <span class="tp-name">${esc(name)}</span>
+      ${team ? `<span class="tp-team">${esc(team)}</span>` : ''}
     </div>`;
   };
 
@@ -965,7 +968,7 @@ function renderTrackerBody() {
     }
     if (row.length) rows.push(row);
 
-    gridHtml = `<div style="overflow-x:auto;width:100%;"><div class="tracker-snake" style="grid-template-columns:repeat(${teams},150px);min-width:max-content;">`;
+    gridHtml = `<div class="tracker-snake" style="grid-template-columns:repeat(${teams},1fr);">`;
     rows.forEach((rowPlayers, roundIdx) => {
       const round = roundIdx + 1;
       const isReversed = type === 'snake' && round % 2 === 0;
@@ -976,7 +979,7 @@ function renderTrackerBody() {
       </div>`;
       gridHtml += orderedRow.map(playerTile).join('');
     });
-    gridHtml += '</div></div>';
+    gridHtml += '</div>';
   } else {
     // Position-filtered view: simple responsive grid, no snake ordering
     gridHtml = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:3px;">
