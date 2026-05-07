@@ -171,15 +171,15 @@ a.row-link:hover { color: var(--gold-light); }
 .pos-pill { background: none; border: 1px solid var(--brown-mid); color: var(--brown-light); font-family: 'Rye', serif; font-size: 0.48rem; letter-spacing: 0.15em; padding: 4px 10px; border-radius: 2px; cursor: pointer; transition: all 0.15s; }
 .pos-pill.active { background: var(--brown-dark); border-color: var(--gold); color: var(--gold-light); }
 /* Snake grid: CSS grid with fixed columns set via inline style per draft */
-.tracker-snake { display: grid; gap: 3px; }
+.tracker-snake { display: grid; gap: 3px; overflow-x: auto; padding-bottom: 8px; }
 .tracker-round-label { grid-column: 1 / -1; font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.2em; color: var(--gold); padding: 8px 0 2px; border-top: 1px solid var(--brown-mid); margin-top: 4px; }
 .tracker-round-label:first-child { border-top: none; margin-top: 0; }
-.tracker-player { background: var(--brown-dark); border: 1px solid var(--brown-mid); border-left: 3px solid var(--brown-mid); border-radius: 2px; padding: 6px 8px; display: flex; flex-direction: column; gap: 2px; transition: opacity 0.2s; min-width: 0; overflow: hidden; }
-.tracker-player.tier-even { background: #3d2a18; }
+.tracker-player { background: var(--brown-dark); border: 1px solid var(--brown-mid); border-left: 3px solid var(--brown-mid); border-radius: 2px; padding: 7px 9px; display: flex; flex-direction: column; gap: 3px; transition: opacity 0.2s; min-width: 0; overflow: hidden; width: 100%; }
+.tracker-player.tier-even { background: #5a3e28; }
 .tracker-player.picked { opacity: 0.22; }
 .tracker-player.picked .tp-name { text-decoration: line-through; }
 .tp-pos  { font-family: 'Rye', serif; font-size: 0.4rem; letter-spacing: 0.1em; flex-shrink: 0; line-height: 1.4; }
-.tp-name { font-family: 'Crimson Text', serif; font-size: 0.88rem; color: var(--parchment); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tp-name { font-family: 'Crimson Text', serif; font-size: 0.92rem; color: var(--parchment); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Position colors */
 .pos-qb { border-left-color: #e8b84b; } .pos-qb .tp-pos { color: #e8b84b; }
 .pos-rb { border-left-color: #5cb85c; } .pos-rb .tp-pos { color: #5cb85c; }
@@ -965,7 +965,7 @@ function renderTrackerBody() {
     }
     if (row.length) rows.push(row);
 
-    gridHtml = `<div class="tracker-snake" style="grid-template-columns:repeat(${teams},1fr);">`;
+    gridHtml = `<div style="overflow-x:auto;width:100%;"><div class="tracker-snake" style="grid-template-columns:repeat(${teams},150px);min-width:max-content;">`;
     rows.forEach((rowPlayers, roundIdx) => {
       const round = roundIdx + 1;
       const isReversed = type === 'snake' && round % 2 === 0;
@@ -976,7 +976,7 @@ function renderTrackerBody() {
       </div>`;
       gridHtml += orderedRow.map(playerTile).join('');
     });
-    gridHtml += '</div>';
+    gridHtml += '</div></div>';
   } else {
     // Position-filtered view: simple responsive grid, no snake ordering
     gridHtml = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:3px;">
