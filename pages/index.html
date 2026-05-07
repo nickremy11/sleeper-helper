@@ -419,7 +419,7 @@ async function renderTrades() {
 
       return `<div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
-          <span style="display:flex;align-items:center;">${dirDot}<span class="card-title">${esc(t._lgName)}</span></span>
+          <span style="display:flex;align-items:center;">${dirDot}<a href="https://sleeper.com/leagues/${esc(t._lgId)}/trades" target="_blank" style="color:var(--text);text-decoration:none;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text)'">${esc(t._lgName)}</a></span>
           <span style="display:flex;align-items:center;gap:6px;">
             <span style="font-size:11px;color:var(--muted);">${dirLabel}</span>
             <span class="badge badge-yellow">${t.created ? timeAgo(t.created) : ''}</span>
@@ -528,13 +528,15 @@ async function doPlayerSearch() {
           if (roster.owner_id === S.userId) {
             // It's on MY roster
             mine.push({
-              lgName:  rd.lg.name,
-              starter: roster.starters?.includes(pid),
+              lgName:   rd.lg.name,
+              lgId:     rd.lg.league_id,
+              rosterId: roster.roster_id,
+              starter:  roster.starters?.includes(pid),
             });
           } else {
             // Someone else's roster — show their name
             const ownerName = rd.uMap[roster.owner_id] || 'Unknown';
-            theirs.push({ lgName: rd.lg.name, ownerName });
+            theirs.push({ lgName: rd.lg.name, lgId: rd.lg.league_id, rosterId: roster.roster_id, ownerName });
           }
           break;
         }
@@ -551,9 +553,7 @@ async function doPlayerSearch() {
 
       const mineHtml = mine.map(f => `
         <div class="row">
-          <span style="display:flex;align-items:center;gap:6px;">
-            <span class="row-label">${esc(f.lgName)}</span>
-          </span>
+          <a href="https://sleeper.com/leagues/${esc(f.lgId)}/team" target="_blank" style="color:var(--muted);text-decoration:none;font-size:13px;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">${esc(f.lgName)}</a>
           <span style="display:flex;align-items:center;gap:5px;">
             ${injuryBadge(player.injury_status)}
             <span class="badge ${f.starter ? 'badge-blue' : 'badge-gray'}">${f.starter ? 'starting' : 'bench'}</span>
@@ -565,7 +565,7 @@ async function doPlayerSearch() {
         <div style="background:var(--surface2);border-radius:var(--r);padding:2px 10px;">
           ${theirs.map(f => `
             <div class="row">
-              <span class="row-label">${esc(f.lgName)}</span>
+              <a href="https://sleeper.com/leagues/${esc(f.lgId)}/roster/${esc(String(f.rosterId))}" target="_blank" style="color:var(--muted);text-decoration:none;font-size:13px;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">${esc(f.lgName)}</a>
               <span style="font-size:12px;color:var(--muted);">${esc(f.ownerName)}</span>
             </div>`).join('')}
         </div>` : '';
@@ -639,7 +639,10 @@ async function renderLineupCheck() {
         if (!issues.length) continue;
 
         html += `<div class="card">
-          <span class="card-title">${esc(lg.name)}</span>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <a href="https://sleeper.com/leagues/${esc(lg.league_id)}/team" target="_blank" class="card-title" style="color:var(--text);text-decoration:none;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text)'">${esc(lg.name)}</a>
+            <span style="font-size:11px;color:var(--dim);">↗ fix lineup</span>
+          </div>
           <div style="margin-top:10px;">${issues.map(i => `<div class="row">
             <span style="display:flex;gap:6px;align-items:center;">
               <span style="font-size:10px;color:var(--muted);font-family:var(--mono);">${esc(i.pos)}</span>
@@ -745,7 +748,7 @@ async function renderDraftQueue(isRefresh = false) {
       return `<div class="card">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:12px;">
           <div>
-            <div class="card-title">${esc(d.metadata?.name || 'Draft')}</div>
+            <a href="https://sleeper.com/draft/nfl/${esc(d.draft_id)}" target="_blank" class="card-title" style="color:var(--text);text-decoration:none;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text)'">${esc(d.metadata?.name || 'Draft')}</a>
             <div class="card-meta" style="margin-top:2px;">${teams} teams · ${rounds} rds · ${esc(d.type || 'snake')}</div>
           </div>
           <span class="badge badge-green">live</span>
