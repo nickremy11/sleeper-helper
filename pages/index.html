@@ -174,11 +174,12 @@ a.row-link:hover { color: var(--gold-light); }
 .tracker-snake { display: grid; gap: 3px; }
 .tracker-round-label { grid-column: 1 / -1; font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.2em; color: var(--gold); padding: 8px 0 2px; border-top: 1px solid var(--brown-mid); margin-top: 4px; }
 .tracker-round-label:first-child { border-top: none; margin-top: 0; }
-.tracker-player { background: var(--brown-dark); border: 1px solid var(--brown-mid); border-left: 3px solid var(--brown-mid); border-radius: 2px; padding: 5px 7px; display: flex; flex-direction: column; gap: 1px; transition: opacity 0.2s; min-width: 0; overflow: hidden; }
+.tracker-player { background: var(--brown-dark); border: 1px solid var(--brown-mid); border-left: 3px solid var(--brown-mid); border-radius: 2px; padding: 6px 8px; display: flex; flex-direction: column; gap: 2px; transition: opacity 0.2s; min-width: 0; overflow: hidden; }
+.tracker-player.tier-even { background: #3d2a18; }
 .tracker-player.picked { opacity: 0.22; }
 .tracker-player.picked .tp-name { text-decoration: line-through; }
 .tp-pos  { font-family: 'Rye', serif; font-size: 0.4rem; letter-spacing: 0.1em; flex-shrink: 0; line-height: 1.4; }
-.tp-name { font-family: 'Crimson Text', serif; font-size: 0.82rem; color: var(--parchment); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
+.tp-name { font-family: 'Crimson Text', serif; font-size: 0.88rem; color: var(--parchment); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Position colors */
 .pos-qb { border-left-color: #e8b84b; } .pos-qb .tp-pos { color: #e8b84b; }
 .pos-rb { border-left-color: #5cb85c; } .pos-rb .tp-pos { color: #5cb85c; }
@@ -918,13 +919,6 @@ function renderTrackerBody() {
 
   const posClass = p => ({ QB:'pos-qb', RB:'pos-rb', WR:'pos-wr', TE:'pos-te', DEF:'pos-def' })[p] || '';
 
-  // Tier → top border color (cycles through a palette)
-  const TIER_COLORS = ['#e8b84b','#5bc0de','#5cb85c','#e8734b','#9b59b6','#e84b6e','#aaaaaa'];
-  const tierColor = t => {
-    const n = parseInt(t) || 0;
-    return TIER_COLORS[(n - 1) % TIER_COLORS.length] || 'transparent';
-  };
-
   const visible   = T.rankings.filter(p => !SKIP_POS.has(p.pos) && (T.posFilter === 'ALL' || p.pos === T.posFilter));
   const positions = ['ALL', ...new Set(T.rankings.filter(p => !SKIP_POS.has(p.pos)).map(p => p.pos).filter(Boolean))];
   const pickedCount = T.picked.size;
@@ -939,14 +933,23 @@ function renderTrackerBody() {
     ${T.draft ? `<span class="card-meta">Round ${Math.floor(pickedCount/teams)+1} · Pick ${(pickedCount%teams)+1} of ${teams}</span>` : ''}
   </div>`;
 
+  // Shorten name to "F. Last - TEAM"
+  const shortName = p => {
+    const parts = p.name.trim().split(/\s+/);
+    if (parts.length < 2) return p.name;
+    const first = parts[0][0] + '.';
+    const last  = parts.slice(1).join(' ');
+    return `${first} ${last}${p.team ? ' — ' + p.team : ''}`;
+  };
+
   const playerTile = (p) => {
-    const isPicked = T.picked.has(String(p.sleeper_id));
-    const pc = posClass(p.pos);
-    const tierNum = parseInt(p.tier) || 0;
-    const tierBorder = hasTiers && tierNum && tierNum % 2 !== 0 ? `border-top:2px solid var(--gold);` : '';
-    return `<div class="tracker-player ${isPicked?'picked':''} ${pc}" style="${tierBorder}">
+    const isPicked  = T.picked.has(String(p.sleeper_id));
+    const pc        = posClass(p.pos);
+    const tierNum   = parseInt(p.tier) || 0;
+    const tierCls   = hasTiers && tierNum && tierNum % 2 === 0 ? 'tier-even' : '';
+    return `<div class="tracker-player ${isPicked?'picked':''} ${pc} ${tierCls}">
       <span class="tp-pos">${esc(p.pos)}</span>
-      <span class="tp-name">${esc(p.name)}</span>
+      <span class="tp-name">${esc(shortName(p))}</span>
     </div>`;
   };
 
