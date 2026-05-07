@@ -3,211 +3,239 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Sleeper Helper — ffhistorian.com</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<title>Sleeper Helper — FF Historian</title>
+<link href="https://fonts.googleapis.com/css2?family=Rye&family=Playfair+Display:ital,wght@0,700;1,400&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet" />
 <style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
 :root {
-  --bg:          #0d0f12;
-  --surface:     #13161b;
-  --surface2:    #1a1e25;
-  --border:      #252a33;
-  --border2:     #2f3540;
-  --text:        #e8eaf0;
-  --muted:       #6b7280;
-  --dim:         #3d4450;
-  --accent:      #4ade80;
-  --accent-dim:  #16532d;
-  --warn:        #fbbf24;
-  --warn-dim:    #4a3000;
-  --danger:      #f87171;
-  --danger-dim:  #4a1515;
-  --info:        #60a5fa;
-  --info-dim:    #1a3060;
-  --mono:        'DM Mono', monospace;
-  --sans:        'Sora', sans-serif;
-  --r:           8px;
-  --rl:          12px;
+  --cream:        #f5ead6;
+  --parchment:    #e8d5b0;
+  --brown-dark:   #2a1a0e;
+  --brown-mid:    #5c3d1e;
+  --brown-light:  #8b5e2e;
+  --green:        #2d4a1e;
+  --green-light:  #4a7a2f;
+  --red:          #8b1a1a;
+  --gold:         #c9962a;
+  --gold-light:   #e8b84b;
+  --ink:          #1a1008;
 }
-
-html { font-family: var(--sans); background: var(--bg); color: var(--text); font-size: 15px; }
-body { min-height: 100vh; }
-
-input, select, button {
-  font-family: var(--sans);
-  font-size: 14px;
-  background: var(--surface2);
-  border: 1px solid var(--border2);
-  color: var(--text);
-  border-radius: var(--r);
-  padding: 8px 12px;
-  outline: none;
-  transition: border-color 0.15s, background 0.15s;
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background-color: var(--cream);
+  color: var(--ink);
+  font-family: 'Crimson Text', Georgia, serif;
+  min-height: 100vh;
+  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23c9962a' fill-opacity='0.06'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
 }
-input:focus { border-color: var(--accent); }
-button { cursor: pointer; font-weight: 500; padding: 8px 16px; }
-button:hover { background: var(--border2); border-color: var(--dim); }
-button.primary { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
-button.primary:hover { background: #1a6b38; }
-button.ghost { background: none; border-color: var(--border); color: var(--muted); font-size: 12px; padding: 5px 10px; }
-button.ghost:hover { color: var(--text); border-color: var(--border2); background: var(--surface2); }
-button:disabled { opacity: 0.4; cursor: not-allowed; }
-
-.shell { max-width: 860px; margin: 0 auto; padding: 0 20px 60px; }
-
-.topbar {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 22px 0 28px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 28px;
+body::before {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: 0.3;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.15'/%3E%3C/svg%3E");
 }
-.logo { display: flex; align-items: baseline; gap: 10px; }
-.logo-mark { font-family: var(--mono); font-size: 18px; font-weight: 500; color: var(--accent); }
-.logo-sub  { font-size: 12px; color: var(--muted); letter-spacing: 0.04em; }
-.logo-link { font-size: 12px; color: var(--muted); text-decoration: none; }
-.logo-link:hover { color: var(--text); }
+.page-wrap { position: relative; z-index: 1; }
 
-.setup {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--rl);
-  padding: 20px 24px;
-  margin-bottom: 28px;
+/* ── BANNER ── */
+.banner { background: var(--green); border-bottom: 6px double var(--gold); position: relative; overflow: hidden; }
+.banner::before {
+  content: ''; position: absolute; inset: 0;
+  background: repeating-linear-gradient(-45deg, transparent, transparent 10px, rgba(0,0,0,0.06) 10px, rgba(0,0,0,0.06) 11px);
 }
-.setup-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px; }
-.setup-row   { display: flex; gap: 8px; }
-.setup-row input { flex: 1; }
-.setup-status { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 8px; min-height: 18px; }
-.setup-status.ok  { color: var(--accent); }
-.setup-status.err { color: var(--danger); }
-
-.tabs {
-  display: flex; gap: 2px; flex-wrap: wrap;
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--rl); padding: 4px; margin-bottom: 24px;
+.banner-inner {
+  position: relative; z-index: 1;
+  max-width: 900px; margin: 0 auto;
+  padding: 28px 32px 24px;
+  display: flex; align-items: center; gap: 20px;
 }
-.tab {
-  flex: 1; min-width: 100px; padding: 8px 10px;
-  font-size: 12px; font-weight: 500; text-align: center;
-  background: none; border: 1px solid transparent;
-  border-radius: 6px; color: var(--muted); cursor: pointer;
-  transition: background 0.12s, color 0.12s;
+.banner-text { flex: 1; }
+.banner-back {
+  font-family: 'Rye', serif; font-size: 0.6rem; letter-spacing: 0.3em;
+  text-transform: uppercase; color: var(--gold-light); text-decoration: none;
+  opacity: 0.7; display: inline-block; margin-bottom: 8px;
 }
-.tab:hover  { background: var(--surface2); color: var(--text); border-color: transparent; }
-.tab.active { background: var(--surface2); color: var(--accent); border-color: var(--border2); }
+.banner-back:hover { opacity: 1; }
+.banner h1 { font-family: 'Rye', serif; font-size: clamp(1.3rem, 3vw, 2rem); color: var(--cream); text-shadow: 2px 2px 0 rgba(0,0,0,0.4); line-height: 1.1; }
+.banner h1 span { color: var(--gold-light); }
+.banner-sub { margin-top: 6px; font-family: 'Playfair Display', serif; font-style: italic; font-size: 0.9rem; color: var(--parchment); opacity: 0.75; }
+.banner-divider { margin-top: 8px; height: 2px; width: 120px; background: linear-gradient(to right, var(--gold), transparent); }
 
-.content { min-height: 300px; }
-
-.card {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--rl); padding: 16px 20px; margin-bottom: 10px;
+/* ── NAV ── */
+.tab-bar { background: var(--brown-dark); border-bottom: 3px solid var(--gold); position: sticky; top: 0; z-index: 100; }
+.tab-bar-inner { max-width: 900px; margin: 0 auto; display: flex; flex-wrap: wrap; }
+.tab-btn {
+  background: none; border: none; cursor: pointer;
+  font-family: 'Rye', serif; font-size: 0.6rem; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--parchment); opacity: 0.55; padding: 14px 18px;
+  border-right: 1px solid rgba(255,255,255,0.07);
+  transition: opacity 0.2s, background 0.2s; position: relative;
 }
-.card-title { font-size: 14px; font-weight: 500; color: var(--text); }
-.card-meta  { font-size: 12px; color: var(--muted); }
+.tab-btn:hover { opacity: 0.85; background: rgba(255,255,255,0.04); }
+.tab-btn.active { opacity: 1; color: var(--gold-light); background: rgba(255,255,255,0.05); }
+.tab-btn.active::after { content: ''; position: absolute; bottom: -3px; left: 0; right: 0; height: 3px; background: var(--gold-light); }
 
-.badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 500; font-family: var(--mono); }
-.badge-green  { background: var(--accent-dim); color: var(--accent); }
-.badge-yellow { background: var(--warn-dim);   color: var(--warn); }
-.badge-red    { background: var(--danger-dim); color: var(--danger); }
-.badge-blue   { background: var(--info-dim);   color: var(--info); }
-.badge-gray   { background: var(--surface2);   color: var(--muted); border: 1px solid var(--border2); }
+/* ── MAIN ── */
+.main { max-width: 900px; margin: 0 auto; padding: 32px 32px 80px; }
 
-.sect { font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin: 12px 0 6px; }
+/* ── SECTION HEAD ── */
+.section-head { display: flex; align-items: center; gap: 16px; margin-bottom: 22px; }
+.section-head h2 { font-family: 'Rye', serif; font-size: 1.1rem; color: var(--brown-dark); white-space: nowrap; }
+.section-head-line { flex: 1; height: 1px; background: linear-gradient(to right, var(--gold), transparent); }
 
-.row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
-.row:last-child { border-bottom: none; }
-.row-label { color: var(--muted); }
-.row-val   { color: var(--text); font-family: var(--mono); }
+/* ── SETUP ── */
+.setup-card { background: var(--brown-dark); border: 2px solid var(--brown-mid); border-radius: 2px; padding: 20px 24px; margin-bottom: 28px; box-shadow: 4px 4px 0 var(--brown-mid); }
+.setup-label-rye { font-family: 'Rye', serif; font-size: 0.58rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--gold); display: block; margin-bottom: 8px; }
+.setup-label-sub { font-family: 'Crimson Text', serif; font-size: 0.82rem; color: var(--brown-light); font-style: italic; margin-left: 8px; letter-spacing: 0; text-transform: none; }
+.setup-row { display: flex; gap: 8px; }
+.setup-input { flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--brown-mid); color: var(--cream); font-family: 'Crimson Text', serif; font-size: 1rem; padding: 8px 12px; border-radius: 2px; outline: none; transition: border-color 0.2s; }
+.setup-input:focus { border-color: var(--gold); }
+.setup-input::placeholder { color: rgba(255,255,255,0.25); font-style: italic; }
+.setup-btn { background: var(--green); border: 2px solid var(--gold); color: var(--gold-light); font-family: 'Rye', serif; font-size: 0.58rem; letter-spacing: 0.18em; text-transform: uppercase; padding: 0 18px; cursor: pointer; border-radius: 2px; transition: background 0.2s, color 0.2s; white-space: nowrap; }
+.setup-btn:hover { background: var(--gold); color: var(--brown-dark); }
+.setup-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.setup-status { font-family: 'Crimson Text', serif; font-size: 0.85rem; font-style: italic; color: var(--brown-light); margin-top: 6px; min-height: 18px; }
+.setup-status.ok  { color: var(--green-light); }
+.setup-status.err { color: var(--red); }
+.setup-divider { border: none; border-top: 1px solid var(--brown-mid); margin: 16px 0; }
 
-.search-wrap { display: flex; gap: 8px; margin-bottom: 16px; }
-.search-wrap input { flex: 1; }
+/* ── CARDS ── */
+.card { background: var(--brown-dark); border: 1px solid var(--brown-mid); border-radius: 2px; padding: 16px 20px; margin-bottom: 10px; }
+.card-title { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 1rem; color: var(--cream); }
+.card-meta { font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--brown-light); font-style: italic; }
+a.card-link { color: var(--cream); text-decoration: none; font-family: 'Playfair Display', serif; font-weight: 700; font-size: 1rem; }
+a.card-link:hover { color: var(--gold-light); }
+a.row-link { color: var(--parchment); text-decoration: none; font-family: 'Crimson Text', serif; font-size: 0.95rem; }
+a.row-link:hover { color: var(--gold-light); }
 
-.empty   { text-align: center; padding: 48px 0; color: var(--muted); font-size: 13px; font-family: var(--mono); }
-.err-msg { background: var(--danger-dim); border: 1px solid var(--danger); border-radius: var(--r); padding: 10px 14px; font-size: 13px; color: var(--danger); margin-bottom: 12px; }
+/* ── DATA ROWS ── */
+.data-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px dashed rgba(255,255,255,0.08); font-family: 'Crimson Text', serif; font-size: 0.95rem; }
+.data-row:last-child { border-bottom: none; }
+.data-row-label { color: var(--parchment); }
+.data-row-val { color: var(--cream); font-family: 'Playfair Display', serif; font-size: 0.9rem; }
 
-.loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 40px 0; color: var(--muted); font-size: 13px; font-family: var(--mono); }
-.spinner { width: 16px; height: 16px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
+/* ── BADGES ── */
+.badge { display: inline-block; padding: 2px 8px; border-radius: 2px; font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.12em; text-transform: uppercase; }
+.badge-gold    { background: var(--gold);     color: var(--brown-dark); }
+.badge-green   { background: var(--green);    color: var(--gold-light); border: 1px solid var(--gold); }
+.badge-red     { background: var(--red);      color: var(--cream); }
+.badge-outline { background: transparent;     color: var(--brown-light); border: 1px solid var(--brown-mid); }
+
+/* ── SECT LABEL ── */
+.sect { font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin: 12px 0 5px; }
+
+/* ── TRADE ── */
+.trade-sides { display: grid; grid-template-columns: 1fr 24px 1fr; gap: 8px; align-items: start; margin-top: 12px; }
+.trade-side-lbl { font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); margin-bottom: 6px; }
+.trade-arrow { display: flex; align-items: center; justify-content: center; color: var(--brown-light); padding-top: 18px; font-size: 1.1rem; }
+.trade-player { font-family: 'Crimson Text', serif; font-size: 0.95rem; color: var(--parchment); padding: 2px 0; border-bottom: 1px dashed rgba(255,255,255,0.07); }
+.trade-pick   { font-family: 'Crimson Text', serif; font-size: 0.95rem; color: var(--gold-light); padding: 2px 0; border-bottom: 1px dashed rgba(255,255,255,0.07); }
+.dir-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; flex-shrink: 0; vertical-align: middle; }
+
+/* ── SEARCH ── */
+.search-wrap { display: flex; gap: 8px; margin-bottom: 20px; }
+
+/* ── PLAYER FINDER ── */
+.pf-mine   { background: rgba(45,74,30,0.35);  border: 1px solid rgba(74,122,47,0.4); border-radius: 2px; padding: 2px 12px; margin-bottom: 4px; }
+.pf-theirs { background: rgba(42,26,14,0.6);   border: 1px solid var(--brown-mid);   border-radius: 2px; padding: 2px 12px; margin-bottom: 4px; }
+.pf-free   { background: rgba(42,26,14,0.4);   border: 1px solid var(--brown-mid);   border-radius: 2px; padding: 2px 12px; }
+
+/* ── DRAFT ── */
+.draft-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.draft-count { font-family: 'Rye', serif; font-size: 2rem; color: var(--gold-light); line-height: 1; }
+.draft-count.up { color: var(--green-light); }
+.draft-bar { height: 4px; background: var(--brown-mid); border-radius: 2px; margin-top: 10px; }
+.draft-bar-fill { height: 4px; background: var(--gold); border-radius: 2px; transition: width 0.4s; }
+
+/* ── TAB HEADER ── */
+.tab-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.ghost-btn { background: none; border: 1px solid var(--brown-mid); color: var(--brown-light); font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.15em; text-transform: uppercase; padding: 6px 12px; cursor: pointer; border-radius: 2px; transition: border-color 0.2s, color 0.2s; }
+.ghost-btn:hover { border-color: var(--gold); color: var(--gold); }
+
+/* ── STATES ── */
+.empty-state { text-align: center; padding: 50px 20px; border: 2px dashed var(--brown-mid); border-radius: 2px; }
+.empty-state p { font-family: 'Playfair Display', serif; font-style: italic; font-size: 1rem; color: var(--brown-light); }
+.loading-state { text-align: center; padding: 50px 20px; font-family: 'Rye', serif; font-size: 0.65rem; letter-spacing: 0.3em; color: var(--brown-light); display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.spinner { width: 26px; height: 26px; border: 3px solid var(--brown-mid); border-top-color: var(--gold); border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+.err-state { background: var(--red); border: 1px solid #a02020; color: var(--cream); font-family: 'Crimson Text', serif; font-style: italic; font-size: 0.9rem; padding: 10px 14px; border-radius: 2px; margin-bottom: 12px; }
 
-/* Draft */
-.draft-grid  { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
-.draft-count { font-family: var(--mono); font-size: 32px; font-weight: 500; color: var(--accent); line-height: 1; }
-.draft-count.up { color: var(--warn); }
-.draft-bar   { height: 4px; background: var(--surface2); border-radius: 2px; margin-top: 10px; }
-.draft-bar-fill { height: 4px; background: var(--accent); border-radius: 2px; transition: width 0.4s; }
+footer { border-top: 3px double var(--brown-light); padding: 20px 32px; text-align: center; font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--brown-light); background: var(--parchment); }
+footer a { color: var(--brown-mid); text-decoration: none; }
+footer a:hover { color: var(--gold); }
 
-/* Trade sides */
-.trade-sides { display: grid; grid-template-columns: 1fr 24px 1fr; gap: 8px; align-items: start; margin-top: 10px; font-size: 12px; }
-.trade-side-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
-.trade-arrow    { display: flex; align-items: center; justify-content: center; color: var(--dim); padding-top: 16px; font-size: 14px; }
-.trade-player   { padding: 2px 0; color: var(--text); }
-.trade-pick     { padding: 2px 0; color: var(--info); }
-
-/* Tab header row (title + refresh button) */
-.tab-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-.tab-header h2 { font-size: 14px; font-weight: 500; color: var(--muted); }
+@media (max-width: 600px) {
+  .banner-inner { padding: 20px 16px; }
+  .tab-btn { padding: 12px 10px; font-size: 0.5rem; letter-spacing: 0.1em; }
+  .main { padding: 20px 16px 60px; }
+  .setup-card { padding: 16px; }
+  .trade-sides { grid-template-columns: 1fr 18px 1fr; }
+}
 </style>
 </head>
 <body>
-<div class="shell">
+<div class="page-wrap">
 
-  <header class="topbar">
-    <div class="logo">
-      <span class="logo-mark">sleeper-helper</span>
-      <span class="logo-sub">helper.ffhistorian.com</span>
+  <header class="banner">
+    <div class="banner-inner">
+      <div class="banner-text">
+        <a href="https://ffhistorian.com" class="banner-back">← FF Historian</a>
+        <h1>Sleeper <span>Helper</span></h1>
+        <div class="banner-sub">Live tools for managing your fantasy leagues</div>
+        <div class="banner-divider"></div>
+      </div>
     </div>
-    <a class="logo-link" href="https://ffhistorian.com">← ffhistorian.com</a>
   </header>
 
-  <div class="setup">
-    <div class="setup-label">Sleeper username</div>
-    <div class="setup-row">
-      <input type="text" id="u-input" placeholder="your sleeper username…" />
-      <button class="primary" id="load-btn" onclick="loadUser()">Load leagues</button>
+  <nav class="tab-bar">
+    <div class="tab-bar-inner">
+      <button class="tab-btn active" id="tab-trades"  onclick="sw('trades')">Trades</button>
+      <button class="tab-btn"        id="tab-player"  onclick="sw('player')">Player Finder</button>
+      <button class="tab-btn"        id="tab-lineups" onclick="sw('lineups')">Lineup Check</button>
+      <button class="tab-btn"        id="tab-drafts"  onclick="sw('drafts')">Draft Queue</button>
     </div>
-    <div class="setup-status" id="u-status"></div>
-    <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
-      <div class="setup-label" style="margin-bottom:6px;">
-        Sleeper auth token
-        <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--dim);margin-left:6px;">— optional, enables pending trades tab</span>
+  </nav>
+
+  <main class="main">
+
+    <div class="setup-card">
+      <div style="margin-bottom:0;">
+        <label class="setup-label-rye">Sleeper Username</label>
+        <div class="setup-row">
+          <input type="text" id="u-input" class="setup-input" placeholder="your sleeper username…" />
+          <button class="setup-btn" id="load-btn" onclick="loadUser()">Load</button>
+        </div>
+        <div class="setup-status" id="u-status"></div>
       </div>
-      <div class="setup-row">
-        <input type="password" id="token-input" placeholder="paste token from sleeper.com (see README for how to find it)…" />
-        <button id="token-btn" onclick="saveToken()">Save</button>
+      <hr class="setup-divider" />
+      <div>
+        <label class="setup-label-rye">Auth Token <span class="setup-label-sub">— optional, enables pending trades</span></label>
+        <div class="setup-row">
+          <input type="password" id="token-input" class="setup-input" placeholder="sleeper.com → DevTools → Network → any graphql request → Authorization header…" />
+          <button class="setup-btn" onclick="saveToken()">Save</button>
+        </div>
+        <div class="setup-status" id="token-status">token lives in memory only — clears when you close this tab</div>
       </div>
-      <div class="setup-status" id="token-status">token lives in memory only — clears when you close this tab</div>
     </div>
-  </div>
 
-  <div class="tabs">
-    <button class="tab active" id="tab-trades"  onclick="sw('trades')">Trades</button>
-    <button class="tab"        id="tab-player"  onclick="sw('player')">Player finder</button>
-    <button class="tab"        id="tab-lineups" onclick="sw('lineups')">Lineup check</button>
-    <button class="tab"        id="tab-drafts"  onclick="sw('drafts')">Draft queue</button>
-  </div>
+    <div id="content">
+      <div class="empty-state"><p>Enter your username above to get started</p></div>
+    </div>
 
-  <div class="content" id="content">
-    <div class="empty">enter your username to get started</div>
-  </div>
+  </main>
+
+  <footer>
+    <a href="https://ffhistorian.com">ffhistorian.com</a> &nbsp;·&nbsp; built on the <a href="https://docs.sleeper.com" target="_blank">Sleeper API</a>
+  </footer>
 
 </div>
 <script>
-// ── Config ────────────────────────────────────────────────────────────────────
 const IS_LOCAL    = location.protocol === 'file:' || location.hostname === 'localhost';
 const API_BASE    = IS_LOCAL ? 'https://api.sleeper.app/v1' : '/api/sleeper';
 const PLAYERS_URL = IS_LOCAL ? 'https://api.sleeper.app/v1/players/nfl' : '/api/players';
-const GQL_URL     = IS_LOCAL ? null : '/api/graphql'; // no GQL proxy in local dev
+const GQL_URL     = IS_LOCAL ? null : '/api/graphql';
 
-// ── State — token intentionally not persisted anywhere ────────────────────────
 const S = { userId: null, leagues: [], leagueDetails: {}, players: {}, nflState: null, token: null, tab: 'trades' };
 
-// ── Fetch helpers ─────────────────────────────────────────────────────────────
 async function api(path) {
   const r = await fetch(API_BASE + path);
-  if (!r.ok) throw new Error('HTTP ' + r.status + ' — ' + path);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
   return r.json();
 }
 async function loadPlayers() {
@@ -216,43 +244,33 @@ async function loadPlayers() {
   if (!r.ok) throw new Error('Could not load player data');
   S.players = await r.json();
 }
-// Token — in memory only, never written to storage
+async function getNflState() {
+  if (S.nflState) return S.nflState;
+  S.nflState = await api('/state/nfl');
+  return S.nflState;
+}
 function saveToken() {
   const t = document.getElementById('token-input').value.trim();
   if (!t) return;
   S.token = t;
-  document.getElementById('token-input').value = '';  // clear field immediately
+  document.getElementById('token-input').value = '';
   const st = document.getElementById('token-status');
-  st.textContent = '✓ token saved for this session';
+  st.textContent = '✦ token saved for this session';
   st.className = 'setup-status ok';
-  // If trades tab is active, re-render now that we have a token
   if (S.tab === 'trades' && S.userId) renderTrades();
 }
-
-// GraphQL query against Sleeper's internal API via our Worker proxy
-async function gql(op, query, variables = {}) {
+async function gql(op, query) {
   if (!S.token) throw new Error('no token');
-  if (!GQL_URL)  throw new Error('graphql proxy not available in local dev');
+  if (!GQL_URL)  throw new Error('not available in local dev');
   const r = await fetch(GQL_URL, {
     method: 'POST',
-    headers: {
-      'Content-Type':         'application/json',
-      'Authorization':        S.token,
-      'X-Sleeper-Graphql-Op': op,
-    },
-    body: JSON.stringify({ operationName: op, variables, query }),
+    headers: { 'Content-Type': 'application/json', 'Authorization': S.token, 'X-Sleeper-Graphql-Op': op },
+    body: JSON.stringify({ operationName: op, variables: {}, query }),
   });
   if (!r.ok) throw new Error('GQL HTTP ' + r.status);
   const json = await r.json();
   if (json.errors?.length) throw new Error(json.errors[0].message);
   return json.data;
-}
-
-
-async function getNflState() {
-  if (S.nflState) return S.nflState;
-  S.nflState = await api('/state/nfl');
-  return S.nflState;
 }
 function timeAgo(ts) {
   const h = Math.floor((Date.now() - ts) / 36e5);
@@ -261,82 +279,62 @@ function timeAgo(ts) {
 function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
-function errHtml(e) {
-  return `<div class="err-msg">error: ${esc(e.message)}</div>`;
-}
-function loading(msg = 'loading') {
-  return `<div class="loading"><div class="spinner"></div>${esc(msg)}</div>`;
-}
+function errHtml(e) { return `<div class="err-state">Error: ${esc(e.message)}</div>`; }
+function loading(msg) { return `<div class="loading-state"><div class="spinner"></div>${esc(msg)}</div>`; }
 
-// ── Load user ─────────────────────────────────────────────────────────────────
 async function loadUser() {
-  const u   = document.getElementById('u-input').value.trim();
+  const u = document.getElementById('u-input').value.trim();
   if (!u) return;
   const btn = document.getElementById('load-btn');
   const st  = document.getElementById('u-status');
   btn.disabled = true; btn.textContent = 'Loading…';
   st.className = 'setup-status';
   try {
-    // Fetch NFL state and user in parallel — state gives us the correct season
-    const [nflState, user] = await Promise.all([
-      getNflState(),
-      api('/user/' + u),
-    ]);
+    const [nflState, user] = await Promise.all([ getNflState(), api('/user/' + u) ]);
     if (!user?.user_id) throw new Error('user not found');
     S.userId = user.user_id;
-    // league_create_season is the active season for league endpoints
     const season = nflState.league_create_season || nflState.season || new Date().getFullYear().toString();
-
-    // Sleeper returns all leagues in a single call (confirmed up to 70+)
-    const allLeagues = await api('/user/' + S.userId + '/leagues/nfl/' + season);
-    S.leagues = allLeagues || [];
-    // Fetch full league detail objects in background — used by trades flags
+    S.leagues = await api('/user/' + S.userId + '/leagues/nfl/' + season) || [];
     Promise.all(S.leagues.map(lg =>
       api('/league/' + lg.league_id).then(d => { S.leagueDetails[lg.league_id] = d; }).catch(() => {})
     ));
     st.textContent = S.leagues.length + ' leagues loaded for ' + esc(user.display_name || u) + ' (' + season + ')';
-    st.className   = 'setup-status ok';
+    st.className = 'setup-status ok';
     render(S.tab);
   } catch(e) {
-    st.textContent = 'error: ' + e.message;
-    st.className   = 'setup-status err';
+    st.textContent = 'Error: ' + e.message;
+    st.className = 'setup-status err';
   }
-  btn.disabled = false; btn.textContent = 'Load leagues';
+  btn.disabled = false; btn.textContent = 'Load';
 }
 
-// ── Tab router ────────────────────────────────────────────────────────────────
 function sw(tab) {
   S.tab = tab;
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
   render(tab);
 }
 function render(tab) {
-  if (!S.userId) { setC('<div class="empty">enter your username to get started</div>'); return; }
-  ({ trades: renderTrades, player: renderPlayerSearch, lineups: renderLineupCheck,
-     drafts: renderDraftQueue })[tab]?.();
+  if (!S.userId) { setC('<div class="empty-state"><p>Enter your username above to get started</p></div>'); return; }
+  ({ trades: renderTrades, player: renderPlayerSearch, lineups: renderLineupCheck, drafts: renderDraftQueue })[tab]?.();
 }
 function setC(html) { document.getElementById('content').innerHTML = html; }
 
-// ── 1. Pending trades (via authenticated GraphQL) ─────────────────────────────
+// ── 1. Trades ─────────────────────────────────────────────────────────────────
 async function renderTrades() {
   if (!S.token) {
-    setC(`<div class="empty" style="padding:40px 0;">
-      <div style="margin-bottom:12px;">paste your Sleeper auth token above to see pending trades</div>
-      <div style="font-size:11px;color:var(--dim);max-width:360px;margin:0 auto;line-height:1.7;">
-        go to sleeper.com → open DevTools → Network tab → click any trade or transaction →
-        find a request to sleeper.com/graphql → copy the <strong style="color:var(--muted);">Authorization</strong> header value
-      </div>
+    setC(`<div class="empty-state">
+      <p>Paste your Sleeper auth token above to see pending trades</p>
+      <p style="margin-top:10px;font-size:0.85rem;color:var(--brown-light);font-family:'Crimson Text',serif;font-style:italic;">
+        sleeper.com → DevTools → Network → any graphql request → Authorization header
+      </p>
     </div>`);
     return;
   }
-
-  setC(loading('scanning leagues for pending trades'));
+  setC(loading('Scanning leagues for pending trades'));
   try {
     await loadPlayers();
-
-    // We need our roster_id in each league to filter trades involving us.
-    // leagueDetails are fetched on load; rosters come from those or a fresh call.
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
     const rosterIds = {};
     await Promise.all(S.leagues.map(async lg => {
       try {
@@ -346,90 +344,57 @@ async function renderTrades() {
       } catch(_) {}
     }));
 
-    // Fire GraphQL query per league concurrently
-    const GQL_QUERY = `query league_transactions_filtered {
-      league_transactions_filtered(
-        league_id: $LEAGUE_ID,
-        roster_id_filters: [$ROSTER_ID],
-        type_filters: ["trade"],
-        leg_filters: [],
-        status_filters: []
-      ){
-        adds consenter_ids created creator draft_picks drops
-        league_id leg roster_ids status status_updated transaction_id type waiver_budget
+    const GQL = `query league_transactions_filtered {
+      league_transactions_filtered(league_id: $LID, roster_id_filters: [$RID], type_filters: ["trade"], leg_filters: [], status_filters: []){
+        adds consenter_ids created creator draft_picks drops league_id leg roster_ids status status_updated transaction_id type waiver_budget
       }
     }`;
-
-    const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
-    const cutoff = Date.now() - SEVEN_DAYS;
 
     const results = await Promise.allSettled(S.leagues.map(async lg => {
       const rid = rosterIds[lg.league_id];
       if (!rid) return [];
-      const query = GQL_QUERY
-        .replace('$LEAGUE_ID', `"${lg.league_id}"`)
-        .replace('$ROSTER_ID', rid);
-      const data = await gql('league_transactions_filtered', query);
-      const txns = data?.league_transactions_filtered || [];
-      return txns
+      const data = await gql('league_transactions_filtered', GQL.replace('$LID', `"${lg.league_id}"`).replace('$RID', rid));
+      return (data?.league_transactions_filtered || [])
         .filter(t => t.status === 'proposed' && t.created >= cutoff)
         .map(t => ({ ...t, _lgId: lg.league_id, _lgName: lg.name, _myRid: rid }));
     }));
 
-    // Sort all trades by created desc (most recent first)
-    const all = results
-      .flatMap(r => r.status === 'fulfilled' ? r.value : [])
-      .sort((a, b) => b.created - a.created);
+    const all = results.flatMap(r => r.status === 'fulfilled' ? r.value : []).sort((a,b) => b.created - a.created);
+    if (!all.length) { setC('<div class="empty-state"><p>No pending trades found in the last 7 days</p></div>'); return; }
 
-    if (!all.length) {
-      setC('<div class="empty">no pending trades found across your leagues</div>');
-      return;
-    }
-
-    // Resolve roster_id → manager name for leagues with pending trades
     const lgIds = [...new Set(all.map(t => t._lgId))];
     const rMaps = {};
     await Promise.all(lgIds.map(async id => {
       try {
-        const [rosters, users] = await Promise.all([
-          api('/league/' + id + '/rosters'),
-          api('/league/' + id + '/users'),
-        ]);
+        const [rosters, users] = await Promise.all([ api('/league/' + id + '/rosters'), api('/league/' + id + '/users') ]);
         const uMap = Object.fromEntries((users || []).map(u => [u.user_id, u.display_name || u.username]));
         rMaps[id] = Object.fromEntries((rosters || []).map(r => [r.roster_id, uMap[r.owner_id] || 'Team ' + r.roster_id]));
       } catch(_) {}
     }));
 
     setC(all.map(t => {
-      const rMap   = rMaps[t._lgId] || {};
-      const sides  = tradeSides(t, rMap);
+      const rMap  = rMaps[t._lgId] || {};
+      const sides = tradeSides(t, rMap);
       const detail = S.leagueDetails[t._lgId];
       const flags  = detail ? leagueFlags(detail) : [];
       const flagHtml = flags.length
-        ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;">${flags.map(f => `<span class="badge badge-gray" style="font-size:10px;">${esc(f)}</span>`).join('')}</div>`
+        ? `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px;">${flags.map(f=>`<span class="badge badge-outline">${esc(f)}</span>`).join('')}</div>`
         : '';
-
-      // Incoming = my roster_id is in consenter_ids (I still need to approve)
-      // Outgoing = I am the creator
-      const isIncoming = (t.consenter_ids || []).includes(t._myRid);
-      const dirDot  = isIncoming
-        ? `<span title="incoming" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-right:5px;flex-shrink:0;"></span>`
-        : `<span title="outgoing" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--danger);margin-right:5px;flex-shrink:0;"></span>`;
-      const dirLabel = isIncoming ? 'incoming' : 'outgoing';
-
+      const isIncoming = t.creator !== S.userId;
+      const dot = `<span class="dir-dot" style="background:${isIncoming ? 'var(--green-light)' : 'var(--red)'};" title="${isIncoming?'incoming':'outgoing'}"></span>`;
       return `<div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
-          <span style="display:flex;align-items:center;">${dirDot}<a href="https://sleeper.com/leagues/${esc(t._lgId)}/trades" target="_blank" style="color:var(--text);text-decoration:none;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text)'">${esc(t._lgName)}</a></span>
-          <span style="display:flex;align-items:center;gap:6px;">
-            <span style="font-size:11px;color:var(--muted);">${dirLabel}</span>
-            <span class="badge badge-yellow">${t.created ? timeAgo(t.created) : ''}</span>
+          <span style="display:flex;align-items:center;">${dot}<a href="https://sleeper.com/leagues/${esc(t._lgId)}/trades" target="_blank" class="card-link">${esc(t._lgName)}</a></span>
+          <span style="display:flex;align-items:center;gap:8px;">
+            <span class="card-meta">${isIncoming?'incoming':'outgoing'}</span>
+            <span class="badge badge-gold">${t.created ? timeAgo(t.created) : ''}</span>
           </span>
         </div>
         ${flagHtml}
         <div class="trade-sides">
-          <div><div class="trade-side-lbl">${esc(sides[0].name)}</div>${sides[0].items.map(i => `<div class="${i.cls}">${esc(i.txt)}</div>`).join('')}</div>
+          <div><div class="trade-side-lbl">${esc(sides[0].name)}</div>${sides[0].items.map(i=>`<div class="${i.cls}">${esc(i.txt)}</div>`).join('')}</div>
           <div class="trade-arrow">⇄</div>
-          <div><div class="trade-side-lbl">${esc(sides[1].name)}</div>${sides[1].items.map(i => `<div class="${i.cls}">${esc(i.txt)}</div>`).join('')}</div>
+          <div><div class="trade-side-lbl">${esc(sides[1].name)}</div>${sides[1].items.map(i=>`<div class="${i.cls}">${esc(i.txt)}</div>`).join('')}</div>
         </div>
       </div>`;
     }).join(''));
@@ -438,87 +403,65 @@ async function renderTrades() {
 
 function tradeSides(t, rMap) {
   const sides = {};
-
-  // adds: { player_id: destination_roster_id }
   for (const [pid, rid] of Object.entries(t.adds || {})) {
     const key = String(rid);
     if (!sides[key]) sides[key] = { name: rMap[rid] || 'Team ' + rid, items: [] };
     const p = S.players[pid];
     sides[key].items.push({ cls: 'trade-player', txt: p ? p.full_name : 'Player ' + pid });
   }
-
-  // draft_picks: array of strings "slot,season,round,teamA_roster,teamB_roster"
-  // format appears to be: "original_slot, season, round, from_roster, to_roster"
   for (const pk of (t.draft_picks || [])) {
     if (typeof pk === 'string') {
       const parts = pk.split(',');
-      // parts: [slot, season, round, from_roster_id, to_roster_id]
-      const round    = parts[2];
-      const season   = parts[1];
-      const toRoster = parts[3];  // parts[3] = receiving roster, parts[4] = sending roster
+      const toRoster = parts[3], round = parts[2], season = parts[1];
       const key = String(toRoster);
       if (!sides[key]) sides[key] = { name: rMap[toRoster] || 'Team ' + toRoster, items: [] };
       const originalOwner = rMap[parts[0]] || (parts[0] !== toRoster ? 'Roster ' + parts[0] : null);
       const viaStr = originalOwner ? ` (via ${originalOwner})` : '';
       sides[key].items.push({ cls: 'trade-pick', txt: `${season} Rd ${round} pick${viaStr}` });
     } else if (pk && typeof pk === 'object') {
-      // fallback for object format
       const rid = String(pk.owner_id);
       if (!sides[rid]) sides[rid] = { name: rMap[pk.owner_id] || 'Team ' + pk.owner_id, items: [] };
       sides[rid].items.push({ cls: 'trade-pick', txt: `${pk.season} Rd ${pk.round} pick` });
     }
   }
-
   const vals = Object.values(sides);
   return [vals[0] || { name: '—', items: [] }, vals[1] || { name: '—', items: [] }];
 }
 
-// ── 2. Player finder (combined roster + availability) ─────────────────────────
+// ── 2. Player Finder ──────────────────────────────────────────────────────────
 function renderPlayerSearch() {
   setC(`<div>
     <div class="search-wrap">
-      <input type="text" id="ps" placeholder="search player name…" oninput="doPlayerSearch()" autofocus />
+      <input type="text" id="ps" class="setup-input" placeholder="Search player name…" oninput="doPlayerSearch()" autofocus />
     </div>
-    <div id="ps-r"><div class="empty">search to see where a player stands across all your leagues</div></div>
+    <div id="ps-r"><div class="empty-state"><p>Search to see where a player stands across all your leagues</p></div></div>
   </div>`);
 }
-
 async function doPlayerSearch() {
   const q = document.getElementById('ps').value.trim().toLowerCase();
   const r = document.getElementById('ps-r');
   if (q.length < 2) return;
   await loadPlayers();
-
-  // Match against full name, sort exact-start matches first
   const matches = Object.entries(S.players)
-    .filter(([, p]) => p.full_name?.toLowerCase().includes(q))
-    .sort((a, b) => {
-      const aStarts = a[1].full_name.toLowerCase().startsWith(q) ? 0 : 1;
-      const bStarts = b[1].full_name.toLowerCase().startsWith(q) ? 0 : 1;
-      return aStarts - bStarts || a[1].full_name.localeCompare(b[1].full_name);
-    })
-    .slice(0, 10);
-
-  if (!matches.length) { r.innerHTML = '<div class="empty">no players found</div>'; return; }
-  r.innerHTML = loading('checking all leagues');
-
+    .filter(([,p]) => p.full_name?.toLowerCase().includes(q))
+    .sort((a,b) => {
+      const aS = a[1].full_name.toLowerCase().startsWith(q) ? 0 : 1;
+      const bS = b[1].full_name.toLowerCase().startsWith(q) ? 0 : 1;
+      return aS - bS || a[1].full_name.localeCompare(b[1].full_name);
+    }).slice(0, 10);
+  if (!matches.length) { r.innerHTML = '<div class="empty-state"><p>No players found</p></div>'; return; }
+  r.innerHTML = loading('Checking all leagues');
   try {
-    // Fetch rosters + users for all leagues concurrently
     const rData = await Promise.all(S.leagues.map(lg =>
-      Promise.all([
-        api('/league/' + lg.league_id + '/rosters'),
-        api('/league/' + lg.league_id + '/users'),
-      ]).then(([rs, us]) => {
-        const uMap = Object.fromEntries((us || []).map(u => [u.user_id, u.display_name || u.username]));
-        return { lg, rs: rs || [], uMap };
-      }).catch(() => null)
+      Promise.all([ api('/league/' + lg.league_id + '/rosters'), api('/league/' + lg.league_id + '/users') ])
+        .then(([rs, us]) => {
+          const uMap = Object.fromEntries((us || []).map(u => [u.user_id, u.display_name || u.username]));
+          return { lg, rs: rs || [], uMap };
+        }).catch(() => null)
     ));
-
     let html = '';
     for (const [pid, player] of matches) {
-      // Categorise each league: mine (on my roster), theirs (on someone else's), or free agent
       const mine = [], theirs = [], free = [];
-
       for (const rd of rData) {
         if (!rd) continue;
         let found = false;
@@ -526,181 +469,121 @@ async function doPlayerSearch() {
           if (!roster.players?.includes(pid)) continue;
           found = true;
           if (roster.owner_id === S.userId) {
-            // It's on MY roster
-            mine.push({
-              lgName:   rd.lg.name,
-              lgId:     rd.lg.league_id,
-              rosterId: roster.roster_id,
-              starter:  roster.starters?.includes(pid),
-            });
+            mine.push({ lgName: rd.lg.name, lgId: rd.lg.league_id, starter: roster.starters?.includes(pid) });
           } else {
-            // Someone else's roster — show their name
-            const ownerName = rd.uMap[roster.owner_id] || 'Unknown';
-            theirs.push({ lgName: rd.lg.name, lgId: rd.lg.league_id, rosterId: roster.roster_id, ownerName });
+            theirs.push({ lgName: rd.lg.name, lgId: rd.lg.league_id, ownerName: rd.uMap[roster.owner_id] || 'Unknown' });
           }
           break;
         }
-        if (!found) free.push(rd.lg.name);
+        if (!found) free.push({ name: rd.lg.name, lgId: rd.lg.league_id });
       }
-
-      // Only render if the player appears somewhere (mine or theirs)
       if (!mine.length && !theirs.length) continue;
+      mine.sort((a,b) => a.lgName.localeCompare(b.lgName));
+      theirs.sort((a,b) => a.lgName.localeCompare(b.lgName));
+      free.sort((a,b) => a.name.localeCompare(b.name));
 
-      // Sort alphabetically within each group
-      mine.sort((a, b) => a.lgName.localeCompare(b.lgName));
-      theirs.sort((a, b) => a.lgName.localeCompare(b.lgName));
-      free.sort();
-
-      const mineHtml = mine.map(f => `
-        <div class="row">
-          <a href="https://sleeper.com/leagues/${esc(f.lgId)}/team" target="_blank" style="color:var(--muted);text-decoration:none;font-size:13px;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">${esc(f.lgName)}</a>
-          <span style="display:flex;align-items:center;gap:5px;">
-            ${injuryBadge(player.injury_status)}
-            <span class="badge ${f.starter ? 'badge-blue' : 'badge-gray'}">${f.starter ? 'starting' : 'bench'}</span>
-          </span>
-        </div>`).join('');
-
-      const theirsHtml = theirs.length ? `
-        <div class="sect" style="margin-top:10px;">on other rosters</div>
-        <div style="background:var(--surface2);border-radius:var(--r);padding:2px 10px;">
-          ${theirs.map(f => `
-            <div class="row">
-              <a href="https://sleeper.com/leagues/${esc(f.lgId)}/roster/${esc(String(f.rosterId))}" target="_blank" style="color:var(--muted);text-decoration:none;font-size:13px;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">${esc(f.lgName)}</a>
-              <span style="font-size:12px;color:var(--muted);">${esc(f.ownerName)}</span>
-            </div>`).join('')}
-        </div>` : '';
-
-      const freeHtml = free.length ? `
-        <div class="sect" style="margin-top:10px;">free agent in</div>
-        <div style="background:var(--surface2);border-radius:var(--r);padding:2px 10px;">
-          ${free.map(n => `
-            <div class="row">
-              <span class="row-label">${esc(n)}</span>
-              <span class="badge badge-green">available</span>
-            </div>`).join('')}
-        </div>` : '';
-
-      html += `<div class="card">
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:${mine.length ? '10px' : '0'};">
+      html += `<div class="card" style="margin-bottom:14px;">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
           <span class="card-title">${esc(player.full_name)}</span>
-          <span class="card-meta">${esc(player.position || '')} · ${esc(player.team || 'FA')}</span>
+          <span class="card-meta">${esc(player.position||'')} · ${esc(player.team||'FA')}</span>
         </div>
-        ${mine.length ? `<div>${mineHtml}</div>` : ''}
-        ${theirsHtml}
-        ${freeHtml}
+        ${mine.length ? `<div class="sect">On your roster</div><div class="pf-mine">${mine.map(f=>`
+          <div class="data-row">
+            <a href="https://sleeper.com/leagues/${esc(f.lgId)}/team" target="_blank" class="row-link">${esc(f.lgName)}</a>
+            <span style="display:flex;align-items:center;gap:6px;">${injuryBadge(player.injury_status)}<span class="badge ${f.starter?'badge-green':'badge-outline'}">${f.starter?'Starting':'Bench'}</span></span>
+          </div>`).join('')}</div>` : ''}
+        ${theirs.length ? `<div class="sect">On other rosters</div><div class="pf-theirs">${theirs.map(f=>`
+          <div class="data-row">
+            <a href="https://sleeper.com/leagues/${esc(f.lgId)}" target="_blank" class="row-link">${esc(f.lgName)}</a>
+            <span class="card-meta">${esc(f.ownerName)}</span>
+          </div>`).join('')}</div>` : ''}
+        ${free.length ? `<div class="sect">Free agent in</div><div class="pf-free">${free.map(f=>`
+          <div class="data-row">
+            <a href="https://sleeper.com/leagues/${esc(f.lgId)}" target="_blank" class="row-link">${esc(f.name)}</a>
+            <span class="badge badge-green">Available</span>
+          </div>`).join('')}</div>` : ''}
       </div>`;
     }
-    r.innerHTML = html || '<div class="empty">player not found in any of your leagues</div>';
+    r.innerHTML = html || '<div class="empty-state"><p>Player not found on any of your rosters</p></div>';
   } catch(e) { r.innerHTML = errHtml(e); }
 }
 
-// ── 3. Lineup check ───────────────────────────────────────────────────────────
+// ── 3. Lineup Check ───────────────────────────────────────────────────────────
 async function renderLineupCheck() {
-  setC(loading('scanning starting lineups'));
+  setC(loading('Scanning starting lineups'));
   try {
     await loadPlayers();
     const nflState = await getNflState();
     const w = nflState.display_week || nflState.leg || 1;
     const isOffseason = nflState.season_type !== 'regular';
-
     let html = '';
     for (const lg of S.leagues) {
       try {
         const rosters = await api('/league/' + lg.league_id + '/rosters');
         const mine = (rosters || []).find(r => r.owner_id === S.userId);
         if (!mine) continue;
-
         let starters = [];
         if (!isOffseason) {
-          // In season: get live matchup starters which reflect any changes made this week
           try {
             const matchups = await api('/league/' + lg.league_id + '/matchups/' + w);
-            const mup = matchups?.find(m => m.roster_id === mine.roster_id);
-            starters = mup?.starters || mine.starters || [];
-          } catch(_) {
-            starters = mine.starters || [];
-          }
-        } else {
-          // Offseason: matchups endpoint returns nothing; use roster starters directly
-          starters = mine.starters || [];
-        }
-
+            starters = matchups?.find(m => m.roster_id === mine.roster_id)?.starters || mine.starters || [];
+          } catch(_) { starters = mine.starters || []; }
+        } else { starters = mine.starters || []; }
         const issues = [];
         for (const pid of starters) {
-          if (!pid || pid === '0') {
-            issues.push({ name: 'Empty slot', s: 'EMPTY', pos: '' });
-            continue;
-          }
+          if (!pid || pid === '0') { issues.push({ name: 'Empty slot', s: 'EMPTY', pos: '' }); continue; }
           const p = S.players[pid];
           if (!p) continue;
-          if (['Q','O','D','IR'].includes(p.injury_status))
-            issues.push({ name: p.full_name, s: p.injury_status, pos: p.position || '' });
+          if (['Q','O','D','IR'].includes(p.injury_status)) issues.push({ name: p.full_name, s: p.injury_status, pos: p.position||'' });
         }
         if (!issues.length) continue;
-
         html += `<div class="card">
           <div style="display:flex;justify-content:space-between;align-items:center;">
-            <a href="https://sleeper.com/leagues/${esc(lg.league_id)}/team" target="_blank" class="card-title" style="color:var(--text);text-decoration:none;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text)'">${esc(lg.name)}</a>
-            <span style="font-size:11px;color:var(--dim);">↗ fix lineup</span>
+            <a href="https://sleeper.com/leagues/${esc(lg.league_id)}/team" target="_blank" class="card-link">${esc(lg.name)}</a>
+            <span class="card-meta" style="font-size:0.75rem;">↗ fix lineup</span>
           </div>
-          <div style="margin-top:10px;">${issues.map(i => `<div class="row">
-            <span style="display:flex;gap:6px;align-items:center;">
-              <span style="font-size:10px;color:var(--muted);font-family:var(--mono);">${esc(i.pos)}</span>
-              <span style="font-size:13px;">${esc(i.name)}</span>
+          <div style="margin-top:10px;">${issues.map(i=>`<div class="data-row">
+            <span style="display:flex;gap:8px;align-items:center;">
+              <span style="font-family:'Rye',serif;font-size:0.5rem;color:var(--brown-light);">${esc(i.pos)}</span>
+              <span>${esc(i.name)}</span>
             </span>
             <span class="badge ${statusBadgeCls(i.s)}">${statusLabel(i.s)}</span>
           </div>`).join('')}</div>
         </div>`;
       } catch(_) {}
     }
-    setC(html || '<div class="empty">no lineup issues found across your leagues</div>');
+    setC(html || '<div class="empty-state"><p>No lineup issues found across your leagues</p></div>');
   } catch(e) { setC(errHtml(e)); }
 }
 
-// ── 4. Draft queue ────────────────────────────────────────────────────────────
+// ── 4. Draft Queue ────────────────────────────────────────────────────────────
 async function renderDraftQueue(isRefresh = false) {
   if (!isRefresh) {
     setC(`<div>
       <div class="tab-header">
-        <span class="card-meta">active rookie / startup drafts</span>
-        <button class="ghost" onclick="renderDraftQueue(true)">↻ refresh</button>
+        <div class="section-head" style="margin-bottom:0;flex:1;"><h2>Active Drafts</h2><div class="section-head-line"></div></div>
+        <button class="ghost-btn" style="margin-left:16px;" onclick="renderDraftQueue(true)">↻ Refresh</button>
       </div>
-      <div id="draft-body">${loading('loading active drafts')}</div>
+      <div id="draft-body">${loading('Loading active drafts')}</div>
     </div>`);
   } else {
-    const body = document.getElementById('draft-body');
-    if (body) body.innerHTML = loading('refreshing');
+    const b = document.getElementById('draft-body');
+    if (b) b.innerHTML = loading('Refreshing');
   }
-
   try {
-    // Get draft IDs from leagues directly — the /user/drafts endpoint is capped at 50.
-    // Each league object has a draft_id field. leagueDetails are fetched at load time;
-    // fall back to a fresh fetch for any that haven't loaded yet.
     const draftIds = new Set();
     await Promise.all(S.leagues.map(async lg => {
       try {
-        let detail = S.leagueDetails[lg.league_id];
-        if (!detail) {
-          detail = await api('/league/' + lg.league_id);
-          S.leagueDetails[lg.league_id] = detail;
-        }
-        if (detail?.draft_id) draftIds.add(detail.draft_id);
+        let d = S.leagueDetails[lg.league_id];
+        if (!d) { d = await api('/league/' + lg.league_id); S.leagueDetails[lg.league_id] = d; }
+        if (d?.draft_id) draftIds.add(d.draft_id);
       } catch(_) {}
     }));
-
-    // Fetch each draft to check status
-    const allDrafts = await Promise.all([...draftIds].map(id =>
-      api('/draft/' + id).catch(() => null)
-    ));
+    const allDrafts = await Promise.all([...draftIds].map(id => api('/draft/' + id).catch(() => null)));
     const active = allDrafts.filter(d => d?.status === 'drafting');
-
     const target = document.getElementById('draft-body');
     if (!target) return;
-
-    if (!active.length) {
-      target.innerHTML = '<div class="empty">no active drafts right now</div>';
-      return;
-    }
+    if (!active.length) { target.innerHTML = '<div class="empty-state"><p>No active drafts right now</p></div>'; return; }
 
     const details = await Promise.all(active.map(async d => {
       const [picks, tradedPicks] = await Promise.all([
@@ -710,172 +593,99 @@ async function renderDraftQueue(isRefresh = false) {
       return { d, picks: picks || [], info: d, tradedPicks: tradedPicks || [] };
     }));
 
-    // We need our roster_id per league to match traded pick ownership
-    const rosterIdByLeague = {};
+    const rIdByLeague = {};
     await Promise.all(details.map(async ({ info }) => {
       const lgId = info.league_id;
-      if (!lgId || rosterIdByLeague[lgId] !== undefined) return;
+      if (!lgId || rIdByLeague[lgId] !== undefined) return;
       try {
         const rosters = await api('/league/' + lgId + '/rosters');
-        const mine = (rosters || []).find(r => r.owner_id === S.userId);
-        rosterIdByLeague[lgId] = mine?.roster_id ?? null;
-      } catch(_) { rosterIdByLeague[lgId] = null; }
+        rIdByLeague[lgId] = (rosters || []).find(r => r.owner_id === S.userId)?.roster_id ?? null;
+      } catch(_) { rIdByLeague[lgId] = null; }
     }));
 
-    const cards = details.map(({ d, picks, info, tradedPicks }) => {
-      const teams  = d.settings?.teams ?? 12;
-      const rounds = d.settings?.rounds ?? 5;
-      const total  = teams * rounds;
-      const done   = picks.length;
-      const pct    = Math.round((done / total) * 100);
-      const myRosterId = rosterIdByLeague[info.league_id] ?? null;
-
-      const pos = picksUntilMyTurn(info, picks, tradedPicks, S.userId, myRosterId);
-
+    target.innerHTML = `<div class="draft-grid">${details.map(({ d, picks, info, tradedPicks }) => {
+      const teams = d.settings?.teams ?? 12, rounds = d.settings?.rounds ?? 5;
+      const total = teams * rounds, done = picks.length;
+      const pct = Math.round((done / total) * 100);
+      const pos = picksUntilMyTurn(info, picks, tradedPicks, rIdByLeague[info.league_id] ?? null);
       let countHtml;
-      if (pos === 0) {
-        countHtml = `<div class="draft-count up" style="margin-bottom:4px;">ON CLOCK</div>
-          <div style="font-size:12px;color:var(--warn);">you're up now</div>`;
-      } else if (pos > 0) {
-        countHtml = `<div style="display:flex;align-items:baseline;gap:6px;margin-bottom:4px;">
-          <span class="draft-count">${pos}</span>
-          <span style="font-size:12px;color:var(--muted);">pick${pos === 1 ? '' : 's'} until your turn</span>
-        </div>`;
-      } else {
-        countHtml = `<div style="font-size:13px;color:var(--muted);margin-bottom:4px;">no more picks this draft</div>`;
-      }
-
+      if (pos === 0)       countHtml = `<div class="draft-count up">On The Clock</div><div class="card-meta">you're up now</div>`;
+      else if (pos > 0)    countHtml = `<div style="display:flex;align-items:baseline;gap:8px;"><span class="draft-count">${pos}</span><span class="card-meta">pick${pos===1?'':'s'} until your turn</span></div>`;
+      else                 countHtml = `<div class="card-meta">No more picks this draft</div>`;
       return `<div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:14px;">
           <div>
-            <a href="https://sleeper.com/draft/nfl/${esc(d.draft_id)}" target="_blank" class="card-title" style="color:var(--text);text-decoration:none;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text)'">${esc(d.metadata?.name || 'Draft')}</a>
-            <div class="card-meta" style="margin-top:2px;">${teams} teams · ${rounds} rds · ${esc(d.type || 'snake')}</div>
+            <a href="https://sleeper.com/draft/nfl/${esc(d.draft_id)}" target="_blank" class="card-link">${esc(d.metadata?.name || 'Draft')}</a>
+            <div class="card-meta" style="margin-top:3px;">${teams} teams · ${rounds} rounds · ${esc(d.type||'snake')}</div>
           </div>
-          <span class="badge badge-green">live</span>
+          <span class="badge badge-green">Live</span>
         </div>
         ${countHtml}
-        <div style="margin-top:12px;">
-          <div class="row"><span class="row-label">picks made</span><span class="row-val">${done} / ${total}</span></div>
-          <div class="row"><span class="row-label">current round</span><span class="row-val">${Math.min(Math.floor(done / teams) + 1, rounds)}</span></div>
+        <div style="margin-top:14px;">
+          <div class="data-row"><span class="data-row-label">Picks made</span><span class="data-row-val">${done} / ${total}</span></div>
+          <div class="data-row"><span class="data-row-label">Current round</span><span class="data-row-val">${Math.min(Math.floor(done/teams)+1,rounds)}</span></div>
         </div>
-        <div class="draft-bar" style="margin-top:10px;">
-          <div class="draft-bar-fill" style="width:${pct}%"></div>
-        </div>
+        <div class="draft-bar"><div class="draft-bar-fill" style="width:${pct}%"></div></div>
       </div>`;
-    }).join('');
-
-    target.innerHTML = `<div class="draft-grid">${cards}</div>`;
+    }).join('')}</div>`;
   } catch(e) {
     const t = document.getElementById('draft-body');
     if (t) t.innerHTML = errHtml(e);
   }
 }
 
-function picksUntilMyTurn(info, completedPicks, tradedPicks, userId, myRosterId) {
-  const teams  = info?.settings?.teams ?? 12;
-  const rounds = info?.settings?.rounds ?? 5;
-  const done   = completedPicks.length;
-  const type   = info?.type; // 'snake' or 'linear'
-
-  // slot_to_roster_id is provided directly on the draft object — maps slot → roster_id
-  // This is the authoritative source, no need to reconstruct it.
+function picksUntilMyTurn(info, completedPicks, tradedPicks, myRosterId) {
+  const teams = info?.settings?.teams ?? 12, rounds = info?.settings?.rounds ?? 5;
+  const done = completedPicks.length, type = info?.type;
   const slotToRoster = info?.slot_to_roster_id ?? {};
-
-  // Build traded picks map: "round.roster_id_of_original_slot_owner" → current owner roster_id
-  // tradedPick: { round, roster_id (original owner), owner_id (current owner) }
   const tradeMap = {};
-  for (const tp of tradedPicks) {
-    tradeMap[`${tp.round}.${tp.roster_id}`] = tp.owner_id;
-  }
-
-  // Walk every remaining pick position
+  for (const tp of tradedPicks) tradeMap[`${tp.round}.${tp.roster_id}`] = tp.owner_id;
   for (let offset = 0; offset < teams * rounds; offset++) {
-    const overall    = done + offset;
+    const overall = done + offset;
     if (overall >= teams * rounds) break;
-    const round      = Math.floor(overall / teams) + 1;  // 1-based
-    const posInRound = overall % teams;                   // 0-based
-    const slot       = (type === 'snake' && round % 2 === 0)
-      ? teams - posInRound   // even rounds go right-to-left
-      : posInRound + 1;      // 1-based slot
-
-    // Original roster for this slot
-    const originalRoster = slotToRoster[slot] ?? slot;
-
-    // Check if this pick has been traded away
-    const tradeKey = `${round}.${originalRoster}`;
-    const currentOwner = tradeMap[tradeKey] ?? originalRoster;
-
-    if (currentOwner === myRosterId) return offset; // 0 = on the clock
+    const round = Math.floor(overall / teams) + 1;
+    const pos   = overall % teams;
+    const slot  = (type === 'snake' && round % 2 === 0) ? teams - pos : pos + 1;
+    const orig  = slotToRoster[slot] ?? slot;
+    const owner = tradeMap[`${round}.${orig}`] ?? orig;
+    if (owner === myRosterId) return offset;
   }
   return -1;
 }
 
-// ── leagueFlags — compact notifiers shown on trade cards ─────────────────────
 function leagueFlags(lg) {
-  const sc  = lg.scoring_settings || {};
-  const st  = lg.settings          || {};
-  const rp  = lg.roster_positions  || [];
+  const sc = lg.scoring_settings||{}, st = lg.settings||{}, rp = lg.roster_positions||[];
   const flags = [];
-
-  // Team count × starter count  e.g. "12x9"
   const numTeams = st.num_teams ?? 0;
   const starters = rp.filter(p => p !== 'BN' && p !== 'IR' && p !== 'TAXI').length;
   if (numTeams) flags.push(numTeams + 'x' + starters);
-
-  // PPR — only flag if NOT full PPR (full PPR is default/standard)
   const rec = sc.rec ?? 1;
-  if (rec === 0)   flags.push('Std');
+  if (rec === 0) flags.push('Std');
   else if (rec < 1) flags.push(rec + 'PPR');
-  // rec === 1 → full PPR, no flag needed
-
-  // WR reception premium (bonus on top of base rec)
-  const wrBonus = sc.bonus_rec_wr ?? 0;
-  if (wrBonus > 0) flags.push('+' + wrBonus + 'WRP');
-
-  // TE reception premium
-  const teBonus = sc.bonus_rec_te ?? 0;
-  if (teBonus > 0) flags.push('+' + teBonus + 'TEP');
-
-  // Points per carry/rush attempt
-  const ppc = sc.rush_att ?? sc.rush_attempt ?? 0;
-  if (ppc > 0) flags.push('PPC');
-
-  // Passing TDs — flag only if 4pt (5 and 6 are standard range, no flag)
-  const passTd = sc.pass_td ?? 4; // Sleeper default is 4 but many leagues set 6
-  if (passTd === 4) flags.push('4ptTD');
-
-  // Return yards (KR or PR scoring)
-  const hasRet = (sc.kr_yd ?? 0) > 0 || (sc.pr_yd ?? 0) > 0
-              || (sc.kr_td ?? 0) > 0 || (sc.pr_td ?? 0) > 0;
-  if (hasRet) flags.push('Ret');
-
-  // 2-TE start
-  const teStarts = rp.filter(p => p === 'TE').length;
-  if (teStarts >= 2) flags.push('2xTE');
-
+  if ((sc.bonus_rec_wr ?? 0) > 0) flags.push('+' + sc.bonus_rec_wr + 'WRP');
+  if ((sc.bonus_rec_te ?? 0) > 0) flags.push('+' + sc.bonus_rec_te + 'TEP');
+  if ((sc.rush_att ?? sc.rush_attempt ?? 0) > 0) flags.push('PPC');
+  if ((sc.pass_td ?? 4) === 4) flags.push('4ptTD');
+  if ((sc.kr_yd??0)>0||(sc.pr_yd??0)>0||(sc.kr_td??0)>0||(sc.pr_td??0)>0) flags.push('Ret');
+  if (rp.filter(p => p === 'TE').length >= 2) flags.push('2xTE');
   return flags;
 }
 
-// ── Shared helpers ────────────────────────────────────────────────────────────
 function injuryBadge(s) {
   if (!s) return '';
-  if (s === 'Q')  return '<span class="badge badge-yellow">Q</span>';
-  if (s === 'O')  return '<span class="badge badge-red">OUT</span>';
-  if (s === 'D')  return '<span class="badge badge-yellow">Doubtful</span>';
-  if (s === 'IR') return '<span class="badge badge-red">IR</span>';
-  return '';
+  const map = { Q:'badge-gold', O:'badge-red', D:'badge-gold', IR:'badge-red' };
+  const lbl = { Q:'Q', O:'Out', D:'Doubtful', IR:'IR' };
+  return map[s] ? `<span class="badge ${map[s]}">${lbl[s]}</span>` : '';
 }
 function statusBadgeCls(s) {
-  if (s === 'EMPTY' || s === 'O' || s === 'IR') return 'badge-red';
-  if (s === 'Q' || s === 'D') return 'badge-yellow';
-  return 'badge-gray';
+  return (s==='EMPTY'||s==='O'||s==='IR') ? 'badge-red' : (s==='Q'||s==='D') ? 'badge-gold' : 'badge-outline';
 }
 function statusLabel(s) {
-  return ({ EMPTY:'empty slot', Q:'questionable', D:'doubtful', O:'out', IR:'IR' })[s] || s;
+  return ({EMPTY:'Empty',Q:'Questionable',D:'Doubtful',O:'Out',IR:'IR'})[s]||s;
 }
 
-document.getElementById('u-input').addEventListener('keydown', e => { if (e.key === 'Enter') loadUser(); });
-document.getElementById('token-input').addEventListener('keydown', e => { if (e.key === 'Enter') saveToken(); });
+document.getElementById('u-input').addEventListener('keydown', e => { if (e.key==='Enter') loadUser(); });
+document.getElementById('token-input').addEventListener('keydown', e => { if (e.key==='Enter') saveToken(); });
 </script>
 </body>
 </html>
