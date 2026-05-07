@@ -130,11 +130,18 @@ a.row-link:hover { color: var(--gold-light); }
 
 /* ── SEARCH ── */
 .search-wrap { display: flex; gap: 8px; margin-bottom: 20px; }
+.search-input { flex: 1; background: var(--brown-dark); border: 1px solid var(--brown-mid); color: var(--cream); font-family: 'Crimson Text', serif; font-size: 1rem; padding: 8px 12px; border-radius: 2px; outline: none; transition: border-color 0.2s; }
+.search-input:focus { border-color: var(--gold); }
+.search-input::placeholder { color: rgba(255,255,255,0.3); font-style: italic; }
 
 /* ── PLAYER FINDER ── */
-.pf-mine   { background: rgba(45,74,30,0.35);  border: 1px solid rgba(74,122,47,0.4); border-radius: 2px; padding: 2px 12px; margin-bottom: 4px; }
-.pf-theirs { background: rgba(42,26,14,0.6);   border: 1px solid var(--brown-mid);   border-radius: 2px; padding: 2px 12px; margin-bottom: 4px; }
-.pf-free   { background: rgba(42,26,14,0.4);   border: 1px solid var(--brown-mid);   border-radius: 2px; padding: 2px 12px; }
+.pf-mine   { background: rgba(45,74,30,0.15);  border: 1px solid rgba(74,122,47,0.5); border-radius: 2px; padding: 2px 12px; margin-bottom: 4px; }
+.pf-theirs { background: rgba(42,26,14,0.08);  border: 1px solid var(--brown-mid);   border-radius: 2px; padding: 2px 12px; margin-bottom: 4px; }
+.pf-free   { background: rgba(42,26,14,0.05);  border: 1px solid var(--brown-mid);   border-radius: 2px; padding: 2px 12px; }
+.pf-mine .data-row, .pf-theirs .data-row, .pf-free .data-row { border-bottom-color: rgba(0,0,0,0.08); }
+.pf-mine .row-link, .pf-theirs .row-link, .pf-free .row-link { color: var(--ink); }
+.pf-mine .row-link:hover, .pf-theirs .row-link:hover, .pf-free .row-link:hover { color: var(--green); }
+.pf-mine .card-meta, .pf-theirs .card-meta { color: var(--brown-light); }
 
 /* ── DRAFT ── */
 .draft-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
@@ -156,7 +163,23 @@ a.row-link:hover { color: var(--gold-light); }
 @keyframes spin { to { transform: rotate(360deg); } }
 .err-state { background: var(--red); border: 1px solid #a02020; color: var(--cream); font-family: 'Crimson Text', serif; font-style: italic; font-size: 0.9rem; padding: 10px 14px; border-radius: 2px; margin-bottom: 12px; }
 
-footer { border-top: 3px double var(--brown-light); padding: 20px 32px; text-align: center; font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--brown-light); background: var(--parchment); }
+/* ── DRAFT TRACKER ── */
+.tracker-controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 20px; }
+.tracker-select { background: var(--brown-dark); border: 1px solid var(--brown-mid); color: var(--cream); font-family: 'Crimson Text', serif; font-size: 0.95rem; padding: 8px 12px; border-radius: 2px; outline: none; cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23c9962a' stroke-width='1.5' fill='none'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px; }
+.tracker-select:focus { border-color: var(--gold); }
+.tracker-filter { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+.pos-pill { background: none; border: 1px solid var(--brown-mid); color: var(--brown-light); font-family: 'Rye', serif; font-size: 0.48rem; letter-spacing: 0.15em; padding: 4px 10px; border-radius: 2px; cursor: pointer; transition: all 0.15s; }
+.pos-pill.active { background: var(--brown-dark); border-color: var(--gold); color: var(--gold-light); }
+.tracker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px; }
+.tracker-player { background: var(--brown-dark); border: 1px solid var(--brown-mid); border-left: 3px solid var(--brown-mid); border-radius: 2px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; transition: opacity 0.2s; }
+.tracker-player.picked { opacity: 0.3; text-decoration: line-through; border-left-color: var(--red); }
+.tracker-player.picked .tp-name { color: var(--brown-light); }
+.tracker-player.tier-break { border-top: 2px solid var(--gold); margin-top: 4px; }
+.tp-rank { font-family: 'Rye', serif; font-size: 0.52rem; color: var(--brown-light); min-width: 28px; }
+.tp-name { font-family: 'Crimson Text', serif; font-size: 0.95rem; color: var(--parchment); flex: 1; }
+.tp-pos  { font-family: 'Rye', serif; font-size: 0.45rem; color: var(--gold); margin-left: 6px; }
+.tp-adp  { font-family: 'Crimson Text', serif; font-size: 0.8rem; color: var(--brown-light); margin-left: 6px; white-space: nowrap; }
+.tracker-empty { color: var(--brown-light); font-family: 'Crimson Text', serif; font-style: italic; font-size: 0.9rem; margin-bottom: 6px; } border-top: 3px double var(--brown-light); padding: 20px 32px; text-align: center; font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--brown-light); background: var(--parchment); }
 footer a { color: var(--brown-mid); text-decoration: none; }
 footer a:hover { color: var(--gold); }
 
@@ -189,6 +212,7 @@ footer a:hover { color: var(--gold); }
       <button class="tab-btn"        id="tab-player"  onclick="sw('player')">Player Finder</button>
       <button class="tab-btn"        id="tab-lineups" onclick="sw('lineups')">Lineup Check</button>
       <button class="tab-btn"        id="tab-drafts"  onclick="sw('drafts')">Draft Queue</button>
+      <button class="tab-btn"        id="tab-tracker" onclick="sw('tracker')">Draft Tracker</button>
     </div>
   </nav>
 
@@ -312,11 +336,13 @@ function sw(tab) {
   S.tab = tab;
   document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
+  // Stop tracker polling when leaving that tab
+  if (tab !== 'tracker' && T.pollTimer) { clearInterval(T.pollTimer); T.pollTimer = null; }
   render(tab);
 }
 function render(tab) {
   if (!S.userId) { setC('<div class="empty-state"><p>Enter your username above to get started</p></div>'); return; }
-  ({ trades: renderTrades, player: renderPlayerSearch, lineups: renderLineupCheck, drafts: renderDraftQueue })[tab]?.();
+  ({ trades: renderTrades, player: renderPlayerSearch, lineups: renderLineupCheck, drafts: renderDraftQueue, tracker: renderDraftTracker })[tab]?.();
 }
 function setC(html) { document.getElementById('content').innerHTML = html; }
 
@@ -432,7 +458,7 @@ function tradeSides(t, rMap) {
 function renderPlayerSearch() {
   setC(`<div>
     <div class="search-wrap">
-      <input type="text" id="ps" class="setup-input" placeholder="Search player name…" oninput="doPlayerSearch()" autofocus />
+      <input type="text" id="ps" class="search-input" placeholder="Search player name…" oninput="doPlayerSearch()" autofocus />
     </div>
     <div id="ps-r"><div class="empty-state"><p>Search to see where a player stands across all your leagues</p></div></div>
   </div>`);
@@ -519,6 +545,9 @@ async function renderLineupCheck() {
     let html = '';
     for (const lg of S.leagues) {
       try {
+        // Skip best ball leagues — no lineup decisions needed
+        const detail = S.leagueDetails[lg.league_id];
+        if (detail?.settings?.best_ball === 1) continue;
         const rosters = await api('/league/' + lg.league_id + '/rosters');
         const mine = (rosters || []).find(r => r.owner_id === S.userId);
         if (!mine) continue;
@@ -545,7 +574,7 @@ async function renderLineupCheck() {
           <div style="margin-top:10px;">${issues.map(i=>`<div class="data-row">
             <span style="display:flex;gap:8px;align-items:center;">
               <span style="font-family:'Rye',serif;font-size:0.5rem;color:var(--brown-light);">${esc(i.pos)}</span>
-              <span>${esc(i.name)}</span>
+              <span style="color:var(--parchment);">${esc(i.name)}</span>
             </span>
             <span class="badge ${statusBadgeCls(i.s)}">${statusLabel(i.s)}</span>
           </div>`).join('')}</div>
@@ -684,7 +713,228 @@ function statusLabel(s) {
   return ({EMPTY:'Empty',Q:'Questionable',D:'Doubtful',O:'Out',IR:'IR'})[s]||s;
 }
 
-document.getElementById('u-input').addEventListener('keydown', e => { if (e.key==='Enter') loadUser(); });
+// ── 5. Draft Tracker ──────────────────────────────────────────────────────────
+// State for tracker
+const T = {
+  rankings: [],       // [{rank, name, pos, team, sleeper_id, adp, tier}]
+  picked: new Set(),  // sleeper_ids of picked players
+  draft: null,        // active draft object
+  posFilter: 'ALL',   // position filter
+  pollTimer: null,
+};
+
+function renderDraftTracker() {
+  setC(`<div>
+    <div class="tab-header">
+      <div class="section-head" style="margin-bottom:0;flex:1;"><h2>Draft Tracker</h2><div class="section-head-line"></div></div>
+    </div>
+
+    <div class="setup-card" style="margin-bottom:20px;">
+      <div style="margin-bottom:14px;">
+        <label class="setup-label-rye">Rankings CSV <span class="setup-label-sub">— columns: name, position, team, rank, sleeper_id (optional), tier (optional), adp (optional)</span></label>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <input type="file" id="csv-file" accept=".csv" style="color:var(--cream);font-family:'Crimson Text',serif;font-size:0.9rem;flex:1;" onchange="loadCSV(event)" />
+          <button class="setup-btn" onclick="loadSleeperADP()">Use Sleeper ADP</button>
+        </div>
+        <div class="setup-status" id="csv-status"></div>
+      </div>
+      <hr class="setup-divider" />
+      <div>
+        <label class="setup-label-rye">Active Draft <span class="setup-label-sub">— auto-updates picks every 15s</span></label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <select id="draft-select" class="tracker-select" onchange="selectDraft(this.value)">
+            <option value="">— select a draft —</option>
+          </select>
+          <button class="setup-btn" onclick="refreshTrackerPicks()">↻ Refresh picks</button>
+        </div>
+        <div class="setup-status" id="draft-status"></div>
+      </div>
+    </div>
+
+    <div id="tracker-body">
+      <div class="empty-state"><p>Upload a CSV or load Sleeper ADP, then select an active draft</p></div>
+    </div>
+  </div>`);
+
+  // Populate draft selector with active drafts if we already have them
+  populateDraftSelector();
+}
+
+async function populateDraftSelector() {
+  if (!S.userId) return;
+  const sel = document.getElementById('draft-select');
+  if (!sel) return;
+  try {
+    const draftIds = new Set();
+    for (const lg of S.leagues) {
+      const d = S.leagueDetails[lg.league_id];
+      if (d?.draft_id) draftIds.add(d.draft_id);
+    }
+    const drafts = await Promise.all([...draftIds].map(id => api('/draft/' + id).catch(() => null)));
+    const active = drafts.filter(d => d?.status === 'drafting');
+    if (!active.length) { sel.innerHTML = '<option value="">— no active drafts —</option>'; return; }
+    sel.innerHTML = '<option value="">— select a draft —</option>' +
+      active.map(d => `<option value="${esc(d.draft_id)}">${esc(d.metadata?.name || d.draft_id)}</option>`).join('');
+    // Auto-select if only one
+    if (active.length === 1) { sel.value = active[0].draft_id; selectDraft(active[0].draft_id); }
+  } catch(e) {}
+}
+
+async function loadSleeperADP() {
+  const st = document.getElementById('csv-status');
+  st.textContent = 'Loading Sleeper ADP…'; st.className = 'setup-status';
+  try {
+    await loadPlayers();
+    // Build ranked list from Sleeper player data sorted by search_rank or rank
+    const ranked = Object.entries(S.players)
+      .filter(([, p]) => p.active && p.search_rank && p.search_rank < 9999 && ['QB','RB','WR','TE','K','DEF'].includes(p.position))
+      .sort((a, b) => (a[1].search_rank || 999) - (b[1].search_rank || 999))
+      .slice(0, 300)
+      .map(([id, p], i) => ({
+        rank: i + 1, name: p.full_name, pos: p.position,
+        team: p.team || 'FA', sleeper_id: id, adp: p.search_rank || '', tier: '',
+      }));
+    T.rankings = ranked;
+    st.textContent = '✦ Loaded ' + ranked.length + ' players from Sleeper ADP';
+    st.className = 'setup-status ok';
+    renderTrackerBody();
+  } catch(e) { st.textContent = 'Error: ' + e.message; st.className = 'setup-status err'; }
+}
+
+function loadCSV(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const st = document.getElementById('csv-status');
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      await loadPlayers();
+      const lines = e.target.result.split('\n').map(l => l.trim()).filter(Boolean);
+      const header = lines[0].toLowerCase().split(',').map(h => h.trim().replace(/"/g,''));
+      const idx = (name) => header.indexOf(name);
+      // Support flexible column names
+      // Fallback positional order: name, position, team, rank, sleeper_id, tier, adp
+      const iName = idx('name') >= 0 ? idx('name') : idx('player') >= 0 ? idx('player') : 0;
+      const iPos  = idx('position') >= 0 ? idx('position') : idx('pos') >= 0 ? idx('pos') : 1;
+      const iTeam = idx('team') >= 0 ? idx('team') : 2;
+      const iRank = idx('rank') >= 0 ? idx('rank') : 3;
+      const iId   = idx('sleeper_id') >= 0 ? idx('sleeper_id') : idx('player_id') >= 0 ? idx('player_id') : 4;
+      const iTier = idx('tier') >= 0 ? idx('tier') : 5;
+      const iAdp  = idx('adp') >= 0 ? idx('adp') : 6;
+
+      const parsed = [];
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g,''));
+        if (!cols[iName]) continue;
+        let sleeperId = iId >= 0 ? cols[iId] : '';
+        // Fuzzy match by name+team if no ID
+        if (!sleeperId) {
+          const name = cols[iName].toLowerCase();
+          const team = cols[iTeam]?.toLowerCase();
+          const match = Object.entries(S.players).find(([, p]) =>
+            p.full_name?.toLowerCase() === name && (!team || p.team?.toLowerCase() === team)
+          );
+          sleeperId = match ? match[0] : '';
+        }
+        parsed.push({
+          rank: parseInt(cols[iRank]) || i,
+          name: cols[iName],
+          pos:  (cols[iPos] || '').toUpperCase(),
+          team: cols[iTeam] || '',
+          sleeper_id: sleeperId,
+          adp:  iAdp >= 0 ? cols[iAdp] : '',
+          tier: iTier >= 0 ? cols[iTier] : '',
+        });
+      }
+      T.rankings = parsed;
+      st.textContent = '✦ Loaded ' + parsed.length + ' players from CSV';
+      st.className = 'setup-status ok';
+      renderTrackerBody();
+    } catch(err) { st.textContent = 'Error parsing CSV: ' + err.message; st.className = 'setup-status err'; }
+  };
+  reader.readAsText(file);
+}
+
+async function selectDraft(draftId) {
+  if (T.pollTimer) { clearInterval(T.pollTimer); T.pollTimer = null; }
+  if (!draftId) { T.draft = null; T.picked.clear(); renderTrackerBody(); return; }
+  const st = document.getElementById('draft-status');
+  st.textContent = 'Loading picks…'; st.className = 'setup-status';
+  try {
+    T.draft = await api('/draft/' + draftId);
+    await syncPicks(draftId);
+    st.textContent = '✦ Synced — auto-refreshing every 15s';
+    st.className = 'setup-status ok';
+    // Poll every 15 seconds for new picks
+    T.pollTimer = setInterval(() => syncPicks(draftId), 15000);
+    renderTrackerBody();
+  } catch(e) { st.textContent = 'Error: ' + e.message; st.className = 'setup-status err'; }
+}
+
+async function syncPicks(draftId) {
+  try {
+    const picks = await api('/draft/' + draftId + '/picks');
+    T.picked.clear();
+    for (const pick of (picks || [])) {
+      if (pick.player_id) T.picked.add(String(pick.player_id));
+    }
+    renderTrackerBody();
+  } catch(_) {}
+}
+
+async function refreshTrackerPicks() {
+  if (!T.draft) return;
+  await syncPicks(T.draft.draft_id);
+}
+
+function renderTrackerBody() {
+  const body = document.getElementById('tracker-body');
+  if (!body) return;
+  if (!T.rankings.length) {
+    body.innerHTML = '<div class="empty-state"><p>Upload a CSV or load Sleeper ADP to begin</p></div>';
+    return;
+  }
+
+  const positions = ['ALL', ...new Set(T.rankings.map(p => p.pos).filter(Boolean))];
+  const available = T.rankings.filter(p => !T.picked.has(String(p.sleeper_id)));
+  const filtered  = T.posFilter === 'ALL' ? T.rankings : T.rankings.filter(p => p.pos === T.posFilter);
+
+  const pickedCount = T.picked.size;
+  const totalCount  = T.rankings.length;
+
+  const posFilterHtml = `<div class="tracker-filter">
+    ${positions.map(pos => `<button class="pos-pill ${T.posFilter===pos?'active':''}" onclick="setTrackerPos('${pos}')">${pos}</button>`).join('')}
+  </div>`;
+
+  const statsHtml = `<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;">
+    <span class="card-meta">${pickedCount} picked · ${available.length} available</span>
+    ${T.draft ? `<span class="card-meta">Round ${Math.floor(pickedCount/(T.draft.settings?.teams??12))+1} · Pick ${(pickedCount%(T.draft.settings?.teams??12))+1}</span>` : ''}
+  </div>`;
+
+  let prevTier = null;
+  const playersHtml = `<div class="tracker-grid">${filtered.map(p => {
+    const isPicked = T.picked.has(String(p.sleeper_id));
+    const tierBreak = p.tier && p.tier !== prevTier && prevTier !== null ? 'tier-break' : '';
+    prevTier = p.tier || prevTier;
+    const posColors = { QB:'#c9962a', RB:'#4a7a2f', WR:'#3a6a9a', TE:'#8b5e2e', K:'#5c3d1e', DEF:'#5c3d1e' };
+    const borderColor = isPicked ? 'var(--red)' : (posColors[p.pos] || 'var(--brown-mid)');
+    return `<div class="tracker-player ${isPicked?'picked':''} ${tierBreak}" style="border-left-color:${borderColor}">
+      <span class="tp-rank">${p.rank}</span>
+      <span class="tp-name">${esc(p.name)}</span>
+      <span class="tp-pos">${esc(p.pos)}</span>
+      ${p.adp ? `<span class="tp-adp">${esc(String(p.adp))}</span>` : ''}
+    </div>`;
+  }).join('')}</div>`;
+
+  body.innerHTML = posFilterHtml + statsHtml + playersHtml;
+}
+
+function setTrackerPos(pos) {
+  T.posFilter = pos;
+  renderTrackerBody();
+}
+
+
 document.getElementById('token-input').addEventListener('keydown', e => { if (e.key==='Enter') saveToken(); });
 </script>
 </body>
