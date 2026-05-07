@@ -174,26 +174,17 @@ a.row-link:hover { color: var(--gold-light); }
 .tracker-snake { display: grid; gap: 3px; }
 .tracker-round-label { grid-column: 1 / -1; font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.2em; color: var(--gold); padding: 8px 0 2px; border-top: 1px solid var(--brown-mid); margin-top: 4px; }
 .tracker-round-label:first-child { border-top: none; margin-top: 0; }
-.tracker-player { background: var(--brown-dark); border: 1px solid var(--brown-mid); border-left: 3px solid var(--brown-mid); border-radius: 2px; padding: 6px 8px; display: flex; flex-direction: column; gap: 2px; transition: opacity 0.2s; min-width: 0; }
-.tracker-player.picked { opacity: 0.28; }
+.tracker-player { background: var(--brown-dark); border: 1px solid var(--brown-mid); border-left: 3px solid var(--brown-mid); border-radius: 2px; padding: 5px 7px; display: flex; flex-direction: column; gap: 1px; transition: opacity 0.2s; min-width: 0; overflow: hidden; }
+.tracker-player.picked { opacity: 0.22; }
 .tracker-player.picked .tp-name { text-decoration: line-through; }
-.tracker-player .tp-top { display: flex; align-items: baseline; gap: 4px; }
-.tp-rank { font-family: 'Rye', serif; font-size: 0.42rem; color: var(--brown-light); flex-shrink: 0; }
-.tp-name { font-family: 'Crimson Text', serif; font-size: 0.88rem; color: var(--parchment); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tp-pos  { font-family: 'Rye', serif; font-size: 0.4rem; letter-spacing: 0.1em; flex-shrink: 0; }
-.tp-adp  { font-family: 'Crimson Text', serif; font-size: 0.75rem; color: var(--brown-light); }
-/* Position colors - bright enough to read */
-.pos-qb { border-left-color: #e8b84b; }  /* gold */
-.pos-rb { border-left-color: #5cb85c; }  /* green */
-.pos-wr { border-left-color: #5bc0de; }  /* blue */
-.pos-te { border-left-color: #e8734b; }  /* orange */
-.pos-def { border-left-color: #9b59b6; } /* purple */
-.pos-qb .tp-pos { color: #e8b84b; }
-.pos-rb .tp-pos { color: #5cb85c; }
-.pos-wr .tp-pos { color: #5bc0de; }
-.pos-te .tp-pos { color: #e8734b; }
-.pos-def .tp-pos { color: #9b59b6; }
-.tracker-empty { color: var(--brown-light); font-family: 'Crimson Text', serif; font-style: italic; font-size: 0.9rem; margin-bottom: 6px; } border-top: 3px double var(--brown-light); padding: 20px 32px; text-align: center; font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--brown-light); background: var(--parchment); }
+.tp-pos  { font-family: 'Rye', serif; font-size: 0.4rem; letter-spacing: 0.1em; flex-shrink: 0; line-height: 1.4; }
+.tp-name { font-family: 'Crimson Text', serif; font-size: 0.82rem; color: var(--parchment); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
+/* Position colors */
+.pos-qb { border-left-color: #e8b84b; } .pos-qb .tp-pos { color: #e8b84b; }
+.pos-rb { border-left-color: #5cb85c; } .pos-rb .tp-pos { color: #5cb85c; }
+.pos-wr { border-left-color: #5bc0de; } .pos-wr .tp-pos { color: #5bc0de; }
+.pos-te { border-left-color: #e8734b; } .pos-te .tp-pos { color: #e8734b; }
+.pos-def { border-left-color: #9b59b6; } .pos-def .tp-pos { color: #9b59b6; } border-top: 3px double var(--brown-light); padding: 20px 32px; text-align: center; font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--brown-light); background: var(--parchment); }
 footer a { color: var(--brown-mid); text-decoration: none; }
 footer a:hover { color: var(--gold); }
 
@@ -806,9 +797,8 @@ async function loadSleeperADP() {
   st.textContent = 'Loading Sleeper ADP…'; st.className = 'setup-status';
   try {
     await loadPlayers();
-    // Build ranked list from Sleeper player data sorted by search_rank or rank
     const ranked = Object.entries(S.players)
-      .filter(([, p]) => p.active && p.search_rank && p.search_rank < 9999 && ['QB','RB','WR','TE','K','DEF'].includes(p.position))
+      .filter(([, p]) => p.active && p.search_rank && p.search_rank < 9999 && ['QB','RB','WR','TE','DEF'].includes(p.position))
       .sort((a, b) => (a[1].search_rank || 999) - (b[1].search_rank || 999))
       .slice(0, 300)
       .map(([id, p], i) => ({
@@ -816,6 +806,10 @@ async function loadSleeperADP() {
         team: p.team || 'FA', sleeper_id: id, adp: p.search_rank || '', tier: '',
       }));
     T.rankings = ranked;
+    T.posFilter = 'ALL';
+    // Reset file input so it can be re-selected
+    const fi = document.getElementById('csv-file');
+    if (fi) fi.value = '';
     st.textContent = '✦ Loaded ' + ranked.length + ' players from Sleeper ADP';
     st.className = 'setup-status ok';
     renderTrackerBody();
@@ -868,6 +862,7 @@ function loadCSV(event) {
         });
       }
       T.rankings = parsed;
+      T.posFilter = 'ALL';
       st.textContent = '✦ Loaded ' + parsed.length + ' players from CSV';
       st.className = 'setup-status ok';
       renderTrackerBody();
@@ -917,16 +912,21 @@ function renderTrackerBody() {
   }
 
   const SKIP_POS = new Set(['K']);
-  const teams = T.draft?.settings?.teams ?? 12;
-  const type  = T.draft?.type ?? 'snake';
+  const teams    = T.draft?.settings?.teams ?? 12;
+  const type     = T.draft?.type ?? 'snake';
+  const hasTiers = T.rankings.some(p => p.tier && p.tier !== '');
 
-  // Position color class
   const posClass = p => ({ QB:'pos-qb', RB:'pos-rb', WR:'pos-wr', TE:'pos-te', DEF:'pos-def' })[p] || '';
 
-  // Filter out K, apply position filter
-  const visible = T.rankings.filter(p => !SKIP_POS.has(p.pos) && (T.posFilter === 'ALL' || p.pos === T.posFilter));
-  const positions = ['ALL', ...new Set(T.rankings.filter(p => !SKIP_POS.has(p.pos)).map(p => p.pos).filter(Boolean))];
+  // Tier → top border color (cycles through a palette)
+  const TIER_COLORS = ['#e8b84b','#5bc0de','#5cb85c','#e8734b','#9b59b6','#e84b6e','#aaaaaa'];
+  const tierColor = t => {
+    const n = parseInt(t) || 0;
+    return TIER_COLORS[(n - 1) % TIER_COLORS.length] || 'transparent';
+  };
 
+  const visible   = T.rankings.filter(p => !SKIP_POS.has(p.pos) && (T.posFilter === 'ALL' || p.pos === T.posFilter));
+  const positions = ['ALL', ...new Set(T.rankings.filter(p => !SKIP_POS.has(p.pos)).map(p => p.pos).filter(Boolean))];
   const pickedCount = T.picked.size;
   const available   = T.rankings.filter(p => !SKIP_POS.has(p.pos) && !T.picked.has(String(p.sleeper_id))).length;
 
@@ -935,60 +935,49 @@ function renderTrackerBody() {
   </div>`;
 
   const statsHtml = `<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;">
-    <span class="card-meta">${pickedCount} picked · ${available} available (excl. K)</span>
+    <span class="card-meta">${pickedCount} picked · ${available} available</span>
     ${T.draft ? `<span class="card-meta">Round ${Math.floor(pickedCount/teams)+1} · Pick ${(pickedCount%teams)+1} of ${teams}</span>` : ''}
   </div>`;
 
-  // Build snake grid — group players into rows of `teams`
-  // In snake mode odd rounds go left→right, even rounds right→left visually
-  // We just lay them out sequentially; the snake ordering is implied by rank order
-  // Each row = one round worth of picks
+  const playerTile = (p) => {
+    const isPicked = T.picked.has(String(p.sleeper_id));
+    const pc = posClass(p.pos);
+    const tierNum = parseInt(p.tier) || 0;
+    const tierBorder = hasTiers && tierNum && tierNum % 2 !== 0 ? `border-top:2px solid var(--gold);` : '';
+    return `<div class="tracker-player ${isPicked?'picked':''} ${pc}" style="${tierBorder}">
+      <span class="tp-pos">${esc(p.pos)}</span>
+      <span class="tp-name">${esc(p.name)}</span>
+    </div>`;
+  };
+
   let gridHtml = '';
+
   if (T.posFilter === 'ALL' && T.draft) {
-    // Snake grid mode: rows of `teams` players
+    // Snake grid: rows of `teams` with direction arrows
     const rows = [];
     let row = [];
     for (const p of visible) {
       row.push(p);
       if (row.length === teams) { rows.push(row); row = []; }
     }
-    if (row.length) rows.push(row); // partial last round
+    if (row.length) rows.push(row);
 
     gridHtml = `<div class="tracker-snake" style="grid-template-columns:repeat(${teams},1fr);">`;
     rows.forEach((rowPlayers, roundIdx) => {
       const round = roundIdx + 1;
       const isReversed = type === 'snake' && round % 2 === 0;
+      const arrow = type !== 'snake' ? '→' : (isReversed ? '←' : '→');
       const orderedRow = isReversed ? [...rowPlayers].reverse() : rowPlayers;
-      gridHtml += `<div class="tracker-round-label" style="grid-column:1/-1;">Round ${round}</div>`;
-      gridHtml += orderedRow.map(p => {
-        const isPicked = T.picked.has(String(p.sleeper_id));
-        const pc = posClass(p.pos);
-        return `<div class="tracker-player ${isPicked?'picked':''} ${pc}">
-          <div class="tp-top">
-            <span class="tp-rank">${p.rank}</span>
-            <span class="tp-pos">${esc(p.pos)}</span>
-          </div>
-          <div class="tp-name">${esc(p.name)}</div>
-          ${p.adp ? `<div class="tp-adp">ADP ${esc(String(p.adp))}</div>` : ''}
-        </div>`;
-      }).join('');
+      gridHtml += `<div class="tracker-round-label" style="grid-column:1/-1;">
+        Round ${round} <span style="color:var(--brown-light);margin-left:6px;">${arrow}</span>
+      </div>`;
+      gridHtml += orderedRow.map(playerTile).join('');
     });
     gridHtml += '</div>';
   } else {
-    // Filtered view: simple responsive grid
-    gridHtml = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:4px;">
-      ${visible.map(p => {
-        const isPicked = T.picked.has(String(p.sleeper_id));
-        const pc = posClass(p.pos);
-        return `<div class="tracker-player ${isPicked?'picked':''} ${pc}">
-          <div class="tp-top">
-            <span class="tp-rank">${p.rank}</span>
-            <span class="tp-pos">${esc(p.pos)}</span>
-          </div>
-          <div class="tp-name">${esc(p.name)}</div>
-          ${p.adp ? `<div class="tp-adp">ADP ${esc(String(p.adp))}</div>` : ''}
-        </div>`;
-      }).join('')}
+    // Position-filtered view: simple responsive grid, no snake ordering
+    gridHtml = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:3px;">
+      ${visible.map(playerTile).join('')}
     </div>`;
   }
 
