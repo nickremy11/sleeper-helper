@@ -114,6 +114,7 @@ a.row-link:hover { color: var(--gold-light); }
 .badge { display: inline-block; padding: 2px 8px; border-radius: 2px; font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.12em; text-transform: uppercase; }
 .badge-gold    { background: var(--gold);     color: var(--brown-dark); }
 .badge-green   { background: var(--green);    color: var(--gold-light); border: 1px solid var(--gold); }
+.badge-yellow  { background: #7a6000;         color: var(--gold-light); border: 1px solid var(--gold); }
 .badge-red     { background: var(--red);      color: var(--cream); }
 .badge-outline { background: transparent;     color: var(--brown-light); border: 1px solid var(--brown-mid); }
 
@@ -626,7 +627,7 @@ async function renderDraftQueue(isRefresh = false) {
       } catch(_) {}
     }));
     const allDrafts = await Promise.all([...draftIds].map(id => api('/draft/' + id).catch(() => null)));
-    const active = allDrafts.filter(d => d?.status === 'drafting');
+    const active = allDrafts.filter(d => d?.status === 'drafting' || d?.status === 'paused');
     const target = document.getElementById('draft-body');
     if (!target) return;
     if (!active.length) { target.innerHTML = '<div class="empty-state"><p>No active drafts right now</p></div>'; return; }
@@ -664,7 +665,7 @@ async function renderDraftQueue(isRefresh = false) {
             <a href="https://sleeper.com/draft/nfl/${esc(d.draft_id)}" target="_blank" class="card-link">${esc(d.metadata?.name || 'Draft')}</a>
             <div class="card-meta" style="margin-top:3px;">${teams} teams · ${rounds} rounds · ${esc(d.type||'snake')}</div>
           </div>
-          <span class="badge badge-green">Live</span>
+          <span class="badge ${d.status === 'paused' ? 'badge-yellow' : 'badge-green'}">${d.status === 'paused' ? 'Paused' : 'Live'}</span>
         </div>
         ${countHtml}
         <div style="margin-top:14px;">
