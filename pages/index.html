@@ -620,6 +620,9 @@ async function renderDraftQueue(isRefresh = false) {
         let d = S.leagueDetails[lg.league_id];
         if (!d) { d = await api('/league/' + lg.league_id); S.leagueDetails[lg.league_id] = d; }
         if (d?.draft_id) draftIds.add(d.draft_id);
+        // Also fetch all drafts for the league to catch any active draft not linked via draft_id
+        const allLgDrafts = await api('/league/' + lg.league_id + '/drafts').catch(() => null);
+        (allLgDrafts || []).forEach(dr => { if (dr?.draft_id) draftIds.add(dr.draft_id); });
       } catch(_) {}
     }));
     const allDrafts = await Promise.all([...draftIds].map(id => api('/draft/' + id).catch(() => null)));
