@@ -445,7 +445,7 @@ function renderStep2() {
     const user = D.users.find(u => u.user_id === r.owner_id);
     const name = r.metadata?.team_name || user?.display_name || user?.username || `Team ${r.roster_id}`;
     const count = (r.players || []).length;
-    const sel = D.selRosterIds.includes(r.roster_id) ? 'selected' : '';
+    const sel = D.selRosterIds.includes(String(r.roster_id)) ? 'selected' : '';
     return `<label class="roster-opt ${sel}" onclick="toggleRoster('${esc(r.roster_id)}')">
       <input type="checkbox" ${sel ? 'checked' : ''}/>
       <div>
@@ -527,7 +527,7 @@ function renderStep4() {
     D.draftOrder = D.selRosterIds.map((_, i) => i);
   }
   const slotNames = D.selRosterIds.map(id => {
-    const r = D.rosters.find(r => r.roster_id === id);
+    const r = D.rosters.find(r => String(r.roster_id) === String(id));
     const u = D.users.find(u => u.user_id === r?.owner_id);
     return r?.metadata?.team_name || u?.display_name || u?.username || `Roster ${id}`;
   });
