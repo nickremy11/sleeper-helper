@@ -177,8 +177,10 @@ body::before {
 .draft-grid-table { display:grid; gap:3px; }
 .grid-th { font-family:'Rye',serif; font-size:0.45rem; letter-spacing:0.12em; text-transform:uppercase; color:var(--gold); padding:6px 4px; text-align:center; border-bottom:1px solid var(--brown-mid); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .grid-th.my-col { color:var(--gold-light); background:rgba(201,150,42,0.08); border-radius:2px 2px 0 0; }
+.grid-th.alt-col { background:rgba(255,255,255,0.04); }
 .grid-round-lbl { font-family:'Rye',serif; font-size:0.42rem; letter-spacing:0.15em; color:var(--gold); padding:6px 4px; white-space:nowrap; display:flex; align-items:center; }
 .grid-cell { background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:2px; padding:5px 6px; min-height:44px; display:flex; align-items:center; font-family:'Crimson Text',serif; font-size:0.8rem; color:var(--parchment); line-height:1.2; overflow:hidden; text-overflow:ellipsis; word-break:break-word; }
+.grid-cell.alt-col { background:rgba(255,255,255,0.05); }
 .grid-cell.filled { background:rgba(44,80,30,0.25); border-color:rgba(74,122,47,0.3); }
 .grid-cell.my-col { background:rgba(201,150,42,0.07); }
 .grid-cell.on-clock { background:rgba(201,150,42,0.15); border-color:var(--gold); animation:pulse-border 1.5s ease-in-out infinite; font-family:'Rye',serif; font-size:0.42rem; letter-spacing:0.1em; color:var(--gold-light); justify-content:center; text-align:center; }
@@ -222,6 +224,10 @@ body::before {
 .badge-gold  { background:var(--gold);  color:var(--brown-dark); }
 .badge-green { background:var(--green); color:var(--gold-light); border:1px solid var(--gold); }
 .badge-red   { background:var(--red);   color:var(--cream); }
+
+/* ── CODES OVERLAY ── */
+.codes-overlay { position:fixed; inset:0; z-index:100; background:rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center; }
+.codes-overlay-inner { background:var(--brown-dark); border:2px solid var(--gold); border-radius:2px; padding:24px 28px; max-width:520px; width:90%; max-height:80vh; overflow-y:auto; box-shadow:0 8px 32px rgba(0,0,0,0.5); }
 
 @media(max-width:600px) {
   .banner-inner { padding:16px; }
@@ -590,84 +596,113 @@ function initDragDrop() {
 }
 
 async function loadStep4() {
-  // Build asset pool from selected rosters + picks
   try {
-    const [fcData, tradedPicks] = await Promise.all([
+    const playersUrl = IS_LOCAL ? 'https://api.sleeper.app/v1/players/nfl' : '/api/players';
+    const [fcData, tradedPicks, allPlayersRaw, draftsData] = await Promise.all([
       fcApi(),
       sApi(`/league/${D.selLeague.league_id}/traded_picks`),
+      fetch(playersUrl).then(r => r.ok ? r.json() : {}),
+      sApi(`/league/${D.selLeague.league_id}/drafts`),
     ]);
     D.tradedPicks = tradedPicks || [];
-    // Build FC lookup: sleeperId -> { value, position }
+    const playerMap = allPlayersRaw || {};
+
+    // FC player lookup: sleeperId -> { value, name, position }
     const fcMap = {};
     for (const e of fcData) {
       if (e.player?.sleeperId) fcMap[e.player.sleeperId] = { value: e.value, name: e.player.name, position: e.player.position };
     }
-    // Build mid-round pick FC lookup: "YEAR_ROUND" -> value
+
+    // FC pick lookup: "YEAR_ROUND_SLOT" -> value (specific) and "YEAR_ROUND" -> mid-round value (fallback)
     const totalLeagueTeams = D.selLeague.total_rosters || 12;
     const midPos = Math.max(0, Math.floor(totalLeagueTeams / 2) - 1);
-    const pickFcMap = {};
+    const pickFcFull = {};
+    const pickFcMid  = {};
     for (const e of fcData) {
       if (e.player?.position === 'PICK') {
         const m = e.player.name.match(/^(\d{4}) Pick (\d+)\.(\d+)$/);
         if (m) {
           const [, yr, rd, pp] = m;
-          const pickNum = parseInt(pp, 10) - 1;
-          if (pickNum === midPos) pickFcMap[`${yr}_${rd}`] = e.value;
+          const slot = parseInt(pp, 10);
+          pickFcFull[`${yr}_${rd}_${slot}`] = e.value;
+          if (slot - 1 === midPos) pickFcMid[`${yr}_${rd}`] = e.value;
         }
       }
     }
+
+    // Build rosterToSlot maps from draft data for years with known pick order
+    const rosterToSlotByYear = {};
+    for (const draft of (draftsData || [])) {
+      if (draft.slot_to_roster_id && D.selYears.includes(String(draft.season))) {
+        const map = {};
+        for (const [slot, rId] of Object.entries(draft.slot_to_roster_id)) {
+          map[String(rId)] = parseInt(slot, 10);
+        }
+        rosterToSlotByYear[String(draft.season)] = map;
+      }
+    }
+
     const allRosterIds = D.rosters.map(r => String(r.roster_id));
-    const dispersedIds  = D.selRosterIds.map(String);
-    // Build traded pick ownership map: "year_round_originalOwner" -> currentOwner
+    const dispersedIds = D.selRosterIds.map(String);
+
+    // Traded pick ownership: "year_round_origOwner" -> currentOwner
     const tradeMap = {};
     for (const tp of D.tradedPicks) {
       if (D.selYears.includes(String(tp.season))) {
         tradeMap[`${tp.season}_${tp.round}_${tp.previous_owner_id}`] = String(tp.roster_id);
       }
     }
+
     const assets = [];
-    // Players from dispersed rosters
+
+    // Players from dispersed rosters (no kickers)
     for (const rosterId of dispersedIds) {
       const roster = D.rosters.find(r => String(r.roster_id) === rosterId);
       const teamName = getTeamName(roster);
       for (const pid of (roster?.players || [])) {
         const fc = fcMap[String(pid)];
+        const sp = playerMap[String(pid)];
+        const position = (fc?.position || sp?.position || 'UNK').toUpperCase();
+        if (position === 'K') continue;
         assets.push({
           id: String(pid),
-          name: fc?.name || String(pid),
-          position: (fc?.position || 'UNK').toUpperCase(),
-          nflTeam: null,
+          name: fc?.name || sp?.full_name || String(pid),
+          position,
+          nflTeam: sp?.team || null,
           fcValue: fc?.value || 0,
           originalTeam: teamName,
           pickedBy: null,
         });
       }
     }
+
     // Picks owned by dispersed rosters
     const rounds = D.selLeague.settings?.draft_rounds || 3;
     for (const year of D.selYears) {
+      const rosterToSlot = rosterToSlotByYear[year] || {};
       for (let rd = 1; rd <= rounds; rd++) {
         for (const origId of allRosterIds) {
           const key = `${year}_${rd}_${origId}`;
           const currentOwner = tradeMap[key] ?? origId;
-          if (dispersedIds.includes(currentOwner)) {
-            const roster = D.rosters.find(r => String(r.roster_id) === currentOwner);
-            const teamName = getTeamName(roster);
-            const fcValue = pickFcMap[`${year}_${rd}`] || 0;
-            assets.push({
-              id: `pick_${year}_${rd}_${origId}`,
-              name: `${year} Round ${rd}`,
-              position: 'PICK',
-              nflTeam: null,
-              fcValue,
-              originalTeam: teamName,
-              pickedBy: null,
-            });
-          }
+          if (!dispersedIds.includes(currentOwner)) continue;
+          const roster = D.rosters.find(r => String(r.roster_id) === currentOwner);
+          const teamName = getTeamName(roster);
+          const slot = rosterToSlot[origId];
+          const name = slot ? `${year} ${rd}.${String(slot).padStart(2, '0')}` : `${year} Round ${rd}`;
+          const fcValue = slot ? (pickFcFull[`${year}_${rd}_${slot}`] || 0) : (pickFcMid[`${year}_${rd}`] || 0);
+          assets.push({
+            id: `pick_${year}_${rd}_${origId}`,
+            name,
+            position: 'PICK',
+            nflTeam: null,
+            fcValue,
+            originalTeam: teamName,
+            pickedBy: null,
+          });
         }
       }
     }
-    // Sort descending by value, deduplicate
+
     assets.sort((a, b) => (b.fcValue || 0) - (a.fcValue || 0));
     D.assetPool = assets;
     D.draftOrder = D.selRosterIds.map((_, i) => i);
@@ -703,8 +738,8 @@ async function createRoom() {
       rosterPositions,
     };
     const res = await dApi('', { method: 'POST', body: JSON.stringify(body) });
-    // Save commissioner code
     localStorage.setItem(`dispersal_${res.roomId}_commissioner`, res.commissionerCode);
+    localStorage.setItem(`dispersal_${res.roomId}_slots`, JSON.stringify(res.teamSlots));
     renderCodesScreen(res);
   } catch (e) {
     st.className = 'setup-status err'; st.textContent = e.message || 'Failed to create room.';
@@ -871,7 +906,10 @@ function renderDraftRoom() {
   const myLabel = myName ? `<span style="font-family:'Crimson Text',serif;font-size:0.85rem;color:var(--brown-light);font-style:italic;">${myName}</span>` : '';
 
   const commBtn = D.commissionerCode
-    ? `<button class="setup-btn setup-btn-sm setup-btn-danger" onclick="deleteRoom()">Delete Room</button>` : '';
+    ? `<button class="setup-btn setup-btn-sm setup-btn-ghost" onclick="showCodes()">View Codes</button>
+       <a href="/dispersal" class="setup-btn setup-btn-sm setup-btn-ghost" style="text-decoration:none;display:inline-flex;align-items:center;">← New Room</a>
+       <button class="setup-btn setup-btn-sm setup-btn-danger" onclick="deleteRoom()">Delete Room</button>`
+    : '';
 
   const header = `<div class="room-header">
     <div>
@@ -891,7 +929,7 @@ function renderDraftRoom() {
 // ── Asset Pool (left) ─────────────────────────────────────────────────────────
 
 function renderAssetPool(room, myTurn, onClockSlot) {
-  const positions = ['ALL','QB','RB','WR','TE','K','PICK'];
+  const positions = ['ALL','QB','RB','WR','TE','PICK'];
   const pills = positions.map(p =>
     `<button class="pos-pill${D.posFilter === p ? ' active' : ''}" onclick="setFilter('${p}')">${p}</button>`
   ).join('');
@@ -976,7 +1014,7 @@ function renderDraftGrid(room, mySlot) {
   const headerCells = colSlots.map((slot, c) => {
     const isMe = mySlot && slot?.index === mySlot.index;
     const claimed = slot?.claimed ? '' : '<span style="opacity:0.4"> ·?</span>';
-    return `<div class="grid-th${isMe ? ' my-col' : ''}">${esc(slot?.name || '?')}${claimed}</div>`;
+    return `<div class="grid-th${isMe ? ' my-col' : ''}${c % 2 === 1 ? ' alt-col' : ''}">${esc(slot?.name || '?')}${claimed}</div>`;
   }).join('');
 
   let gridHtml = `<div class="draft-grid-table" style="grid-template-columns:${templateCols}">`;
@@ -995,6 +1033,7 @@ function renderDraftGrid(room, mySlot) {
 
       let cellContent = '', cellClass = 'grid-cell';
       if (isMe) cellClass += ' my-col';
+      if (c % 2 === 1) cellClass += ' alt-col';
 
       if (pick) {
         const asset = assetMap[pick.assetId];
@@ -1019,8 +1058,8 @@ function renderDraftGrid(room, mySlot) {
 }
 
 function renderRosters(room, mySlot) {
-  const rp = room.rosterPositions || [];
-  const starterSet = new Set(['QB','RB','WR','TE','K','DEF','FLEX','SF']);
+  const rp = (room.rosterPositions || []).filter(p => p.toUpperCase() !== 'K');
+  const starterSet = new Set(['QB','RB','WR','TE','DEF','FLEX','SF']);
   const cards = room.teamSlots.map(slot => {
     const teamPicks = room.assets.filter(a => a.pickedBy === slot.index);
     const filled    = fillLineup(rp, teamPicks);
@@ -1044,7 +1083,8 @@ function renderRosters(room, mySlot) {
       <div class="roster-slots">${slots}</div>
     </div>`;
   }).join('');
-  return `<div class="rosters-wrap">${cards}</div>`;
+  const cols = Math.min(4, room.teamSlots.length);
+  return `<div class="rosters-wrap" style="grid-template-columns:repeat(${cols},1fr)">${cards}</div>`;
 }
 
 // ── Pick Action ───────────────────────────────────────────────────────────────
@@ -1055,6 +1095,34 @@ function makePick(assetId) {
     return;
   }
   D.ws.send(JSON.stringify({ type: 'pick', assetId, sessionToken: D.sessionToken }));
+}
+
+// ── Commissioner Codes Overlay ────────────────────────────────────────────────
+
+function showCodes() {
+  let slots;
+  try { slots = JSON.parse(localStorage.getItem(`dispersal_${D.roomId}_slots`) || 'null'); } catch {}
+  if (!slots) {
+    alert('Claim codes are no longer available in this browser. Share the room URL and have each team enter the codes from when you created the room.');
+    return;
+  }
+  const rows = slots.map(s =>
+    `<tr><td>${esc(s.name)}</td><td class="code">${esc(s.claimCode)}</td></tr>`
+  ).join('');
+  const roomUrl = `${location.origin}/dispersal?room=${D.roomId}`;
+  const overlay = document.createElement('div');
+  overlay.className = 'codes-overlay';
+  overlay.innerHTML = `<div class="codes-overlay-inner">
+    <div class="sect-head" style="margin-bottom:14px"><h2>Claim Codes</h2><div class="sect-line"></div></div>
+    <label class="setup-label" style="margin-bottom:4px">Room URL</label>
+    <div class="code-url" style="margin-bottom:16px">${esc(roomUrl)} <button class="copy-btn" onclick="navigator.clipboard.writeText('${esc(roomUrl)}').catch(()=>{})">Copy</button></div>
+    <label class="setup-label" style="margin-bottom:8px">Team Codes</label>
+    <table class="codes-table"><thead><tr><th>Team</th><th>Claim Code</th></tr></thead><tbody>${rows}</tbody></table>
+    <hr class="setup-divider"/>
+    <button class="setup-btn setup-btn-sm" onclick="this.closest('.codes-overlay').remove()">Close</button>
+  </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 }
 
 // ── Delete Room ───────────────────────────────────────────────────────────────
