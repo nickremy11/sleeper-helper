@@ -257,7 +257,7 @@ body::before {
 
 const IS_LOCAL    = location.protocol === 'file:' || location.hostname === 'localhost';
 const SLEEPER_BASE = IS_LOCAL ? 'https://api.sleeper.app/v1' : '/api/sleeper';
-const ROOM_ID     = location.pathname.split('/').filter(Boolean)[1] || null;
+const ROOM_ID     = new URLSearchParams(location.search).get('room') || null;
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -713,7 +713,7 @@ async function createRoom() {
 }
 
 function renderCodesScreen(res) {
-  const url = `${location.origin}/dispersal/${res.roomId}`;
+  const url = `${location.origin}/dispersal?room=${res.roomId}`;
   const rows = res.teamSlots.map(s =>
     `<tr><td>${esc(s.name)}</td><td class="code">${esc(s.claimCode)}</td></tr>`
   ).join('');
@@ -727,7 +727,7 @@ function renderCodesScreen(res) {
       <table class="codes-table"><thead><tr><th>Team</th><th>Claim Code</th></tr></thead><tbody>${rows}</tbody></table>
       <hr class="setup-divider"/>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <a href="/dispersal/${esc(res.roomId)}" class="setup-btn" style="text-decoration:none;display:inline-flex;align-items:center;">Enter Draft Room →</a>
+        <a href="/dispersal?room=${esc(res.roomId)}" class="setup-btn" style="text-decoration:none;display:inline-flex;align-items:center;">Enter Draft Room →</a>
       </div>
     </div>
   </div>`);
@@ -828,7 +828,7 @@ async function doClaim() {
 function connectWs() {
   if (D.ws && D.ws.readyState <= 1) return; // already open or connecting
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  D.ws = new WebSocket(`${proto}//${location.host}/api/dispersal/${D.roomId}/ws`);
+  D.ws = new WebSocket(`${proto}//${location.host}/api/dispersal/${encodeURIComponent(D.roomId)}/ws`);
   D.ws.onmessage = evt => {
     try {
       const msg = JSON.parse(evt.data);

@@ -28,8 +28,8 @@ name       = "DISPERSAL_ROOM"
 class_name = "DispersalRoom"
 
 [[migrations]]
-tag         = "v1"
-new_classes = ["DispersalRoom"]
+tag              = "v1"
+new_sqlite_classes = ["DispersalRoom"]
 
 [observability]
 enabled = true
