@@ -91,7 +91,8 @@ body::before {
 .roster-opt { background:rgba(255,255,255,0.04); border:1px solid var(--brown-mid); border-radius:2px; padding:10px 14px; cursor:pointer; display:flex; align-items:center; gap:12px; transition:border-color 0.15s; }
 .roster-opt:hover { border-color:var(--gold-light); }
 .roster-opt.selected { border-color:var(--gold); background:rgba(201,150,42,0.1); }
-.roster-opt input[type=checkbox] { accent-color:var(--gold); flex-shrink:0; width:16px; height:16px; }
+.roster-check { width:20px; height:20px; border:2px solid var(--brown-light); border-radius:3px; display:flex; align-items:center; justify-content:center; font-size:13px; color:transparent; flex-shrink:0; transition:background 0.15s,border-color 0.15s; }
+.roster-opt.selected .roster-check { background:var(--gold); border-color:var(--gold); color:var(--brown-dark); font-weight:700; }
 .roster-opt-name { font-family:'Playfair Display',serif; font-weight:700; color:var(--cream); font-size:0.9rem; }
 .roster-opt-count { font-family:'Crimson Text',serif; font-size:0.82rem; color:var(--brown-light); font-style:italic; }
 
@@ -301,9 +302,12 @@ async function dApi(path, opts = {}) {
   try { return JSON.parse(text); } catch { return text; }
 }
 
+const FC_DIRECT = 'https://api.fantasycalc.com/values/current?isDynasty=true&numQbs=2&ppr=1&includePickValues=true';
+
 async function fcApi() {
   if (D.fcValues) return D.fcValues;
-  const r = await fetch('/api/fantasycalc');
+  const url = IS_LOCAL ? FC_DIRECT : '/api/fantasycalc';
+  const r = await fetch(url);
   if (!r.ok) throw new Error('FantasyCalc error');
   D.fcValues = await r.json();
   return D.fcValues;
@@ -383,21 +387,19 @@ function renderSetup() {
 // ── Step 1: Username + League ─────────────────────────────────────────────────
 
 function renderStep1() {
-  const leagues = D.leagues.map(lg => {
+  const sorted = [...D.leagues].sort((a, b) => a.name.localeCompare(b.name));
+  const options = sorted.map(lg => {
     const sel = D.selLeague?.league_id === lg.league_id ? 'selected' : '';
-    const teams = lg.total_rosters || '?';
-    const season = lg.season || '';
-    return `<label class="league-opt ${sel}" onclick="selectLeague('${esc(lg.league_id)}')">
-      <input type="radio" name="league" value="${esc(lg.league_id)}" ${sel ? 'checked' : ''} />
-      <div>
-        <div class="league-opt-name">${esc(lg.name)}</div>
-        <div class="league-opt-meta">${teams} teams · ${season}</div>
-      </div>
-    </label>`;
+    return `<option value="${esc(lg.league_id)}" ${sel}>${esc(lg.name)} — ${lg.total_rosters || '?'} teams · ${lg.season || ''}</option>`;
   }).join('');
-  const leagueList = D.leagues.length
-    ? `<div class="league-list">${leagues}</div>`
-    : D.userId ? `<div class="empty-state"><p>No dynasty leagues found for this user.</p></div>` : '';
+  const leagueSelect = D.leagues.length
+    ? `<select class="tracker-select" style="width:100%;margin-top:4px" onchange="selectLeague(this.value)">
+        <option value="">— select a league —</option>
+        ${options}
+      </select>`
+    : D.userId
+      ? `<div class="empty-state" style="margin-top:12px"><p>No dynasty leagues found for this user.</p></div>`
+      : '';
   return `
     <div class="setup-card">
       <label class="setup-label">Commissioner Sleeper Username</label>
@@ -406,10 +408,10 @@ function renderStep1() {
         <button class="setup-btn" onclick="loadUser1()">Load</button>
       </div>
       <div class="setup-status" id="s1-status"></div>
-      ${D.leagues.length ? '<hr class="setup-divider"/>' : ''}
-      ${leagueList}
+      ${D.leagues.length ? '<hr class="setup-divider"/><label class="setup-label" style="margin-bottom:4px">Select League</label>' : ''}
+      ${leagueSelect}
     </div>
-    ${D.selLeague ? `<div style="display:flex;justify-content:flex-end"><button class="setup-btn" onclick="goStep(2)">Next: Select Rosters →</button></div>` : ''}`;
+    ${D.selLeague ? `<div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="setup-btn" onclick="goStep(2)">Next: Select Rosters →</button></div>` : ''}`;
 }
 
 async function loadUser1() {
@@ -447,7 +449,7 @@ function renderStep2() {
     const count = (r.players || []).length;
     const sel = D.selRosterIds.includes(r.roster_id) ? 'selected' : '';
     return `<label class="roster-opt ${sel}" onclick="toggleRoster('${esc(r.roster_id)}')">
-      <input type="checkbox" ${sel ? 'checked' : ''} />
+      <div class="roster-check">${sel ? '✓' : ''}</div>
       <div>
         <div class="roster-opt-name">${esc(name)}</div>
         <div class="roster-opt-count">${count} players</div>
