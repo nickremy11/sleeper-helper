@@ -161,13 +161,13 @@ async function handleCreateRoom(request, env) {
     return new Response('Failed to initialize room', { status: 500, headers: CORS });
   }
 
-  return jsonRes({
+  return jsonRes(JSON.stringify({
     roomId,
     commissionerCode,
     teamSlots: teamSlots.map(({ index, name, rosterId, claimCode }) => ({
       index, name, rosterId, claimCode,
     })),
-  });
+  }));
 }
 
 /** Generates a random alphanumeric ID (no 0/O/I/1 to avoid confusion). */
