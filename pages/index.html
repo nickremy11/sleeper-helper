@@ -1072,15 +1072,25 @@ function switchAuthTab(tab) {
   document.getElementById('auth-tab-register').classList.toggle('active', tab === 'register');
 }
 
+async function authFetch(url, body) {
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const text = await r.text();
+  try {
+    const data = JSON.parse(text);
+    if (data.error) throw new Error(data.error);
+    return data;
+  } catch(e) {
+    throw new Error(r.ok ? e.message : `Server error (${r.status}) — check wrangler tail for details`);
+  }
+}
+
 async function submitLogin() {
   const email = document.getElementById('auth-email-l').value.trim();
   const pass  = document.getElementById('auth-pass-l').value;
   const err   = document.getElementById('auth-err-l');
   err.style.display = 'none';
   try {
-    const r    = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: pass }) });
-    const data = await r.json();
-    if (data.error) throw new Error(data.error);
+    await authFetch('/api/auth/login', { email, password: pass });
     await afterAuth();
     closeAuthModal();
   } catch(e) { err.textContent = e.message; err.style.display = 'block'; }
@@ -1094,9 +1104,7 @@ async function submitRegister() {
   err.style.display = 'none';
   if (pass !== pass2) { err.textContent = 'Passwords do not match'; err.style.display = 'block'; return; }
   try {
-    const r    = await fetch('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: pass }) });
-    const data = await r.json();
-    if (data.error) throw new Error(data.error);
+    await authFetch('/api/auth/register', { email, password: pass });
     await afterAuth();
     closeAuthModal();
   } catch(e) { err.textContent = e.message; err.style.display = 'block'; }
