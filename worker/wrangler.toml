@@ -12,6 +12,14 @@ routes = [
   { pattern = "helper.ffhistorian.com/api/*", zone_name = "ffhistorian.com" }
 ]
 
+# ── D1 Database ───────────────────────────────────────────────────────────────
+# Run: wrangler d1 create sleeper-helper-db  →  paste database_id below
+# Run: wrangler d1 execute sleeper-helper-db --file=./schema.sql  (run once)
+[[d1_databases]]
+binding       = "DB"
+database_name = "sleeper-helper-db"
+database_id   = "7b094e00-d010-43a8-8f1a-047e72901cd8"
+
 # ── KV Namespace ──────────────────────────────────────────────────────────────
 # 1. Run: wrangler kv:namespace create SLEEPER_KV
 #    Paste the returned id below.

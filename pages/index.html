@@ -191,6 +191,21 @@ a.row-link:hover { color: var(--gold-light); }
 footer a { color: var(--brown-mid); text-decoration: none; }
 footer a:hover { color: var(--gold); }
 
+/* ── AUTH MODAL ── */
+.auth-modal-overlay { display:none; position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.72); align-items:center; justify-content:center; }
+.auth-modal-overlay.open { display:flex; }
+.auth-modal-card { background:var(--brown-dark); border:2px solid var(--gold); border-radius:2px; padding:32px 36px; width:420px; max-width:calc(100vw - 32px); box-shadow:8px 8px 0 rgba(0,0,0,0.35); position:relative; }
+.auth-close { position:absolute; top:14px; right:16px; background:none; border:none; cursor:pointer; color:var(--brown-light); font-size:1.1rem; line-height:1; transition:color 0.2s; }
+.auth-close:hover { color:var(--gold); }
+.auth-tabs { display:flex; border-bottom:1px solid var(--brown-mid); margin-bottom:24px; }
+.auth-tab { background:none; border:none; border-bottom:2px solid transparent; margin-bottom:-1px; cursor:pointer; font-family:'Rye',serif; font-size:0.58rem; letter-spacing:0.18em; text-transform:uppercase; color:var(--brown-light); padding:10px 16px; opacity:0.6; transition:opacity 0.2s, color 0.2s; }
+.auth-tab:hover { opacity:0.85; }
+.auth-tab.active { opacity:1; color:var(--gold-light); border-bottom-color:var(--gold-light); }
+.auth-field { width:100%; margin-bottom:14px; }
+.auth-hint { font-family:'Crimson Text',serif; font-size:0.78rem; color:var(--brown-light); font-style:italic; margin-bottom:14px; }
+.auth-err { display:none; background:var(--red); border:1px solid #a02020; color:var(--cream); font-family:'Crimson Text',serif; font-style:italic; font-size:0.88rem; padding:8px 12px; border-radius:2px; margin-bottom:14px; }
+.auth-submit { width:100%; height:40px; }
+
 @media (max-width: 600px) {
   .banner-inner { padding: 20px 16px; }
   .tab-btn { padding: 12px 10px; font-size: 0.5rem; letter-spacing: 0.1em; }
@@ -211,6 +226,7 @@ footer a:hover { color: var(--gold); }
         <div class="banner-sub">Live tools for managing your fantasy leagues</div>
         <div class="banner-divider"></div>
       </div>
+      <div id="auth-chip" style="flex-shrink:0;text-align:right;"></div>
     </div>
   </header>
 
@@ -238,11 +254,20 @@ footer a:hover { color: var(--gold); }
       <hr class="setup-divider" />
       <div>
         <label class="setup-label-rye">Auth Token <span class="setup-label-sub">— optional, enables pending trades</span></label>
-        <div class="setup-row">
-          <input type="password" id="token-input" class="setup-input" placeholder="sleeper.com → DevTools → Network → any graphql request → Authorization header…" />
-          <button class="setup-btn" onclick="saveToken()">Save</button>
+        <!-- shown when logged in AND has a stored token -->
+        <div id="token-saved-row" style="display:none;">
+          <div class="setup-status ok" style="margin-bottom:8px;">Token saved to account — trades load automatically</div>
+          <button class="ghost-btn" style="font-size:0.5rem;" onclick="showReplaceToken()">Replace token</button>
         </div>
-        <div class="setup-status" id="token-status">token lives in memory only — clears when you close this tab</div>
+        <!-- shown when no stored token or when replacing -->
+        <div id="token-input-row">
+          <div class="setup-row">
+            <input type="password" id="token-input" class="setup-input" placeholder="sleeper.com → DevTools → Network → any graphql request → Authorization header…" />
+            <button class="setup-btn" onclick="saveToken()">Save</button>
+            <button class="setup-btn" id="token-save-acct-btn" style="display:none;white-space:nowrap;" onclick="saveTokenToAccount()">Save to acct</button>
+          </div>
+          <div class="setup-status" id="token-status">token lives in memory only — clears when you close this tab</div>
+        </div>
       </div>
     </div>
 
@@ -257,13 +282,48 @@ footer a:hover { color: var(--gold); }
   </footer>
 
 </div>
+
+<!-- ── Auth modal ─────────────────────────────────────────────────────────── -->
+<div id="auth-modal" class="auth-modal-overlay" onclick="handleModalBgClick(event)">
+  <div class="auth-modal-card">
+    <button class="auth-close" onclick="closeAuthModal()" title="Close">✕</button>
+
+    <div class="auth-tabs">
+      <button id="auth-tab-login"    class="auth-tab active" onclick="switchAuthTab('login')">Sign In</button>
+      <button id="auth-tab-register" class="auth-tab"        onclick="switchAuthTab('register')">Create Account</button>
+    </div>
+
+    <!-- Login form -->
+    <div id="auth-login-form">
+      <label class="setup-label-rye">Email</label>
+      <input type="email"    id="auth-email-l" class="setup-input auth-field" placeholder="your@email.com" />
+      <label class="setup-label-rye">Password</label>
+      <input type="password" id="auth-pass-l"  class="setup-input auth-field" placeholder="••••••••" />
+      <div class="auth-err" id="auth-err-l"></div>
+      <button class="setup-btn auth-submit" onclick="submitLogin()">Sign In</button>
+    </div>
+
+    <!-- Register form -->
+    <div id="auth-register-form" style="display:none;">
+      <label class="setup-label-rye">Email</label>
+      <input type="email"    id="auth-email-r"  class="setup-input auth-field" placeholder="your@email.com" />
+      <label class="setup-label-rye">Password</label>
+      <input type="password" id="auth-pass-r"   class="setup-input auth-field" placeholder="min 12 chars" />
+      <div class="auth-hint">Minimum 12 characters · uppercase · lowercase · number · symbol</div>
+      <label class="setup-label-rye">Confirm Password</label>
+      <input type="password" id="auth-pass-r2"  class="setup-input auth-field" placeholder="••••••••" />
+      <div class="auth-err" id="auth-err-r"></div>
+      <button class="setup-btn auth-submit" onclick="submitRegister()">Create Account</button>
+    </div>
+  </div>
+</div>
 <script>
 const IS_LOCAL    = location.protocol === 'file:' || location.hostname === 'localhost';
 const API_BASE    = IS_LOCAL ? 'https://api.sleeper.app/v1' : '/api/sleeper';
 const PLAYERS_URL = IS_LOCAL ? 'https://api.sleeper.app/v1/players/nfl' : '/api/players';
 const GQL_URL     = IS_LOCAL ? null : '/api/graphql';
 
-const S = { userId: null, leagues: [], leagueDetails: {}, players: {}, nflState: null, token: null, tab: 'trades' };
+const S = { userId: null, leagues: [], leagueDetails: {}, players: {}, nflState: null, token: null, tab: 'trades', auth: null };
 
 async function api(path) {
   const r = await fetch(API_BASE + path);
@@ -292,11 +352,13 @@ function saveToken() {
   if (S.tab === 'trades' && S.userId) renderTrades();
 }
 async function gql(op, query) {
-  if (!S.token) throw new Error('no token');
-  if (!GQL_URL)  throw new Error('not available in local dev');
+  if (!S.token && !S.auth?.user?.has_token) throw new Error('no token');
+  if (!GQL_URL) throw new Error('not available in local dev');
+  const headers = { 'Content-Type': 'application/json', 'X-Sleeper-Graphql-Op': op };
+  if (S.token) headers['Authorization'] = S.token; // explicit token takes priority; otherwise server uses stored one
   const r = await fetch(GQL_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': S.token, 'X-Sleeper-Graphql-Op': op },
+    headers,
     body: JSON.stringify({ operationName: op, variables: {}, query }),
   });
   if (!r.ok) throw new Error('GQL HTTP ' + r.status);
@@ -333,6 +395,11 @@ async function loadUser() {
     st.textContent = S.leagues.length + ' leagues loaded for ' + esc(user.display_name || u) + ' (' + season + ')';
     st.className = 'setup-status ok';
     render(S.tab);
+    // Auto-save username to account when logged in
+    if (S.auth?.user && u !== S.auth.user.sleeper_username) {
+      fetch('/api/auth/me', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sleeper_username: u }) })
+        .then(r => r.json()).then(d => { if (!d.error && S.auth?.user) S.auth.user.sleeper_username = u; }).catch(() => {});
+    }
   } catch(e) {
     st.textContent = 'Error: ' + e.message;
     st.className = 'setup-status err';
@@ -356,7 +423,7 @@ function setC(html) { document.getElementById('content').innerHTML = html; }
 
 // ── 1. Trades ─────────────────────────────────────────────────────────────────
 async function renderTrades() {
-  if (!S.token) {
+  if (!S.token && !S.auth?.user?.has_token) {
     setC(`<div class="empty-state">
       <p>Paste your Sleeper auth token above to see pending trades</p>
       <p style="margin-top:10px;font-size:0.85rem;color:var(--brown-light);font-family:'Crimson Text',serif;font-style:italic;">
@@ -991,6 +1058,130 @@ function setTrackerPos(pos) {
 
 
 document.getElementById('token-input').addEventListener('keydown', e => { if (e.key==='Enter') saveToken(); });
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+
+function openAuthModal()  { document.getElementById('auth-modal').classList.add('open'); }
+function closeAuthModal() { document.getElementById('auth-modal').classList.remove('open'); }
+function handleModalBgClick(e) { if (e.target === document.getElementById('auth-modal')) closeAuthModal(); }
+
+function switchAuthTab(tab) {
+  document.getElementById('auth-login-form').style.display    = tab === 'login'    ? '' : 'none';
+  document.getElementById('auth-register-form').style.display = tab === 'register' ? '' : 'none';
+  document.getElementById('auth-tab-login').classList.toggle('active',    tab === 'login');
+  document.getElementById('auth-tab-register').classList.toggle('active', tab === 'register');
+}
+
+async function submitLogin() {
+  const email = document.getElementById('auth-email-l').value.trim();
+  const pass  = document.getElementById('auth-pass-l').value;
+  const err   = document.getElementById('auth-err-l');
+  err.style.display = 'none';
+  try {
+    const r    = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: pass }) });
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    await afterAuth();
+    closeAuthModal();
+  } catch(e) { err.textContent = e.message; err.style.display = ''; }
+}
+
+async function submitRegister() {
+  const email = document.getElementById('auth-email-r').value.trim();
+  const pass  = document.getElementById('auth-pass-r').value;
+  const pass2 = document.getElementById('auth-pass-r2').value;
+  const err   = document.getElementById('auth-err-r');
+  err.style.display = 'none';
+  if (pass !== pass2) { err.textContent = 'Passwords do not match'; err.style.display = ''; return; }
+  try {
+    const r    = await fetch('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: pass }) });
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    await afterAuth();
+    closeAuthModal();
+  } catch(e) { err.textContent = e.message; err.style.display = ''; }
+}
+
+async function afterAuth() {
+  const r    = await fetch('/api/auth/me');
+  const data = await r.json();
+  S.auth = data;
+  updateAuthUI();
+  if (data.user?.sleeper_username && !S.userId) {
+    document.getElementById('u-input').value = data.user.sleeper_username;
+    loadUser();
+  }
+}
+
+async function submitLogout() {
+  await fetch('/api/auth/logout', { method: 'POST' });
+  S.auth = { user: null };
+  updateAuthUI();
+}
+
+function updateAuthUI() {
+  const chip = document.getElementById('auth-chip');
+  const user = S.auth?.user;
+
+  if (user) {
+    chip.innerHTML = `<span style="font-family:'Crimson Text',serif;font-size:0.82rem;color:var(--parchment);opacity:0.85;">${esc(user.email)}<a href="#" onclick="submitLogout();return false;" style="margin-left:10px;color:var(--gold-light);font-size:0.78rem;text-decoration:none;">Sign out</a></span>`;
+  } else {
+    chip.innerHTML = `<a href="#" onclick="openAuthModal();return false;" style="font-family:'Rye',serif;font-size:0.52rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--gold-light);text-decoration:none;opacity:0.85;">Sign In</a>`;
+  }
+
+  const savedRow    = document.getElementById('token-saved-row');
+  const inputRow    = document.getElementById('token-input-row');
+  const saveAcctBtn = document.getElementById('token-save-acct-btn');
+
+  if (user?.has_token) {
+    savedRow.style.display = '';
+    inputRow.style.display = 'none';
+  } else {
+    savedRow.style.display = 'none';
+    inputRow.style.display = '';
+    if (saveAcctBtn) saveAcctBtn.style.display = user ? '' : 'none';
+  }
+}
+
+function showReplaceToken() {
+  document.getElementById('token-saved-row').style.display = 'none';
+  document.getElementById('token-input-row').style.display = '';
+  const btn = document.getElementById('token-save-acct-btn');
+  if (btn && S.auth?.user) btn.style.display = '';
+}
+
+async function saveTokenToAccount() {
+  const t  = document.getElementById('token-input').value.trim();
+  const st = document.getElementById('token-status');
+  if (!t) { st.textContent = 'Paste your token first'; st.className = 'setup-status err'; return; }
+  S.token = t;
+  document.getElementById('token-input').value = '';
+  st.textContent = 'Saving…'; st.className = 'setup-status';
+  try {
+    const r    = await fetch('/api/auth/me', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }) });
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    if (S.auth?.user) S.auth.user.has_token = true;
+    updateAuthUI();
+    if (S.tab === 'trades' && S.userId) renderTrades();
+  } catch(e) { st.textContent = 'Error: ' + e.message; st.className = 'setup-status err'; }
+}
+
+async function initAuth() {
+  if (IS_LOCAL) return;
+  try {
+    const r    = await fetch('/api/auth/me');
+    const data = await r.json();
+    S.auth = data;
+    updateAuthUI();
+    if (data.user?.sleeper_username) {
+      document.getElementById('u-input').value = data.user.sleeper_username;
+      loadUser();
+    }
+  } catch(_) {}
+}
+
+initAuth();
 </script>
 </body>
 </html>

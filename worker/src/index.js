@@ -2,6 +2,11 @@
  * Sleeper Helper — Cloudflare Worker
  *
  * Routes:
+ *   POST /api/auth/register       → create account
+ *   POST /api/auth/login          → login, set session cookie
+ *   GET  /api/auth/me             → current user (session cookie)
+ *   PATCH /api/auth/me            → update sleeper_username / stored token
+ *   POST /api/auth/logout         → clear session
  *   GET  /api/players             → KV-cached player map (2h TTL)
  *   GET  /api/sleeper/*           → live proxy to api.sleeper.app (no cache)
  *   POST /api/graphql             → proxy to sleeper.com/graphql (authenticated)
@@ -10,10 +15,13 @@
  *   *    /api/dispersal/:id/*     → forward to DispersalRoom Durable Object
  *
  * KV binding:      SLEEPER_KV
+ * D1 binding:      DB
  * DO binding:      DISPERSAL_ROOM
+ * Secret:          TOKEN_ENCRYPTION_KEY  (base64 AES-256 key)
  */
 
 export { DispersalRoom } from './dispersal.js';
+import { handleAuth, getAuthUser, decryptStoredToken } from './auth.js';
 
 const SLEEPER_BASE  = 'https://api.sleeper.app/v1';
 const SLEEPER_GQL   = 'https://sleeper.com/graphql';
@@ -23,7 +31,7 @@ const FC_TTL        = 60 * 60 * 24;  // 24 hours
 const ROOM_TTL_MS   = 7 * 24 * 60 * 60 * 1000; // 7 days
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Sleeper-Graphql-Op',
 };
 
@@ -35,6 +43,10 @@ export default {
       return new Response(null, { status: 204, headers: CORS });
     }
 
+    if (url.pathname.startsWith('/api/auth/')) {
+      return handleAuth(request, env, url);
+    }
+
     if (url.pathname === '/api/players' && request.method === 'GET') {
       return handlePlayers(env);
     }
@@ -44,7 +56,7 @@ export default {
     }
 
     if (url.pathname === '/api/graphql' && request.method === 'POST') {
-      return handleGraphQL(request);
+      return handleGraphQL(request, env);
     }
 
     if (url.pathname === '/api/fantasycalc' && request.method === 'GET') {
@@ -203,10 +215,20 @@ async function handlePlayers(env) {
   return jsonRes(body, { 'X-Cache': 'MISS' });
 }
 
-async function handleGraphQL(request) {
-  const token = request.headers.get('Authorization') || '';
-  const op    = request.headers.get('X-Sleeper-Graphql-Op') || '';
-  const body  = await request.text();
+async function handleGraphQL(request, env) {
+  let token  = request.headers.get('Authorization') || '';
+  const op   = request.headers.get('X-Sleeper-Graphql-Op') || '';
+  const body = await request.text();
+
+  // Fall back to user's stored (encrypted) token when no Authorization header provided
+  if (!token && env?.DB && env?.TOKEN_ENCRYPTION_KEY) {
+    try {
+      const user = await getAuthUser(request, env);
+      if (user?.token_enc && user?.token_iv) {
+        token = await decryptStoredToken(user.token_enc, user.token_iv, env.TOKEN_ENCRYPTION_KEY);
+      }
+    } catch(_) {}
+  }
 
   const upstream = await fetch(SLEEPER_GQL, {
     method:  'POST',
