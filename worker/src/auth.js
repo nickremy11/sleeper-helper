@@ -123,6 +123,12 @@ async function register(request, env) {
   try { body = await request.json(); } catch { return errRes('Invalid JSON'); }
   const { email, password } = body ?? {};
   if (!email || !String(email).includes('@')) return errRes('Valid email required');
+
+  const allowed = (env.ALLOWED_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+  if (allowed.length && !allowed.includes(String(email).toLowerCase())) {
+    return errRes('This email is not authorized to register');
+  }
+
   const pwErr = validatePassword(password);
   if (pwErr) return errRes(pwErr);
 
