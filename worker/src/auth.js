@@ -30,14 +30,14 @@ async function hashPassword(password) {
   const salt   = crypto.getRandomValues(new Uint8Array(32));
   const saltB64 = btoa(String.fromCharCode(...salt));
   const keyMat = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
-  const bits   = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 200000, hash: 'SHA-256' }, keyMat, 256);
+  const bits   = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' }, keyMat, 256);
   return { hash: btoa(String.fromCharCode(...new Uint8Array(bits))), salt: saltB64 };
 }
 
 async function verifyPassword(password, storedHash, storedSalt) {
   const salt   = Uint8Array.from(atob(storedSalt), c => c.charCodeAt(0));
   const keyMat = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
-  const bits   = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 200000, hash: 'SHA-256' }, keyMat, 256);
+  const bits   = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' }, keyMat, 256);
   return btoa(String.fromCharCode(...new Uint8Array(bits))) === storedHash;
 }
 

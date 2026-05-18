@@ -435,7 +435,6 @@ async function renderTrades() {
   setC(loading('Scanning leagues for pending trades'));
   try {
     await loadPlayers();
-    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
     const rosterIds = {};
     await Promise.all(S.leagues.map(async lg => {
       try {
@@ -447,7 +446,7 @@ async function renderTrades() {
 
     const GQL = `query league_transactions_filtered {
       league_transactions_filtered(league_id: $LID, roster_id_filters: [$RID], type_filters: ["trade"], leg_filters: [], status_filters: []){
-        adds consenter_ids created creator draft_picks drops league_id leg roster_ids status status_updated transaction_id type waiver_budget
+        adds consenter_ids created creator draft_picks drops league_id leg metadata roster_ids settings status status_updated transaction_id type waiver_budget
       }
     }`;
 
@@ -456,12 +455,13 @@ async function renderTrades() {
       if (!rid) return [];
       const data = await gql('league_transactions_filtered', GQL.replace('$LID', `"${lg.league_id}"`).replace('$RID', rid));
       return (data?.league_transactions_filtered || [])
-        .filter(t => t.status === 'proposed' && t.created >= cutoff)
+        .filter(t => t.status === 'proposed')
+        .map(t => { console.log('TRADE', t.transaction_id, 'status_updated:', new Date(t.status_updated).toISOString(), 'settings:', JSON.stringify(t.settings), 'metadata:', JSON.stringify(t.metadata)); return t; })
         .map(t => ({ ...t, _lgId: lg.league_id, _lgName: lg.name, _myRid: rid }));
     }));
 
     const all = results.flatMap(r => r.status === 'fulfilled' ? r.value : []).sort((a,b) => b.created - a.created);
-    if (!all.length) { setC('<div class="empty-state"><p>No pending trades found in the last 7 days</p></div>'); return; }
+    if (!all.length) { setC('<div class="empty-state"><p>No pending trades found</p></div>'); return; }
 
     const lgIds = [...new Set(all.map(t => t._lgId))];
     const rMaps = {};
@@ -475,25 +475,22 @@ async function renderTrades() {
 
     setC(all.map(t => {
       const rMap  = rMaps[t._lgId] || {};
-      const sides = tradeSides(t, rMap);
+      const sides = tradeSides(t, rMap, t._myRid);
       const detail = S.leagueDetails[t._lgId];
       const flags  = detail ? leagueFlags(detail) : [];
       const flagHtml = flags.length
-        ? `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px;">${flags.map(f=>`<span class="badge badge-outline">${esc(f)}</span>`).join('')}</div>`
+        ? `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;">${flags.map(f=>`<span class="badge badge-outline">${esc(f)}</span>`).join('')}</div>`
         : '';
       const isIncoming = t.creator !== S.userId;
-      const dot = `<span class="dir-dot" style="background:${isIncoming ? 'var(--green-light)' : 'var(--red)'};" title="${isIncoming?'incoming':'outgoing'}"></span>`;
-      return `<div class="card">
+      const dirBadge = `<span class="badge ${isIncoming ? 'badge-green' : 'badge-red'}" style="font-size:0.48rem;letter-spacing:0.1em;">${isIncoming ? '▼ Incoming' : '▲ Outgoing'}</span>`;
+      return `<div class="card" style="border-left:3px solid ${isIncoming ? 'var(--green-light)' : 'var(--red)'};">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
-          <span style="display:flex;align-items:center;">${dot}<a href="https://sleeper.com/leagues/${esc(t._lgId)}/trades" target="_blank" class="card-link">${esc(t._lgName)}</a></span>
-          <span style="display:flex;align-items:center;gap:8px;">
-            <span class="card-meta">${isIncoming?'incoming':'outgoing'}</span>
-            <span class="badge badge-gold">${t.created ? timeAgo(t.created) : ''}</span>
-          </span>
+          <span style="display:flex;align-items:center;gap:8px;">${dirBadge}<a href="https://sleeper.com/leagues/${esc(t._lgId)}/trades" target="_blank" class="card-link">${esc(t._lgName)}</a></span>
+          <span class="badge badge-gold">${t.created ? timeAgo(t.created) : ''}</span>
         </div>
         ${flagHtml}
         <div class="trade-sides">
-          <div><div class="trade-side-lbl">${esc(sides[0].name)}</div>${sides[0].items.map(i=>`<div class="${i.cls}">${esc(i.txt)}</div>`).join('')}</div>
+          <div><div class="trade-side-lbl">You receive</div>${sides[0].items.map(i=>`<div class="${i.cls}">${esc(i.txt)}</div>`).join('')}</div>
           <div class="trade-arrow">⇄</div>
           <div><div class="trade-side-lbl">${esc(sides[1].name)}</div>${sides[1].items.map(i=>`<div class="${i.cls}">${esc(i.txt)}</div>`).join('')}</div>
         </div>
@@ -502,7 +499,7 @@ async function renderTrades() {
   } catch(e) { setC(errHtml(e)); }
 }
 
-function tradeSides(t, rMap) {
+function tradeSides(t, rMap, myRid) {
   const sides = {};
   for (const [pid, rid] of Object.entries(t.adds || {})) {
     const key = String(rid);
@@ -525,7 +522,12 @@ function tradeSides(t, rMap) {
       sides[rid].items.push({ cls: 'trade-pick', txt: `${pk.season} Rd ${pk.round} pick` });
     }
   }
+  const keys = Object.keys(sides);
   const vals = Object.values(sides);
+  // Always put my side first (what I receive on the left)
+  if (myRid && keys.length === 2 && keys[1] === String(myRid)) {
+    return [vals[1], vals[0]];
+  }
   return [vals[0] || { name: '—', items: [] }, vals[1] || { name: '—', items: [] }];
 }
 
