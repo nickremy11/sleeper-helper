@@ -455,8 +455,7 @@ async function renderTrades() {
       if (!rid) return [];
       const data = await gql('league_transactions_filtered', GQL.replace('$LID', `"${lg.league_id}"`).replace('$RID', rid));
       return (data?.league_transactions_filtered || [])
-        .filter(t => t.status === 'proposed')
-        .map(t => { console.log('TRADE', t.transaction_id, 'status_updated:', new Date(t.status_updated).toISOString(), 'settings:', JSON.stringify(t.settings), 'metadata:', JSON.stringify(t.metadata)); return t; })
+        .filter(t => t.status === 'proposed' && (!t.settings?.expires_at || t.settings.expires_at * 1000 > Date.now()))
         .map(t => ({ ...t, _lgId: lg.league_id, _lgName: lg.name, _myRid: rid }));
     }));
 
