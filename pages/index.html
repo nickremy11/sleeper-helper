@@ -1083,7 +1083,7 @@ async function submitLogin() {
     if (data.error) throw new Error(data.error);
     await afterAuth();
     closeAuthModal();
-  } catch(e) { err.textContent = e.message; err.style.display = ''; }
+  } catch(e) { err.textContent = e.message; err.style.display = 'block'; }
 }
 
 async function submitRegister() {
@@ -1092,14 +1092,14 @@ async function submitRegister() {
   const pass2 = document.getElementById('auth-pass-r2').value;
   const err   = document.getElementById('auth-err-r');
   err.style.display = 'none';
-  if (pass !== pass2) { err.textContent = 'Passwords do not match'; err.style.display = ''; return; }
+  if (pass !== pass2) { err.textContent = 'Passwords do not match'; err.style.display = 'block'; return; }
   try {
     const r    = await fetch('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: pass }) });
     const data = await r.json();
     if (data.error) throw new Error(data.error);
     await afterAuth();
     closeAuthModal();
-  } catch(e) { err.textContent = e.message; err.style.display = ''; }
+  } catch(e) { err.textContent = e.message; err.style.display = 'block'; }
 }
 
 async function afterAuth() {
