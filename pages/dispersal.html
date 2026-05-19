@@ -272,6 +272,7 @@ const D = {
   userId: null, leagues: [], selLeague: null, leagueDetails: null,
   rosters: [], users: [], tradedPicks: [], fcValues: null,
   selRosterIds: [], selYears: [], assetPool: [], draftOrder: [],
+  extraPicks: [], pickFcMid: {},
   step: 1,
   // Draft room
   roomId: ROOM_ID,
@@ -544,12 +545,26 @@ function renderStep4() {
       <span class="order-name">${esc(slotNames[slotIdx])}</span>
     </div>`;
   }).join('');
-  const totalAssets = D.assetPool.length;
+  const totalAssets = D.assetPool.length + D.extraPicks.length;
   const n = D.selRosterIds.length;
   const rounds = totalAssets ? Math.ceil(totalAssets / n) : '?';
   const preview = D.assetPool.length
     ? `<div style="margin-top:12px;font-family:'Crimson Text',serif;font-size:0.88rem;color:var(--brown-light);font-style:italic;">${totalAssets} assets · ${rounds} rounds · ${n}-team snake</div>`
     : `<div style="margin-top:12px" class="loading-state" style="padding:12px"><div class="spinner"></div>Building asset pool…</div>`;
+
+  const currentYear = parseInt(D.selLeague?.season || new Date().getFullYear(), 10);
+  const yearOpts = [0,1,2,3].map(d => `<option value="${currentYear+d}">${currentYear+d}</option>`).join('');
+  const roundOpts = [1,2,3,4,5].map(r => `<option value="${r}">Round ${r}</option>`).join('');
+  const teamOpts = D.rosters.map(r => `<option value="${esc(r.roster_id)}">${esc(getTeamName(r))}</option>`).join('');
+  const extraList = D.extraPicks.length
+    ? `<div style="display:grid;gap:6px;margin-bottom:12px">${D.extraPicks.map((p, i) => `
+        <div style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.04);border:1px solid var(--brown-mid);border-radius:2px;padding:7px 12px">
+          <span class="pos-tag pos-PICK" style="color:#7ec8e3">PICK</span>
+          <span style="flex:1;font-family:'Crimson Text',serif;font-size:0.9rem;color:var(--cream)">${esc(p.name)}</span>
+          <button class="setup-btn setup-btn-sm setup-btn-ghost" onclick="removeExtraPick(${i})" style="padding:3px 10px;min-height:auto">Remove</button>
+        </div>`).join('')}</div>`
+    : '';
+
   return `
     <div class="setup-card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px">
@@ -559,9 +574,22 @@ function renderStep4() {
       <div class="order-list" id="order-list">${items}</div>
       ${preview}
     </div>
+    <div class="setup-card" style="margin-top:0">
+      <label class="setup-label" style="margin-bottom:4px">Extra Assets <span class="setup-label-sm">— optional</span></label>
+      <div class="setup-label-sm" style="margin-bottom:12px">Add individual picks not already in the pool, e.g. compensation from a non-dispersed team.</div>
+      ${extraList}
+      <div class="setup-row" style="flex-wrap:wrap;gap:8px">
+        <select id="ep-year" class="setup-input" style="flex:0 0 82px">${yearOpts}</select>
+        <select id="ep-round" class="setup-input" style="flex:0 0 100px">${roundOpts}</select>
+        <select id="ep-team" class="setup-input" style="flex:1;min-width:140px">
+          <option value="">— team (optional) —</option>${teamOpts}
+        </select>
+        <button class="setup-btn setup-btn-sm" onclick="addExtraPick()" style="white-space:nowrap">+ Add Pick</button>
+      </div>
+    </div>
     <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap">
       <button class="setup-btn setup-btn-ghost setup-btn-sm" onclick="goStep(3)">← Back</button>
-      <button class="setup-btn" onclick="createRoom()" id="create-btn" ${!totalAssets ? 'disabled' : ''}>Create Dispersal Room</button>
+      <button class="setup-btn" onclick="createRoom()" id="create-btn" ${!D.assetPool.length ? 'disabled' : ''}>Create Dispersal Room</button>
     </div>
     <div class="setup-status" id="create-status"></div>`;
 }
@@ -595,14 +623,42 @@ function initDragDrop() {
   });
 }
 
+function addExtraPick() {
+  const year  = parseInt($('ep-year')?.value || 0, 10);
+  const round = parseInt($('ep-round')?.value || 0, 10);
+  if (!year || !round) return;
+  const rosterId = $('ep-team')?.value || '';
+  const origRoster = D.rosters.find(r => String(r.roster_id) === rosterId);
+  const origTeamName = origRoster ? getTeamName(origRoster) : '';
+  const name = origTeamName ? `${year} Round ${round} (${origTeamName})` : `${year} Round ${round}`;
+  const fcValue = D.pickFcMid[`${year}_${round}`] || 0;
+  D.extraPicks.push({
+    id: `extra_${year}_${round}_${rosterId || 'none'}_${Date.now()}`,
+    name,
+    position: 'PICK',
+    nflTeam: null,
+    fcValue,
+    originalTeam: origTeamName || 'Extra',
+    pickedBy: null,
+  });
+  renderSetup();
+}
+
+function removeExtraPick(idx) {
+  D.extraPicks.splice(idx, 1);
+  renderSetup();
+}
+
 async function loadStep4() {
   try {
     const playersUrl = IS_LOCAL ? 'https://api.sleeper.app/v1/players/nfl' : '/api/players';
-    const [fcData, tradedPicks, allPlayersRaw, draftsData] = await Promise.all([
+    const prevLeagueId = D.selLeague.previous_league_id;
+    const [fcData, tradedPicks, allPlayersRaw, draftsData, prevDraftsData] = await Promise.all([
       fcApi(),
       sApi(`/league/${D.selLeague.league_id}/traded_picks`),
       fetch(playersUrl).then(r => r.ok ? r.json() : {}),
       sApi(`/league/${D.selLeague.league_id}/drafts`),
+      prevLeagueId ? sApi(`/league/${prevLeagueId}/drafts`) : Promise.resolve([]),
     ]);
     D.tradedPicks = tradedPicks || [];
     const playerMap = allPlayersRaw || {};
@@ -629,18 +685,37 @@ async function loadStep4() {
         }
       }
     }
+    D.pickFcMid = pickFcMid;
 
-    // Build rosterToSlot maps from draft data for years with known pick order
+    // Build rosterToSlot maps from draft data for years with known pick order.
+    // Check current league's drafts first, then fall back to the previous league's
+    // drafts (Sleeper creates the current-year rookie draft in the prior season's league).
+    // Use both slot_to_roster_id (slot→roster) and draft_order (userId→slot, resolved
+    // via roster owner_id) — draft_order is the more reliably populated field.
     const rosterToSlotByYear = {};
-    for (const draft of (draftsData || [])) {
-      if (draft.slot_to_roster_id && D.selYears.includes(String(draft.season))) {
-        const map = {};
+    function applyDraftSlots(draft, overwrite = true) {
+      const yr = String(draft.season);
+      if (!D.selYears.includes(yr)) return;
+      if (!overwrite && rosterToSlotByYear[yr]) return;
+      const map = {};
+      if (draft.slot_to_roster_id) {
         for (const [slot, rId] of Object.entries(draft.slot_to_roster_id)) {
           map[String(rId)] = parseInt(slot, 10);
         }
-        rosterToSlotByYear[String(draft.season)] = map;
       }
+      // draft_order maps userId → slot; resolve to rosterId via roster.owner_id
+      if (draft.draft_order) {
+        for (const [userId, slot] of Object.entries(draft.draft_order)) {
+          const roster = D.rosters.find(r => r.owner_id === userId);
+          if (roster && !map[String(roster.roster_id)]) {
+            map[String(roster.roster_id)] = parseInt(slot, 10);
+          }
+        }
+      }
+      if (Object.keys(map).length > 0) rosterToSlotByYear[yr] = map;
     }
+    for (const draft of (draftsData || [])) applyDraftSlots(draft, true);
+    for (const draft of (prevDraftsData || [])) applyDraftSlots(draft, false);
 
     const allRosterIds = D.rosters.map(r => String(r.roster_id));
     const dispersedIds = D.selRosterIds.map(String);
@@ -688,7 +763,11 @@ async function loadStep4() {
           const roster = D.rosters.find(r => String(r.roster_id) === currentOwner);
           const teamName = getTeamName(roster);
           const slot = rosterToSlot[origId];
-          const name = slot ? `${year} ${rd}.${String(slot).padStart(2, '0')}` : `${year} Round ${rd}`;
+          const origRoster = D.rosters.find(r => String(r.roster_id) === origId);
+          const origTeamName = getTeamName(origRoster);
+          const name = slot
+            ? `${year} ${rd}.${String(slot).padStart(2, '0')}`
+            : `${year} Round ${rd} (${origTeamName})`;
           const fcValue = slot ? (pickFcFull[`${year}_${rd}_${slot}`] || 0) : (pickFcMid[`${year}_${rd}`] || 0);
           assets.push({
             id: `pick_${year}_${rd}_${origId}`,
@@ -728,13 +807,15 @@ async function createRoom() {
       return { index: i, name: getTeamName(roster), rosterId: String(rosterId) };
     });
     const rosterPositions = D.selLeague.roster_positions || ['QB','RB','RB','WR','WR','TE','FLEX','SF','BN','BN','BN','BN','BN','BN'];
+    const allAssets = [...D.assetPool, ...D.extraPicks]
+      .sort((a, b) => (b.fcValue || 0) - (a.fcValue || 0));
     const body = {
       leagueId:        D.selLeague.league_id,
       leagueName:      D.selLeague.name,
       numTeams:        teamSlots.length,
       teamSlots,
       draftOrder:      D.draftOrder,
-      assets:          D.assetPool,
+      assets:          allAssets,
       rosterPositions,
     };
     const res = await dApi('', { method: 'POST', body: JSON.stringify(body) });
