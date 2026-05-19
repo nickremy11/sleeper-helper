@@ -660,8 +660,9 @@ async function loadStep4() {
   try {
     const playersUrl = IS_LOCAL ? 'https://api.sleeper.app/v1/players/nfl' : '/api/players';
     const prevLeagueId = D.selLeague.previous_league_id;
-    const [fcData, allPlayersRaw, draftsData, prevDraftsData] = await Promise.all([
+    const [fcData, tradedPicks, allPlayersRaw, draftsData, prevDraftsData] = await Promise.all([
       fcApi(),
+      sApi(`/league/${D.selLeague.league_id}/traded_picks`),
       fetch(playersUrl).then(r => r.ok ? r.json() : {}),
       sApi(`/league/${D.selLeague.league_id}/drafts`),
       prevLeagueId ? sApi(`/league/${prevLeagueId}/drafts`) : Promise.resolve([]),
@@ -747,39 +748,54 @@ async function loadStep4() {
       }
     }
 
-    // Picks currently held by dispersed rosters.
-    // roster.picks is the authoritative source — Sleeper stores picks in the
-    // current owner's roster, so no trade-chain resolution needed.
-    // pick.roster_id = the original owner's roster (for slot/naming); the pick
-    // appears in whatever roster currently holds it.
-    const picksAdded = new Set();
-    for (const rosterId of dispersedIds) {
-      const roster = D.rosters.find(r => String(r.roster_id) === rosterId);
-      const teamName = getTeamName(roster);
-      for (const pick of (roster?.picks || [])) {
-        if (!D.selYears.includes(String(pick.season))) continue;
-        const origId  = String(pick.roster_id);
-        const yr      = String(pick.season);
-        const rd      = pick.round;
-        const pickId  = `pick_${yr}_${rd}_${origId}`;
-        if (picksAdded.has(pickId)) continue;
-        picksAdded.add(pickId);
-        const rosterToSlot  = rosterToSlotByYear[yr] || {};
-        const slot          = rosterToSlot[origId];
-        const origRoster    = D.rosters.find(r => String(r.roster_id) === origId);
-        const origTeamName  = getTeamName(origRoster);
-        const name = slot
-          ? `${yr} ${rd}.${String(slot).padStart(2, '0')}`
-          : `${yr} Round ${rd} (${origTeamName})`;
-        assets.push({
-          id: pickId,
-          name,
-          position: 'PICK',
-          nflTeam: null,
-          fcValue: slot ? (pickFcFull[`${yr}_${rd}_${slot}`] || 0) : (pickFcMid[`${yr}_${rd}`] || 0),
-          originalTeam: teamName,
-          pickedBy: null,
-        });
+    // Build a trade graph from traded_picks: "year_round_prevOwner" → currentOwner.
+    // Sleeper records every trade leg, so chain-walking resolves multi-hop trades.
+    const tradeGraph = {};
+    for (const tp of (tradedPicks || [])) {
+      if (D.selYears.includes(String(tp.season))) {
+        tradeGraph[`${tp.season}_${tp.round}_${tp.previous_owner_id}`] = String(tp.roster_id);
+      }
+    }
+
+    function finalOwner(year, rd, startId) {
+      let owner = String(startId);
+      const seen = new Set();
+      while (!seen.has(owner)) {
+        seen.add(owner);
+        const next = tradeGraph[`${year}_${rd}_${owner}`];
+        if (!next) break;
+        owner = next;
+      }
+      return owner;
+    }
+
+    // For every pick slot (year × round × origTeam), resolve who currently owns it.
+    // Include only picks whose final owner is a dispersed roster.
+    const allRosterIds = D.rosters.map(r => String(r.roster_id));
+    const rounds = D.selLeague.settings?.draft_rounds || 3;
+    for (const year of D.selYears) {
+      const rosterToSlot = rosterToSlotByYear[year] || {};
+      for (let rd = 1; rd <= rounds; rd++) {
+        for (const origId of allRosterIds) {
+          const owner = finalOwner(year, rd, origId);
+          if (!dispersedIds.includes(owner)) continue;
+          const ownerRoster = D.rosters.find(r => String(r.roster_id) === owner);
+          const origRoster  = D.rosters.find(r => String(r.roster_id) === origId);
+          const slot        = rosterToSlot[origId];
+          const origTeamName = getTeamName(origRoster);
+          const name = slot
+            ? `${year} ${rd}.${String(slot).padStart(2, '0')}`
+            : `${year} Round ${rd} (${origTeamName})`;
+          assets.push({
+            id: `pick_${year}_${rd}_${origId}`,
+            name,
+            position: 'PICK',
+            nflTeam: null,
+            fcValue: slot ? (pickFcFull[`${year}_${rd}_${slot}`] || 0) : (pickFcMid[`${year}_${rd}`] || 0),
+            originalTeam: getTeamName(ownerRoster),
+            pickedBy: null,
+          });
+        }
       }
     }
 
