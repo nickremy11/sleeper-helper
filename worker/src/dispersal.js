@@ -46,6 +46,7 @@ export class DispersalRoom {
       if (request.method === 'DELETE') return this.deleteRoom(request);
     }
     if (action === 'claim' && request.method === 'POST') return this.claimSlot(request);
+    if (action === 'undo'  && request.method === 'POST') return this.undoPick(request);
 
     return new Response('Not found', { status: 404 });
   }
@@ -96,6 +97,26 @@ export class DispersalRoom {
     this.broadcast({ type: 'state', room: this.publicState(room) });
 
     return ok({ sessionToken: token, slotIndex: slot.index, slotName: slot.name });
+  }
+
+  async undoPick(request) {
+    const { commissionerCode } = await request.json().catch(() => ({}));
+    const room = await this.state.storage.get('room');
+    if (!room) return new Response('Room not found', { status: 404 });
+    if (room.commissionerCode !== commissionerCode) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+    if (!room.picks.length) return new Response('No picks to undo', { status: 400 });
+
+    const last = room.picks.pop();
+    const asset = room.assets.find(a => a.id === last.assetId);
+    if (asset) asset.pickedBy = null;
+    room.currentOverallPick = last.overallPick;
+    if (room.status === 'complete') room.status = 'active';
+
+    await this.state.storage.put('room', room);
+    this.broadcast({ type: 'state', room: this.publicState(room) });
+    return ok({ ok: true });
   }
 
   // ── WebSocket ──────────────────────────────────────────────────────────────

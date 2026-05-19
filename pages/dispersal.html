@@ -1009,8 +1009,10 @@ function renderDraftRoom() {
   const myName  = mySlot ? ` (${esc(mySlot.name)})` : D.commissionerCode ? ' (Commissioner)' : '';
   const myLabel = myName ? `<span style="font-family:'Crimson Text',serif;font-size:0.85rem;color:var(--brown-light);font-style:italic;">${myName}</span>` : '';
 
+  const haspicks = room.picks.length > 0;
   const commBtn = D.commissionerCode
     ? `<button class="setup-btn setup-btn-sm setup-btn-ghost" onclick="showCodes()">View Codes</button>
+       ${haspicks ? `<button class="setup-btn setup-btn-sm setup-btn-ghost" onclick="undoLastPick()" style="border-color:var(--gold-light);color:var(--gold-light)">Undo Pick</button>` : ''}
        <a href="/dispersal" class="setup-btn setup-btn-sm setup-btn-ghost" style="text-decoration:none;display:inline-flex;align-items:center;">← New Room</a>
        <button class="setup-btn setup-btn-sm setup-btn-danger" onclick="deleteRoom()">Delete Room</button>`
     : '';
@@ -1227,6 +1229,23 @@ function showCodes() {
   </div>`;
   document.body.appendChild(overlay);
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+}
+
+// ── Undo Pick ─────────────────────────────────────────────────────────────────
+
+async function undoLastPick() {
+  const last = D.room?.picks?.at(-1);
+  const asset = last ? D.room.assets.find(a => a.id === last.assetId) : null;
+  const label = asset ? asset.name : 'the last pick';
+  if (!confirm(`Undo ${label}?`)) return;
+  try {
+    await dApi('/' + D.roomId + '/undo', {
+      method: 'POST',
+      body: JSON.stringify({ commissionerCode: D.commissionerCode }),
+    });
+  } catch (e) {
+    alert('Failed to undo pick: ' + e.message);
+  }
 }
 
 // ── Delete Room ───────────────────────────────────────────────────────────────
