@@ -727,11 +727,15 @@ async function loadStep4() {
     const allRosterIds = D.rosters.map(r => String(r.roster_id));
     const dispersedIds = D.selRosterIds.map(String);
 
-    // Traded pick ownership: "year_round_origOwner" -> currentOwner
-    const tradeMap = {};
-    for (const tp of D.tradedPicks) {
-      if (D.selYears.includes(String(tp.season))) {
-        tradeMap[`${tp.season}_${tp.round}_${tp.previous_owner_id}`] = String(tp.roster_id);
+    // Build pick ownership from roster.picks — each team's picks array contains
+    // every pick they currently own, with pick.roster_id = original owner.
+    // This is the authoritative source; traded_picks trade history is unreliable.
+    const pickOwnerMap = {}; // "year_round_origRosterId" -> currentRosterId
+    for (const roster of D.rosters) {
+      for (const pick of (roster.picks || [])) {
+        if (D.selYears.includes(String(pick.season))) {
+          pickOwnerMap[`${pick.season}_${pick.round}_${pick.roster_id}`] = String(roster.roster_id);
+        }
       }
     }
 
@@ -764,16 +768,7 @@ async function loadStep4() {
       const rosterToSlot = rosterToSlotByYear[year] || {};
       for (let rd = 1; rd <= rounds; rd++) {
         for (const origId of allRosterIds) {
-          // Walk the full trade chain — tradeMap has one entry per leg (A→B, B→C…)
-          // so a single lookup only resolves one hop.
-          let currentOwner = origId;
-          const seen = new Set();
-          while (!seen.has(currentOwner)) {
-            seen.add(currentOwner);
-            const next = tradeMap[`${year}_${rd}_${currentOwner}`];
-            if (!next) break;
-            currentOwner = next;
-          }
+          const currentOwner = pickOwnerMap[`${year}_${rd}_${origId}`] ?? origId;
           if (!dispersedIds.includes(currentOwner)) continue;
           const roster = D.rosters.find(r => String(r.roster_id) === currentOwner);
           const teamName = getTeamName(roster);
