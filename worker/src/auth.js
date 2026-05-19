@@ -112,7 +112,7 @@ async function createSession(userId, env) {
   const id = randomHex(32);
   await env.DB.prepare('INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)')
     .bind(id, userId, Date.now() + SESSION_TTL_MS).run();
-  const cookie = `sh_session=${id}; HttpOnly; Secure; SameSite=Strict; Max-Age=${SESSION_TTL}; Path=/`;
+  const cookie = `sh_session=${id}; HttpOnly; Secure; SameSite=Strict; Domain=.ffhistorian.com; Max-Age=${SESSION_TTL}; Path=/`;
   return jsonRes({ ok: true }, 200, { 'Set-Cookie': cookie });
 }
 
@@ -201,7 +201,7 @@ async function updateMe(request, env) {
 async function logout(request, env) {
   const sessionId = getSessionId(request);
   if (sessionId) await env.DB.prepare('DELETE FROM sessions WHERE id = ?').bind(sessionId).run();
-  const clear = 'sh_session=; HttpOnly; Secure; SameSite=Strict; Max-Age=0; Path=/';
+  const clear = 'sh_session=; HttpOnly; Secure; SameSite=Strict; Domain=.ffhistorian.com; Max-Age=0; Path=/';
   return jsonRes({ ok: true }, 200, { 'Set-Cookie': clear });
 }
 

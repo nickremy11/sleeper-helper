@@ -9,7 +9,8 @@ workers_dev        = false
 # Only /api/* on the subdomain hits this Worker.
 # Everything else (static HTML) is served by Pages.
 routes = [
-  { pattern = "helper.ffhistorian.com/api/*", zone_name = "ffhistorian.com" }
+  { pattern = "helper.ffhistorian.com/api/*",     zone_name = "ffhistorian.com" },
+  { pattern = "rootforme.ffhistorian.com/api/*",  zone_name = "ffhistorian.com" }
 ]
 
 # ── D1 Database ───────────────────────────────────────────────────────────────

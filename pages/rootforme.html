@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Root For Me — FF Historian</title>
+<link href="https://fonts.googleapis.com/css2?family=Rye&family=Playfair+Display:ital,wght@0,700;1,400&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet" />
+<style>
+:root {
+  --cream:       #f5ead6;
+  --parchment:   #e8d5b0;
+  --brown-dark:  #2a1a0e;
+  --brown-mid:   #5c3d1e;
+  --brown-light: #8b5e2e;
+  --green:       #2d4a1e;
+  --green-light: #4a7a2f;
+  --red:         #8b1a1a;
+  --gold:        #c9962a;
+  --gold-light:  #e8b84b;
+  --ink:         #1a1008;
+}
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background-color: var(--cream);
+  color: var(--ink);
+  font-family: 'Crimson Text', Georgia, serif;
+  min-height: 100vh;
+  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23c9962a' fill-opacity='0.06'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+body::before {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: 0.3;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.15'/%3E%3C/svg%3E");
+}
+.page-wrap { position: relative; z-index: 1; }
+
+/* ── BANNER ── */
+.banner { background: var(--green); border-bottom: 6px double var(--gold); position: relative; overflow: hidden; }
+.banner::before {
+  content: ''; position: absolute; inset: 0;
+  background: repeating-linear-gradient(-45deg, transparent, transparent 10px, rgba(0,0,0,0.06) 10px, rgba(0,0,0,0.06) 11px);
+}
+.banner-inner {
+  position: relative; z-index: 1;
+  max-width: 960px; margin: 0 auto;
+  padding: 24px 32px 20px;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+}
+.banner-text { flex: 1; }
+.banner-back {
+  font-family: 'Rye', serif; font-size: 0.58rem; letter-spacing: 0.3em;
+  text-transform: uppercase; color: var(--gold-light); text-decoration: none;
+  opacity: 0.7; display: inline-block; margin-bottom: 8px;
+}
+.banner-back:hover { opacity: 1; }
+.banner h1 { font-family: 'Rye', serif; font-size: clamp(1.2rem, 3vw, 1.9rem); color: var(--cream); text-shadow: 2px 2px 0 rgba(0,0,0,0.4); line-height: 1.1; }
+.banner h1 span { color: var(--gold-light); }
+.banner-sub { margin-top: 5px; font-family: 'Playfair Display', serif; font-style: italic; font-size: 0.85rem; color: var(--parchment); opacity: 0.75; }
+.banner-divider { margin-top: 8px; height: 2px; width: 100px; background: linear-gradient(to right, var(--gold), transparent); }
+.auth-badge {
+  font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.12em; text-transform: uppercase;
+  padding: 4px 10px; border: 1px solid var(--gold); border-radius: 2px; color: var(--gold-light);
+  cursor: pointer; background: rgba(0,0,0,0.15); transition: background 0.2s; white-space: nowrap;
+}
+.auth-badge:hover { background: rgba(0,0,0,0.3); }
+
+/* ── MAIN ── */
+.main { max-width: 960px; margin: 0 auto; padding: 28px 24px 80px; }
+
+/* ── SECTION HEAD ── */
+.section-head { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+.section-head h2 { font-family: 'Rye', serif; font-size: 1rem; color: var(--brown-dark); white-space: nowrap; }
+.section-head-line { flex: 1; height: 1px; background: linear-gradient(to right, var(--gold), transparent); }
+
+/* ── SETUP CARD ── */
+.setup-card {
+  background: var(--brown-dark); border: 2px solid var(--brown-mid); border-radius: 2px;
+  padding: 18px 22px; margin-bottom: 22px; box-shadow: 4px 4px 0 var(--brown-mid);
+}
+.setup-label { font-family: 'Rye', serif; font-size: 0.55rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--gold); display: block; margin-bottom: 7px; }
+.setup-row { display: flex; gap: 8px; }
+.setup-input {
+  flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--brown-mid);
+  color: var(--cream); font-family: 'Crimson Text', serif; font-size: 1rem;
+  padding: 7px 12px; border-radius: 2px; outline: none; transition: border-color 0.2s;
+}
+.setup-input:focus { border-color: var(--gold); }
+.setup-input::placeholder { color: rgba(255,255,255,0.25); font-style: italic; }
+.setup-btn {
+  background: var(--green); border: 2px solid var(--gold); color: var(--gold-light);
+  font-family: 'Rye', serif; font-size: 0.55rem; letter-spacing: 0.18em; text-transform: uppercase;
+  padding: 0 16px; cursor: pointer; border-radius: 2px; transition: background 0.2s, color 0.2s; white-space: nowrap;
+}
+.setup-btn:hover { background: var(--gold); color: var(--brown-dark); }
+.setup-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.setup-status { font-family: 'Crimson Text', serif; font-size: 0.85rem; font-style: italic; color: var(--brown-light); margin-top: 5px; min-height: 16px; }
+.setup-status.ok  { color: var(--green-light); }
+.setup-status.err { color: #e05050; }
+
+/* ── WEEK CONTROLS ── */
+.week-bar {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 20px;
+  background: var(--brown-dark); border: 1px solid var(--brown-mid); border-radius: 2px; padding: 10px 16px;
+}
+.week-label { font-family: 'Rye', serif; font-size: 0.55rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); }
+.week-num { font-family: 'Playfair Display', serif; font-size: 1.1rem; font-weight: 700; color: var(--cream); min-width: 28px; text-align: center; }
+.week-arrow { background: none; border: 1px solid var(--brown-mid); color: var(--brown-light); width: 28px; height: 28px; cursor: pointer; border-radius: 2px; font-size: 0.8rem; line-height: 1; transition: border-color 0.2s, color 0.2s; display: flex; align-items: center; justify-content: center; }
+.week-arrow:hover:not(:disabled) { border-color: var(--gold); color: var(--gold); }
+.week-arrow:disabled { opacity: 0.3; cursor: default; }
+.load-btn {
+  margin-left: auto;
+  background: var(--green); border: 2px solid var(--gold); color: var(--gold-light);
+  font-family: 'Rye', serif; font-size: 0.52rem; letter-spacing: 0.18em; text-transform: uppercase;
+  padding: 7px 18px; cursor: pointer; border-radius: 2px; transition: background 0.2s, color 0.2s;
+}
+.load-btn:hover { background: var(--gold); color: var(--brown-dark); }
+.load-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── LEAGUE TABLE ── */
+.league-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+.league-table th {
+  font-family: 'Rye', serif; font-size: 0.48rem; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--gold); text-align: left; padding: 6px 10px; border-bottom: 2px solid var(--brown-mid);
+}
+.league-table th.center { text-align: center; }
+.league-table td { padding: 7px 10px; border-bottom: 1px dashed rgba(255,255,255,0.07); vertical-align: middle; }
+.league-table tr:last-child td { border-bottom: none; }
+.league-table tr:hover td { background: rgba(255,255,255,0.02); }
+.league-name { font-family: 'Crimson Text', serif; font-size: 0.95rem; color: var(--parchment); }
+.league-type { font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brown-light); margin-top: 1px; }
+.value-input {
+  width: 80px; background: rgba(255,255,255,0.05); border: 1px solid var(--brown-mid);
+  color: var(--cream); font-family: 'Crimson Text', serif; font-size: 0.95rem;
+  padding: 4px 8px; border-radius: 2px; outline: none; text-align: right; transition: border-color 0.2s;
+}
+.value-input:focus { border-color: var(--gold); }
+.value-input::placeholder { color: rgba(255,255,255,0.2); }
+.contender-check { width: 18px; height: 18px; accent-color: var(--gold); cursor: pointer; display: block; margin: 0 auto; }
+.leagues-card {
+  background: var(--brown-dark); border: 2px solid var(--brown-mid); border-radius: 2px;
+  padding: 0 4px; margin-bottom: 20px; box-shadow: 4px 4px 0 var(--brown-mid);
+}
+
+/* ── STATES ── */
+.loading-state {
+  text-align: center; padding: 40px 20px;
+  font-family: 'Rye', serif; font-size: 0.62rem; letter-spacing: 0.3em; color: var(--brown-light);
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+}
+.spinner { width: 26px; height: 26px; border: 3px solid var(--brown-mid); border-top-color: var(--gold); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.empty-state { text-align: center; padding: 50px 20px; border: 2px dashed var(--brown-mid); border-radius: 2px; }
+.empty-state p { font-family: 'Playfair Display', serif; font-style: italic; font-size: 1rem; color: var(--brown-light); }
+.err-state {
+  background: rgba(139,26,26,0.2); border: 1px solid var(--red); color: #e08080;
+  font-family: 'Crimson Text', serif; font-style: italic; font-size: 0.9rem;
+  padding: 10px 14px; border-radius: 2px; margin-bottom: 14px;
+}
+
+/* ── GAME CARDS ── */
+.game-card {
+  background: var(--brown-dark); border: 1px solid var(--brown-mid); border-radius: 2px;
+  margin-bottom: 10px; overflow: hidden; box-shadow: 3px 3px 0 rgba(0,0,0,0.2);
+}
+.game-header {
+  display: flex; align-items: center; gap: 12px; padding: 13px 16px;
+  cursor: pointer; user-select: none; transition: background 0.15s;
+}
+.game-header:hover { background: rgba(255,255,255,0.03); }
+.game-teams { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+.game-team {
+  font-family: 'Rye', serif; font-size: 0.75rem; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--cream);
+}
+.game-at { font-family: 'Crimson Text', serif; font-size: 0.8rem; color: var(--brown-light); }
+.game-time { font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--brown-light); font-style: italic; }
+.game-pill {
+  font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 2px; white-space: nowrap;
+}
+.game-pill-mine { background: rgba(45,74,30,0.4); border: 1px solid rgba(74,122,47,0.5); color: var(--green-light); }
+.game-pill-opp  { background: rgba(139,26,26,0.3); border: 1px solid rgba(139,26,26,0.5); color: #e08080; }
+.game-toggle { font-size: 0.65rem; color: var(--brown-light); transition: transform 0.2s; flex-shrink: 0; }
+.game-card.open .game-toggle { transform: rotate(90deg); }
+
+.game-body { display: none; border-top: 1px solid var(--brown-mid); }
+.game-card.open .game-body { display: block; }
+
+/* ── GAME SPLIT ── */
+.game-split {
+  display: grid; grid-template-columns: 1fr 1px 1fr; gap: 0;
+}
+@media (max-width: 560px) {
+  .game-split { grid-template-columns: 1fr; }
+  .game-col-divider { display: none; }
+}
+.game-col { padding: 12px 16px; }
+.game-col-divider { background: var(--brown-mid); }
+.game-col-header {
+  font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 10px; padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.game-col-empty { font-family: 'Crimson Text', serif; font-style: italic; font-size: 0.85rem; color: var(--brown-light); padding: 4px 0; }
+
+/* ── PLAYER ROWS ── */
+.player-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 6px; margin-bottom: 2px; border-radius: 2px;
+  cursor: pointer; transition: background 0.15s; position: relative;
+}
+.player-row:hover { background: rgba(255,255,255,0.05); }
+.player-row.active { background: rgba(201,150,42,0.12); }
+.player-pos {
+  font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.08em; text-transform: uppercase;
+  width: 28px; flex-shrink: 0; padding: 2px 4px; border-radius: 2px; text-align: center;
+  background: rgba(255,255,255,0.06); color: var(--brown-light);
+}
+.pos-qb  .player-pos { background: rgba(232,184,75,0.18); color: #e8b84b; }
+.pos-rb  .player-pos { background: rgba(92,184,92,0.18);  color: #5cb85c; }
+.pos-wr  .player-pos { background: rgba(91,192,222,0.18); color: #5bc0de; }
+.pos-te  .player-pos { background: rgba(232,115,75,0.18); color: #e8734b; }
+.pos-dl  .player-pos,
+.pos-de  .player-pos,
+.pos-dt  .player-pos,
+.pos-nt  .player-pos { background: rgba(155,89,182,0.18); color: #9b59b6; }
+.pos-lb  .player-pos,
+.pos-ilb .player-pos,
+.pos-olb .player-pos,
+.pos-mlb .player-pos { background: rgba(41,128,185,0.18); color: #3498db; }
+.pos-db  .player-pos,
+.pos-cb  .player-pos,
+.pos-s   .player-pos,
+.pos-ss  .player-pos,
+.pos-fs  .player-pos,
+.pos-saf .player-pos { background: rgba(26,188,156,0.18); color: #1abc9c; }
+.pos-k   .player-pos { background: rgba(149,165,166,0.18); color: #95a5a6; }
+.pos-def .player-pos { background: rgba(231,76,60,0.18);  color: #e74c3c; }
+
+.player-name { font-family: 'Crimson Text', serif; font-size: 0.95rem; color: var(--parchment); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.player-count { color: var(--brown-light); font-size: 0.82rem; }
+.root-chip {
+  font-family: 'Playfair Display', serif; font-size: 0.78rem; font-weight: 700;
+  min-width: 34px; text-align: center; padding: 2px 6px; border-radius: 3px;
+  color: #fff; flex-shrink: 0; text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+}
+
+/* ── PLAYER DETAIL POPOVER ── */
+.player-detail {
+  margin: 0 8px 10px; padding: 12px 14px;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--brown-mid); border-radius: 2px;
+}
+.detail-name { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 1rem; color: var(--cream); margin-bottom: 4px; }
+.detail-score-line {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+}
+.detail-root-chip {
+  font-family: 'Playfair Display', serif; font-size: 1.2rem; font-weight: 700;
+  padding: 3px 12px; border-radius: 3px; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+}
+.detail-score-label { font-family: 'Crimson Text', serif; font-size: 0.88rem; font-style: italic; color: var(--brown-light); }
+.detail-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 420px) { .detail-cols { grid-template-columns: 1fr; } }
+.detail-section-label {
+  font-family: 'Rye', serif; font-size: 0.44rem; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 5px;
+}
+.detail-league { font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--parchment); padding: 2px 0; border-bottom: 1px dashed rgba(255,255,255,0.07); display: flex; justify-content: space-between; }
+.detail-league:last-child { border-bottom: none; }
+.detail-league-val { color: var(--gold-light); }
+.detail-none { font-family: 'Crimson Text', serif; font-style: italic; font-size: 0.85rem; color: var(--brown-light); }
+
+/* ── AUTH MODAL ── */
+.modal-overlay { display:none; position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.72); align-items:center; justify-content:center; }
+.modal-overlay.open { display:flex; }
+.modal-card { background:var(--brown-dark); border:2px solid var(--gold); border-radius:2px; padding:28px 32px; width:400px; max-width:calc(100vw - 32px); box-shadow:8px 8px 0 rgba(0,0,0,0.35); position:relative; }
+.modal-close { position:absolute; top:12px; right:14px; background:none; border:none; cursor:pointer; color:var(--brown-light); font-size:1.1rem; transition:color 0.2s; }
+.modal-close:hover { color:var(--gold); }
+.modal-title { font-family:'Rye',serif; font-size:0.8rem; letter-spacing:0.15em; text-transform:uppercase; color:var(--gold); margin-bottom:18px; }
+.modal-tabs { display:flex; gap:0; border-bottom:1px solid var(--brown-mid); margin-bottom:18px; }
+.modal-tab { background:none; border:none; cursor:pointer; font-family:'Rye',serif; font-size:0.5rem; letter-spacing:0.15em; text-transform:uppercase; color:var(--brown-light); padding:8px 14px; border-bottom:2px solid transparent; margin-bottom:-1px; transition:color 0.2s, border-color 0.2s; }
+.modal-tab.active { color:var(--gold-light); border-bottom-color:var(--gold-light); }
+.modal-field { margin-bottom:12px; }
+.modal-field label { font-family:'Rye',serif; font-size:0.48rem; letter-spacing:0.18em; text-transform:uppercase; color:var(--gold); display:block; margin-bottom:5px; }
+.modal-input { width:100%; background:rgba(255,255,255,0.06); border:1px solid var(--brown-mid); color:var(--cream); font-family:'Crimson Text',serif; font-size:1rem; padding:7px 10px; border-radius:2px; outline:none; transition:border-color 0.2s; }
+.modal-input:focus { border-color:var(--gold); }
+.modal-submit { width:100%; background:var(--green); border:2px solid var(--gold); color:var(--gold-light); font-family:'Rye',serif; font-size:0.55rem; letter-spacing:0.18em; text-transform:uppercase; padding:10px; cursor:pointer; border-radius:2px; transition:background 0.2s, color 0.2s; margin-top:4px; }
+.modal-submit:hover { background:var(--gold); color:var(--brown-dark); }
+.modal-err { color:#e05050; font-family:'Crimson Text',serif; font-style:italic; font-size:0.88rem; margin-top:8px; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="page-wrap">
+
+<!-- ── BANNER ── -->
+<header class="banner">
+  <div class="banner-inner">
+    <div class="banner-text">
+      <a href="https://helper.ffhistorian.com" class="banner-back">← FF Historian</a>
+      <h1>Root <span>For Me</span></h1>
+      <p class="banner-sub">Know who to cheer for, week by week</p>
+      <div class="banner-divider"></div>
+    </div>
+    <button class="auth-badge" id="auth-btn" onclick="openAuthModal()">Sign In</button>
+  </div>
+</header>
+
+<!-- ── MAIN ── -->
+<main class="main">
+
+  <!-- Setup -->
+  <div id="setup-section">
+    <div class="section-head"><h2>Setup</h2><div class="section-head-line"></div></div>
+    <div class="setup-card">
+      <label class="setup-label">Sleeper Username</label>
+      <div class="setup-row">
+        <input type="text" id="username-input" class="setup-input" placeholder="your Sleeper username" autocomplete="off" spellcheck="false" />
+        <button class="setup-btn" id="username-btn" onclick="submitUsername()">Load Leagues</button>
+      </div>
+      <div class="setup-status" id="setup-status"></div>
+    </div>
+  </div>
+
+  <!-- League Config -->
+  <div id="leagues-section" style="display:none">
+    <div class="section-head"><h2>Your Leagues</h2><div class="section-head-line"></div></div>
+    <div class="leagues-card" id="leagues-card">
+      <div class="loading-state"><div class="spinner"></div>Loading leagues…</div>
+    </div>
+  </div>
+
+  <!-- Week + Load -->
+  <div id="week-section" style="display:none">
+    <div class="week-bar">
+      <span class="week-label">Week</span>
+      <button class="week-arrow" id="week-prev" onclick="changeWeek(-1)">◀</button>
+      <span class="week-num" id="week-num">—</span>
+      <button class="week-arrow" id="week-next" onclick="changeWeek(1)">▶</button>
+      <button class="load-btn" id="load-btn" onclick="loadMatchups()">Load Matchups</button>
+    </div>
+  </div>
+
+  <!-- Games -->
+  <div id="games-section" style="display:none">
+    <div class="section-head"><h2>NFL Games</h2><div class="section-head-line"></div></div>
+    <div id="games-container"></div>
+  </div>
+
+</main>
+
+<!-- ── AUTH MODAL ── -->
+<div class="modal-overlay" id="auth-modal">
+  <div class="modal-card">
+    <button class="modal-close" onclick="closeAuthModal()">✕</button>
+    <div class="modal-title">Account</div>
+    <div class="modal-tabs">
+      <button class="modal-tab active" id="tab-login"    onclick="switchTab('login')">Sign In</button>
+      <button class="modal-tab"        id="tab-register" onclick="switchTab('register')">Register</button>
+    </div>
+    <!-- Login -->
+    <div id="modal-login">
+      <div class="modal-field"><label>Email</label><input type="email"    id="m-email-l" class="modal-input" placeholder="you@example.com" /></div>
+      <div class="modal-field"><label>Password</label><input type="password" id="m-pass-l"  class="modal-input" placeholder="••••••••" /></div>
+      <button class="modal-submit" onclick="submitLogin()">Sign In</button>
+      <div class="modal-err" id="m-err-l"></div>
+    </div>
+    <!-- Register -->
+    <div id="modal-register" style="display:none">
+      <div class="modal-field"><label>Email</label><input type="email"    id="m-email-r" class="modal-input" placeholder="you@example.com" /></div>
+      <div class="modal-field"><label>Password</label><input type="password" id="m-pass-r"  class="modal-input" placeholder="min 12 chars" /></div>
+      <div class="modal-field"><label>Confirm</label><input type="password" id="m-pass-r2" class="modal-input" placeholder="••••••••" /></div>
+      <button class="modal-submit" onclick="submitRegister()">Create Account</button>
+      <div class="modal-err" id="m-err-r"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Constants ─────────────────────────────────────────────────────────────────
+const API = '/api';
+
+const POS_RANK = {
+  QB:0, RB:1, WR:2, TE:3,
+  DL:4, DE:4, DT:4, NT:4,
+  LB:5, ILB:5, OLB:5, MLB:5,
+  DB:6, CB:6, S:6, SS:6, FS:6, SAF:6,
+  K:7, DEF:8,
+};
+
+// ── State ─────────────────────────────────────────────────────────────────────
+const S = {
+  auth:            null,
+  username:        '',
+  userId:          '',
+  season:          '2025',
+  week:            1,
+  leagues:         [],
+  prefs:           {},
+  playerMap:       {},
+  nflGames:        [],
+  matchupResults:  [],
+  processedGames:  null, // cached after loadMatchups
+  activeDetail:    null, // { gameKey, pid }
+};
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function init() {
+  await checkAuth();
+  const stored = localStorage.getItem('rfm_username');
+  const fromAuth = S.auth?.sleeper_username;
+  S.username = fromAuth || stored || '';
+  if (S.username) {
+    document.getElementById('username-input').value = S.username;
+    await loadLeagues();
+  }
+  updateAuthBadge();
+}
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+async function checkAuth() {
+  try {
+    const r = await fetch(`${API}/auth/me`, { credentials: 'include' });
+    const d = await r.json();
+    S.auth = d.user || null;
+  } catch { S.auth = null; }
+}
+
+function updateAuthBadge() {
+  const btn = document.getElementById('auth-btn');
+  if (S.auth) {
+    btn.textContent = S.auth.email.split('@')[0];
+  } else {
+    btn.textContent = 'Sign In';
+  }
+}
+
+// ── Username / League Load ────────────────────────────────────────────────────
+async function submitUsername() {
+  const val = document.getElementById('username-input').value.trim();
+  if (!val) return;
+  S.username = val;
+  localStorage.setItem('rfm_username', val);
+  await loadLeagues();
+}
+
+async function loadLeagues() {
+  const statusEl = document.getElementById('setup-status');
+  const btn      = document.getElementById('username-btn');
+  btn.disabled   = true;
+  statusEl.className = 'setup-status';
+  statusEl.textContent = 'Loading…';
+
+  try {
+    // Resolve user_id from username
+    const userRes = await fetch(`${API}/sleeper/user/${S.username}`);
+    if (!userRes.ok) throw new Error('User not found');
+    const user = await userRes.json();
+    if (!user.user_id) throw new Error('User not found');
+    S.userId = user.user_id;
+
+    // Get current NFL state
+    const stateRes = await fetch(`${API}/sleeper/state/nfl`);
+    const nflState = await stateRes.json();
+    S.season = nflState.season || '2025';
+    S.week   = nflState.display_week || nflState.week || 1;
+
+    // Get leagues
+    const lgRes = await fetch(`${API}/sleeper/user/${S.userId}/leagues/nfl/${S.season}`);
+    S.leagues = (await lgRes.json()) || [];
+
+    // Load prefs
+    await loadPrefs();
+
+    statusEl.className  = 'setup-status ok';
+    statusEl.textContent = `Loaded ${S.leagues.length} league${S.leagues.length !== 1 ? 's' : ''}`;
+    renderLeagueTable();
+    document.getElementById('leagues-section').style.display = '';
+    document.getElementById('week-section').style.display    = '';
+    document.getElementById('week-num').textContent          = S.week;
+    updateWeekArrows();
+  } catch (e) {
+    statusEl.className  = 'setup-status err';
+    statusEl.textContent = e.message || 'Failed to load leagues';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ── Prefs ─────────────────────────────────────────────────────────────────────
+async function loadPrefs() {
+  let stored = {};
+  if (S.auth) {
+    try {
+      const r = await fetch(`${API}/rootforme/prefs`, { credentials: 'include' });
+      if (r.ok) stored = (await r.json()).prefs || {};
+    } catch {}
+  } else {
+    try { stored = JSON.parse(localStorage.getItem('rfm_prefs') || '{}'); } catch {}
+  }
+
+  // Merge with defaults for any league not yet in prefs
+  S.prefs = {};
+  for (const lg of S.leagues) {
+    S.prefs[lg.league_id] = stored[lg.league_id] ?? { value: 0, contender: true };
+  }
+}
+
+function savePref(leagueId, key, val) {
+  if (!S.prefs[leagueId]) S.prefs[leagueId] = { value: 0, contender: true };
+  S.prefs[leagueId][key] = val;
+  persistPrefs();
+}
+
+let _prefTimer = null;
+function persistPrefs() {
+  clearTimeout(_prefTimer);
+  _prefTimer = setTimeout(async () => {
+    if (S.auth) {
+      await fetch(`${API}/rootforme/prefs`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prefs: S.prefs }),
+      }).catch(() => {});
+    } else {
+      localStorage.setItem('rfm_prefs', JSON.stringify(S.prefs));
+    }
+  }, 800);
+}
+
+// ── League Table ──────────────────────────────────────────────────────────────
+function renderLeagueTable() {
+  const card = document.getElementById('leagues-card');
+  if (!S.leagues.length) {
+    card.innerHTML = '<div style="padding:16px 20px"><div class="empty-state"><p>No leagues found for this season.</p></div></div>';
+    return;
+  }
+
+  const rows = S.leagues.map(lg => {
+    const pref  = S.prefs[lg.league_id] || { value: 0, contender: true };
+    const isBB  = lg.settings?.best_ball === 1;
+    const type  = isBB ? 'Bestball' : lg.settings?.type === 2 ? 'Dynasty' : lg.settings?.type === 1 ? 'Keeper' : 'Redraft';
+    const val   = pref.value || '';
+    const chk   = pref.contender ? 'checked' : '';
+    return `
+      <tr>
+        <td>
+          <div class="league-name">${escHtml(lg.name || 'Unnamed League')}</div>
+          <div class="league-type">${type} · ${lg.total_rosters || '?'} teams</div>
+        </td>
+        <td><input type="number" min="0" class="value-input" placeholder="0" value="${val}"
+          oninput="savePref('${lg.league_id}', 'value', +this.value || 0)" /></td>
+        <td style="text-align:center"><input type="checkbox" class="contender-check" ${chk}
+          onchange="savePref('${lg.league_id}', 'contender', this.checked)" /></td>
+      </tr>
+    `;
+  }).join('');
+
+  card.innerHTML = `
+    <table class="league-table">
+      <thead><tr>
+        <th>League</th>
+        <th>Value ($)</th>
+        <th class="center">Contending?</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+// ── Week Controls ─────────────────────────────────────────────────────────────
+function changeWeek(delta) {
+  S.week = Math.max(1, Math.min(18, S.week + delta));
+  document.getElementById('week-num').textContent = S.week;
+  updateWeekArrows();
+}
+
+function updateWeekArrows() {
+  document.getElementById('week-prev').disabled = S.week <= 1;
+  document.getElementById('week-next').disabled = S.week >= 18;
+}
+
+// ── Load Matchups ─────────────────────────────────────────────────────────────
+async function loadMatchups() {
+  const btn = document.getElementById('load-btn');
+  btn.disabled = true;
+  btn.textContent = 'Loading…';
+
+  const gamesSection = document.getElementById('games-section');
+  gamesSection.style.display = '';
+  const container = document.getElementById('games-container');
+  container.innerHTML = '<div class="loading-state"><div class="spinner"></div>Fetching matchup data…</div>';
+
+  try {
+    // Fetch players + schedule + all league matchups in parallel
+    const contenderLeagues = S.leagues.filter(lg => S.prefs[lg.league_id]?.contender);
+
+    const [players, nflGames, ...matchupResults] = await Promise.all([
+      fetch(`${API}/players`).then(r => r.json()),
+      fetch(`${API}/espn/games?week=${S.week}&season=${S.season}`).then(r => r.ok ? r.json() : []),
+      ...contenderLeagues.map(lg => fetchLeagueMatchup(lg)),
+    ]);
+
+    S.playerMap      = players || {};
+    S.nflGames       = nflGames || [];
+    S.matchupResults = matchupResults.filter(Boolean);
+    S.activeDetail   = null;
+    S.processedGames = null;
+
+    renderGameCards();
+  } catch (e) {
+    container.innerHTML = `<div class="err-state">Failed to load matchup data: ${escHtml(e.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Load Matchups';
+  }
+}
+
+async function fetchLeagueMatchup(league) {
+  const [rosters, matchups] = await Promise.all([
+    fetch(`${API}/sleeper/league/${league.league_id}/rosters`).then(r => r.json()),
+    fetch(`${API}/sleeper/league/${league.league_id}/matchups/${S.week}`).then(r => r.json()),
+  ]);
+
+  const myRoster = (rosters || []).find(r => r.owner_id === S.userId);
+  if (!myRoster) return null;
+
+  const myMatchup  = (matchups || []).find(m => m.roster_id === myRoster.roster_id);
+  if (!myMatchup) return null;
+
+  const oppMatchup = (matchups || []).find(m =>
+    m.matchup_id === myMatchup.matchup_id && m.roster_id !== myRoster.roster_id
+  );
+
+  return { league, myMatchup, oppMatchup: oppMatchup || null };
+}
+
+// ── Process Games ─────────────────────────────────────────────────────────────
+function processGames() {
+  // Build team → game index
+  const teamToGame = {};
+  for (const game of S.nflGames) {
+    teamToGame[game.home] = game;
+    teamToGame[game.away] = game;
+  }
+
+  const gameData = {}; // { gameKey → { game, players: { pid → {...} } } }
+
+  for (const { league, myMatchup, oppMatchup } of S.matchupResults) {
+    const pref     = S.prefs[league.league_id] || { value: 0, contender: true };
+    const isBB     = league.settings?.best_ball === 1;
+    const myPids   = (isBB ? myMatchup.players   : myMatchup.starters)   || [];
+    const oppPids  = (isBB ? oppMatchup?.players  : oppMatchup?.starters) || [];
+
+    const addPlayer = (pid, side) => {
+      if (!pid) return;
+      const player = S.playerMap[pid];
+      if (!player?.team) return;
+
+      const game = teamToGame[player.team];
+      if (!game) return;
+
+      const gameKey = [game.home, game.away].sort().join('_');
+      if (!gameData[gameKey]) gameData[gameKey] = { game, players: {} };
+      if (!gameData[gameKey].players[pid]) {
+        gameData[gameKey].players[pid] = {
+          pid, player,
+          myCount: 0, myValue: 0, myLeagues: [],
+          oppCount: 0, oppValue: 0, oppLeagues: [],
+          rootScore: 50,
+        };
+      }
+      const p = gameData[gameKey].players[pid];
+      if (side === 'my') {
+        p.myCount++;
+        p.myValue += pref.value;
+        p.myLeagues.push({ name: league.name, value: pref.value });
+      } else {
+        p.oppCount++;
+        p.oppValue += pref.value;
+        p.oppLeagues.push({ name: league.name, value: pref.value });
+      }
+    };
+
+    myPids.forEach(pid => addPlayer(pid, 'my'));
+    oppPids.forEach(pid => addPlayer(pid, 'opp'));
+  }
+
+  // Calculate root scores
+  for (const gd of Object.values(gameData)) {
+    for (const p of Object.values(gd.players)) {
+      const total = p.myValue + p.oppValue;
+      if (total === 0) {
+        p.rootScore = p.myCount > 0 ? 100 : 0;
+      } else {
+        p.rootScore = Math.round((p.myValue / total) * 100);
+      }
+    }
+  }
+
+  // Sort by kickoff, return as array
+  return Object.entries(gameData)
+    .map(([key, data]) => ({ key, ...data }))
+    .sort((a, b) => new Date(a.game.kickoff) - new Date(b.game.kickoff));
+}
+
+// ── Render Game Cards ─────────────────────────────────────────────────────────
+function renderGameCards() {
+  const container  = document.getElementById('games-container');
+  S.processedGames = processGames();
+  const processed  = S.processedGames;
+
+  if (!processed.length) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <p>No players found in contending leagues for Week ${S.week}.<br>Make sure leagues are checked and you have active matchups.</p>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = processed.map(({ key, game, players }) => {
+    const kickoff    = new Date(game.kickoff);
+    const dateStr    = kickoff.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    const timeStr    = kickoff.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+    const allPlayers = Object.values(players);
+    const myPlayers  = allPlayers.filter(p => p.myCount  > 0).sort(byPos);
+    const oppPlayers = allPlayers.filter(p => p.oppCount > 0).sort(byPos);
+
+    return `
+      <div class="game-card" id="gc-${key}">
+        <div class="game-header" onclick="toggleGame('${key}')">
+          <div class="game-teams">
+            <span class="game-team">${game.away}</span>
+            <span class="game-at">@</span>
+            <span class="game-team">${game.home}</span>
+          </div>
+          <span class="game-time">${dateStr} · ${timeStr}</span>
+          <span class="game-pill game-pill-mine">Me: ${myPlayers.length}</span>
+          <span class="game-pill game-pill-opp">Opp: ${oppPlayers.length}</span>
+          <span class="game-toggle">▶</span>
+        </div>
+        <div class="game-body" id="gb-${key}">
+          <div class="game-split">
+            <div class="game-col">
+              <div class="game-col-header">My Lineup</div>
+              ${myPlayers.length
+                ? myPlayers.map(p => playerRowHtml(p, 'my', key)).join('')
+                : '<div class="game-col-empty">No starters</div>'}
+            </div>
+            <div class="game-col-divider"></div>
+            <div class="game-col">
+              <div class="game-col-header">Opponents</div>
+              ${oppPlayers.length
+                ? oppPlayers.map(p => playerRowHtml(p, 'opp', key)).join('')
+                : '<div class="game-col-empty">No starters</div>'}
+            </div>
+          </div>
+          <div id="detail-${key}"></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function byPos(a, b) {
+  const ra = POS_RANK[a.player.position?.toUpperCase()] ?? 99;
+  const rb = POS_RANK[b.player.position?.toUpperCase()] ?? 99;
+  return ra - rb;
+}
+
+function playerRowHtml(p, side, gameKey) {
+  const pos   = (p.player.position || '').toUpperCase();
+  const count = side === 'my' ? p.myCount : p.oppCount;
+  const color = rootColor(p.rootScore);
+  const posClass = `pos-${pos.toLowerCase()}`;
+
+  return `
+    <div class="player-row ${posClass}" id="pr-${gameKey}-${p.pid}"
+         onclick="togglePlayerDetail('${gameKey}', '${p.pid}')">
+      <span class="player-pos">${pos || '—'}</span>
+      <span class="player-name">${escHtml(p.player.full_name || p.player.last_name || p.pid)}
+        <span class="player-count">(x${count})</span></span>
+      <span class="root-chip" style="background:${color}">${p.rootScore}</span>
+    </div>
+  `;
+}
+
+// ── Player Detail ─────────────────────────────────────────────────────────────
+function togglePlayerDetail(gameKey, pid) {
+  const detailEl = document.getElementById(`detail-${gameKey}`);
+  const rowEl    = document.getElementById(`pr-${gameKey}-${pid}`);
+
+  // Clicking the same player toggles off
+  if (S.activeDetail?.gameKey === gameKey && S.activeDetail?.pid === pid) {
+    detailEl.innerHTML = '';
+    rowEl.classList.remove('active');
+    S.activeDetail = null;
+    return;
+  }
+
+  // Deactivate previous active row in this game (if any)
+  if (S.activeDetail?.gameKey === gameKey && S.activeDetail?.pid) {
+    const prev = document.getElementById(`pr-${gameKey}-${S.activeDetail.pid}`);
+    if (prev) prev.classList.remove('active');
+  }
+
+  S.activeDetail = { gameKey, pid };
+  rowEl.classList.add('active');
+
+  // Find the player data from the cached processed results
+  const gd = (S.processedGames || []).find(g => g.key === gameKey);
+  if (!gd) return;
+  const p = gd.players[pid];
+  if (!p) return;
+
+  const total  = p.myValue + p.oppValue;
+  const color  = rootColor(p.rootScore);
+  const pct    = total > 0
+    ? `${p.rootScore}% of total value — ${scoreLabel(p.rootScore)}`
+    : p.myCount > 0 ? 'On my side only' : 'On opponents\' side only';
+
+  const mySection = p.myLeagues.length
+    ? p.myLeagues.map(l => `<div class="detail-league"><span>${escHtml(l.name)}</span><span class="detail-league-val">$${l.value}</span></div>`).join('')
+    : '<div class="detail-none">None</div>';
+  const oppSection = p.oppLeagues.length
+    ? p.oppLeagues.map(l => `<div class="detail-league"><span>${escHtml(l.name)}</span><span class="detail-league-val">$${l.value}</span></div>`).join('')
+    : '<div class="detail-none">None</div>';
+
+  detailEl.innerHTML = `
+    <div class="player-detail">
+      <div class="detail-name">${escHtml(p.player.full_name || p.player.last_name || pid)}</div>
+      <div class="detail-score-line">
+        <span class="detail-root-chip" style="background:${color}">${p.rootScore}</span>
+        <span class="detail-score-label">${pct}</span>
+      </div>
+      <div class="detail-cols">
+        <div>
+          <div class="detail-section-label">My leagues (${p.myCount})</div>
+          ${mySection}
+        </div>
+        <div>
+          <div class="detail-section-label">Opponents' leagues (${p.oppCount})</div>
+          ${oppSection}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function scoreLabel(score) {
+  if (score >= 85) return 'Root hard for them';
+  if (score >= 65) return 'Root for them';
+  if (score >= 45) return 'Neutral';
+  if (score >= 25) return 'Root against them';
+  return 'Root hard against them';
+}
+
+// ── Game Toggle ───────────────────────────────────────────────────────────────
+function toggleGame(key) {
+  const card = document.getElementById(`gc-${key}`);
+  card.classList.toggle('open');
+}
+
+// ── Color ─────────────────────────────────────────────────────────────────────
+function rootColor(score) {
+  // 0 → red (#8b1a1a), 50 → gold (#c9962a), 100 → green (#2d8b2d)
+  const hue = score < 50
+    ? (score / 50) * 42            // 0°→42° (red→gold-ish)
+    : 42 + ((score - 50) / 50) * 78; // 42°→120° (gold→green)
+  return `hsl(${hue.toFixed(0)}, 68%, 35%)`;
+}
+
+// ── Auth Modal ────────────────────────────────────────────────────────────────
+function openAuthModal()  { document.getElementById('auth-modal').classList.add('open'); }
+function closeAuthModal() { document.getElementById('auth-modal').classList.remove('open'); }
+
+function switchTab(tab) {
+  document.getElementById('modal-login').style.display    = tab === 'login'    ? '' : 'none';
+  document.getElementById('modal-register').style.display = tab === 'register' ? '' : 'none';
+  document.getElementById('tab-login').classList.toggle('active',    tab === 'login');
+  document.getElementById('tab-register').classList.toggle('active', tab === 'register');
+}
+
+async function submitLogin() {
+  const email = document.getElementById('m-email-l').value.trim();
+  const pass  = document.getElementById('m-pass-l').value;
+  const errEl = document.getElementById('m-err-l');
+  errEl.textContent = '';
+  try {
+    const r = await fetch(`${API}/auth/login`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: pass }),
+    });
+    const d = await r.json();
+    if (!r.ok) { errEl.textContent = d.error || 'Login failed'; return; }
+    await checkAuth();
+    updateAuthBadge();
+    closeAuthModal();
+    if (S.auth?.sleeper_username && !S.username) {
+      S.username = S.auth.sleeper_username;
+      document.getElementById('username-input').value = S.username;
+      await loadLeagues();
+    } else {
+      await persistPrefs(); // re-save local prefs to server
+    }
+  } catch { errEl.textContent = 'Network error'; }
+}
+
+async function submitRegister() {
+  const email = document.getElementById('m-email-r').value.trim();
+  const pass  = document.getElementById('m-pass-r').value;
+  const pass2 = document.getElementById('m-pass-r2').value;
+  const errEl = document.getElementById('m-err-r');
+  errEl.textContent = '';
+  if (pass !== pass2) { errEl.textContent = 'Passwords do not match'; return; }
+  try {
+    const r = await fetch(`${API}/auth/register`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: pass }),
+    });
+    const d = await r.json();
+    if (!r.ok) { errEl.textContent = d.error || 'Registration failed'; return; }
+    await checkAuth();
+    updateAuthBadge();
+    closeAuthModal();
+  } catch { errEl.textContent = 'Network error'; }
+}
+
+// Close modal on overlay click
+document.getElementById('auth-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('auth-modal')) closeAuthModal();
+});
+
+// Enter key triggers username load
+document.getElementById('username-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitUsername();
+});
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>

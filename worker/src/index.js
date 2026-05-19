@@ -12,6 +12,9 @@
  *   POST /api/graphql             → proxy to sleeper.com/graphql (authenticated)
  *   GET  /api/fantasycalc         → FantasyCalc values (KV-cached 24h)
  *   GET  /api/espn/scoreboard     → NFL week schedule: team → kickoff ISO (KV-cached 5m)
+ *   GET  /api/espn/games          → NFL week games with pairings [{home,away,kickoff}] (KV-cached 5m)
+ *   GET  /api/rootforme/prefs     → get league preferences for logged-in user
+ *   POST /api/rootforme/prefs     → save league preferences for logged-in user
  *   POST /api/dispersal           → create dispersal room
  *   *    /api/dispersal/:id/*     → forward to DispersalRoom Durable Object
  *
@@ -67,6 +70,14 @@ export default {
 
     if (url.pathname === '/api/espn/scoreboard' && request.method === 'GET') {
       return handleESPNScoreboard(request, env, url);
+    }
+
+    if (url.pathname === '/api/espn/games' && request.method === 'GET') {
+      return handleESPNGames(request, env, url);
+    }
+
+    if (url.pathname === '/api/rootforme/prefs') {
+      return handleRootformePrefs(request, env);
     }
 
     if (url.pathname.startsWith('/api/dispersal')) {
@@ -147,6 +158,97 @@ async function handleESPNScoreboard(request, env, url) {
   });
 
   return jsonRes(body, { 'X-Cache': 'MISS' });
+}
+
+// ── ESPN Games (with pairings) ────────────────────────────────────────────────
+
+async function handleESPNGames(request, env, url) {
+  const week   = url.searchParams.get('week')   || '1';
+  const season = url.searchParams.get('season') || '2025';
+  const key    = `espn_games_${season}_${week}`;
+
+  const cached = await env.SLEEPER_KV.getWithMetadata(key, 'text');
+  if (cached.value) {
+    return jsonRes(cached.value, { 'X-Cache': 'HIT' });
+  }
+
+  const espnUrl = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?week=${week}&seasontype=2&dates=${season}`;
+  const upstream = await fetch(espnUrl, { headers: { 'User-Agent': 'sleeper-helper/1.0' } });
+  if (!upstream.ok) {
+    return new Response('ESPN upstream error', { status: 502, headers: CORS });
+  }
+
+  const data  = await upstream.json();
+  const games = [];
+
+  for (const event of (data.events || [])) {
+    const kickoff = event.date;
+    for (const competition of (event.competitions || [])) {
+      const teams = (competition.competitors || []).map(c => {
+        let abbr = c.team?.abbreviation || '';
+        return ESPN_TO_SLEEPER[abbr] || abbr;
+      });
+      if (teams.length === 2) {
+        const homeComp = competition.competitors.find(c => c.homeAway === 'home');
+        const awayComp = competition.competitors.find(c => c.homeAway === 'away');
+        let home = homeComp ? (ESPN_TO_SLEEPER[homeComp.team?.abbreviation] || homeComp.team?.abbreviation) : teams[0];
+        let away = awayComp ? (ESPN_TO_SLEEPER[awayComp.team?.abbreviation] || awayComp.team?.abbreviation) : teams[1];
+        games.push({ home, away, kickoff });
+      }
+    }
+  }
+
+  const body = JSON.stringify(games);
+  await env.SLEEPER_KV.put(key, body, {
+    expirationTtl: ESPN_TTL,
+    metadata: { cachedAt: Date.now() },
+  });
+
+  return jsonRes(body, { 'X-Cache': 'MISS' });
+}
+
+// ── Root For Me — League Preferences ─────────────────────────────────────────
+
+async function handleRootformePrefs(request, env) {
+  const user = await getAuthUser(request, env);
+  if (!user) {
+    return new Response(JSON.stringify({ error: 'Not authenticated' }), { status: 401, headers: CORS });
+  }
+
+  if (request.method === 'GET') {
+    const rows = await env.DB.prepare(
+      'SELECT league_id, value, contender FROM league_preferences WHERE user_id = ?'
+    ).bind(user.user_id).all();
+
+    const prefs = {};
+    for (const row of (rows.results || [])) {
+      prefs[row.league_id] = { value: row.value, contender: row.contender === 1 };
+    }
+    return jsonRes(JSON.stringify({ prefs }));
+  }
+
+  if (request.method === 'POST') {
+    let body;
+    try { body = await request.json(); } catch {
+      return new Response('Invalid JSON', { status: 400, headers: CORS });
+    }
+
+    const prefs = body.prefs || {};
+    const now   = Date.now();
+    const stmts = Object.entries(prefs).map(([leagueId, pref]) =>
+      env.DB.prepare(
+        `INSERT INTO league_preferences (user_id, league_id, value, contender, updated_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(user_id, league_id) DO UPDATE
+         SET value=excluded.value, contender=excluded.contender, updated_at=excluded.updated_at`
+      ).bind(user.user_id, leagueId, pref.value || 0, pref.contender ? 1 : 0, now)
+    );
+
+    if (stmts.length) await env.DB.batch(stmts);
+    return jsonRes(JSON.stringify({ ok: true }));
+  }
+
+  return new Response('Method not allowed', { status: 405, headers: CORS });
 }
 
 // ── Dispersal ─────────────────────────────────────────────────────────────────

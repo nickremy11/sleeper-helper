@@ -17,3 +17,12 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 CREATE INDEX IF NOT EXISTS idx_sessions_user  ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_users_email    ON users(email);
+
+CREATE TABLE IF NOT EXISTS league_preferences (
+  user_id    TEXT    NOT NULL,
+  league_id  TEXT    NOT NULL,
+  value      INTEGER DEFAULT 0,
+  contender  INTEGER DEFAULT 1,
+  updated_at INTEGER DEFAULT 0,
+  PRIMARY KEY (user_id, league_id)
+);
