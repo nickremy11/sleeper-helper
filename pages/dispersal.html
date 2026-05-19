@@ -900,7 +900,9 @@ async function initDraftRoom() {
     return;
   }
 
-  if (D.sessionToken === null && D.slotIndex < 0 && !D.commissionerCode) {
+  const isSpectator = localStorage.getItem(`dispersal_${D.roomId}_spectator`) === '1';
+
+  if (D.sessionToken === null && D.slotIndex < 0 && !D.commissionerCode && !isSpectator) {
     renderClaimForm();
     return;
   }
@@ -927,7 +929,7 @@ function renderClaimForm() {
         <div class="setup-status" id="claim-status"></div>
       </div>
       <div style="text-align:center;margin-top:8px">
-        <button class="setup-btn setup-btn-ghost setup-btn-sm" onclick="renderDraftRoom()">View as spectator</button>
+        <button class="setup-btn setup-btn-ghost setup-btn-sm" onclick="viewAsSpectator()">View as spectator</button>
       </div>
     </div>`);
   setTimeout(() => $('claim-input')?.focus(), 50);
@@ -952,6 +954,12 @@ async function doClaim() {
   } catch {
     st.className = 'setup-status err'; st.textContent = 'Invalid code. Check with your commissioner.';
   }
+}
+
+function viewAsSpectator() {
+  localStorage.setItem(`dispersal_${D.roomId}_spectator`, '1');
+  connectWs();
+  renderDraftRoom();
 }
 
 // ── WebSocket ─────────────────────────────────────────────────────────────────
