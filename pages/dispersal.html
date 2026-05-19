@@ -235,6 +235,13 @@ body::before {
   .setup-card { padding:16px; }
   .room-header { flex-direction:column; align-items:flex-start; }
   .asset-table-wrap { max-height:none; }
+  /* Larger tap targets for mobile drafters */
+  .asset-row td { padding:11px 8px; }
+  .pick-btn { padding:8px 14px; font-size:0.52rem; }
+  .pos-pill { padding:7px 12px; }
+  /* Hide value column to give name more room */
+  .asset-table th.right:first-of-type,
+  .asset-row td.val { display:none; }
 }
 </style>
 </head>
@@ -757,8 +764,16 @@ async function loadStep4() {
       const rosterToSlot = rosterToSlotByYear[year] || {};
       for (let rd = 1; rd <= rounds; rd++) {
         for (const origId of allRosterIds) {
-          const key = `${year}_${rd}_${origId}`;
-          const currentOwner = tradeMap[key] ?? origId;
+          // Walk the full trade chain — tradeMap has one entry per leg (A→B, B→C…)
+          // so a single lookup only resolves one hop.
+          let currentOwner = origId;
+          const seen = new Set();
+          while (!seen.has(currentOwner)) {
+            seen.add(currentOwner);
+            const next = tradeMap[`${year}_${rd}_${currentOwner}`];
+            if (!next) break;
+            currentOwner = next;
+          }
           if (!dispersedIds.includes(currentOwner)) continue;
           const roster = D.rosters.find(r => String(r.roster_id) === currentOwner);
           const teamName = getTeamName(roster);
