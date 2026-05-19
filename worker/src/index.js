@@ -11,6 +11,7 @@
  *   GET  /api/sleeper/*           → live proxy to api.sleeper.app (no cache)
  *   POST /api/graphql             → proxy to sleeper.com/graphql (authenticated)
  *   GET  /api/fantasycalc         → FantasyCalc values (KV-cached 24h)
+ *   GET  /api/espn/scoreboard     → NFL week schedule: team → kickoff ISO (KV-cached 5m)
  *   POST /api/dispersal           → create dispersal room
  *   *    /api/dispersal/:id/*     → forward to DispersalRoom Durable Object
  *
@@ -28,6 +29,7 @@ const SLEEPER_GQL   = 'https://sleeper.com/graphql';
 const FC_URL        = 'https://api.fantasycalc.com/values/current?isDynasty=true&numQbs=2&ppr=1&includePickValues=true';
 const PLAYERS_TTL   = 60 * 60 * 2;   // 2 hours
 const FC_TTL        = 60 * 60 * 24;  // 24 hours
+const ESPN_TTL      = 60 * 5;        // 5 minutes (game times are stable but scores update live)
 const ROOM_TTL_MS   = 7 * 24 * 60 * 60 * 1000; // 7 days
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
@@ -63,6 +65,10 @@ export default {
       return handleFantasyCalc(env);
     }
 
+    if (url.pathname === '/api/espn/scoreboard' && request.method === 'GET') {
+      return handleESPNScoreboard(request, env, url);
+    }
+
     if (url.pathname.startsWith('/api/dispersal')) {
       return handleDispersal(request, env, url);
     }
@@ -91,6 +97,52 @@ async function handleFantasyCalc(env) {
   const body = await upstream.text();
   await env.SLEEPER_KV.put('fc_values', body, {
     expirationTtl: FC_TTL,
+    metadata: { cachedAt: Date.now() },
+  });
+
+  return jsonRes(body, { 'X-Cache': 'MISS' });
+}
+
+// ── ESPN Scoreboard ───────────────────────────────────────────────────────────
+
+// Sleeper → ESPN abbreviation overrides for teams that differ between the two
+const ESPN_TO_SLEEPER = { WSH: 'WAS' };
+
+async function handleESPNScoreboard(request, env, url) {
+  const week   = url.searchParams.get('week')   || '1';
+  const season = url.searchParams.get('season') || '2025';
+  const key    = `espn_scoreboard_${season}_${week}`;
+
+  const cached = await env.SLEEPER_KV.getWithMetadata(key, 'text');
+  if (cached.value) {
+    return jsonRes(cached.value, { 'X-Cache': 'HIT' });
+  }
+
+  const espnUrl = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?week=${week}&seasontype=2&dates=${season}`;
+  const upstream = await fetch(espnUrl, { headers: { 'User-Agent': 'sleeper-helper/1.0' } });
+  if (!upstream.ok) {
+    return new Response('ESPN upstream error', { status: 502, headers: CORS });
+  }
+
+  const data = await upstream.json();
+
+  // Reduce to { SLEEPER_ABBR: isoKickoffString } — all we need client-side
+  const games = {};
+  for (const event of (data.events || [])) {
+    const kickoff = event.date; // ISO 8601 UTC
+    for (const competition of (event.competitions || [])) {
+      for (const competitor of (competition.competitors || [])) {
+        let abbr = competitor.team?.abbreviation;
+        if (!abbr) continue;
+        abbr = ESPN_TO_SLEEPER[abbr] || abbr;
+        games[abbr] = kickoff;
+      }
+    }
+  }
+
+  const body = JSON.stringify(games);
+  await env.SLEEPER_KV.put(key, body, {
+    expirationTtl: ESPN_TTL,
     metadata: { cachedAt: Date.now() },
   });
 
