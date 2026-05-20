@@ -255,6 +255,7 @@ body::before {
       <h1>Dispersal <span>Draft</span></h1>
       <div class="banner-sub">Snake draft for dispersing dynasty rosters</div>
     </div>
+    <div id="auth-chip" style="flex-shrink:0;"></div>
   </div>
 </header>
 
@@ -1269,6 +1270,10 @@ function snakeSlot(overallPick, numTeams, draftOrder) {
   const idx   = round % 2 === 0 ? pos : (numTeams - 1 - pos);
   return draftOrder[idx];
 }
+</script>
+<script src="/shared-auth.js"></script>
+<script>
+SharedAuth.init({ chipContainerId: 'auth-chip' });
 </script>
 </body>
 </html>

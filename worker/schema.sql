@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS users (
   email         TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   password_salt TEXT NOT NULL,
+  name             TEXT,
   sleeper_username TEXT,
   token_enc     TEXT,
   token_iv      TEXT,

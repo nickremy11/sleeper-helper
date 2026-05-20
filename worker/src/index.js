@@ -34,22 +34,40 @@ const PLAYERS_TTL   = 60 * 60 * 2;   // 2 hours
 const FC_TTL        = 60 * 60 * 24;  // 24 hours
 const ESPN_TTL      = 60 * 5;        // 5 minutes (game times are stable but scores update live)
 const ROOM_TTL_MS   = 7 * 24 * 60 * 60 * 1000; // 7 days
-const CORS = {
-  'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Sleeper-Graphql-Op',
-};
+const ALLOWED_ORIGINS = new Set([
+  'https://ffhistorian.com',
+  'https://helper.ffhistorian.com',
+  'https://rootforme.ffhistorian.com',
+]);
+
+function getCors(request) {
+  const origin = (request && request.headers.get('Origin')) || '';
+  const allow  = ALLOWED_ORIGINS.has(origin) ? origin : '*';
+  return {
+    'Access-Control-Allow-Origin':      allow,
+    'Access-Control-Allow-Credentials': allow !== '*' ? 'true' : 'false',
+    'Access-Control-Allow-Methods':     'GET, POST, PATCH, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers':     'Content-Type, Authorization, X-Sleeper-Graphql-Op',
+  };
+}
+
+// Backwards-compat alias used by static references below
+const CORS = getCors(null);
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
     if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: CORS });
+      return new Response(null, { status: 204, headers: getCors(request) });
     }
 
     if (url.pathname.startsWith('/api/auth/')) {
-      return handleAuth(request, env, url);
+      const authResp = await handleAuth(request, env, url);
+      const cors     = getCors(request);
+      const h        = new Headers(authResp.headers);
+      for (const [k, v] of Object.entries(cors)) h.set(k, v);
+      return new Response(authResp.body, { status: authResp.status, headers: h });
     }
 
     if (url.pathname === '/api/players' && request.method === 'GET') {

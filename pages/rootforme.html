@@ -56,12 +56,6 @@ body::before {
 .banner h1 span { color: var(--gold-light); }
 .banner-sub { margin-top: 5px; font-family: 'Playfair Display', serif; font-style: italic; font-size: 0.85rem; color: var(--parchment); opacity: 0.75; }
 .banner-divider { margin-top: 8px; height: 2px; width: 100px; background: linear-gradient(to right, var(--gold), transparent); }
-.auth-badge {
-  font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.12em; text-transform: uppercase;
-  padding: 4px 10px; border: 1px solid var(--gold); border-radius: 2px; color: var(--gold-light);
-  cursor: pointer; background: rgba(0,0,0,0.15); transition: background 0.2s; white-space: nowrap;
-}
-.auth-badge:hover { background: rgba(0,0,0,0.3); }
 
 /* ── MAIN ── */
 .main { max-width: 960px; margin: 0 auto; padding: 28px 24px 80px; }
@@ -269,23 +263,6 @@ body::before {
 .detail-league-val { color: var(--gold-light); }
 .detail-none { font-family: 'Crimson Text', serif; font-style: italic; font-size: 0.85rem; color: var(--brown-light); }
 
-/* ── AUTH MODAL ── */
-.modal-overlay { display:none; position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.72); align-items:center; justify-content:center; }
-.modal-overlay.open { display:flex; }
-.modal-card { background:var(--brown-dark); border:2px solid var(--gold); border-radius:2px; padding:28px 32px; width:400px; max-width:calc(100vw - 32px); box-shadow:8px 8px 0 rgba(0,0,0,0.35); position:relative; }
-.modal-close { position:absolute; top:12px; right:14px; background:none; border:none; cursor:pointer; color:var(--brown-light); font-size:1.1rem; transition:color 0.2s; }
-.modal-close:hover { color:var(--gold); }
-.modal-title { font-family:'Rye',serif; font-size:0.8rem; letter-spacing:0.15em; text-transform:uppercase; color:var(--gold); margin-bottom:18px; }
-.modal-tabs { display:flex; gap:0; border-bottom:1px solid var(--brown-mid); margin-bottom:18px; }
-.modal-tab { background:none; border:none; cursor:pointer; font-family:'Rye',serif; font-size:0.5rem; letter-spacing:0.15em; text-transform:uppercase; color:var(--brown-light); padding:8px 14px; border-bottom:2px solid transparent; margin-bottom:-1px; transition:color 0.2s, border-color 0.2s; }
-.modal-tab.active { color:var(--gold-light); border-bottom-color:var(--gold-light); }
-.modal-field { margin-bottom:12px; }
-.modal-field label { font-family:'Rye',serif; font-size:0.48rem; letter-spacing:0.18em; text-transform:uppercase; color:var(--gold); display:block; margin-bottom:5px; }
-.modal-input { width:100%; background:rgba(255,255,255,0.06); border:1px solid var(--brown-mid); color:var(--cream); font-family:'Crimson Text',serif; font-size:1rem; padding:7px 10px; border-radius:2px; outline:none; transition:border-color 0.2s; }
-.modal-input:focus { border-color:var(--gold); }
-.modal-submit { width:100%; background:var(--green); border:2px solid var(--gold); color:var(--gold-light); font-family:'Rye',serif; font-size:0.55rem; letter-spacing:0.18em; text-transform:uppercase; padding:10px; cursor:pointer; border-radius:2px; transition:background 0.2s, color 0.2s; margin-top:4px; }
-.modal-submit:hover { background:var(--gold); color:var(--brown-dark); }
-.modal-err { color:#e05050; font-family:'Crimson Text',serif; font-style:italic; font-size:0.88rem; margin-top:8px; min-height:18px; }
 </style>
 </head>
 <body>
@@ -300,7 +277,7 @@ body::before {
       <p class="banner-sub">Know who to cheer for, week by week</p>
       <div class="banner-divider"></div>
     </div>
-    <button class="auth-badge" id="auth-btn" onclick="openAuthModal()">Sign In</button>
+    <div id="auth-chip" style="flex-shrink:0;"></div>
   </div>
 </header>
 
@@ -347,33 +324,7 @@ body::before {
 
 </main>
 
-<!-- ── AUTH MODAL ── -->
-<div class="modal-overlay" id="auth-modal">
-  <div class="modal-card">
-    <button class="modal-close" onclick="closeAuthModal()">✕</button>
-    <div class="modal-title">Account</div>
-    <div class="modal-tabs">
-      <button class="modal-tab active" id="tab-login"    onclick="switchTab('login')">Sign In</button>
-      <button class="modal-tab"        id="tab-register" onclick="switchTab('register')">Register</button>
-    </div>
-    <!-- Login -->
-    <div id="modal-login">
-      <div class="modal-field"><label>Email</label><input type="email"    id="m-email-l" class="modal-input" placeholder="you@example.com" /></div>
-      <div class="modal-field"><label>Password</label><input type="password" id="m-pass-l"  class="modal-input" placeholder="••••••••" /></div>
-      <button class="modal-submit" onclick="submitLogin()">Sign In</button>
-      <div class="modal-err" id="m-err-l"></div>
-    </div>
-    <!-- Register -->
-    <div id="modal-register" style="display:none">
-      <div class="modal-field"><label>Email</label><input type="email"    id="m-email-r" class="modal-input" placeholder="you@example.com" /></div>
-      <div class="modal-field"><label>Password</label><input type="password" id="m-pass-r"  class="modal-input" placeholder="min 12 chars" /></div>
-      <div class="modal-field"><label>Confirm</label><input type="password" id="m-pass-r2" class="modal-input" placeholder="••••••••" /></div>
-      <button class="modal-submit" onclick="submitRegister()">Create Account</button>
-      <div class="modal-err" id="m-err-r"></div>
-    </div>
-  </div>
-</div>
-
+<script src="/shared-auth.js"></script>
 <script>
 // ── Constants ─────────────────────────────────────────────────────────────────
 const API = '/api';
@@ -404,32 +355,27 @@ const S = {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
-  await checkAuth();
-  const stored = localStorage.getItem('rfm_username');
+  const user = await SharedAuth.init({
+    chipContainerId: 'auth-chip',
+    onLogin: async (u) => {
+      S.auth = u;
+      if (u.sleeper_username && !S.username) {
+        S.username = u.sleeper_username;
+        document.getElementById('username-input').value = S.username;
+        await loadLeagues();
+      } else {
+        await persistPrefs();
+      }
+    },
+    onLogout: () => { S.auth = null; },
+  });
+  S.auth = user;
+  const stored   = localStorage.getItem('rfm_username');
   const fromAuth = S.auth?.sleeper_username;
   S.username = fromAuth || stored || '';
   if (S.username) {
     document.getElementById('username-input').value = S.username;
     await loadLeagues();
-  }
-  updateAuthBadge();
-}
-
-// ── Auth ──────────────────────────────────────────────────────────────────────
-async function checkAuth() {
-  try {
-    const r = await fetch(`${API}/auth/me`, { credentials: 'include' });
-    const d = await r.json();
-    S.auth = d.user || null;
-  } catch { S.auth = null; }
-}
-
-function updateAuthBadge() {
-  const btn = document.getElementById('auth-btn');
-  if (S.auth) {
-    btn.textContent = S.auth.email.split('@')[0];
-  } else {
-    btn.textContent = 'Sign In';
   }
 }
 
@@ -867,69 +813,6 @@ function rootColor(score) {
     : 42 + ((score - 50) / 50) * 78; // 42°→120° (gold→green)
   return `hsl(${hue.toFixed(0)}, 68%, 35%)`;
 }
-
-// ── Auth Modal ────────────────────────────────────────────────────────────────
-function openAuthModal()  { document.getElementById('auth-modal').classList.add('open'); }
-function closeAuthModal() { document.getElementById('auth-modal').classList.remove('open'); }
-
-function switchTab(tab) {
-  document.getElementById('modal-login').style.display    = tab === 'login'    ? '' : 'none';
-  document.getElementById('modal-register').style.display = tab === 'register' ? '' : 'none';
-  document.getElementById('tab-login').classList.toggle('active',    tab === 'login');
-  document.getElementById('tab-register').classList.toggle('active', tab === 'register');
-}
-
-async function submitLogin() {
-  const email = document.getElementById('m-email-l').value.trim();
-  const pass  = document.getElementById('m-pass-l').value;
-  const errEl = document.getElementById('m-err-l');
-  errEl.textContent = '';
-  try {
-    const r = await fetch(`${API}/auth/login`, {
-      method: 'POST', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password: pass }),
-    });
-    const d = await r.json();
-    if (!r.ok) { errEl.textContent = d.error || 'Login failed'; return; }
-    await checkAuth();
-    updateAuthBadge();
-    closeAuthModal();
-    if (S.auth?.sleeper_username && !S.username) {
-      S.username = S.auth.sleeper_username;
-      document.getElementById('username-input').value = S.username;
-      await loadLeagues();
-    } else {
-      await persistPrefs(); // re-save local prefs to server
-    }
-  } catch { errEl.textContent = 'Network error'; }
-}
-
-async function submitRegister() {
-  const email = document.getElementById('m-email-r').value.trim();
-  const pass  = document.getElementById('m-pass-r').value;
-  const pass2 = document.getElementById('m-pass-r2').value;
-  const errEl = document.getElementById('m-err-r');
-  errEl.textContent = '';
-  if (pass !== pass2) { errEl.textContent = 'Passwords do not match'; return; }
-  try {
-    const r = await fetch(`${API}/auth/register`, {
-      method: 'POST', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password: pass }),
-    });
-    const d = await r.json();
-    if (!r.ok) { errEl.textContent = d.error || 'Registration failed'; return; }
-    await checkAuth();
-    updateAuthBadge();
-    closeAuthModal();
-  } catch { errEl.textContent = 'Network error'; }
-}
-
-// Close modal on overlay click
-document.getElementById('auth-modal').addEventListener('click', e => {
-  if (e.target === document.getElementById('auth-modal')) closeAuthModal();
-});
 
 // Enter key triggers username load
 document.getElementById('username-input').addEventListener('keydown', e => {

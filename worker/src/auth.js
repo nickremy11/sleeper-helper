@@ -82,7 +82,7 @@ export async function getAuthUser(request, env) {
   const sessionId = getSessionId(request);
   if (!sessionId) return null;
   const row = await env.DB.prepare(
-    `SELECT s.user_id, s.expires_at, u.email, u.sleeper_username, u.token_enc, u.token_iv
+    `SELECT s.user_id, s.expires_at, u.email, u.name, u.sleeper_username, u.token_enc, u.token_iv
      FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.id = ?`
   ).bind(sessionId).first();
   if (!row) return null;
@@ -161,6 +161,7 @@ async function me(request, env) {
   return jsonRes({
     user: {
       email:            user.email,
+      name:             user.name || null,
       sleeper_username: user.sleeper_username,
       has_token:        !!user.token_enc,
     },
@@ -174,6 +175,12 @@ async function updateMe(request, env) {
   try { body = await request.json(); } catch { return errRes('Invalid JSON'); }
 
   const stmts = [];
+  if ('name' in body) {
+    stmts.push(
+      env.DB.prepare('UPDATE users SET name = ? WHERE id = ?')
+        .bind(body.name ? String(body.name).trim().slice(0, 64) : null, user.user_id)
+    );
+  }
   if ('sleeper_username' in body) {
     stmts.push(
       env.DB.prepare('UPDATE users SET sleeper_username = ? WHERE id = ?')
@@ -205,6 +212,30 @@ async function logout(request, env) {
   return jsonRes({ ok: true }, 200, { 'Set-Cookie': clear });
 }
 
+async function changePassword(request, env) {
+  const user = await getAuthUser(request, env);
+  if (!user) return errRes('Not authenticated', 401);
+  let body;
+  try { body = await request.json(); } catch { return errRes('Invalid JSON'); }
+  const { currentPassword, newPassword } = body ?? {};
+  if (!currentPassword || !newPassword) return errRes('currentPassword and newPassword required');
+
+  const fullUser = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(user.user_id).first();
+  const ok = await verifyPassword(String(currentPassword), fullUser.password_hash, fullUser.password_salt);
+  if (!ok) return errRes('Current password is incorrect');
+
+  const pwErr = validatePassword(String(newPassword));
+  if (pwErr) return errRes(pwErr);
+
+  const { hash, salt } = await hashPassword(String(newPassword));
+  const sessionId = getSessionId(request);
+  await env.DB.batch([
+    env.DB.prepare('UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?').bind(hash, salt, user.user_id),
+    env.DB.prepare('DELETE FROM sessions WHERE user_id = ? AND id != ?').bind(user.user_id, sessionId),
+  ]);
+  return jsonRes({ ok: true });
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 
 export async function handleAuth(request, env, url) {
@@ -213,6 +244,7 @@ export async function handleAuth(request, env, url) {
   if (p === '/api/auth/login'    && request.method === 'POST')  return login(request, env);
   if (p === '/api/auth/me'       && request.method === 'GET')   return me(request, env);
   if (p === '/api/auth/me'       && request.method === 'PATCH') return updateMe(request, env);
-  if (p === '/api/auth/logout'   && request.method === 'POST')  return logout(request, env);
+  if (p === '/api/auth/logout'          && request.method === 'POST')  return logout(request, env);
+  if (p === '/api/auth/change-password' && request.method === 'POST')  return changePassword(request, env);
   return errRes('Not found', 404);
 }
