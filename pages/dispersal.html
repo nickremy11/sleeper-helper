@@ -723,45 +723,15 @@ async function loadStep4() {
     for (const draft of (draftsData || [])) applyDraftSlots(draft, true);
     for (const draft of (prevDraftsData || [])) applyDraftSlots(draft, false);
 
-    // For each selected year that has an existing draft, fetch draft-level traded_picks.
-    // The draft-level endpoint uses confirmed semantics (roster_id = original slot owner,
-    // owner_id = current owner) — same as the working draft queue tool.
-    const draftIdByYear = {};
-    for (const d of [...(draftsData || []), ...(prevDraftsData || [])]) {
-      const yr = String(d.season);
-      if (D.selYears.includes(yr) && !draftIdByYear[yr]) draftIdByYear[yr] = d.draft_id;
-    }
-    const draftTpByYear = {};
-    await Promise.all(
-      Object.entries(draftIdByYear).map(([yr, draftId]) =>
-        sApi(`/draft/${draftId}/traded_picks`)
-          .then(p => { draftTpByYear[yr] = p || []; })
-          .catch(() => {})
-      )
-    );
-
-    // Build tradeMap: draft-level takes precedence (roster_id=original, owner_id=current).
-    // League-level fallback for years where the draft has no traded-pick records yet
-    // (draft not set up or pre-draft state); field semantics: owner_id=original, roster_id=current.
+    // Both /league/{id}/traded_picks and /draft/{id}/traded_picks use the same semantics:
+    //   roster_id = original slot owner (never changes), owner_id = current owner after trades.
     const tradeMap = {};
     for (const tp of (tradedPicks || [])) {
       const yr = String(tp.season);
-      if (D.selYears.includes(yr) && tp.owner_id != null) {
-        tradeMap[`${yr}_${tp.round}_${tp.owner_id}`] = String(tp.roster_id);
-      }
-    }
-    for (const [yr, picks] of Object.entries(draftTpByYear)) {
-      for (const tp of picks) {
-        // Overwrite league-level entry with authoritative draft-level entry.
+      if (D.selYears.includes(yr)) {
         tradeMap[`${yr}_${tp.round}_${tp.roster_id}`] = String(tp.owner_id);
       }
     }
-    console.log('[dispersal] league tradedPicks:', (tradedPicks || []).length,
-      (tradedPicks || []).slice(0, 2));
-    console.log('[dispersal] draftTpByYear counts:',
-      Object.fromEntries(Object.entries(draftTpByYear).map(([y, p]) => [y, p.length])));
-    console.log('[dispersal] tradeMap entries:', Object.keys(tradeMap).length,
-      Object.entries(tradeMap).slice(0, 4));
 
     function finalOwner(year, rd, origId) {
       return tradeMap[`${year}_${rd}_${String(origId)}`] ?? String(origId);
