@@ -748,25 +748,17 @@ async function loadStep4() {
       }
     }
 
-    // Build a trade graph from traded_picks: "year_round_prevOwner" → currentOwner.
-    // Sleeper records every trade leg, so chain-walking resolves multi-hop trades.
-    const tradeGraph = {};
+    // Build a trade map from traded_picks: "year_round_origOwner" → currentOwner.
+    // Sleeper stores one record per pick (current state), keyed by the original slot owner (owner_id).
+    const tradeMap = {};
     for (const tp of (tradedPicks || [])) {
       if (D.selYears.includes(String(tp.season))) {
-        tradeGraph[`${tp.season}_${tp.round}_${tp.previous_owner_id}`] = String(tp.roster_id);
+        tradeMap[`${tp.season}_${tp.round}_${tp.owner_id}`] = String(tp.roster_id);
       }
     }
 
-    function finalOwner(year, rd, startId) {
-      let owner = String(startId);
-      const seen = new Set();
-      while (!seen.has(owner)) {
-        seen.add(owner);
-        const next = tradeGraph[`${year}_${rd}_${owner}`];
-        if (!next) break;
-        owner = next;
-      }
-      return owner;
+    function finalOwner(year, rd, origId) {
+      return tradeMap[`${year}_${rd}_${String(origId)}`] ?? String(origId);
     }
 
     // For every pick slot (year × round × origTeam), resolve who currently owns it.
