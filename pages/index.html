@@ -244,6 +244,16 @@ footer a:hover { color: var(--gold); }
 .rs-pct-bar  { height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; width: 60px; flex-shrink: 0; }
 .rs-pct-fill { height: 4px; border-radius: 2px; background: var(--gold); }
 .rs-pct-txt  { font-family: 'Playfair Display', serif; font-size: 0.86rem; color: var(--cream); min-width: 44px; text-align: right; }
+.rs-name-btn { background: none; border: none; cursor: pointer; color: var(--parchment); font-family: 'Crimson Text', serif; font-size: 0.92rem; text-align: left; padding: 0; display: flex; align-items: center; gap: 5px; transition: color 0.15s; }
+.rs-name-btn:hover { color: var(--gold-light); }
+.rs-name-btn .rs-chevron { font-size: 0.6rem; color: var(--brown-light); transition: transform 0.2s; }
+.rs-name-btn.rs-expanded .rs-chevron { transform: rotate(180deg); color: var(--gold); }
+.rs-expand-row td { padding: 0; border-bottom: 1px solid var(--brown-mid); }
+.rs-expand-inner { padding: 10px 14px 12px 14px; background: rgba(255,255,255,0.03); }
+.rs-expand-title { font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); margin-bottom: 7px; }
+.rs-expand-leagues { display: flex; flex-wrap: wrap; gap: 5px; }
+.rs-expand-tag { font-family: 'Crimson Text', serif; font-size: 0.82rem; color: var(--parchment); background: rgba(255,255,255,0.05); border: 1px solid var(--brown-mid); border-radius: 2px; padding: 2px 8px; white-space: nowrap; }
+.rs-expand-tag .rs-tag-meta { font-size: 0.75rem; color: var(--brown-light); margin-left: 4px; }
 </style>
 </head>
 <body>
@@ -345,6 +355,7 @@ const RS = {
   filtType:        'all',
   _teams:          new Set(),
   _sizes:          new Set(),
+  expandedKey:     null,   // key of currently expanded player row
 };
 
 function rsNormPos(raw) {
@@ -1612,17 +1623,24 @@ async function rsLoadLeague(lg) {
     RS.leagueRosters[lg.league_id] = r.ok ? await r.json() : [];
   } catch { RS.leagueRosters[lg.league_id] = []; }
 
-  // Draft info — for pick slot resolution in current season
-  // slot_to_roster_id maps slot# → roster_id; reverse gives roster_id → slot# (pick position)
+  // Drafts + traded_picks in parallel
+  // - drafts: for slot_to_roster_id → reverse to ridToSlot (labels 1.01, 1.02…)
+  // - traded_picks: authoritative source for CURRENT pick ownership
   try {
-    const r = await fetch(`/api/sleeper/league/${lg.league_id}/drafts`);
-    if (!r.ok) throw new Error();
-    const drafts     = await r.json() || [];
-    const nflSeason  = S.nflState?.season || new Date().getFullYear().toString();
-    const curDraft   = drafts.find(d => d.season === nflSeason);
-    const rawSlots   = curDraft?.slot_to_roster_id;
-    const hasSlots   = rawSlots && Object.keys(rawSlots).length > 0;
-    // Build reverse map: roster_id → slot# (used to label picks as "1.03" etc.)
+    const nflSeason = S.nflState?.season || new Date().getFullYear().toString();
+    const [draftsRes, tradedRes] = await Promise.all([
+      fetch(`/api/sleeper/league/${lg.league_id}/drafts`),
+      fetch(`/api/sleeper/league/${lg.league_id}/traded_picks`),
+    ]);
+
+    const drafts      = draftsRes.ok  ? (await draftsRes.json()  || []) : [];
+    const tradedPicks = tradedRes.ok  ? (await tradedRes.json()  || []) : [];
+
+    // slot resolution: slot_to_roster_id maps draft slot# → roster_id
+    // reversed: roster_id → slot# so we can label picks as "2025 1.03"
+    const curDraft  = drafts.find(d => d.season === nflSeason);
+    const rawSlots  = curDraft?.slot_to_roster_id;
+    const hasSlots  = rawSlots && Object.keys(rawSlots).length > 0;
     let ridToSlot = null;
     if (hasSlots) {
       ridToSlot = {};
@@ -1630,10 +1648,58 @@ async function rsLoadLeague(lg) {
         ridToSlot[String(rid)] = parseInt(slot);
       }
     }
-    RS.leagueDraftInfo[lg.league_id] = { ridToSlot, draftStatus: curDraft?.status };
+
+    RS.leagueDraftInfo[lg.league_id] = {
+      ridToSlot,
+      draftStatus: curDraft?.status,
+      tradedPicks,     // store for rsComputePicksForRoster()
+    };
   } catch {
-    RS.leagueDraftInfo[lg.league_id] = { ridToSlot: null };
+    RS.leagueDraftInfo[lg.league_id] = { ridToSlot: null, tradedPicks: [] };
   }
+}
+
+// Compute which picks a roster owns for the current + upcoming seasons.
+// Sleeper's traded_picks contains every pick that changed hands; owner_id = current holder.
+// Picks never traded are still with the original team (roster_id = owner by default).
+// We build base ownership (each team owns their own), apply traded_pick overrides,
+// then return entries where owner === myRosterId.
+function rsComputePicksForRoster(myRosterId, rosters, tradedPicks, nflSeason) {
+  const currentYear = parseInt(nflSeason);
+
+  // Collect relevant seasons: next 4 years + any season mentioned in traded_picks
+  const seasons = new Set();
+  for (let y = currentYear; y <= currentYear + 3; y++) seasons.add(String(y));
+  for (const tp of tradedPicks) {
+    if (parseInt(tp.season) >= currentYear) seasons.add(tp.season);
+  }
+
+  // Initialize: every team owns their own 1st and 2nd for each season
+  // key = `${season}_${round}_${originalRosterId}`  →  currentOwnerId
+  const ownership = {};
+  for (const roster of rosters) {
+    for (const season of seasons) {
+      for (const round of [1, 2]) {
+        ownership[`${season}_${round}_${roster.roster_id}`] = roster.roster_id;
+      }
+    }
+  }
+
+  // Apply trades: traded_picks shows current owner_id (one entry per pick, current state)
+  for (const tp of tradedPicks) {
+    if (tp.round > 2) continue;
+    if (parseInt(tp.season) < currentYear) continue;
+    ownership[`${tp.season}_${tp.round}_${tp.roster_id}`] = tp.owner_id;
+  }
+
+  // Collect picks I own
+  const myPicks = [];
+  for (const [key, ownerId] of Object.entries(ownership)) {
+    if (String(ownerId) !== String(myRosterId)) continue;
+    const [season, round, origRid] = key.split('_');
+    myPicks.push({ season, round: parseInt(round), roster_id: parseInt(origRid) });
+  }
+  return myPicks;
 }
 
 // ── Build rows from cached data ────────────────────────────────────────────────
@@ -1670,27 +1736,34 @@ function rsBuildRows() {
     }
 
     // ── Draft picks (1sts & 2nds only) ─────────────────────────────────────────
-    // roster.draft_picks: [{season, round, roster_id (original team), owner_id (current owner)}]
-    // slot_to_roster_id (from draft): {slot# → roster_id}
-    // We reverse it to ridToSlot: {roster_id → slot#}
-    // If slot is known, label as "2025 1.03"; otherwise group as "2025 1st"
-    const { ridToSlot } = RS.leagueDraftInfo[lg.league_id] || {};
+    // Use rsComputePicksForRoster() which derives ownership from traded_picks:
+    //   - Start: each team owns their own picks for all upcoming seasons
+    //   - Override: apply traded_picks to update ownership
+    // This is more reliable than roster.draft_picks which is often null/empty.
+    //
+    // ridToSlot (reversed from slot_to_roster_id) maps roster_id → draft slot#,
+    // enabling individual pick labels ("2025 1.03") when order is set.
+    const { ridToSlot, tradedPicks: lgTradedPicks } = RS.leagueDraftInfo[lg.league_id] || {};
+    const myPicks = rsComputePicksForRoster(
+      myRoster.roster_id,
+      rosters,
+      lgTradedPicks || [],
+      nflSeason
+    );
 
-    for (const pick of (myRoster.draft_picks || [])) {
-      if (!pick || pick.round > 2) continue;
-
+    for (const pick of myPicks) {
       const { round, season } = pick;
       const roundStr = round === 1 ? '1st' : '2nd';
       let pickKey;
 
       if (season === nflSeason && ridToSlot) {
-        // Current season with draft order set → label individual slots
+        // Current season with draft order known → individual slot label
         const slot = ridToSlot[String(pick.roster_id)];
         pickKey = slot
           ? `${season} ${round}.${String(slot).padStart(2, '0')}`
           : `${season} ${roundStr}`;
       } else {
-        // Future seasons (or current without order) → group by year + round
+        // Future season or order unknown → group by year + round
         pickKey = `${season} ${roundStr}`;
       }
 
@@ -1701,7 +1774,7 @@ function rsBuildRows() {
           pos:          'PICK',
           team:         '—',
           exp:          null,
-          leagueCounts: {},   // lgId → count (can be >1 if multiple picks of same type)
+          leagueCounts: {},   // lgId → count (>1 when holding multiple picks of same type)
           fcVal:        null,
           isPick:       true,
           season,
@@ -1823,12 +1896,47 @@ function rsUpdateTable() {
   const maxPct = Math.max(100, ...visible.map(r => r.pct));
 
   tbody.innerHTML = visible.map(row => {
-    const barW   = Math.min((row.pct / maxPct) * 100, 100).toFixed(1);
-    const pctStr = row.pct < 1 ? row.pct.toFixed(1) : row.pct.toFixed(row.pct >= 100 ? 0 : 1);
-    const valStr = row.fcVal != null ? Number(row.fcVal).toLocaleString() : '—';
-    const expStr = row.exp == null ? '—' : row.exp === 0 ? 'R' : `Y${row.exp}`;
-    return `<tr>
-      <td style="font-family:'Crimson Text',serif;color:var(--parchment);">${esc(row.name)}</td>
+    const barW     = Math.min((row.pct / maxPct) * 100, 100).toFixed(1);
+    const pctStr   = row.pct < 1 ? row.pct.toFixed(1) : row.pct.toFixed(row.pct >= 100 ? 0 : 1);
+    const valStr   = row.fcVal != null ? Number(row.fcVal).toLocaleString() : '—';
+    const expStr   = row.exp == null ? '—' : row.exp === 0 ? 'R' : `Y${row.exp}`;
+    const isExpanded = RS.expandedKey === row.key;
+    const safeKey  = esc(row.key);
+
+    // Build expansion row (league list) if this row is expanded
+    let expandHtml = '';
+    if (isExpanded) {
+      const leagueIds = row.isPick
+        ? Object.keys(row.leagueCounts)
+        : [...row.leagueSet];
+
+      const tags = leagueIds.map(lgId => {
+        const lg  = S.leagues.find(l => l.league_id === lgId);
+        if (!lg) return '';
+        const d   = S.leagueDetails[lgId] || lg;
+        const isBB = d.settings?.best_ball === 1;
+        const type = isBB ? 'Bestball'
+                   : d.settings?.type === 2 ? 'Dynasty'
+                   : d.settings?.type === 1 ? 'Keeper' : 'Redraft';
+        const sz  = d.total_rosters || lg.total_rosters || '?';
+        const cnt = row.isPick && row.leagueCounts[lgId] > 1
+          ? ` ×${row.leagueCounts[lgId]}` : '';
+        return `<span class="rs-expand-tag">${esc(lg.name || 'Unnamed')}<span class="rs-tag-meta">${esc(type)} · ${sz}${cnt}</span></span>`;
+      }).filter(Boolean).join('');
+
+      const label = row.isPick ? 'Leagues holding this pick' : 'Leagues with this player';
+      expandHtml = `<tr class="rs-expand-row">
+        <td colspan="7"><div class="rs-expand-inner">
+          <div class="rs-expand-title">${label}</div>
+          <div class="rs-expand-leagues">${tags || '<span style="font-style:italic;color:var(--brown-light);font-size:0.85rem;">None</span>'}</div>
+        </div></td>
+      </tr>`;
+    }
+
+    return `<tr style="${isExpanded ? 'background:rgba(201,150,42,0.06);' : ''}">
+      <td><button class="rs-name-btn${isExpanded?' rs-expanded':''}" onclick="rsToggleExpand('${safeKey}')">
+        ${esc(row.name)}<span class="rs-chevron">▾</span>
+      </button></td>
       <td><span class="rs-pos rs-pos-${row.pos}">${row.pos}</span></td>
       <td style="font-family:'Rye',serif;font-size:0.42rem;letter-spacing:0.1em;color:var(--brown-light);">${row.team !== '—' ? esc(row.team) : '—'}</td>
       <td style="font-family:'Crimson Text',serif;font-style:italic;color:var(--brown-light);">${expStr}</td>
@@ -1838,10 +1946,16 @@ function rsUpdateTable() {
         <span class="rs-pct-txt">${pctStr}%</span>
       </div></td>
       <td style="font-family:'Playfair Display',serif;color:var(--cream);">${valStr}</td>
-    </tr>`;
+    </tr>${expandHtml}`;
   }).join('');
 
   if (meta) meta.textContent = `${visible.length} result${visible.length!==1?'s':''} · ${RS.selectedLeagues.size} league${RS.selectedLeagues.size!==1?'s':''} selected`;
+}
+
+// ── Expand / collapse player row ─────────────────────────────────────────────
+function rsToggleExpand(key) {
+  RS.expandedKey = RS.expandedKey === key ? null : key;
+  rsUpdateTable();
 }
 
 // ── League selector actions ───────────────────────────────────────────────────
