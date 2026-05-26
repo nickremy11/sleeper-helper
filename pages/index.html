@@ -209,6 +209,41 @@ footer a:hover { color: var(--gold); }
   .setup-card { padding: 16px; }
   .trade-sides { grid-template-columns: 1fr 18px 1fr; }
 }
+
+/* ── ROSTERSHIP TAB ── */
+.rs-lg-panel { background: var(--brown-dark); border: 1px solid var(--brown-mid); border-radius: 2px; margin-bottom: 16px; }
+.rs-lg-header { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-bottom: 1px solid var(--brown-mid); flex-wrap: wrap; }
+.rs-lg-title { font-family: 'Rye', serif; font-size: 0.6rem; letter-spacing: 0.15em; color: var(--gold); flex: 1; white-space: nowrap; }
+.rs-lg-list { max-height: 180px; overflow-y: auto; }
+.rs-lg-item { display: flex; align-items: center; gap: 10px; padding: 6px 14px; border-bottom: 1px dashed rgba(255,255,255,0.06); cursor: pointer; transition: background 0.15s; }
+.rs-lg-item:last-child { border-bottom: none; }
+.rs-lg-item:hover { background: rgba(255,255,255,0.03); }
+.rs-lg-name { font-family: 'Crimson Text', serif; font-size: 0.9rem; color: var(--parchment); flex: 1; }
+.rs-lg-meta { font-family: 'Rye', serif; font-size: 0.38rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brown-light); white-space: nowrap; }
+.rs-filter-panel { background: var(--brown-dark); border: 1px solid var(--brown-mid); border-radius: 2px; padding: 12px 16px; margin-bottom: 12px; display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-start; }
+.filter-group-rs { display: flex; flex-direction: column; gap: 5px; }
+.filter-lbl-rs { font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); }
+.rs-table { width: 100%; border-collapse: collapse; background: var(--brown-dark); font-size: 0.92rem; }
+.rs-table th { background: #1e0e05; font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); text-align: left; padding: 9px 10px; border-bottom: 2px solid var(--brown-mid); white-space: nowrap; cursor: pointer; user-select: none; transition: color 0.15s; }
+.rs-table th:hover, .rs-table th.rs-sorted { color: var(--gold-light); }
+.rs-table th .rs-arr { margin-left: 3px; font-size: 0.46rem; opacity: 0.5; }
+.rs-table th.rs-sorted .rs-arr { opacity: 1; }
+.rs-table td { padding: 7px 10px; border-bottom: 1px dashed rgba(255,255,255,0.06); vertical-align: middle; }
+.rs-table tr:last-child td { border-bottom: none; }
+.rs-table tbody tr:hover td { background: rgba(255,255,255,0.025); }
+.rs-pos { display: inline-block; font-family: 'Rye', serif; font-size: 0.36rem; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 5px; border-radius: 2px; min-width: 26px; text-align: center; }
+.rs-pos-QB   { background: rgba(232,184,75,0.18);  color: #e8b84b; }
+.rs-pos-RB   { background: rgba(92,184,92,0.18);   color: #5cb85c; }
+.rs-pos-WR   { background: rgba(91,192,222,0.18);  color: #5bc0de; }
+.rs-pos-TE   { background: rgba(232,115,75,0.18);  color: #e8734b; }
+.rs-pos-DL   { background: rgba(155,89,182,0.18);  color: #9b59b6; }
+.rs-pos-LB   { background: rgba(41,128,185,0.18);  color: #3498db; }
+.rs-pos-DB   { background: rgba(26,188,156,0.18);  color: #1abc9c; }
+.rs-pos-PICK { background: rgba(201,150,42,0.2);   color: var(--gold-light); }
+.rs-pct-wrap { display: flex; align-items: center; gap: 7px; }
+.rs-pct-bar  { height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; width: 60px; flex-shrink: 0; }
+.rs-pct-fill { height: 4px; border-radius: 2px; background: var(--gold); }
+.rs-pct-txt  { font-family: 'Playfair Display', serif; font-size: 0.86rem; color: var(--cream); min-width: 44px; text-align: right; }
 </style>
 </head>
 <body>
@@ -233,6 +268,7 @@ footer a:hover { color: var(--gold); }
       <button class="tab-btn"        id="tab-lineups" onclick="sw('lineups')">Lineup Check</button>
       <button class="tab-btn"        id="tab-drafts"  onclick="sw('drafts')">Draft Queue</button>
       <button class="tab-btn"        id="tab-tracker" onclick="sw('tracker')">Draft Tracker</button>
+      <button class="tab-btn"        id="tab-rostership" onclick="sw('rostership')">Rostership</button>
     </div>
   </nav>
 
@@ -288,6 +324,52 @@ const PLAYERS_URL = IS_LOCAL ? 'https://api.sleeper.app/v1/players/nfl' : '/api/
 const GQL_URL     = IS_LOCAL ? null : '/api/graphql';
 
 const S = { userId: null, leagues: [], leagueDetails: {}, players: {}, nflState: null, token: null, tab: 'trades', auth: null, projections: null, gameStartByTeam: {}, lineupFixes: [], _projWeekKey: null };
+
+// ── Rostership state ──────────────────────────────────────────────────────────
+const RS = {
+  selectedLeagues: null,  // Set<lgId> — null until first tab visit
+  prefs:           {},    // {lgId: {contender} | null}
+  fcMap:           {},    // {sleeperId: value}
+  leagueRosters:   {},    // {lgId: [roster]}
+  leagueDraftInfo: {},    // {lgId: {slotToRoster: {} | null}}
+  allRows:         [],
+  loaded:          false,
+  sortCol:         'pct',
+  sortDir:         -1,
+  search:          '',
+  filtPositions:   new Set(['QB','RB','WR','TE','DL','LB','DB','PICK']),
+  filtExp:         { op: '', val: '' },
+  filtFCVal:       { op: '', val: '' },
+  filtTeam:        '',
+  filtSize:        '',
+  filtType:        'all',
+  _teams:          new Set(),
+  _sizes:          new Set(),
+};
+
+function rsNormPos(raw) {
+  if (!raw) return null;
+  const p = raw.toUpperCase();
+  if (['QB','RB','WR','TE'].includes(p))           return p;
+  if (['DE','DT','NT','IDL','DL'].includes(p))     return 'DL';
+  if (['LB','ILB','OLB','MLB'].includes(p))        return 'LB';
+  if (['CB','S','SS','FS','SAF','DB'].includes(p)) return 'DB';
+  return null;
+}
+function rsCmp(actual, op, valStr) {
+  if (!op || valStr === '') return true;
+  if (actual === null || actual === undefined) return false;
+  const v = parseFloat(valStr);
+  if (isNaN(v)) return true;
+  switch (op) {
+    case '=':  return actual === v;
+    case '>':  return actual >  v;
+    case '<':  return actual <  v;
+    case '>=': return actual >= v;
+    case '<=': return actual <= v;
+  }
+  return true;
+}
 
 async function api(path) {
   const r = await fetch(API_BASE + path);
@@ -381,7 +463,7 @@ function sw(tab) {
 }
 function render(tab) {
   if (!S.userId) { setC('<div class="empty-state"><p>Enter your username above to get started</p></div>'); return; }
-  ({ trades: renderTrades, player: renderPlayerSearch, lineups: renderLineupCheck, drafts: renderDraftQueue, tracker: renderDraftTracker })[tab]?.();
+  ({ trades: renderTrades, player: renderPlayerSearch, lineups: renderLineupCheck, drafts: renderDraftQueue, tracker: renderDraftTracker, rostership: renderRostership })[tab]?.();
 }
 function setC(html) { document.getElementById('content').innerHTML = html; }
 
@@ -1330,6 +1412,514 @@ function setTrackerPos(pos) {
   renderTrackerBody();
 }
 
+
+// ── 6. Rostership ─────────────────────────────────────────────────────────────
+
+async function renderRostership() {
+  // First visit: init league selection and load prefs
+  if (RS.selectedLeagues === null) {
+    RS.selectedLeagues = new Set(S.leagues.map(lg => lg.league_id));
+    await rsLoadPrefs();
+  }
+  rsDrawFull();
+}
+
+async function rsLoadPrefs() {
+  let stored = {};
+  if (S.auth) {
+    try {
+      const r = await fetch('/api/rootforme/prefs', { credentials: 'include' });
+      if (r.ok) stored = (await r.json()).prefs || {};
+    } catch {}
+  } else {
+    try { stored = JSON.parse(localStorage.getItem('rfm_prefs') || '{}'); } catch {}
+  }
+  RS.prefs = {};
+  for (const lg of S.leagues) RS.prefs[lg.league_id] = stored[lg.league_id] ?? null;
+}
+
+// Full re-draw of the tab (called on tab enter, or after league list changes)
+function rsDrawFull() {
+  const hasPrefs = S.leagues.some(lg => RS.prefs[lg.league_id] !== null);
+  const nSel     = RS.selectedLeagues.size;
+  const nflSeason = S.nflState?.season || new Date().getFullYear().toString();
+
+  const lgRows = S.leagues.map(lg => {
+    const d    = S.leagueDetails[lg.league_id] || lg;
+    const isBB = d.settings?.best_ball === 1;
+    const type = isBB ? 'Bestball'
+               : d.settings?.type === 2 ? 'Dynasty'
+               : d.settings?.type === 1 ? 'Keeper' : 'Redraft';
+    const sz   = d.total_rosters || lg.total_rosters || '?';
+    const chk  = RS.selectedLeagues.has(lg.league_id) ? 'checked' : '';
+    return `<label class="rs-lg-item">
+      <span class="rs-lg-name">${esc(lg.name || 'Unnamed')}</span>
+      <span class="rs-lg-meta">${esc(type)} · ${sz}</span>
+      <input type="checkbox" style="width:15px;height:15px;accent-color:var(--gold);flex-shrink:0;cursor:pointer;"
+        ${chk} onchange="rsToggleLeague('${lg.league_id}',this.checked)" />
+    </label>`;
+  }).join('');
+
+  const filterHtml = RS.loaded ? `
+    <div class="rs-filter-panel">
+      <div class="filter-group-rs">
+        <span class="filter-lbl-rs">Position</span>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;" id="rs-pos-chips">
+          ${['QB','RB','WR','TE','DL','LB','DB','PICK'].map(p =>
+            `<button class="pos-pill${RS.filtPositions.has(p)?' active':''}" onclick="rsTogglePos('${p}')">${p}</button>`
+          ).join('')}
+        </div>
+      </div>
+      <div class="filter-group-rs">
+        <span class="filter-lbl-rs">Experience (yrs)</span>
+        <div style="display:flex;gap:4px;align-items:center;">
+          <select class="tracker-select" id="rs-exp-op" onchange="rsReadFilters()"
+            style="padding:5px 24px 5px 6px;min-width:0;width:58px;">
+            <option value="">Any</option>
+            <option value="="  ${RS.filtExp.op==='=' ?'selected':''}>＝</option>
+            <option value=">"  ${RS.filtExp.op==='>' ?'selected':''}>＞</option>
+            <option value="<"  ${RS.filtExp.op==='<' ?'selected':''}>＜</option>
+            <option value=">=" ${RS.filtExp.op==='>='?'selected':''}>≥</option>
+            <option value="<=" ${RS.filtExp.op==='<='?'selected':''}>≤</option>
+          </select>
+          <input type="number" min="0" step="1" class="tracker-select" id="rs-exp-val"
+            value="${esc(RS.filtExp.val)}" placeholder="0"
+            oninput="rsReadFilters()" style="width:58px;padding:5px 6px;" />
+        </div>
+      </div>
+      <div class="filter-group-rs">
+        <span class="filter-lbl-rs">FC Value</span>
+        <div style="display:flex;gap:4px;align-items:center;">
+          <select class="tracker-select" id="rs-val-op" onchange="rsReadFilters()"
+            style="padding:5px 24px 5px 6px;min-width:0;width:58px;">
+            <option value="">Any</option>
+            <option value="="  ${RS.filtFCVal.op==='=' ?'selected':''}>＝</option>
+            <option value=">"  ${RS.filtFCVal.op==='>' ?'selected':''}>＞</option>
+            <option value="<"  ${RS.filtFCVal.op==='<' ?'selected':''}>＜</option>
+            <option value=">=" ${RS.filtFCVal.op==='>='?'selected':''}>≥</option>
+            <option value="<=" ${RS.filtFCVal.op==='<='?'selected':''}>≤</option>
+          </select>
+          <input type="number" min="0" step="100" class="tracker-select" id="rs-val-val"
+            value="${esc(RS.filtFCVal.val)}" placeholder="value"
+            oninput="rsReadFilters()" style="width:76px;padding:5px 6px;" />
+        </div>
+      </div>
+      <div class="filter-group-rs">
+        <span class="filter-lbl-rs">NFL Team</span>
+        <select class="tracker-select" id="rs-team" onchange="rsReadFilters()">
+          <option value="">All</option>
+          ${[...RS._teams].sort().map(t => `<option value="${esc(t)}"${RS.filtTeam===t?' selected':''}>${esc(t)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="filter-group-rs">
+        <span class="filter-lbl-rs">League Size</span>
+        <select class="tracker-select" id="rs-size" onchange="rsReadFilters()">
+          <option value="">Any</option>
+          ${[...RS._sizes].sort((a,b)=>a-b).map(s => `<option value="${s}"${RS.filtSize===String(s)?' selected':''}>${s} teams</option>`).join('')}
+        </select>
+      </div>
+      <div class="filter-group-rs">
+        <span class="filter-lbl-rs">Lineup Type</span>
+        <div style="display:flex;gap:4px;">
+          <button class="pos-pill${RS.filtType==='all'      ?' active':''}" onclick="rsSetType('all')">All</button>
+          <button class="pos-pill${RS.filtType==='bestball' ?' active':''}" onclick="rsSetType('bestball')">Best Ball</button>
+          <button class="pos-pill${RS.filtType==='lineup'   ?' active':''}" onclick="rsSetType('lineup')">Lineup</button>
+        </div>
+      </div>
+    </div>` : '';
+
+  setC(`<div>
+    <div class="rs-lg-panel">
+      <div class="rs-lg-header">
+        <span class="rs-lg-title">Leagues</span>
+        <span style="font-family:'Crimson Text',serif;font-size:0.85rem;font-style:italic;color:var(--brown-light);" id="rs-lg-info">${nSel}/${S.leagues.length} selected</span>
+        <button class="ghost-btn" onclick="rsSelectAll()">All</button>
+        <button class="ghost-btn" onclick="rsDeselectAll()">None</button>
+        <button class="ghost-btn" id="rs-btn-cont" ${hasPrefs?'':'disabled title="Fill out Root For Me first"'} onclick="rsSelectContenders()">Contenders</button>
+        <button class="ghost-btn" id="rs-btn-reb"  ${hasPrefs?'':'disabled title="Fill out Root For Me first"'} onclick="rsSelectRebuilders()">Rebuilders</button>
+        <div style="flex:1;"></div>
+        <button class="setup-btn" id="rs-load-btn" onclick="loadRostershipData()" style="height:32px;">${RS.loaded?'Reload':'Load Rostership'}</button>
+        <span class="setup-status" id="rs-load-status" style="margin:0;"></span>
+      </div>
+      <div class="rs-lg-list">${lgRows}</div>
+    </div>
+
+    ${RS.loaded ? `
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+      <input type="text" class="search-input" id="rs-search"
+        placeholder="Search player, pick, team…" oninput="rsOnSearch()" value="${esc(RS.search)}" />
+    </div>` : ''}
+
+    ${filterHtml}
+
+    ${RS.loaded ? `
+    <div class="setup-status" id="rs-result-meta" style="margin-bottom:8px;font-style:italic;min-height:18px;"></div>
+    <div style="overflow-x:auto;">
+      <table class="rs-table">
+        <thead id="rs-thead"></thead>
+        <tbody id="rs-tbody"><tr><td colspan="7" style="padding:20px;text-align:center;font-style:italic;color:var(--brown-light);">Computing…</td></tr></tbody>
+      </table>
+    </div>` : `<div class="empty-state"><p>Select leagues above and click Load Rostership</p></div>`}
+  </div>`);
+
+  if (RS.loaded) rsUpdateTable();
+}
+
+// ── Load all roster + draft data ──────────────────────────────────────────────
+async function loadRostershipData() {
+  const btn    = document.getElementById('rs-load-btn');
+  const statEl = document.getElementById('rs-load-status');
+  if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
+  if (statEl) statEl.textContent = '';
+
+  try {
+    // Players (reuse S.players if already loaded)
+    if (statEl) statEl.textContent = 'Loading players…';
+    await loadPlayers();
+
+    // FantasyCalc values
+    if (statEl) statEl.textContent = 'Loading FC values…';
+    try {
+      const fc = await fetch('/api/fantasycalc').then(r => r.ok ? r.json() : []);
+      RS.fcMap = {};
+      for (const item of (Array.isArray(fc) ? fc : [])) {
+        const sid = item.player?.sleeperId || item.player?.maybeSleeperID;
+        if (sid) RS.fcMap[String(sid)] = item.value ?? 0;
+      }
+    } catch { RS.fcMap = {}; }
+
+    // Rosters + draft info per league (parallel)
+    if (statEl) statEl.textContent = `Fetching ${S.leagues.length} leagues…`;
+    await Promise.all(S.leagues.map(rsLoadLeague));
+
+    // Build rows
+    RS.loaded = true;
+    rsBuildRows();
+    rsPopulateFilterMeta();
+    rsDrawFull();           // full redraw now that RS.loaded = true
+  } catch (e) {
+    if (statEl) statEl.textContent = 'Error: ' + e.message;
+  } finally {
+    const b = document.getElementById('rs-load-btn');
+    if (b) { b.disabled = false; b.textContent = RS.loaded ? 'Reload' : 'Load Rostership'; }
+  }
+}
+
+async function rsLoadLeague(lg) {
+  // Rosters
+  try {
+    const r = await fetch(`/api/sleeper/league/${lg.league_id}/rosters`);
+    RS.leagueRosters[lg.league_id] = r.ok ? await r.json() : [];
+  } catch { RS.leagueRosters[lg.league_id] = []; }
+
+  // Draft info — for pick slot resolution in current season
+  // slot_to_roster_id maps slot# → roster_id; reverse gives roster_id → slot# (pick position)
+  try {
+    const r = await fetch(`/api/sleeper/league/${lg.league_id}/drafts`);
+    if (!r.ok) throw new Error();
+    const drafts     = await r.json() || [];
+    const nflSeason  = S.nflState?.season || new Date().getFullYear().toString();
+    const curDraft   = drafts.find(d => d.season === nflSeason);
+    const rawSlots   = curDraft?.slot_to_roster_id;
+    const hasSlots   = rawSlots && Object.keys(rawSlots).length > 0;
+    // Build reverse map: roster_id → slot# (used to label picks as "1.03" etc.)
+    let ridToSlot = null;
+    if (hasSlots) {
+      ridToSlot = {};
+      for (const [slot, rid] of Object.entries(rawSlots)) {
+        ridToSlot[String(rid)] = parseInt(slot);
+      }
+    }
+    RS.leagueDraftInfo[lg.league_id] = { ridToSlot, draftStatus: curDraft?.status };
+  } catch {
+    RS.leagueDraftInfo[lg.league_id] = { ridToSlot: null };
+  }
+}
+
+// ── Build rows from cached data ────────────────────────────────────────────────
+function rsBuildRows() {
+  const playerMap = {};  // pid → row
+  const pickMap   = {};  // pickKey → row
+  const nflSeason = S.nflState?.season || new Date().getFullYear().toString();
+
+  for (const lg of S.leagues) {
+    const rosters  = RS.leagueRosters[lg.league_id] || [];
+    const myRoster = rosters.find(r => r.owner_id === S.userId);
+    if (!myRoster) continue;
+
+    // ── Players ────────────────────────────────────────────────────────────────
+    for (const pid of (myRoster.players || [])) {
+      const player = S.players[pid];
+      if (!player) continue;
+      const pos = rsNormPos(player.position);
+      if (!pos) continue;                      // drop K, DEF, P, etc.
+
+      if (!playerMap[pid]) {
+        playerMap[pid] = {
+          key:       pid,
+          name:      player.full_name || player.last_name || pid,
+          pos,
+          team:      player.team || 'FA',
+          exp:       player.years_exp ?? null,
+          leagueSet: new Set(),
+          fcVal:     RS.fcMap[pid] != null ? RS.fcMap[pid] : null,
+          isPick:    false,
+        };
+      }
+      playerMap[pid].leagueSet.add(lg.league_id);
+    }
+
+    // ── Draft picks (1sts & 2nds only) ─────────────────────────────────────────
+    // roster.draft_picks: [{season, round, roster_id (original team), owner_id (current owner)}]
+    // slot_to_roster_id (from draft): {slot# → roster_id}
+    // We reverse it to ridToSlot: {roster_id → slot#}
+    // If slot is known, label as "2025 1.03"; otherwise group as "2025 1st"
+    const { ridToSlot } = RS.leagueDraftInfo[lg.league_id] || {};
+
+    for (const pick of (myRoster.draft_picks || [])) {
+      if (!pick || pick.round > 2) continue;
+
+      const { round, season } = pick;
+      const roundStr = round === 1 ? '1st' : '2nd';
+      let pickKey;
+
+      if (season === nflSeason && ridToSlot) {
+        // Current season with draft order set → label individual slots
+        const slot = ridToSlot[String(pick.roster_id)];
+        pickKey = slot
+          ? `${season} ${round}.${String(slot).padStart(2, '0')}`
+          : `${season} ${roundStr}`;
+      } else {
+        // Future seasons (or current without order) → group by year + round
+        pickKey = `${season} ${roundStr}`;
+      }
+
+      if (!pickMap[pickKey]) {
+        pickMap[pickKey] = {
+          key:          pickKey,
+          name:         pickKey,
+          pos:          'PICK',
+          team:         '—',
+          exp:          null,
+          leagueCounts: {},   // lgId → count (can be >1 if multiple picks of same type)
+          fcVal:        null,
+          isPick:       true,
+          season,
+          round,
+        };
+      }
+      pickMap[pickKey].leagueCounts[lg.league_id] =
+        (pickMap[pickKey].leagueCounts[lg.league_id] || 0) + 1;
+    }
+  }
+
+  RS.allRows = [...Object.values(playerMap), ...Object.values(pickMap)];
+}
+
+function rsPopulateFilterMeta() {
+  RS._teams = new Set();
+  RS._sizes = new Set();
+  for (const row of RS.allRows) {
+    if (row.team && row.team !== '—' && row.team !== 'FA') RS._teams.add(row.team);
+  }
+  for (const lg of S.leagues) {
+    const d = S.leagueDetails[lg.league_id] || lg;
+    const sz = d.total_rosters || lg.total_rosters;
+    if (sz) RS._sizes.add(sz);
+  }
+}
+
+// ── Per-row stats (selection + filter aware) ──────────────────────────────────
+function rsRowStats(row) {
+  const sizeFilter = RS.filtSize ? parseInt(RS.filtSize) : null;
+  let shares = 0, total = 0;
+
+  for (const lgId of RS.selectedLeagues) {
+    const d     = S.leagueDetails[lgId] || S.leagues.find(l => l.league_id === lgId);
+    const isBB  = d?.settings?.best_ball === 1;
+    const ltype = isBB ? 'bestball' : 'lineup';
+    const lsize = d?.total_rosters || 0;
+
+    if (sizeFilter && lsize !== sizeFilter)           continue;
+    if (RS.filtType !== 'all' && ltype !== RS.filtType) continue;
+
+    total++;
+    if (row.isPick) shares += (row.leagueCounts[lgId] || 0);
+    else if (row.leagueSet.has(lgId)) shares++;
+  }
+
+  const pct = total > 0 ? (shares / total) * 100 : 0;
+  return { shares, pct, total };
+}
+
+// ── Compute visible + sorted rows ─────────────────────────────────────────────
+function rsComputeVisible() {
+  const q = RS.search.toLowerCase();
+
+  const visible = RS.allRows
+    .filter(row => {
+      if (!RS.filtPositions.has(row.pos)) return false;
+      if (RS.filtTeam && row.team !== RS.filtTeam) return false;
+      if (!row.isPick) {
+        if (!rsCmp(row.exp,   RS.filtExp.op,   RS.filtExp.val))   return false;
+        if (!rsCmp(row.fcVal, RS.filtFCVal.op, RS.filtFCVal.val)) return false;
+      } else {
+        // Picks have no exp; skip exp filter; skip fcVal filter
+        if (RS.filtExp.op && RS.filtExp.val !== '') return false;
+      }
+      if (q && !row.name.toLowerCase().includes(q) && !row.team.toLowerCase().includes(q)) return false;
+      const { shares } = rsRowStats(row);
+      return shares > 0;
+    })
+    .map(row => { const { shares, pct } = rsRowStats(row); return { ...row, shares, pct }; });
+
+  visible.sort((a, b) => {
+    switch (RS.sortCol) {
+      case 'name':   return RS.sortDir * a.name.localeCompare(b.name);
+      case 'pos':    return RS.sortDir * a.pos.localeCompare(b.pos);
+      case 'team':   return RS.sortDir * a.team.localeCompare(b.team);
+      case 'shares': return RS.sortDir * (b.shares - a.shares);
+      case 'pct':    return RS.sortDir * (b.pct - a.pct);
+      case 'value':  return RS.sortDir * ((b.fcVal ?? -1) - (a.fcVal ?? -1));
+      case 'exp':    return RS.sortDir * ((a.exp ?? -1) - (b.exp ?? -1));
+      default: return 0;
+    }
+  });
+
+  return visible;
+}
+
+// ── Update table only (fast — no full redraw) ─────────────────────────────────
+function rsUpdateTable() {
+  const visible = rsComputeVisible();
+  const thead   = document.getElementById('rs-thead');
+  const tbody   = document.getElementById('rs-tbody');
+  const meta    = document.getElementById('rs-result-meta');
+  if (!thead || !tbody) return;
+
+  // Header
+  const cols = [
+    { key: 'name',   lbl: 'Player'       },
+    { key: 'pos',    lbl: 'Pos'          },
+    { key: 'team',   lbl: 'Team'         },
+    { key: 'exp',    lbl: 'Exp'          },
+    { key: 'shares', lbl: '# Shares'     },
+    { key: 'pct',    lbl: 'Rostership %' },
+    { key: 'value',  lbl: 'FC Value'     },
+  ];
+  thead.innerHTML = `<tr>${cols.map(c => {
+    const sorted = RS.sortCol === c.key;
+    const arr    = sorted ? (RS.sortDir === -1 ? '▼' : '▲') : '·';
+    return `<th class="${sorted?'rs-sorted':''}" onclick="rsSort('${c.key}')">${c.lbl}<span class="rs-arr">${arr}</span></th>`;
+  }).join('')}</tr>`;
+
+  // Body
+  if (!visible.length) {
+    tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state" style="margin:12px;"><p>No players match current filters</p></div></td></tr>';
+    if (meta) meta.textContent = '0 results';
+    return;
+  }
+
+  const maxPct = Math.max(100, ...visible.map(r => r.pct));
+
+  tbody.innerHTML = visible.map(row => {
+    const barW   = Math.min((row.pct / maxPct) * 100, 100).toFixed(1);
+    const pctStr = row.pct < 1 ? row.pct.toFixed(1) : row.pct.toFixed(row.pct >= 100 ? 0 : 1);
+    const valStr = row.fcVal != null ? Number(row.fcVal).toLocaleString() : '—';
+    const expStr = row.exp == null ? '—' : row.exp === 0 ? 'R' : `Y${row.exp}`;
+    return `<tr>
+      <td style="font-family:'Crimson Text',serif;color:var(--parchment);">${esc(row.name)}</td>
+      <td><span class="rs-pos rs-pos-${row.pos}">${row.pos}</span></td>
+      <td style="font-family:'Rye',serif;font-size:0.42rem;letter-spacing:0.1em;color:var(--brown-light);">${row.team !== '—' ? esc(row.team) : '—'}</td>
+      <td style="font-family:'Crimson Text',serif;font-style:italic;color:var(--brown-light);">${expStr}</td>
+      <td style="font-family:'Playfair Display',serif;color:var(--cream);">${row.shares}</td>
+      <td><div class="rs-pct-wrap">
+        <div class="rs-pct-bar"><div class="rs-pct-fill" style="width:${barW}%"></div></div>
+        <span class="rs-pct-txt">${pctStr}%</span>
+      </div></td>
+      <td style="font-family:'Playfair Display',serif;color:var(--cream);">${valStr}</td>
+    </tr>`;
+  }).join('');
+
+  if (meta) meta.textContent = `${visible.length} result${visible.length!==1?'s':''} · ${RS.selectedLeagues.size} league${RS.selectedLeagues.size!==1?'s':''} selected`;
+}
+
+// ── League selector actions ───────────────────────────────────────────────────
+function rsToggleLeague(lgId, checked) {
+  if (checked) RS.selectedLeagues.add(lgId);
+  else         RS.selectedLeagues.delete(lgId);
+  const el = document.getElementById('rs-lg-info');
+  if (el) el.textContent = `${RS.selectedLeagues.size}/${S.leagues.length} selected`;
+  if (RS.loaded) rsUpdateTable();
+}
+function rsSelectAll()    { S.leagues.forEach(l => RS.selectedLeagues.add(l.league_id));  rsSyncSelector(); }
+function rsDeselectAll()  { RS.selectedLeagues.clear(); rsSyncSelector(); }
+function rsSelectContenders() {
+  RS.selectedLeagues.clear();
+  for (const lg of S.leagues) if (RS.prefs[lg.league_id]?.contender) RS.selectedLeagues.add(lg.league_id);
+  rsSyncSelector();
+}
+function rsSelectRebuilders() {
+  RS.selectedLeagues.clear();
+  for (const lg of S.leagues) {
+    const p = RS.prefs[lg.league_id];
+    if (p !== null && p?.contender === false) RS.selectedLeagues.add(lg.league_id);
+  }
+  rsSyncSelector();
+}
+function rsSyncSelector() {
+  // Update checkboxes + count without full redraw
+  document.querySelectorAll('.rs-lg-list input[type=checkbox]').forEach((cb, i) => {
+    if (S.leagues[i]) cb.checked = RS.selectedLeagues.has(S.leagues[i].league_id);
+  });
+  const el = document.getElementById('rs-lg-info');
+  if (el) el.textContent = `${RS.selectedLeagues.size}/${S.leagues.length} selected`;
+  if (RS.loaded) rsUpdateTable();
+}
+
+// ── Filter actions ────────────────────────────────────────────────────────────
+function rsTogglePos(pos) {
+  if (RS.filtPositions.has(pos)) {
+    if (RS.filtPositions.size === 1) return;
+    RS.filtPositions.delete(pos);
+  } else {
+    RS.filtPositions.add(pos);
+  }
+  document.querySelectorAll('#rs-pos-chips .pos-pill').forEach(btn => {
+    btn.classList.toggle('active', RS.filtPositions.has(btn.textContent.trim()));
+  });
+  rsUpdateTable();
+}
+function rsSetType(type) {
+  RS.filtType = type;
+  document.querySelectorAll('.rs-type-pill').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.type === type);
+  });
+  // Re-render type pills properly via direct DOM
+  const pills = document.querySelectorAll('[onclick^="rsSetType"]');
+  pills.forEach(b => {
+    const t = b.getAttribute('onclick').match(/'(\w+)'/)?.[1];
+    if (t) b.classList.toggle('active', t === type);
+  });
+  rsUpdateTable();
+}
+function rsReadFilters() {
+  const get = id => document.getElementById(id);
+  RS.filtExp   = { op: get('rs-exp-op')?.value || '', val: get('rs-exp-val')?.value || '' };
+  RS.filtFCVal = { op: get('rs-val-op')?.value || '', val: get('rs-val-val')?.value || '' };
+  RS.filtTeam  = get('rs-team')?.value || '';
+  RS.filtSize  = get('rs-size')?.value || '';
+  rsUpdateTable();
+}
+function rsOnSearch() {
+  RS.search = document.getElementById('rs-search')?.value.trim() || '';
+  rsUpdateTable();
+}
+function rsSort(col) {
+  RS.sortDir = RS.sortCol === col ? RS.sortDir * -1 : (['name','pos','team'].includes(col) ? 1 : -1);
+  RS.sortCol = col;
+  rsUpdateTable();
+}
 
 document.getElementById('token-input').addEventListener('keydown', e => { if (e.key==='Enter') saveToken(); });
 
