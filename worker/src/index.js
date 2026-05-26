@@ -37,7 +37,6 @@ const ROOM_TTL_MS   = 7 * 24 * 60 * 60 * 1000; // 7 days
 const ALLOWED_ORIGINS = new Set([
   'https://ffhistorian.com',
   'https://helper.ffhistorian.com',
-  'https://rootforme.ffhistorian.com',
 ]);
 
 function getCors(request) {

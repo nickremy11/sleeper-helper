@@ -360,11 +360,15 @@ async function init() {
     onLogin: async (u) => {
       S.auth = u;
       if (u.sleeper_username && !S.username) {
+        // No leagues loaded yet — kick off with the username saved in the profile.
         S.username = u.sleeper_username;
         document.getElementById('username-input').value = S.username;
-        await loadLeagues();
-      } else {
-        await persistPrefs();
+        await loadLeagues(); // loadLeagues → loadPrefs() fetches server prefs
+      } else if (S.leagues.length) {
+        // Leagues already loaded (typed username) — pull server prefs now that
+        // we're authenticated instead of overwriting them with in-memory ones.
+        await loadPrefs();
+        renderLeagueTable();
       }
     },
     onLogout: () => { S.auth = null; },
