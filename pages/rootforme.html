@@ -134,6 +134,25 @@ body::before {
   padding: 0 4px; margin-bottom: 20px; box-shadow: 4px 4px 0 var(--brown-mid);
 }
 
+/* ── LEAGUES COLLAPSIBLE ── */
+details.leagues-details > summary {
+  display: flex; align-items: center; gap: 12px;
+  cursor: pointer; list-style: none;
+  padding: 6px 0; margin-bottom: 16px; user-select: none;
+}
+details.leagues-details > summary::-webkit-details-marker { display: none; }
+details.leagues-details > summary::marker { display: none; }
+.leagues-toggle {
+  font-size: 0.55rem; color: var(--gold);
+  transition: transform 0.2s; flex-shrink: 0;
+}
+details.leagues-details[open] > summary .leagues-toggle { transform: rotate(90deg); }
+.leagues-summary-head { font-family: 'Rye', serif; font-size: 1rem; color: var(--brown-dark); white-space: nowrap; }
+.leagues-summary-info {
+  font-family: 'Crimson Text', serif; font-size: 0.85rem;
+  color: var(--brown-light); font-style: italic; white-space: nowrap; flex-shrink: 0;
+}
+
 /* ── STATES ── */
 .loading-state {
   text-align: center; padding: 40px 20px;
@@ -299,10 +318,17 @@ body::before {
 
   <!-- League Config -->
   <div id="leagues-section" style="display:none">
-    <div class="section-head"><h2>Your Leagues</h2><div class="section-head-line"></div></div>
-    <div class="leagues-card" id="leagues-card">
-      <div class="loading-state"><div class="spinner"></div>Loading leagues…</div>
-    </div>
+    <details id="leagues-details" class="leagues-details" open>
+      <summary>
+        <span class="leagues-toggle">▶</span>
+        <h2 class="leagues-summary-head">Your Leagues</h2>
+        <div class="section-head-line"></div>
+        <span id="leagues-summary-info" class="leagues-summary-info"></span>
+      </summary>
+      <div class="leagues-card" id="leagues-card">
+        <div class="loading-state"><div class="spinner"></div>Loading leagues…</div>
+      </div>
+    </details>
   </div>
 
   <!-- Week + Load -->
@@ -457,7 +483,15 @@ async function loadPrefs() {
 function savePref(leagueId, key, val) {
   if (!S.prefs[leagueId]) S.prefs[leagueId] = { value: 0, contender: true };
   S.prefs[leagueId][key] = val;
+  updateLeaguesSummary();
   persistPrefs();
+}
+
+function updateLeaguesSummary() {
+  const el = document.getElementById('leagues-summary-info');
+  if (!el || !S.leagues.length) return;
+  const contending = S.leagues.filter(lg => S.prefs[lg.league_id]?.contender !== false).length;
+  el.textContent = `${S.leagues.length} league${S.leagues.length !== 1 ? 's' : ''} · ${contending} contending`;
 }
 
 let _prefTimer = null;
@@ -514,6 +548,7 @@ function renderLeagueTable() {
       <tbody>${rows}</tbody>
     </table>
   `;
+  updateLeaguesSummary();
 }
 
 // ── Week Controls ─────────────────────────────────────────────────────────────
