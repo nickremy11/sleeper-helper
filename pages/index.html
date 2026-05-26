@@ -361,7 +361,7 @@ async function loadUser() {
     render(S.tab);
     // Auto-save username to account when logged in
     if (S.auth && u !== S.auth.sleeper_username) {
-      fetch('/api/auth/me', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sleeper_username: u }) })
+      fetch('/api/auth/me', { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sleeper_username: u }) })
         .then(r => r.json()).then(d => { if (!d.error && S.auth) S.auth.sleeper_username = u; }).catch(() => {});
     }
   } catch(e) {
@@ -1364,7 +1364,7 @@ async function saveTokenToAccount() {
   document.getElementById('token-input').value = '';
   st.textContent = 'Saving…'; st.className = 'setup-status';
   try {
-    const r    = await fetch('/api/auth/me', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }) });
+    const r    = await fetch('/api/auth/me', { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }) });
     const data = await r.json();
     if (data.error) throw new Error(data.error);
     if (S.auth) S.auth.has_token = true;
@@ -1373,21 +1373,26 @@ async function saveTokenToAccount() {
   } catch(e) { st.textContent = 'Error: ' + e.message; st.className = 'setup-status err'; }
 }
 
-SharedAuth.init({
-  chipContainerId: 'auth-chip',
-  onLogin: (user) => {
+(async function () {
+  function _applyAuth(user) {
     S.auth = user;
     updateTokenRow(user);
     if (user.sleeper_username && !S.userId) {
       document.getElementById('u-input').value = user.sleeper_username;
       loadUser();
     }
-  },
-  onLogout: () => {
-    S.auth = null;
-    updateTokenRow(null);
-  },
-});
+  }
+
+  const initUser = await SharedAuth.init({
+    chipContainerId: 'auth-chip',
+    onLogin:  (user) => { _applyAuth(user); },
+    onLogout: ()     => { S.auth = null; updateTokenRow(null); },
+  });
+
+  // onLogin only fires when signing in via the modal — handle the
+  // already-signed-in case (existing session cookie) here.
+  if (initUser) _applyAuth(initUser);
+})();
 </script>
 </body>
 </html>
