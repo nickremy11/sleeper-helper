@@ -231,7 +231,7 @@ footer a:hover { color: var(--gold); }
 .rs-table td { padding: 7px 10px; border-bottom: 1px dashed rgba(255,255,255,0.06); vertical-align: middle; }
 .rs-table tr:last-child td { border-bottom: none; }
 .rs-table tbody tr:hover td { background: rgba(255,255,255,0.025); }
-.rs-pos { display: inline-block; font-family: 'Rye', serif; font-size: 0.36rem; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 5px; border-radius: 2px; min-width: 26px; text-align: center; }
+.rs-pos { display: inline-block; font-family: 'Crimson Text', serif; font-size: 0.82rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 7px; border-radius: 2px; min-width: 32px; text-align: center; }
 .rs-pos-QB   { background: rgba(232,184,75,0.18);  color: #e8b84b; }
 .rs-pos-RB   { background: rgba(92,184,92,0.18);   color: #5cb85c; }
 .rs-pos-WR   { background: rgba(91,192,222,0.18);  color: #5bc0de; }
@@ -1753,6 +1753,8 @@ function rsBuildRows() {
 
     for (const pick of myPicks) {
       const { round, season } = pick;
+      // Skip current-year picks — 2026 drafts are mostly complete
+      if (season === nflSeason) continue;
       const roundStr = round === 1 ? '1st' : '2nd';
       let pickKey;
 
@@ -1938,8 +1940,8 @@ function rsUpdateTable() {
         ${esc(row.name)}<span class="rs-chevron">▾</span>
       </button></td>
       <td><span class="rs-pos rs-pos-${row.pos}">${row.pos}</span></td>
-      <td style="font-family:'Rye',serif;font-size:0.42rem;letter-spacing:0.1em;color:var(--brown-light);">${row.team !== '—' ? esc(row.team) : '—'}</td>
-      <td style="font-family:'Crimson Text',serif;font-style:italic;color:var(--brown-light);">${expStr}</td>
+      <td style="font-family:'Crimson Text',serif;font-size:0.88rem;font-weight:600;letter-spacing:0.04em;color:var(--parchment);">${row.team !== '—' ? esc(row.team) : '—'}</td>
+      <td style="font-family:'Crimson Text',serif;font-size:0.88rem;font-style:italic;color:var(--brown-light);">${expStr}</td>
       <td style="font-family:'Playfair Display',serif;color:var(--cream);">${row.shares}</td>
       <td><div class="rs-pct-wrap">
         <div class="rs-pct-bar"><div class="rs-pct-fill" style="width:${barW}%"></div></div>

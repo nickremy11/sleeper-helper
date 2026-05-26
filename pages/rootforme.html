@@ -277,10 +277,46 @@ details.leagues-details[open] > summary .leagues-toggle { transform: rotate(90de
   font-family: 'Rye', serif; font-size: 0.44rem; letter-spacing: 0.18em; text-transform: uppercase;
   color: var(--gold); margin-bottom: 5px;
 }
-.detail-league { font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--parchment); padding: 2px 0; border-bottom: 1px dashed rgba(255,255,255,0.07); display: flex; justify-content: space-between; }
+.detail-league {
+  font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--parchment);
+  padding: 2px 0; border-bottom: 1px dashed rgba(255,255,255,0.07);
+  display: flex; justify-content: space-between; align-items: center; gap: 6px;
+}
 .detail-league:last-child { border-bottom: none; }
+.detail-league-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.detail-league-pts { color: var(--brown-light); font-size: 0.82rem; }
 .detail-league-val { color: var(--gold-light); }
 .detail-none { font-family: 'Crimson Text', serif; font-style: italic; font-size: 0.85rem; color: var(--brown-light); }
+
+/* ── PLAYERS SECTION ── */
+details.players-outer > summary {
+  display: flex; align-items: center; gap: 12px;
+  cursor: pointer; list-style: none;
+  padding: 6px 0; margin-bottom: 0; user-select: none;
+}
+details.players-outer > summary::-webkit-details-marker { display: none; }
+details.players-outer > summary::marker { display: none; }
+details.players-outer[open] > summary { margin-bottom: 14px; }
+.players-toggle { font-size: 0.55rem; color: var(--gold); transition: transform 0.2s; flex-shrink: 0; }
+details.players-outer[open] > summary .players-toggle { transform: rotate(90deg); }
+.players-summary-head { font-family: 'Rye', serif; font-size: 1rem; color: var(--brown-dark); white-space: nowrap; }
+.players-summary-info { font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--brown-light); font-style: italic; white-space: nowrap; flex-shrink: 0; }
+.pos-group-wrap { border-top: 1px solid rgba(255,255,255,0.07); }
+.pos-group-wrap:first-child { border-top: none; }
+details.pos-group > summary {
+  display: flex; align-items: center; gap: 10px;
+  cursor: pointer; list-style: none;
+  padding: 9px 12px; user-select: none;
+  transition: background 0.15s;
+}
+details.pos-group > summary:hover { background: rgba(255,255,255,0.02); }
+details.pos-group > summary::-webkit-details-marker { display: none; }
+details.pos-group > summary::marker { display: none; }
+.pos-group-toggle { font-size: 0.5rem; color: var(--brown-light); transition: transform 0.2s; flex-shrink: 0; }
+details.pos-group[open] > summary .pos-group-toggle { transform: rotate(90deg); }
+.pos-group-label { font-family: 'Rye', serif; font-size: 0.58rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); }
+.pos-group-count { font-family: 'Crimson Text', serif; font-size: 0.82rem; color: var(--brown-light); font-style: italic; }
+.pos-group-body { padding: 2px 12px 10px; }
 
 </style>
 </head>
@@ -348,6 +384,19 @@ details.leagues-details[open] > summary .leagues-toggle { transform: rotate(90de
     <div id="games-container"></div>
   </div>
 
+  <!-- Players -->
+  <div id="players-section" style="display:none; margin-top: 28px;">
+    <details class="players-outer leagues-details">
+      <summary>
+        <span class="players-toggle leagues-toggle">▶</span>
+        <h2 class="players-summary-head leagues-summary-head">Players</h2>
+        <div class="section-head-line"></div>
+        <span id="players-summary-info" class="players-summary-info leagues-summary-info"></span>
+      </summary>
+      <div class="leagues-card" style="padding: 0;" id="players-container"></div>
+    </details>
+  </div>
+
 </main>
 
 <script src="/shared-auth.js"></script>
@@ -363,6 +412,8 @@ const POS_RANK = {
   K:7, DEF:8,
 };
 
+const DEF_POSITIONS = new Set(['DL','DE','DT','NT','LB','ILB','OLB','MLB','DB','CB','S','SS','FS','SAF','DEF']);
+
 // ── State ─────────────────────────────────────────────────────────────────────
 const S = {
   auth:            null,
@@ -377,6 +428,7 @@ const S = {
   matchupResults:  [],
   processedGames:  null, // cached after loadMatchups
   activeDetail:    null, // { gameKey, pid }
+  psActiveDetail:  null, // pid for players section
 };
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -386,13 +438,10 @@ async function init() {
     onLogin: async (u) => {
       S.auth = u;
       if (u.sleeper_username && !S.username) {
-        // No leagues loaded yet — kick off with the username saved in the profile.
         S.username = u.sleeper_username;
         document.getElementById('username-input').value = S.username;
-        await loadLeagues(); // loadLeagues → loadPrefs() fetches server prefs
+        await loadLeagues();
       } else if (S.leagues.length) {
-        // Leagues already loaded (typed username) — pull server prefs now that
-        // we're authenticated instead of overwriting them with in-memory ones.
         await loadPrefs();
         renderLeagueTable();
       }
@@ -426,24 +475,20 @@ async function loadLeagues() {
   statusEl.textContent = 'Loading…';
 
   try {
-    // Resolve user_id from username
     const userRes = await fetch(`${API}/sleeper/user/${S.username}`);
     if (!userRes.ok) throw new Error('User not found');
     const user = await userRes.json();
     if (!user.user_id) throw new Error('User not found');
     S.userId = user.user_id;
 
-    // Get current NFL state
     const stateRes = await fetch(`${API}/sleeper/state/nfl`);
     const nflState = await stateRes.json();
     S.season = nflState.season || '2025';
     S.week   = nflState.display_week || nflState.week || 1;
 
-    // Get leagues
     const lgRes = await fetch(`${API}/sleeper/user/${S.userId}/leagues/nfl/${S.season}`);
     S.leagues = (await lgRes.json()) || [];
 
-    // Load prefs
     await loadPrefs();
 
     statusEl.className  = 'setup-status ok';
@@ -473,7 +518,6 @@ async function loadPrefs() {
     try { stored = JSON.parse(localStorage.getItem('rfm_prefs') || '{}'); } catch {}
   }
 
-  // Merge with defaults for any league not yet in prefs
   S.prefs = {};
   for (const lg of S.leagues) {
     S.prefs[lg.league_id] = stored[lg.league_id] ?? { value: 0, contender: true };
@@ -571,11 +615,13 @@ async function loadMatchups() {
 
   const gamesSection = document.getElementById('games-section');
   gamesSection.style.display = '';
+  document.getElementById('players-section').style.display = '';
   const container = document.getElementById('games-container');
   container.innerHTML = '<div class="loading-state"><div class="spinner"></div>Fetching matchup data…</div>';
+  document.getElementById('players-container').innerHTML = '';
+  document.getElementById('players-summary-info').textContent = '';
 
   try {
-    // Fetch players + schedule + all league matchups in parallel
     const contenderLeagues = S.leagues.filter(lg => S.prefs[lg.league_id]?.contender);
 
     const [players, nflGames, ...matchupResults] = await Promise.all([
@@ -588,9 +634,11 @@ async function loadMatchups() {
     S.nflGames       = nflGames || [];
     S.matchupResults = matchupResults.filter(Boolean);
     S.activeDetail   = null;
+    S.psActiveDetail = null;
     S.processedGames = null;
 
     renderGameCards();
+    renderPlayersSection();
   } catch (e) {
     container.innerHTML = `<div class="err-state">Failed to load matchup data: ${escHtml(e.message)}</div>`;
   } finally {
@@ -620,14 +668,13 @@ async function fetchLeagueMatchup(league) {
 
 // ── Process Games ─────────────────────────────────────────────────────────────
 function processGames() {
-  // Build team → game index
   const teamToGame = {};
   for (const game of S.nflGames) {
     teamToGame[game.home] = game;
     teamToGame[game.away] = game;
   }
 
-  const gameData = {}; // { gameKey → { game, players: { pid → {...} } } }
+  const gameData = {};
 
   for (const { league, myMatchup, oppMatchup } of S.matchupResults) {
     const pref     = S.prefs[league.league_id] || { value: 0, contender: true };
@@ -657,11 +704,13 @@ function processGames() {
       if (side === 'my') {
         p.myCount++;
         p.myValue += pref.value;
-        p.myLeagues.push({ name: league.name, value: pref.value });
+        const pts = myMatchup.players_points?.[pid] ?? 0;
+        p.myLeagues.push({ name: league.name, value: pref.value, points: pts });
       } else {
         p.oppCount++;
         p.oppValue += pref.value;
-        p.oppLeagues.push({ name: league.name, value: pref.value });
+        const pts = oppMatchup?.players_points?.[pid] ?? 0;
+        p.oppLeagues.push({ name: league.name, value: pref.value, points: pts });
       }
     };
 
@@ -681,7 +730,6 @@ function processGames() {
     }
   }
 
-  // Sort by kickoff, return as array
   return Object.entries(gameData)
     .map(([key, data]) => ({ key, ...data }))
     .sort((a, b) => new Date(a.game.kickoff) - new Date(b.game.kickoff));
@@ -748,7 +796,8 @@ function renderGameCards() {
 function byPos(a, b) {
   const ra = POS_RANK[a.player.position?.toUpperCase()] ?? 99;
   const rb = POS_RANK[b.player.position?.toUpperCase()] ?? 99;
-  return ra - rb;
+  if (ra !== rb) return ra - rb;
+  return b.rootScore - a.rootScore; // higher root score first within same position
 }
 
 function playerRowHtml(p, side, gameKey) {
@@ -768,48 +817,27 @@ function playerRowHtml(p, side, gameKey) {
   `;
 }
 
-// ── Player Detail ─────────────────────────────────────────────────────────────
-function togglePlayerDetail(gameKey, pid) {
-  const detailEl = document.getElementById(`detail-${gameKey}`);
-  const rowEl    = document.getElementById(`pr-${gameKey}-${pid}`);
-
-  // Clicking the same player toggles off
-  if (S.activeDetail?.gameKey === gameKey && S.activeDetail?.pid === pid) {
-    detailEl.innerHTML = '';
-    rowEl.classList.remove('active');
-    S.activeDetail = null;
-    return;
-  }
-
-  // Deactivate previous active row in this game (if any)
-  if (S.activeDetail?.gameKey === gameKey && S.activeDetail?.pid) {
-    const prev = document.getElementById(`pr-${gameKey}-${S.activeDetail.pid}`);
-    if (prev) prev.classList.remove('active');
-  }
-
-  S.activeDetail = { gameKey, pid };
-  rowEl.classList.add('active');
-
-  // Find the player data from the cached processed results
-  const gd = (S.processedGames || []).find(g => g.key === gameKey);
-  if (!gd) return;
-  const p = gd.players[pid];
-  if (!p) return;
-
-  const total  = p.myValue + p.oppValue;
-  const color  = rootColor(p.rootScore);
-  const pct    = total > 0
+// ── Build Detail HTML (shared) ────────────────────────────────────────────────
+function buildDetailHtml(p, pid) {
+  const total = p.myValue + p.oppValue;
+  const color = rootColor(p.rootScore);
+  const pct   = total > 0
     ? `${p.rootScore}% of total value — ${scoreLabel(p.rootScore)}`
     : p.myCount > 0 ? 'On my side only' : 'On opponents\' side only';
 
-  const mySection = p.myLeagues.length
-    ? p.myLeagues.map(l => `<div class="detail-league"><span>${escHtml(l.name)}</span><span class="detail-league-val">$${l.value}</span></div>`).join('')
-    : '<div class="detail-none">None</div>';
-  const oppSection = p.oppLeagues.length
-    ? p.oppLeagues.map(l => `<div class="detail-league"><span>${escHtml(l.name)}</span><span class="detail-league-val">$${l.value}</span></div>`).join('')
-    : '<div class="detail-none">None</div>';
+  const leagueRow = l => `
+    <div class="detail-league">
+      <span>${escHtml(l.name)}</span>
+      <span class="detail-league-right">
+        <span class="detail-league-pts">${(l.points || 0).toFixed(1)} pts</span>
+        <span class="detail-league-val">$${l.value}</span>
+      </span>
+    </div>`;
 
-  detailEl.innerHTML = `
+  const mySection  = p.myLeagues.length  ? p.myLeagues.map(leagueRow).join('')  : '<div class="detail-none">None</div>';
+  const oppSection = p.oppLeagues.length ? p.oppLeagues.map(leagueRow).join('') : '<div class="detail-none">None</div>';
+
+  return `
     <div class="player-detail">
       <div class="detail-name">${escHtml(p.player.full_name || p.player.last_name || pid)}</div>
       <div class="detail-score-line">
@@ -830,6 +858,135 @@ function togglePlayerDetail(gameKey, pid) {
   `;
 }
 
+// ── Player Detail (game cards) ────────────────────────────────────────────────
+function togglePlayerDetail(gameKey, pid) {
+  const detailEl = document.getElementById(`detail-${gameKey}`);
+  const rowEl    = document.getElementById(`pr-${gameKey}-${pid}`);
+
+  if (S.activeDetail?.gameKey === gameKey && S.activeDetail?.pid === pid) {
+    detailEl.innerHTML = '';
+    rowEl.classList.remove('active');
+    S.activeDetail = null;
+    return;
+  }
+
+  if (S.activeDetail?.gameKey === gameKey && S.activeDetail?.pid) {
+    const prev = document.getElementById(`pr-${gameKey}-${S.activeDetail.pid}`);
+    if (prev) prev.classList.remove('active');
+  }
+
+  S.activeDetail = { gameKey, pid };
+  rowEl.classList.add('active');
+
+  const gd = (S.processedGames || []).find(g => g.key === gameKey);
+  if (!gd) return;
+  const p = gd.players[pid];
+  if (!p) return;
+
+  detailEl.innerHTML = buildDetailHtml(p, pid);
+}
+
+// ── Players Section ───────────────────────────────────────────────────────────
+function renderPlayersSection() {
+  const container = document.getElementById('players-container');
+  const infoEl    = document.getElementById('players-summary-info');
+  if (!container) return;
+
+  // Collect all unique players across all games
+  const allPlayers = [];
+  for (const gd of (S.processedGames || [])) {
+    for (const p of Object.values(gd.players)) {
+      allPlayers.push({ ...p, gameKey: gd.key });
+    }
+  }
+
+  if (!allPlayers.length) {
+    container.innerHTML = '<div class="game-col-empty" style="padding:14px 16px">No player data available.</div>';
+    if (infoEl) infoEl.textContent = '';
+    return;
+  }
+
+  const buckets = [
+    { id: 'qb',  label: 'QB',  test: pos => pos === 'QB' },
+    { id: 'rb',  label: 'RB',  test: pos => pos === 'RB' },
+    { id: 'wr',  label: 'WR',  test: pos => pos === 'WR' },
+    { id: 'te',  label: 'TE',  test: pos => pos === 'TE' },
+    { id: 'def', label: 'DEF', test: pos => DEF_POSITIONS.has(pos) },
+  ];
+
+  let totalShown = 0;
+  const html = buckets.map(bucket => {
+    const players = allPlayers
+      .filter(p => bucket.test((p.player.position || '').toUpperCase()))
+      .sort((a, b) => b.rootScore - a.rootScore);
+
+    if (!players.length) return '';
+    totalShown += players.length;
+
+    const rows = players.map(p => {
+      const pos      = (p.player.position || '').toUpperCase();
+      const posClass = `pos-${pos.toLowerCase()}`;
+      const color    = rootColor(p.rootScore);
+      const teamStr  = p.player.team ? ` · ${p.player.team}` : '';
+      return `
+        <div class="player-row ${posClass}" id="ps-pr-${p.pid}"
+             onclick="togglePlayerSectionDetail('${p.pid}', '${p.gameKey}')">
+          <span class="player-pos">${pos || '—'}</span>
+          <span class="player-name">${escHtml(p.player.full_name || p.player.last_name || p.pid)}<span class="player-count">${escHtml(teamStr)}</span></span>
+          <span class="root-chip" style="background:${color}">${p.rootScore}</span>
+        </div>
+        <div id="ps-detail-${p.pid}"></div>
+      `;
+    }).join('');
+
+    return `
+      <div class="pos-group-wrap">
+        <details class="pos-group" open>
+          <summary>
+            <span class="pos-group-toggle">▶</span>
+            <span class="pos-group-label">${bucket.label}</span>
+            <span class="pos-group-count">${players.length} player${players.length !== 1 ? 's' : ''}</span>
+          </summary>
+          <div class="pos-group-body">${rows}</div>
+        </details>
+      </div>
+    `;
+  }).join('');
+
+  container.innerHTML = html || '<div class="game-col-empty" style="padding:14px 16px">No players in tracked positions.</div>';
+  if (infoEl) infoEl.textContent = `${totalShown} player${totalShown !== 1 ? 's' : ''}`;
+}
+
+function togglePlayerSectionDetail(pid, gameKey) {
+  const detailEl = document.getElementById(`ps-detail-${pid}`);
+  const rowEl    = document.getElementById(`ps-pr-${pid}`);
+  if (!detailEl || !rowEl) return;
+
+  if (S.psActiveDetail === pid) {
+    detailEl.innerHTML = '';
+    rowEl.classList.remove('active');
+    S.psActiveDetail = null;
+    return;
+  }
+
+  if (S.psActiveDetail) {
+    const prevDetail = document.getElementById(`ps-detail-${S.psActiveDetail}`);
+    if (prevDetail) prevDetail.innerHTML = '';
+    const prevRow = document.getElementById(`ps-pr-${S.psActiveDetail}`);
+    if (prevRow) prevRow.classList.remove('active');
+  }
+
+  S.psActiveDetail = pid;
+  rowEl.classList.add('active');
+
+  const gd = (S.processedGames || []).find(g => g.key === gameKey);
+  if (!gd) return;
+  const p = gd.players[pid];
+  if (!p) return;
+
+  detailEl.innerHTML = buildDetailHtml(p, pid);
+}
+
 function scoreLabel(score) {
   if (score >= 85) return 'Root hard for them';
   if (score >= 65) return 'Root for them';
@@ -846,10 +1003,9 @@ function toggleGame(key) {
 
 // ── Color ─────────────────────────────────────────────────────────────────────
 function rootColor(score) {
-  // 0 → red (#8b1a1a), 50 → gold (#c9962a), 100 → green (#2d8b2d)
   const hue = score < 50
-    ? (score / 50) * 42            // 0°→42° (red→gold-ish)
-    : 42 + ((score - 50) / 50) * 78; // 42°→120° (gold→green)
+    ? (score / 50) * 42
+    : 42 + ((score - 50) / 50) * 78;
   return `hsl(${hue.toFixed(0)}, 68%, 35%)`;
 }
 
