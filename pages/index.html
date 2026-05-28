@@ -709,20 +709,48 @@ function isInactive(playerId, scoringSettings) {
 
 async function loadProjectionsAndSchedule(season, week) {
   const weekKey = `${season}_${week}`;
-  if (S._projWeekKey === weekKey && S.projections) return;
+  // Don't short-circuit if schedule data is missing — retry until we get it
+  if (S._projWeekKey === weekKey && S.projections && Object.keys(S.gameStartByTeam).length > 0) return;
+
+  const schedUrl = IS_LOCAL
+    ? `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?week=${week}&seasontype=2&dates=${season}`
+    : `/api/espn/games?week=${week}&season=${season}`;
 
   const [projResult, schedResult] = await Promise.allSettled([
     api(`/projections/nfl/regular/${season}/${week}`),
-    IS_LOCAL ? Promise.reject('local') : fetch(`/api/espn/scoreboard?week=${week}&season=${season}`).then(r => r.ok ? r.json() : {}),
+    fetch(schedUrl).then(r => r.ok ? r.json() : null),
   ]);
 
   S.projections     = projResult.status === 'fulfilled' ? projResult.value : {};
   S.gameStartByTeam = {};
 
-  if (schedResult.status === 'fulfilled') {
-    for (const [team, iso] of Object.entries(schedResult.value || {})) {
-      const dt = new Date(iso);
-      if (!isNaN(dt)) S.gameStartByTeam[team] = dt;
+  const schedData = schedResult.status === 'fulfilled' ? schedResult.value : null;
+  if (schedData) {
+    if (IS_LOCAL) {
+      // Direct ESPN response: events array → { team: isoString }
+      const ESPN_TO_SLEEPER = { WSH: 'WAS' };
+      for (const event of (schedData.events || [])) {
+        for (const comp of (event.competitions || [])) {
+          for (const c of (comp.competitors || [])) {
+            const raw = c.team?.abbreviation;
+            if (!raw) continue;
+            const abbr = ESPN_TO_SLEEPER[raw] || raw;
+            const dt = new Date(event.date);
+            if (!isNaN(dt)) S.gameStartByTeam[abbr] = dt;
+          }
+        }
+      }
+    } else {
+      // /api/espn/games response: [{ home, away, kickoff }]
+      for (const g of schedData) {
+        if (g.kickoff) {
+          const dt = new Date(g.kickoff);
+          if (!isNaN(dt)) {
+            if (g.home) S.gameStartByTeam[g.home] = dt;
+            if (g.away) S.gameStartByTeam[g.away] = dt;
+          }
+        }
+      }
     }
   }
 
@@ -1056,8 +1084,14 @@ function renderLineupCards() {
     </div>
   </div>`;
 
+  const schedWarn = !Object.keys(S.gameStartByTeam).length
+    ? `<div style="background:rgba(201,150,42,0.12);border:1px solid var(--gold);color:var(--gold-light);font-family:'Crimson Text',serif;font-style:italic;font-size:0.85rem;padding:8px 14px;border-radius:2px;margin-bottom:14px;">
+        Game schedule unavailable — game-time ordering cannot be checked
+       </div>`
+    : '';
+
   if (!S.lineupFixes.length) {
-    setC(buttonsHtml + '<div class="empty-state"><p>No active lineups found</p></div>');
+    setC(buttonsHtml + schedWarn + '<div class="empty-state"><p>No active lineups found</p></div>');
     return;
   }
 
@@ -1101,7 +1135,7 @@ function renderLineupCards() {
     </details>`;
   }).join('');
 
-  setC(buttonsHtml + `<div style="border:1px solid var(--brown-mid);border-radius:2px;overflow:hidden;background:var(--brown-dark);">${cardsHtml}</div>`);
+  setC(buttonsHtml + schedWarn + `<div style="border:1px solid var(--brown-mid);border-radius:2px;overflow:hidden;background:var(--brown-dark);">${cardsHtml}</div>`);
 }
 
 // ── 4. Draft Queue ────────────────────────────────────────────────────────────
