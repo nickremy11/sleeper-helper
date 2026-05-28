@@ -112,8 +112,7 @@ async function createSession(userId, env) {
   const id = randomHex(32);
   await env.DB.prepare('INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)')
     .bind(id, userId, Date.now() + SESSION_TTL_MS).run();
-  const cookie = `sh_session=${id}; HttpOnly; Secure; SameSite=Strict; Domain=.ffhistorian.com; Max-Age=${SESSION_TTL}; Path=/`;
-  return jsonRes({ ok: true }, 200, { 'Set-Cookie': cookie });
+  return `sh_session=${id}; HttpOnly; Secure; SameSite=Strict; Domain=.ffhistorian.com; Max-Age=${SESSION_TTL}; Path=/`;
 }
 
 // ── Route handlers ────────────────────────────────────────────────────────────
@@ -136,9 +135,11 @@ async function register(request, env) {
 
   const { hash, salt } = await hashPassword(String(password));
   const id = randomHex(16);
+  const normalizedEmail = String(email).toLowerCase();
   await env.DB.prepare('INSERT INTO users (id, email, password_hash, password_salt, created_at) VALUES (?, ?, ?, ?, ?)')
-    .bind(id, String(email).toLowerCase(), hash, salt, Date.now()).run();
-  return createSession(id, env);
+    .bind(id, normalizedEmail, hash, salt, Date.now()).run();
+  const cookie = await createSession(id, env);
+  return jsonRes({ ok: true, user: { email: normalizedEmail, name: null, sleeper_username: null } }, 200, { 'Set-Cookie': cookie });
 }
 
 async function login(request, env) {
@@ -152,7 +153,8 @@ async function login(request, env) {
   if (!user) return errRes('Invalid email or password');
   const ok = await verifyPassword(String(password), user.password_hash, user.password_salt);
   if (!ok) return errRes('Invalid email or password');
-  return createSession(user.id, env);
+  const cookie = await createSession(user.id, env);
+  return jsonRes({ ok: true, user: { email: user.email, name: user.name || null, sleeper_username: user.sleeper_username } }, 200, { 'Set-Cookie': cookie });
 }
 
 async function me(request, env) {
