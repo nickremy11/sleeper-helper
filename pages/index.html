@@ -334,7 +334,7 @@ const API_BASE    = IS_LOCAL ? 'https://api.sleeper.app/v1' : '/api/sleeper';
 const PLAYERS_URL = IS_LOCAL ? 'https://api.sleeper.app/v1/players/nfl' : '/api/players';
 const GQL_URL     = IS_LOCAL ? null : '/api/graphql';
 
-const S = { userId: null, leagues: [], leagueDetails: {}, players: {}, nflState: null, token: null, tab: 'trades', auth: null, projections: null, gameStartByTeam: {}, lineupFixes: [], _projWeekKey: null };
+const S = { userId: null, leagues: [], leagueDetails: {}, players: {}, nflState: null, token: null, tab: 'trades', auth: null };
 
 // ── Rostership state ──────────────────────────────────────────────────────────
 const RS = {
@@ -670,378 +670,26 @@ async function doPlayerSearch() {
 
 // ── 3. Lineup Check ───────────────────────────────────────────────────────────
 
-function posEligible(slot, playerPos) {
-  if (!slot || !playerPos) return false;
-  if (slot === playerPos)    return true;
-  if (slot === 'FLEX')       return ['RB','WR','TE'].includes(playerPos);
-  if (slot === 'SUPER_FLEX') return ['QB','RB','WR','TE'].includes(playerPos);
-  if (slot === 'REC_FLEX')   return ['WR','TE'].includes(playerPos);
-  if (slot === 'IDP_FLEX')   return ['DL','LB','DB'].includes(playerPos);
-  return false;
-}
-
-function getProj(playerId, scoringSettings) {
-  if (!playerId || playerId === '0') return 0;
-  const p = S.projections?.[playerId];
-  if (!p) return 0;
-  const rec = scoringSettings?.rec ?? 1;
-  if (rec === 0) return p.pts_std     ?? 0;
-  if (rec >= 1)  return p.pts_ppr     ?? 0;
-  return               p.pts_half_ppr ?? 0;
-}
-
-function isPlayerLocked(playerId) {
-  const p = S.players[playerId];
-  if (!p?.team) return false;
-  const kickoff = S.gameStartByTeam?.[p.team];
-  return kickoff ? kickoff <= Date.now() : false;
-}
-
-function isInactive(playerId, scoringSettings) {
-  if (!playerId || playerId === '0') return true;
-  const p = S.players[playerId];
-  if (!p) return false;
-  if (['O','IR','OUT','DNR','NA'].includes(p.injury_status)) return true;
-  // BYE proxy: healthy player with 0 projection when projections are loaded
-  if (!p.injury_status && S.projections && Object.keys(S.projections).length > 0 && getProj(playerId, scoringSettings) === 0) return true;
-  return false;
-}
-
-async function loadProjectionsAndSchedule(season, week) {
-  const weekKey = `${season}_${week}`;
-  // Don't short-circuit if schedule data is missing — retry until we get it
-  if (S._projWeekKey === weekKey && S.projections && Object.keys(S.gameStartByTeam).length > 0) return;
-
-  const schedUrl = IS_LOCAL
-    ? `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?week=${week}&seasontype=2&dates=${season}`
-    : `/api/espn/games?week=${week}&season=${season}`;
-
-  const [projResult, schedResult] = await Promise.allSettled([
-    api(`/projections/nfl/regular/${season}/${week}`),
-    fetch(schedUrl).then(r => r.ok ? r.json() : null),
-  ]);
-
-  S.projections     = projResult.status === 'fulfilled' ? projResult.value : {};
-  S.gameStartByTeam = {};
-
-  const schedData = schedResult.status === 'fulfilled' ? schedResult.value : null;
-  if (schedData) {
-    if (IS_LOCAL) {
-      // Direct ESPN response: events array → { team: isoString }
-      const ESPN_TO_SLEEPER = { WSH: 'WAS' };
-      for (const event of (schedData.events || [])) {
-        for (const comp of (event.competitions || [])) {
-          for (const c of (comp.competitors || [])) {
-            const raw = c.team?.abbreviation;
-            if (!raw) continue;
-            const abbr = ESPN_TO_SLEEPER[raw] || raw;
-            const dt = new Date(event.date);
-            if (!isNaN(dt)) S.gameStartByTeam[abbr] = dt;
-          }
-        }
-      }
-    } else {
-      // /api/espn/games response: [{ home, away, kickoff }]
-      for (const g of schedData) {
-        if (g.kickoff) {
-          const dt = new Date(g.kickoff);
-          if (!isNaN(dt)) {
-            if (g.home) S.gameStartByTeam[g.home] = dt;
-            if (g.away) S.gameStartByTeam[g.away] = dt;
-          }
-        }
-      }
-    }
-  }
-
-  S._projWeekKey = weekKey;
-}
-
-function optimizeLineup(pool, rosterPositions, currentStarters, scoringSettings) {
-  const RESTRICT_ORDER = ['K','QB','RB','WR','TE','DL','LB','DB','DEF','REC_FLEX','FLEX','SUPER_FLEX','IDP_FLEX'];
-
-  const lockedIdxs    = new Set();
-  const lockedPlayers = new Set();
-  currentStarters.forEach((pid, i) => {
-    if (pid && pid !== '0' && isPlayerLocked(pid)) {
-      lockedIdxs.add(i);
-      lockedPlayers.add(pid);
-    }
-  });
-
-  const unlocked = rosterPositions
-    .map((type, i) => ({ index: i, type }))
-    .filter(s => !lockedIdxs.has(s.index));
-  unlocked.sort((a, b) => RESTRICT_ORDER.indexOf(a.type) - RESTRICT_ORDER.indexOf(b.type));
-
-  const sorted = [...pool]
-    .filter(pid => !lockedPlayers.has(pid))
-    .sort((a, b) => getProj(b, scoringSettings) - getProj(a, scoringSettings));
-
-  const assigned = new Map();
-  const used     = new Set(lockedPlayers);
-
-  for (const slot of unlocked) {
-    const best = sorted.find(pid => !used.has(pid) && posEligible(slot.type, S.players[pid]?.position));
-    if (best) { assigned.set(slot.index, best); used.add(best); }
-  }
-
-  return rosterPositions.map((_, i) => {
-    if (lockedIdxs.has(i)) return currentStarters[i];
-    return assigned.get(i) || '0';
-  });
-}
-
-function applyGameTimeOrdering(optimalStarters, rosterPositions, currentStarters, scoringSettings) {
-  if (!Object.keys(S.gameStartByTeam).length) return optimalStarters;
-
-  const result      = [...optimalStarters];
-  const lockedIdxs  = new Set();
-  currentStarters.forEach((pid, i) => {
-    if (pid && pid !== '0' && isPlayerLocked(pid)) lockedIdxs.add(i);
-  });
-
-  const FLEX_SLOTS = new Set(['FLEX','SUPER_FLEX','REC_FLEX','IDP_FLEX']);
-
-  function kickoff(pid) {
-    const team = S.players[pid]?.team;
-    return (team && S.gameStartByTeam[team]) ? S.gameStartByTeam[team].getTime() : Infinity;
-  }
-
-  for (const pos of ['QB','RB','WR','TE','DL','LB','DB']) {
-    const occupied = result
-      .map((pid, i) => ({ pid, i, slotType: rosterPositions[i] }))
-      .filter(x => !lockedIdxs.has(x.i) && x.pid && x.pid !== '0' && S.players[x.pid]?.position === pos);
-
-    if (occupied.length <= 1) continue;
-
-    const pureItems = occupied.filter(x => x.slotType === pos);
-    const flexItems = occupied.filter(x => FLEX_SLOTS.has(x.slotType));
-    if (!pureItems.length || !flexItems.length) continue;
-
-    // Determine which players belong in flex: the N with the latest kickoff
-    const numFlex = flexItems.length;
-    const byKickoffDesc = [...occupied].sort((a, b) => {
-      const ta = kickoff(a.pid), tb = kickoff(b.pid);
-      if (ta !== tb) return tb - ta;
-      return getProj(b.pid, scoringSettings) - getProj(a.pid, scoringSettings);
-    });
-    const shouldBeFlex = new Set(byKickoffDesc.slice(0, numFlex).map(x => x.pid));
-
-    // Only swap players that are in the wrong category (pure↔flex boundary swaps only)
-    // This preserves WR1/WR2/WR3 ordering and only moves e.g. Jefferson→FLEX, Higgins→WR
-    const pureToFlex = pureItems.filter(x => shouldBeFlex.has(x.pid));
-    const flexToPure = flexItems.filter(x => !shouldBeFlex.has(x.pid));
-
-    for (let i = 0; i < Math.min(pureToFlex.length, flexToPure.length); i++) {
-      result[pureToFlex[i].i] = flexToPure[i].pid;
-      result[flexToPure[i].i] = pureToFlex[i].pid;
-    }
-  }
-
-  return result;
-}
-
-function buildInjuryFixStarters(currentStarters, rosterPositions, pool, scoringSettings) {
-  const result = [...currentStarters];
-  const used   = new Set(currentStarters.filter(pid => pid && pid !== '0'));
-
-  for (let i = 0; i < rosterPositions.length; i++) {
-    const pid = result[i];
-    if (!isInactive(pid, scoringSettings)) continue;
-    if (pid && pid !== '0' && isPlayerLocked(pid)) continue;
-
-    const replacement = pool
-      .filter(id =>
-        !used.has(id) &&
-        !isPlayerLocked(id) &&
-        !isInactive(id, scoringSettings) &&
-        posEligible(rosterPositions[i], S.players[id]?.position)
-      )
-      .sort((a, b) => getProj(b, scoringSettings) - getProj(a, scoringSettings))[0];
-
-    if (replacement) {
-      if (pid && pid !== '0') used.delete(pid);
-      result[i] = replacement;
-      used.add(replacement);
-    }
-  }
-  return result;
-}
-
-function getLineupStatus(currentStarters, optimalStarters, rosterPositions, scoringSettings) {
-  const lockedIdxs = new Set();
-  currentStarters.forEach((pid, i) => {
-    if (pid && pid !== '0' && isPlayerLocked(pid)) lockedIdxs.add(i);
-  });
-
-  for (let i = 0; i < rosterPositions.length; i++) {
-    if (lockedIdxs.has(i)) continue;
-    if (isInactive(currentStarters[i], scoringSettings)) return 'inactive';
-  }
-
-  const curSet = currentStarters.filter((_, i) => !lockedIdxs.has(i)).slice().sort().join(',');
-  const optSet = optimalStarters.filter((_, i) => !lockedIdxs.has(i)).slice().sort().join(',');
-  if (curSet !== optSet) return 'suboptimal';
-
-  // Same player set — compare per slot-type group; within-group ordering doesn't matter
-  // (e.g. WR1/WR2/WR3 can hold the same three WRs in any order)
-  const slotGroups = {};
-  for (let i = 0; i < rosterPositions.length; i++) {
-    if (lockedIdxs.has(i)) continue;
-    const t = rosterPositions[i];
-    if (!slotGroups[t]) slotGroups[t] = { cur: [], opt: [] };
-    slotGroups[t].cur.push(currentStarters[i] || '0');
-    slotGroups[t].opt.push(optimalStarters[i] || '0');
-  }
-  for (const grp of Object.values(slotGroups)) {
-    if (grp.cur.slice().sort().join(',') !== grp.opt.slice().sort().join(',')) return 'suboptimal';
-  }
-  return 'optimized';
-}
-
-function computeLineupDiffs(currentStarters, targetStarters, rosterPositions, scoringSettings) {
-  const lockedIdxs = new Set();
-  currentStarters.forEach((pid, i) => {
-    if (pid && pid !== '0' && isPlayerLocked(pid)) lockedIdxs.add(i);
-  });
-
-  // If a slot-type group has the same player set in both lineups (just reordered),
-  // skip all those slots — only cross-type moves are actionable changes.
-  const typeIdxs = {};
-  for (let i = 0; i < rosterPositions.length; i++) {
-    if (lockedIdxs.has(i)) continue;
-    const t = rosterPositions[i];
-    if (!typeIdxs[t]) typeIdxs[t] = [];
-    typeIdxs[t].push(i);
-  }
-  const skipIdxs = new Set();
-  for (const idxs of Object.values(typeIdxs)) {
-    if (idxs.length <= 1) continue;
-    const curSet = idxs.map(i => currentStarters[i] || '0').slice().sort().join(',');
-    const tgtSet = idxs.map(i => targetStarters[i] || '0').slice().sort().join(',');
-    if (curSet === tgtSet) idxs.forEach(i => skipIdxs.add(i));
-  }
-
-  const diffs = [];
-  for (let i = 0; i < rosterPositions.length; i++) {
-    if (skipIdxs.has(i)) continue;
-    const cur = currentStarters[i];
-    const opt = targetStarters[i];
-    if (cur === opt) continue;
-    if (cur && cur !== '0' && isPlayerLocked(cur)) continue;
-    const curName   = (cur && cur !== '0') ? (S.players[cur]?.full_name || 'Player ' + cur) : 'Empty';
-    const optName   = (opt && opt !== '0') ? (S.players[opt]?.full_name || 'Player ' + opt) : '—';
-    const curProj   = getProj(cur, scoringSettings);
-    const optProj   = getProj(opt, scoringSettings);
-    const fromInjury = (cur && cur !== '0') ? (S.players[cur]?.injury_status || null) : null;
-    diffs.push({ slot: rosterPositions[i], fromName: curName, toName: optName, fromProj: curProj, toProj: optProj, fromInjury });
-  }
-  return diffs;
-}
-
-async function applyLineupFix(leagueId, rosterId, newStarters) {
-  const query = `mutation roster_update_starters {
-    roster_update_starters(league_id: "${leagueId}", roster_id: ${rosterId}, starters: ${JSON.stringify(newStarters)}) {
-      roster_id
-      starters
-    }
-  }`;
-  const data = await gql('roster_update_starters', query);
-  if (!data?.roster_update_starters?.roster_id) {
-    throw new Error('Sleeper did not confirm the lineup change — try updating directly in the app');
-  }
-}
-
-async function applyLeagueFix(lgFixIdx, type, btn) {
-  const fix = S.lineupFixes?.[lgFixIdx];
-  if (!fix) return;
-  const starters = type === 'injuries' ? fix.injuryFixStarters : fix.optimalStarters;
-  if (!starters || starters.join(',') === fix.currentStarters.join(',')) return;
-  if (btn) { btn.disabled = true; btn.textContent = 'Fixing…'; }
-  try {
-    await applyLineupFix(fix.leagueId, fix.rosterId, starters);
-    fix.currentStarters = [...starters];
-    fix.status    = 'optimized';
-    fix.diffs     = [];
-    fix.injDiffs  = [];
-    // Patch only this card's DOM — no full re-render
-    const statusEl = document.getElementById(`lc-status-${lgFixIdx}`);
-    const bodyEl   = document.getElementById(`lc-body-${lgFixIdx}`);
-    if (statusEl) {
-      statusEl.style.color = 'var(--green-light)';
-      statusEl.innerHTML = `<span style="width:7px;height:7px;border-radius:50%;background:#4a7a2f;flex-shrink:0;display:inline-block;"></span> Optimized`;
-    }
-    if (bodyEl) {
-      bodyEl.innerHTML = `<div style="padding:12px 16px;font-family:'Crimson Text',serif;font-style:italic;color:var(--brown-light);font-size:0.9rem;">Lineup looks great ✓</div>`;
-    }
-  } catch(e) {
-    if (btn) { btn.disabled = false; btn.textContent = type === 'injuries' ? 'Fix Injuries' : 'Optimize'; }
-    const errEl = document.createElement('span');
-    errEl.style.cssText = 'color:var(--red);font-size:0.8rem;margin-left:8px;';
-    errEl.textContent = e.message;
-    btn?.insertAdjacentElement('afterend', errEl);
-  }
-}
-
-async function applyAllFixes(type) {
-  const hasToken = S.token || S.auth?.has_token;
-  if (!hasToken) return;
-  const btnOpt = document.getElementById('btn-optimize-all');
-  const btnInj = document.getElementById('btn-fix-injuries');
-  if (btnOpt) { btnOpt.disabled = true; btnOpt.textContent = 'Working…'; }
-  if (btnInj) { btnInj.disabled = true; btnInj.textContent = 'Working…'; }
-  for (const [idx, fix] of (S.lineupFixes || []).entries()) {
-    if (fix.status === 'optimized') continue;
-    const starters = type === 'injuries' ? fix.injuryFixStarters : fix.optimalStarters;
-    if (!starters || starters.join(',') === fix.currentStarters.join(',')) continue;
-    try {
-      await applyLineupFix(fix.leagueId, fix.rosterId, starters);
-      fix.currentStarters = [...starters];
-      fix.status   = 'optimized';
-      fix.diffs    = [];
-      fix.injDiffs = [];
-      const statusEl = document.getElementById(`lc-status-${idx}`);
-      const bodyEl   = document.getElementById(`lc-body-${idx}`);
-      if (statusEl) {
-        statusEl.style.color = 'var(--green-light)';
-        statusEl.innerHTML = `<span style="width:7px;height:7px;border-radius:50%;background:#4a7a2f;flex-shrink:0;display:inline-block;"></span> Optimized`;
-      }
-      if (bodyEl) {
-        bodyEl.innerHTML = `<div style="padding:12px 16px;font-family:'Crimson Text',serif;font-style:italic;color:var(--brown-light);font-size:0.9rem;">Lineup looks great ✓</div>`;
-      }
-    } catch(_) {}
-  }
-  if (btnOpt) { btnOpt.disabled = false; btnOpt.textContent = 'Optimize All'; }
-  if (btnInj) { btnInj.disabled = false; btnInj.textContent = 'Fix Injuries'; }
-}
-
 async function renderLineupCheck() {
-  const hasToken = S.token || S.auth?.has_token;
-  setC(loading('Scanning lineups'));
+  setC(loading('Loading lineups'));
   try {
     await loadPlayers();
-    const nflState  = await getNflState();
+    const nflState    = await getNflState();
     const isOffseason = nflState.season_type !== 'regular';
-    const w         = isOffseason ? 1 : (nflState.display_week || nflState.leg || 1);
-    const season    = nflState.season;
+    const w           = isOffseason ? 1 : (nflState.display_week || nflState.leg || 1);
 
-    await loadProjectionsAndSchedule(season, w);
-    S.lineupFixes = [];
+    const lineups = [];
 
     for (const lg of S.leagues) {
       try {
-        const detail = S.leagueDetails[lg.league_id];
+        const detail          = S.leagueDetails[lg.league_id];
         if (detail?.settings?.best_ball === 1) continue;
-        const scoring         = detail?.scoring_settings || {};
         const rosterPositions = (detail?.roster_positions || []).filter(p => p !== 'BN' && p !== 'IR' && p !== 'TAXI');
 
         const rosters = await api('/league/' + lg.league_id + '/rosters');
         const mine    = (rosters || []).find(r => r.owner_id === S.userId);
         if (!mine) continue;
 
-        // Prefer roster.starters — it reflects mutations immediately.
-        // Fall back to matchup.starters when roster length doesn't match (e.g. mid-season roster changes).
         let starters = mine.starters || [];
         if (starters.length !== rosterPositions.length) {
           try {
@@ -1051,95 +699,43 @@ async function renderLineupCheck() {
         }
         if (!starters.length || starters.length !== rosterPositions.length) continue;
 
-        const taxi    = new Set(mine.taxi    || []);
-        const reserve = new Set(mine.reserve || []);
-        const pool    = (mine.players || []).filter(id => !taxi.has(id) && !reserve.has(id));
-
-        const timingFixed     = applyGameTimeOrdering(starters, rosterPositions, starters, scoring);
-        const hasTiming       = timingFixed.some((pid, i) => pid !== starters[i]);
-        const optimalRaw      = optimizeLineup(pool, rosterPositions, starters, scoring);
-        const optimalStarters = hasTiming
-          ? timingFixed
-          : applyGameTimeOrdering(optimalRaw, rosterPositions, starters, scoring);
-        const injuryFix       = buildInjuryFixStarters(starters, rosterPositions, pool, scoring);
-        const status          = getLineupStatus(starters, optimalStarters, rosterPositions, scoring);
-        const diffs           = computeLineupDiffs(starters, optimalStarters, rosterPositions, scoring);
-        const injDiffs        = computeLineupDiffs(starters, injuryFix, rosterPositions, scoring);
-        const inactiveNames   = starters
-          .filter(pid => pid && pid !== '0' && isInactive(pid, scoring))
-          .map(pid => S.players[pid]?.full_name || pid);
-
-        S.lineupFixes.push({ leagueId: lg.league_id, leagueName: lg.name, rosterId: mine.roster_id, currentStarters: starters, optimalStarters, injuryFixStarters: injuryFix, status, diffs, injDiffs, inactiveNames });
+        lineups.push({ leagueName: lg.name, leagueId: lg.league_id, rosterId: mine.roster_id, starters, rosterPositions });
       } catch(_) {}
     }
 
-    renderLineupCards();
-  } catch(e) { setC(errHtml(e)); }
-}
-
-function renderLineupCards() {
-  const hasToken  = S.token || S.auth?.has_token;
-  const disAttr   = hasToken ? '' : 'disabled title="Auth token required"';
-  const buttonsHtml = `<div class="tab-header" style="margin-bottom:16px;">
-    <div class="section-head" style="margin-bottom:0;flex:1;"><h2>Lineup Check</h2><div class="section-head-line"></div></div>
-    <div style="display:flex;gap:8px;flex-shrink:0;">
-      <button class="setup-btn" id="btn-optimize-all" onclick="applyAllFixes('optimize')" ${disAttr}>Optimize All</button>
-      <button class="setup-btn" id="btn-fix-injuries" onclick="applyAllFixes('injuries')" ${disAttr}>Fix Injuries</button>
-    </div>
-  </div>`;
-
-  const schedWarn = !Object.keys(S.gameStartByTeam).length
-    ? `<div style="background:rgba(201,150,42,0.12);border:1px solid var(--gold);color:var(--gold-light);font-family:'Crimson Text',serif;font-style:italic;font-size:0.85rem;padding:8px 14px;border-radius:2px;margin-bottom:14px;">
-        Game schedule unavailable — game-time ordering cannot be checked
-       </div>`
-    : '';
-
-  if (!S.lineupFixes.length) {
-    setC(buttonsHtml + schedWarn + '<div class="empty-state"><p>No active lineups found</p></div>');
-    return;
-  }
-
-  const cardsHtml = S.lineupFixes.map((fix, idx) => {
-    const isGood    = fix.status === 'optimized';
-    const color     = isGood ? 'var(--green-light)' : 'var(--red)';
-    const dotBg     = isGood ? '#4a7a2f' : '#8b1a1a';
-    const statusTxt = isGood ? 'Optimized' : 'Not Optimized';
-
-    let body = '';
-    if (isGood) {
-      body = `<div style="padding:12px 16px;font-family:'Crimson Text',serif;font-style:italic;color:var(--brown-light);font-size:0.9rem;">Lineup looks great ✓</div>`;
-    } else {
-      const diffsToShow = fix.diffs.length ? fix.diffs : fix.injDiffs;
-      const diffHtml = diffsToShow.map(d => `<div class="diff-row">
-        <span class="diff-slot">${esc(d.slot)}</span>
-        <span style="color:var(--parchment);">${esc(d.fromName)}${d.fromInjury ? ' ' + injuryBadge(d.fromInjury) : ''}</span>
-        <span class="diff-proj">(${d.fromProj.toFixed(1)})</span>
-        <span class="diff-arrow">→</span>
-        <span style="color:var(--cream);">${esc(d.toName)}</span>
-        <span class="diff-proj">(${d.toProj.toFixed(1)})</span>
-      </div>`).join('');
-
-      const btns = hasToken ? `<div style="padding:10px 16px;display:flex;gap:8px;">
-        <button class="setup-btn" style="font-size:0.5rem;padding:0 14px;height:32px;" onclick="applyLeagueFix(${idx},'optimize',this)">Optimize</button>
-        ${fix.injDiffs.length ? `<button class="setup-btn" style="font-size:0.5rem;padding:0 14px;height:32px;" onclick="applyLeagueFix(${idx},'injuries',this)">Fix Injuries</button>` : ''}
-      </div>` : '';
-
-      body = diffHtml + btns;
+    if (!lineups.length) {
+      setC('<div class="empty-state"><p>No active lineups found</p></div>');
+      return;
     }
 
-    return `<details class="lineup-card" id="lc-${idx}" open>
-      <summary>
-        <span style="font-family:'Playfair Display',serif;font-weight:700;font-size:0.95rem;color:var(--cream);">${esc(fix.leagueName)}</span>
-        <span id="lc-status-${idx}" style="font-family:'Rye',serif;font-size:0.45rem;letter-spacing:0.12em;text-transform:uppercase;display:flex;align-items:center;gap:6px;white-space:nowrap;color:${color};">
-          <span style="width:7px;height:7px;border-radius:50%;background:${dotBg};flex-shrink:0;display:inline-block;"></span>
-          ${esc(statusTxt)}
-        </span>
-      </summary>
-      <div id="lc-body-${idx}">${body}</div>
-    </details>`;
-  }).join('');
+    const cardsHtml = lineups.map((fix, idx) => {
+      const slotRows = fix.starters.map((pid, i) => {
+        const slot   = fix.rosterPositions[i] || '?';
+        const player = S.players[pid];
+        const name   = player?.full_name || (pid && pid !== '0' ? 'Player ' + pid : 'Empty');
+        const inj    = injuryBadge(player?.injury_status);
+        return `<div class="diff-row">
+          <span class="diff-slot">${esc(slot)}</span>
+          <span style="color:var(--parchment);">${esc(name)}${inj ? ' ' + inj : ''}</span>
+        </div>`;
+      }).join('');
 
-  setC(buttonsHtml + schedWarn + `<div style="border:1px solid var(--brown-mid);border-radius:2px;overflow:hidden;background:var(--brown-dark);">${cardsHtml}</div>`);
+      return `<details class="lineup-card" id="lc-${idx}" open>
+        <summary>
+          <span style="font-family:'Playfair Display',serif;font-weight:700;font-size:0.95rem;color:var(--cream);">${esc(fix.leagueName)}</span>
+          <span style="font-family:'Rye',serif;font-size:0.45rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--brown-light);">Week ${w}</span>
+        </summary>
+        <div id="lc-body-${idx}">${slotRows}</div>
+      </details>`;
+    }).join('');
+
+    setC(`<div>
+      <div class="tab-header" style="margin-bottom:16px;">
+        <div class="section-head" style="margin-bottom:0;flex:1;"><h2>Lineup Check</h2><div class="section-head-line"></div></div>
+      </div>
+      <div style="border:1px solid var(--brown-mid);border-radius:2px;overflow:hidden;background:var(--brown-dark);">${cardsHtml}</div>
+    </div>`);
+  } catch(e) { setC(errHtml(e)); }
 }
 
 // ── 4. Draft Queue ────────────────────────────────────────────────────────────
