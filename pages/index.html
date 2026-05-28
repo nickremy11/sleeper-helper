@@ -279,6 +279,7 @@ footer a:hover { color: var(--gold); }
       <button class="tab-btn"        id="tab-drafts"  onclick="sw('drafts')">Draft Queue</button>
       <button class="tab-btn"        id="tab-tracker" onclick="sw('tracker')">Draft Tracker</button>
       <button class="tab-btn"        id="tab-rostership" onclick="sw('rostership')">Rostership</button>
+      <a class="tab-btn" href="/rootforme" style="text-decoration:none;display:inline-flex;align-items:center;">Root For Me</a>
     </div>
   </nav>
 
@@ -931,14 +932,9 @@ async function renderLineupCheck() {
   try {
     await loadPlayers();
     const nflState  = await getNflState();
-    const w         = nflState.display_week || nflState.leg || 1;
-    const season    = nflState.season;
     const isOffseason = nflState.season_type !== 'regular';
-
-    if (isOffseason) {
-      setC('<div class="empty-state"><p>Lineup optimization is available during the regular season — check back when games begin.</p></div>');
-      return;
-    }
+    const w         = isOffseason ? 1 : (nflState.display_week || nflState.leg || 1);
+    const season    = nflState.season;
 
     await loadProjectionsAndSchedule(season, w);
     S.lineupFixes = [];
