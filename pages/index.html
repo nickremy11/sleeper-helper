@@ -1055,8 +1055,12 @@ async function renderLineupCheck() {
         const reserve = new Set(mine.reserve || []);
         const pool    = (mine.players || []).filter(id => !taxi.has(id) && !reserve.has(id));
 
+        const timingFixed     = applyGameTimeOrdering(starters, rosterPositions, starters, scoring);
+        const hasTiming       = timingFixed.some((pid, i) => pid !== starters[i]);
         const optimalRaw      = optimizeLineup(pool, rosterPositions, starters, scoring);
-        const optimalStarters = applyGameTimeOrdering(optimalRaw, rosterPositions, starters, scoring);
+        const optimalStarters = hasTiming
+          ? timingFixed
+          : applyGameTimeOrdering(optimalRaw, rosterPositions, starters, scoring);
         const injuryFix       = buildInjuryFixStarters(starters, rosterPositions, pool, scoring);
         const status          = getLineupStatus(starters, optimalStarters, rosterPositions, scoring);
         const diffs           = computeLineupDiffs(starters, optimalStarters, rosterPositions, scoring);
