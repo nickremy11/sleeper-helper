@@ -685,9 +685,9 @@ function getProj(playerId, scoringSettings) {
   const p = S.projections?.[playerId];
   if (!p) return 0;
   const rec = scoringSettings?.rec ?? 1;
-  if (rec === 0) return p.pts_std       ?? 0;
-  if (rec >= 1)  return p.pts_ppr       ?? 0;
-  return               p.pts_half_ppr   ?? 0;
+  if (rec === 0) return p.pts_std     ?? 0;
+  if (rec >= 1)  return p.pts_ppr     ?? 0;
+  return               p.pts_half_ppr ?? 0;
 }
 
 function isPlayerLocked(playerId) {
@@ -781,36 +781,34 @@ function applyGameTimeOrdering(optimalStarters, rosterPositions, currentStarters
   }
 
   for (const pos of ['QB','RB','WR','TE','DL','LB','DB']) {
-    // Find unlocked result slots where the assigned player is of this position
     const occupied = result
       .map((pid, i) => ({ pid, i, slotType: rosterPositions[i] }))
       .filter(x => !lockedIdxs.has(x.i) && x.pid && x.pid !== '0' && S.players[x.pid]?.position === pos);
 
     if (occupied.length <= 1) continue;
 
-    const hasPureSlot = occupied.some(x => x.slotType === pos);
-    const hasFlexSlot = occupied.some(x => FLEX_SLOTS.has(x.slotType));
-    if (!hasPureSlot || !hasFlexSlot) continue;
+    const pureItems = occupied.filter(x => x.slotType === pos);
+    const flexItems = occupied.filter(x => FLEX_SLOTS.has(x.slotType));
+    if (!pureItems.length || !flexItems.length) continue;
 
-    // Sort players: earliest game → positional slot, latest → flex
-    const sortedPlayers = [...occupied].sort((a, b) => {
+    // Determine which players belong in flex: the N with the latest kickoff
+    const numFlex = flexItems.length;
+    const byKickoffDesc = [...occupied].sort((a, b) => {
       const ta = kickoff(a.pid), tb = kickoff(b.pid);
-      if (ta !== tb) return ta - tb;
-      // tie-break: higher proj goes to flex (later slot), so sort lower proj first
-      return getProj(a.pid, scoringSettings) - getProj(b.pid, scoringSettings);
+      if (ta !== tb) return tb - ta;
+      return getProj(b.pid, scoringSettings) - getProj(a.pid, scoringSettings);
     });
+    const shouldBeFlex = new Set(byKickoffDesc.slice(0, numFlex).map(x => x.pid));
 
-    // Sort slots: positional type first, then flex
-    const sortedSlotIdxs = occupied
-      .map(x => x.i)
-      .sort((a, b) => {
-        const aIsPure = rosterPositions[a] === pos;
-        const bIsPure = rosterPositions[b] === pos;
-        if (aIsPure !== bIsPure) return aIsPure ? -1 : 1;
-        return a - b;
-      });
+    // Only swap players that are in the wrong category (pure↔flex boundary swaps only)
+    // This preserves WR1/WR2/WR3 ordering and only moves e.g. Jefferson→FLEX, Higgins→WR
+    const pureToFlex = pureItems.filter(x => shouldBeFlex.has(x.pid));
+    const flexToPure = flexItems.filter(x => !shouldBeFlex.has(x.pid));
 
-    sortedPlayers.forEach((player, i) => { result[sortedSlotIdxs[i]] = player.pid; });
+    for (let i = 0; i < Math.min(pureToFlex.length, flexToPure.length); i++) {
+      result[pureToFlex[i].i] = flexToPure[i].pid;
+      result[flexToPure[i].i] = pureToFlex[i].pid;
+    }
   }
 
   return result;
@@ -904,11 +902,12 @@ function computeLineupDiffs(currentStarters, targetStarters, rosterPositions, sc
     const opt = targetStarters[i];
     if (cur === opt) continue;
     if (cur && cur !== '0' && isPlayerLocked(cur)) continue;
-    const curName = (cur && cur !== '0') ? (S.players[cur]?.full_name || 'Player ' + cur) : 'Empty';
-    const optName = (opt && opt !== '0') ? (S.players[opt]?.full_name || 'Player ' + opt) : '—';
-    const curProj = getProj(cur, scoringSettings);
-    const optProj = getProj(opt, scoringSettings);
-    diffs.push({ slot: rosterPositions[i], fromName: curName, toName: optName, fromProj: curProj, toProj: optProj });
+    const curName   = (cur && cur !== '0') ? (S.players[cur]?.full_name || 'Player ' + cur) : 'Empty';
+    const optName   = (opt && opt !== '0') ? (S.players[opt]?.full_name || 'Player ' + opt) : '—';
+    const curProj   = getProj(cur, scoringSettings);
+    const optProj   = getProj(opt, scoringSettings);
+    const fromInjury = (cur && cur !== '0') ? (S.players[cur]?.injury_status || null) : null;
+    diffs.push({ slot: rosterPositions[i], fromName: curName, toName: optName, fromProj: curProj, toProj: optProj, fromInjury });
   }
   return diffs;
 }
@@ -934,8 +933,20 @@ async function applyLeagueFix(lgFixIdx, type, btn) {
   if (btn) { btn.disabled = true; btn.textContent = 'Fixing…'; }
   try {
     await applyLineupFix(fix.leagueId, fix.rosterId, starters);
-    S._projWeekKey = null; // force refresh
-    await renderLineupCheck();
+    fix.currentStarters = [...starters];
+    fix.status    = 'optimized';
+    fix.diffs     = [];
+    fix.injDiffs  = [];
+    // Patch only this card's DOM — no full re-render
+    const statusEl = document.getElementById(`lc-status-${lgFixIdx}`);
+    const bodyEl   = document.getElementById(`lc-body-${lgFixIdx}`);
+    if (statusEl) {
+      statusEl.style.color = 'var(--green-light)';
+      statusEl.innerHTML = `<span style="width:7px;height:7px;border-radius:50%;background:#4a7a2f;flex-shrink:0;display:inline-block;"></span> Optimized`;
+    }
+    if (bodyEl) {
+      bodyEl.innerHTML = `<div style="padding:12px 16px;font-family:'Crimson Text',serif;font-style:italic;color:var(--brown-light);font-size:0.9rem;">Lineup looks great ✓</div>`;
+    }
   } catch(e) {
     if (btn) { btn.disabled = false; btn.textContent = type === 'injuries' ? 'Fix Injuries' : 'Optimize'; }
     const errEl = document.createElement('span');
@@ -952,14 +963,29 @@ async function applyAllFixes(type) {
   const btnInj = document.getElementById('btn-fix-injuries');
   if (btnOpt) { btnOpt.disabled = true; btnOpt.textContent = 'Working…'; }
   if (btnInj) { btnInj.disabled = true; btnInj.textContent = 'Working…'; }
-  for (const fix of (S.lineupFixes || [])) {
+  for (const [idx, fix] of (S.lineupFixes || []).entries()) {
     if (fix.status === 'optimized') continue;
     const starters = type === 'injuries' ? fix.injuryFixStarters : fix.optimalStarters;
     if (!starters || starters.join(',') === fix.currentStarters.join(',')) continue;
-    try { await applyLineupFix(fix.leagueId, fix.rosterId, starters); } catch(_) {}
+    try {
+      await applyLineupFix(fix.leagueId, fix.rosterId, starters);
+      fix.currentStarters = [...starters];
+      fix.status   = 'optimized';
+      fix.diffs    = [];
+      fix.injDiffs = [];
+      const statusEl = document.getElementById(`lc-status-${idx}`);
+      const bodyEl   = document.getElementById(`lc-body-${idx}`);
+      if (statusEl) {
+        statusEl.style.color = 'var(--green-light)';
+        statusEl.innerHTML = `<span style="width:7px;height:7px;border-radius:50%;background:#4a7a2f;flex-shrink:0;display:inline-block;"></span> Optimized`;
+      }
+      if (bodyEl) {
+        bodyEl.innerHTML = `<div style="padding:12px 16px;font-family:'Crimson Text',serif;font-style:italic;color:var(--brown-light);font-size:0.9rem;">Lineup looks great ✓</div>`;
+      }
+    } catch(_) {}
   }
-  S._projWeekKey = null;
-  await renderLineupCheck();
+  if (btnOpt) { btnOpt.disabled = false; btnOpt.textContent = 'Optimize All'; }
+  if (btnInj) { btnInj.disabled = false; btnInj.textContent = 'Fix Injuries'; }
 }
 
 async function renderLineupCheck() {
@@ -1007,67 +1033,75 @@ async function renderLineupCheck() {
         const status          = getLineupStatus(starters, optimalStarters, rosterPositions, scoring);
         const diffs           = computeLineupDiffs(starters, optimalStarters, rosterPositions, scoring);
         const injDiffs        = computeLineupDiffs(starters, injuryFix, rosterPositions, scoring);
+        const inactiveNames   = starters
+          .filter(pid => pid && pid !== '0' && isInactive(pid, scoring))
+          .map(pid => S.players[pid]?.full_name || pid);
 
-        S.lineupFixes.push({ leagueId: lg.league_id, leagueName: lg.name, rosterId: mine.roster_id, currentStarters: starters, optimalStarters, injuryFixStarters: injuryFix, status, diffs, injDiffs });
+        S.lineupFixes.push({ leagueId: lg.league_id, leagueName: lg.name, rosterId: mine.roster_id, currentStarters: starters, optimalStarters, injuryFixStarters: injuryFix, status, diffs, injDiffs, inactiveNames });
       } catch(_) {}
     }
 
-    const disAttr = hasToken ? '' : 'disabled title="Auth token required"';
-    const buttonsHtml = `<div class="tab-header" style="margin-bottom:16px;">
-      <div class="section-head" style="margin-bottom:0;flex:1;"><h2>Lineup Check</h2><div class="section-head-line"></div></div>
-      <div style="display:flex;gap:8px;flex-shrink:0;">
-        <button class="setup-btn" id="btn-optimize-all" onclick="applyAllFixes('optimize')" ${disAttr}>Optimize All</button>
-        <button class="setup-btn" id="btn-fix-injuries" onclick="applyAllFixes('injuries')" ${disAttr}>Fix Injuries</button>
-      </div>
-    </div>`;
+    renderLineupCards();
+  } catch(e) { setC(errHtml(e)); }
+}
 
-    if (!S.lineupFixes.length) {
-      setC(buttonsHtml + '<div class="empty-state"><p>No active lineups found</p></div>');
-      return;
+function renderLineupCards() {
+  const hasToken  = S.token || S.auth?.has_token;
+  const disAttr   = hasToken ? '' : 'disabled title="Auth token required"';
+  const buttonsHtml = `<div class="tab-header" style="margin-bottom:16px;">
+    <div class="section-head" style="margin-bottom:0;flex:1;"><h2>Lineup Check</h2><div class="section-head-line"></div></div>
+    <div style="display:flex;gap:8px;flex-shrink:0;">
+      <button class="setup-btn" id="btn-optimize-all" onclick="applyAllFixes('optimize')" ${disAttr}>Optimize All</button>
+      <button class="setup-btn" id="btn-fix-injuries" onclick="applyAllFixes('injuries')" ${disAttr}>Fix Injuries</button>
+    </div>
+  </div>`;
+
+  if (!S.lineupFixes.length) {
+    setC(buttonsHtml + '<div class="empty-state"><p>No active lineups found</p></div>');
+    return;
+  }
+
+  const cardsHtml = S.lineupFixes.map((fix, idx) => {
+    const isGood    = fix.status === 'optimized';
+    const color     = isGood ? 'var(--green-light)' : 'var(--red)';
+    const dotBg     = isGood ? '#4a7a2f' : '#8b1a1a';
+    const statusTxt = isGood ? 'Optimized' : 'Not Optimized';
+
+    let body = '';
+    if (isGood) {
+      body = `<div style="padding:12px 16px;font-family:'Crimson Text',serif;font-style:italic;color:var(--brown-light);font-size:0.9rem;">Lineup looks great ✓</div>`;
+    } else {
+      const diffsToShow = fix.diffs.length ? fix.diffs : fix.injDiffs;
+      const diffHtml = diffsToShow.map(d => `<div class="diff-row">
+        <span class="diff-slot">${esc(d.slot)}</span>
+        <span style="color:var(--parchment);">${esc(d.fromName)}${d.fromInjury ? ' ' + injuryBadge(d.fromInjury) : ''}</span>
+        <span class="diff-proj">(${d.fromProj.toFixed(1)})</span>
+        <span class="diff-arrow">→</span>
+        <span style="color:var(--cream);">${esc(d.toName)}</span>
+        <span class="diff-proj">(${d.toProj.toFixed(1)})</span>
+      </div>`).join('');
+
+      const btns = hasToken ? `<div style="padding:10px 16px;display:flex;gap:8px;">
+        <button class="setup-btn" style="font-size:0.5rem;padding:0 14px;height:32px;" onclick="applyLeagueFix(${idx},'optimize',this)">Optimize</button>
+        ${fix.injDiffs.length ? `<button class="setup-btn" style="font-size:0.5rem;padding:0 14px;height:32px;" onclick="applyLeagueFix(${idx},'injuries',this)">Fix Injuries</button>` : ''}
+      </div>` : '';
+
+      body = diffHtml + btns;
     }
 
-    const cardsHtml = S.lineupFixes.map((fix, idx) => {
-      const isGood    = fix.status === 'optimized';
-      const color     = isGood ? 'var(--green-light)' : 'var(--red)';
-      const dotBg     = isGood ? '#4a7a2f' : '#8b1a1a';
-      const statusTxt = isGood ? 'Optimized' : fix.status === 'inactive' ? 'Not Optimized — Inactive Player' : 'Not Optimized';
+    return `<details class="lineup-card" id="lc-${idx}" open>
+      <summary>
+        <span style="font-family:'Playfair Display',serif;font-weight:700;font-size:0.95rem;color:var(--cream);">${esc(fix.leagueName)}</span>
+        <span id="lc-status-${idx}" style="font-family:'Rye',serif;font-size:0.45rem;letter-spacing:0.12em;text-transform:uppercase;display:flex;align-items:center;gap:6px;white-space:nowrap;color:${color};">
+          <span style="width:7px;height:7px;border-radius:50%;background:${dotBg};flex-shrink:0;display:inline-block;"></span>
+          ${esc(statusTxt)}
+        </span>
+      </summary>
+      <div id="lc-body-${idx}">${body}</div>
+    </details>`;
+  }).join('');
 
-      let body = '';
-      if (isGood) {
-        body = `<div style="padding:12px 16px;font-family:'Crimson Text',serif;font-style:italic;color:var(--brown-light);font-size:0.9rem;">Lineup looks great ✓</div>`;
-      } else {
-        const diffsToShow = fix.diffs.length ? fix.diffs : fix.injDiffs;
-        const diffHtml = diffsToShow.map(d => `<div class="diff-row">
-          <span class="diff-slot">${esc(d.slot)}</span>
-          <span style="color:var(--parchment);">${esc(d.fromName)}</span>
-          <span class="diff-proj">(${d.fromProj.toFixed(1)})</span>
-          <span class="diff-arrow">→</span>
-          <span style="color:var(--cream);">${esc(d.toName)}</span>
-          <span class="diff-proj">(${d.toProj.toFixed(1)})</span>
-        </div>`).join('');
-
-        const btns = hasToken ? `<div style="padding:10px 16px;display:flex;gap:8px;">
-          <button class="setup-btn" style="font-size:0.5rem;padding:0 14px;height:32px;" onclick="applyLeagueFix(${idx},'optimize',this)">Optimize</button>
-          ${fix.injDiffs.length ? `<button class="setup-btn" style="font-size:0.5rem;padding:0 14px;height:32px;" onclick="applyLeagueFix(${idx},'injuries',this)">Fix Injuries</button>` : ''}
-        </div>` : '';
-
-        body = diffHtml + btns;
-      }
-
-      return `<details class="lineup-card">
-        <summary>
-          <span style="font-family:'Playfair Display',serif;font-weight:700;font-size:0.95rem;color:var(--cream);">${esc(fix.leagueName)}</span>
-          <span style="font-family:'Rye',serif;font-size:0.45rem;letter-spacing:0.12em;text-transform:uppercase;display:flex;align-items:center;gap:6px;white-space:nowrap;color:${color};">
-            <span style="width:7px;height:7px;border-radius:50%;background:${dotBg};flex-shrink:0;display:inline-block;"></span>
-            ${esc(statusTxt)}
-          </span>
-        </summary>
-        <div>${body}</div>
-      </details>`;
-    }).join('');
-
-    setC(buttonsHtml + `<div style="border:1px solid var(--brown-mid);border-radius:2px;overflow:hidden;background:var(--brown-dark);">${cardsHtml}</div>`);
-  } catch(e) { setC(errHtml(e)); }
+  setC(buttonsHtml + `<div style="border:1px solid var(--brown-mid);border-radius:2px;overflow:hidden;background:var(--brown-dark);">${cardsHtml}</div>`);
 }
 
 // ── 4. Draft Queue ────────────────────────────────────────────────────────────
