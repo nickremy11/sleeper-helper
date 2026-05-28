@@ -920,7 +920,10 @@ async function applyLineupFix(leagueId, rosterId, newStarters) {
       starters
     }
   }`;
-  await gql('roster_update_starters', query);
+  const data = await gql('roster_update_starters', query);
+  if (!data?.roster_update_starters?.roster_id) {
+    throw new Error('Sleeper did not confirm the lineup change — try updating directly in the app');
+  }
 }
 
 async function applyLeagueFix(lgFixIdx, type, btn) {
@@ -983,11 +986,15 @@ async function renderLineupCheck() {
         const mine    = (rosters || []).find(r => r.owner_id === S.userId);
         if (!mine) continue;
 
-        let starters = [];
-        try {
-          const matchups = await api('/league/' + lg.league_id + '/matchups/' + w);
-          starters = matchups?.find(m => m.roster_id === mine.roster_id)?.starters || mine.starters || [];
-        } catch(_) { starters = mine.starters || []; }
+        // Prefer roster.starters — it reflects mutations immediately.
+        // Fall back to matchup.starters when roster length doesn't match (e.g. mid-season roster changes).
+        let starters = mine.starters || [];
+        if (starters.length !== rosterPositions.length) {
+          try {
+            const matchups = await api('/league/' + lg.league_id + '/matchups/' + w);
+            starters = matchups?.find(m => m.roster_id === mine.roster_id)?.starters || starters;
+          } catch(_) {}
+        }
         if (!starters.length || starters.length !== rosterPositions.length) continue;
 
         const taxi    = new Set(mine.taxi    || []);
