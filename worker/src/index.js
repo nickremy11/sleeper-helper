@@ -62,13 +62,13 @@ export default {
     }
 
     if (url.pathname.startsWith('/api/auth/')) {
-      const authResp = await handleAuth(request, env, url);
-      const cors     = getCors(request);
-      const h        = new Headers(authResp.headers);
-      for (const [k, v] of Object.entries(cors)) h.set(k, v);
+      const authResp  = await handleAuth(request, env, url);
+      const cors      = getCors(request);
       const setCookie = authResp.headers.get('Set-Cookie');
-      if (setCookie) h.set('Set-Cookie', setCookie);
-      return new Response(authResp.body, { status: authResp.status, headers: h });
+      const body      = await authResp.text();
+      const headers   = { ...cors, 'Content-Type': 'application/json;charset=UTF-8' };
+      if (setCookie) headers['Set-Cookie'] = setCookie;
+      return new Response(body, { status: authResp.status, headers });
     }
 
     if (url.pathname === '/api/players' && request.method === 'GET') {
