@@ -66,6 +66,8 @@ export default {
       const cors     = getCors(request);
       const h        = new Headers(authResp.headers);
       for (const [k, v] of Object.entries(cors)) h.set(k, v);
+      const setCookie = authResp.headers.get('Set-Cookie');
+      if (setCookie) h.set('Set-Cookie', setCookie);
       return new Response(authResp.body, { status: authResp.status, headers: h });
     }
 
