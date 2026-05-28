@@ -858,15 +858,48 @@ function getLineupStatus(currentStarters, optimalStarters, rosterPositions, scor
   const optSet = optimalStarters.filter((_, i) => !lockedIdxs.has(i)).slice().sort().join(',');
   if (curSet !== optSet) return 'suboptimal';
 
-  // Same set of players — check ordering (only matters if schedule available)
-  if (currentStarters.join(',') !== optimalStarters.join(',')) return 'suboptimal';
-
+  // Same player set — compare per slot-type group; within-group ordering doesn't matter
+  // (e.g. WR1/WR2/WR3 can hold the same three WRs in any order)
+  const slotGroups = {};
+  for (let i = 0; i < rosterPositions.length; i++) {
+    if (lockedIdxs.has(i)) continue;
+    const t = rosterPositions[i];
+    if (!slotGroups[t]) slotGroups[t] = { cur: [], opt: [] };
+    slotGroups[t].cur.push(currentStarters[i] || '0');
+    slotGroups[t].opt.push(optimalStarters[i] || '0');
+  }
+  for (const grp of Object.values(slotGroups)) {
+    if (grp.cur.slice().sort().join(',') !== grp.opt.slice().sort().join(',')) return 'suboptimal';
+  }
   return 'optimized';
 }
 
 function computeLineupDiffs(currentStarters, targetStarters, rosterPositions, scoringSettings) {
+  const lockedIdxs = new Set();
+  currentStarters.forEach((pid, i) => {
+    if (pid && pid !== '0' && isPlayerLocked(pid)) lockedIdxs.add(i);
+  });
+
+  // If a slot-type group has the same player set in both lineups (just reordered),
+  // skip all those slots — only cross-type moves are actionable changes.
+  const typeIdxs = {};
+  for (let i = 0; i < rosterPositions.length; i++) {
+    if (lockedIdxs.has(i)) continue;
+    const t = rosterPositions[i];
+    if (!typeIdxs[t]) typeIdxs[t] = [];
+    typeIdxs[t].push(i);
+  }
+  const skipIdxs = new Set();
+  for (const idxs of Object.values(typeIdxs)) {
+    if (idxs.length <= 1) continue;
+    const curSet = idxs.map(i => currentStarters[i] || '0').slice().sort().join(',');
+    const tgtSet = idxs.map(i => targetStarters[i] || '0').slice().sort().join(',');
+    if (curSet === tgtSet) idxs.forEach(i => skipIdxs.add(i));
+  }
+
   const diffs = [];
   for (let i = 0; i < rosterPositions.length; i++) {
+    if (skipIdxs.has(i)) continue;
     const cur = currentStarters[i];
     const opt = targetStarters[i];
     if (cur === opt) continue;
