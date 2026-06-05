@@ -74,3 +74,12 @@ CREATE TABLE IF NOT EXISTS named_ranking_players (
 );
 
 CREATE INDEX IF NOT EXISTS idx_named_players_set ON named_ranking_players(set_id);
+
+CREATE TABLE IF NOT EXISTS named_ranking_set_shares (
+  set_id              INTEGER NOT NULL,
+  shared_with_user_id TEXT    NOT NULL,
+  created_at          INTEGER NOT NULL,
+  PRIMARY KEY (set_id, shared_with_user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_shares_user ON named_ranking_set_shares(shared_with_user_id);
