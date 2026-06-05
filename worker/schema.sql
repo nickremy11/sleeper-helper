@@ -83,3 +83,13 @@ CREATE TABLE IF NOT EXISTS named_ranking_set_shares (
 );
 
 CREATE INDEX IF NOT EXISTS idx_shares_user ON named_ranking_set_shares(shared_with_user_id);
+
+-- Sharing the primary (My Rankings) tier board
+CREATE TABLE IF NOT EXISTS user_rankings_shares (
+  owner_user_id       TEXT NOT NULL,
+  shared_with_user_id TEXT NOT NULL,
+  created_at          INTEGER NOT NULL,
+  PRIMARY KEY (owner_user_id, shared_with_user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ur_shares_viewer ON user_rankings_shares(shared_with_user_id);
