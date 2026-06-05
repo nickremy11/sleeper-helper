@@ -51,3 +51,26 @@ CREATE TABLE IF NOT EXISTS user_tier_picks (
 );
 
 CREATE INDEX IF NOT EXISTS idx_picks_user ON user_tier_picks(user_id);
+
+-- ── Named Ranking Sets (imported/saved named sets) ────────────────────────────
+
+CREATE TABLE IF NOT EXISTS named_ranking_sets (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  owner_user_id TEXT    NOT NULL,
+  name          TEXT    NOT NULL,
+  created_at    INTEGER NOT NULL,
+  updated_at    INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_named_sets_user ON named_ranking_sets(owner_user_id);
+
+CREATE TABLE IF NOT EXISTS named_ranking_players (
+  set_id      INTEGER NOT NULL,
+  player_name TEXT    NOT NULL,
+  team        TEXT    DEFAULT '',
+  position    TEXT    NOT NULL,
+  tier        INTEGER NOT NULL,
+  PRIMARY KEY (set_id, player_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_named_players_set ON named_ranking_players(set_id);
