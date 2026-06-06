@@ -279,6 +279,7 @@ footer a:hover { color: var(--gold); }
       <button class="tab-btn"        id="tab-drafts"  onclick="sw('drafts')">Draft Queue</button>
       <button class="tab-btn"        id="tab-tracker" onclick="sw('tracker')">Draft Tracker</button>
       <button class="tab-btn"        id="tab-rostership" onclick="sw('rostership')">Rostership</button>
+      <button class="tab-btn"        id="tab-partners"   onclick="sw('partners')">Trade Partners</button>
       <a class="tab-btn" href="/rootforme" style="text-decoration:none;display:inline-flex;align-items:center;">Root For Me</a>
     </div>
   </nav>
@@ -335,6 +336,7 @@ const PLAYERS_URL = IS_LOCAL ? 'https://api.sleeper.app/v1/players/nfl' : '/api/
 const GQL_URL     = IS_LOCAL ? null : '/api/graphql';
 
 const S = { userId: null, leagues: [], leagueDetails: {}, players: {}, nflState: null, token: null, tab: 'trades', auth: null };
+const TP = { user1Id: null, user2Id: null, user1Leagues: [], user2Leagues: [], allLeagues: [] };
 
 // ── Rostership state ──────────────────────────────────────────────────────────
 const RS = {
@@ -474,8 +476,8 @@ function sw(tab) {
   render(tab);
 }
 function render(tab) {
-  if (!S.userId) { setC('<div class="empty-state"><p>Enter your username above to get started</p></div>'); return; }
-  ({ trades: renderTrades, player: renderPlayerSearch, lineups: renderLineupCheck, drafts: renderDraftQueue, tracker: renderDraftTracker, rostership: renderRostership })[tab]?.();
+  if (!S.userId && tab !== 'partners') { setC('<div class="empty-state"><p>Enter your username above to get started</p></div>'); return; }
+  ({ trades: renderTrades, player: renderPlayerSearch, lineups: renderLineupCheck, drafts: renderDraftQueue, tracker: renderDraftTracker, rostership: renderRostership, partners: renderTradePartners })[tab]?.();
 }
 function setC(html) { document.getElementById('content').innerHTML = html; }
 
@@ -1744,6 +1746,128 @@ function rsSort(col) {
 }
 
 document.getElementById('token-input').addEventListener('keydown', e => { if (e.key==='Enter') saveToken(); });
+
+// ── 7. Trade Partners ─────────────────────────────────────────────────────────
+
+function renderTradePartners() {
+  const u1IsFixed = !!S.auth?.sleeper_username;
+  const user1Field = u1IsFixed
+    ? `<span class="badge badge-green" style="font-family:'Crimson Text',serif;font-size:1rem;padding:8px 14px;">${esc(S.auth.sleeper_username)}</span>`
+    : `<input id="tp-u1" class="setup-input" placeholder="User 1 username…" style="max-width:220px;" onkeydown="if(event.key==='Enter')doTradePartners()" />`;
+  setC(`<div>
+    <div class="section-head"><h2>Trade Partners</h2><div class="section-head-line"></div></div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px;">
+      ${user1Field}
+      <span style="color:var(--brown-light);font-family:'Rye',serif;font-size:0.6rem;">vs</span>
+      <input id="tp-u2" class="setup-input" placeholder="User 2 username…" style="max-width:220px;"
+        onkeydown="if(event.key==='Enter')doTradePartners()" />
+      <button class="setup-btn" onclick="doTradePartners()">Find</button>
+    </div>
+    <div id="tp-results"></div>
+  </div>`);
+}
+
+async function doTradePartners() {
+  const u1 = S.auth?.sleeper_username || document.getElementById('tp-u1')?.value.trim();
+  const u2 = document.getElementById('tp-u2').value.trim();
+  const r  = document.getElementById('tp-results');
+  if (!u1 || !u2) { r.innerHTML = errHtml(new Error('Enter both usernames')); return; }
+  r.innerHTML = loading('Looking up users…');
+  try {
+    const nflState = await getNflState();
+    const season = nflState.league_create_season || nflState.season;
+    const [usr1, usr2] = await Promise.all([api('/user/' + u1), api('/user/' + u2)]);
+    if (!usr1?.user_id) throw new Error('User "' + u1 + '" not found');
+    if (!usr2?.user_id) throw new Error('User "' + u2 + '" not found');
+    TP.user1Id = usr1.user_id;
+    TP.user2Id = usr2.user_id;
+
+    const [lgs1, lgs2] = await Promise.all([
+      api('/user/' + TP.user1Id + '/leagues/nfl/' + season),
+      api('/user/' + TP.user2Id + '/leagues/nfl/' + season),
+    ]);
+    TP.user1Leagues = lgs1 || [];
+    TP.user2Leagues = lgs2 || [];
+
+    const set2 = new Set((lgs2 || []).map(l => l.league_id));
+    const common = (lgs1 || []).filter(l => set2.has(l.league_id));
+
+    const allMap = {};
+    [...TP.user1Leagues, ...TP.user2Leagues].forEach(l => { allMap[l.league_id] = l; });
+    TP.allLeagues = Object.values(allMap);
+
+    const commonHtml = common.length
+      ? common.map(l => `<div class="data-row">
+          <a href="https://sleeper.com/leagues/${esc(l.league_id)}" target="_blank" class="row-link">${esc(l.name)}</a>
+          <span class="card-meta">${l.total_rosters} teams</span>
+        </div>`).join('')
+      : '<div class="empty-state" style="padding:12px;"><p>No leagues in common</p></div>';
+
+    const u1Label = esc(usr1.display_name || u1);
+    const u2Label = esc(usr2.display_name || u2);
+    r.innerHTML = `
+      <div class="section-head" style="margin-bottom:12px;">
+        <h2>Common Leagues (${common.length})</h2><div class="section-head-line"></div>
+      </div>
+      <div style="margin-bottom:24px;">${commonHtml}</div>
+      <div class="section-head" style="margin-bottom:12px;">
+        <h2>Player Search</h2><div class="section-head-line"></div>
+      </div>
+      <div style="margin-bottom:12px;">
+        <input id="tp-ps" class="search-input" placeholder="Search player name…"
+          oninput="doTradePlayerSearch('${u1Label}','${u2Label}')" />
+      </div>
+      <div id="tp-ps-r"><div class="empty-state"><p>Search a player to see who has them</p></div></div>
+    `;
+  } catch(e) { r.innerHTML = errHtml(e); }
+}
+
+async function doTradePlayerSearch(u1Name, u2Name) {
+  const q = document.getElementById('tp-ps').value.trim().toLowerCase();
+  const r = document.getElementById('tp-ps-r');
+  if (q.length < 2) return;
+  await loadPlayers();
+
+  const matches = Object.entries(S.players)
+    .filter(([,p]) => p.full_name?.toLowerCase().includes(q))
+    .sort((a,b) => {
+      const aS = a[1].full_name.toLowerCase().startsWith(q) ? 0 : 1;
+      const bS = b[1].full_name.toLowerCase().startsWith(q) ? 0 : 1;
+      return aS - bS || a[1].full_name.localeCompare(b[1].full_name);
+    }).slice(0, 8);
+
+  if (!matches.length) { r.innerHTML = '<div class="empty-state"><p>No players found</p></div>'; return; }
+  r.innerHTML = loading('Checking rosters…');
+
+  try {
+    const rData = await Promise.all(TP.allLeagues.map(lg =>
+      api('/league/' + lg.league_id + '/rosters').then(rs => ({ lg, rs: rs || [] })).catch(() => null)
+    ));
+
+    let html = '';
+    for (const [pid, player] of matches) {
+      const u1Has = [], u2Has = [];
+      for (const rd of rData) {
+        if (!rd) continue;
+        const r1 = rd.rs.find(ro => ro.owner_id === TP.user1Id);
+        const r2 = rd.rs.find(ro => ro.owner_id === TP.user2Id);
+        if (r1?.players?.includes(pid)) u1Has.push(rd.lg.name);
+        if (r2?.players?.includes(pid)) u2Has.push(rd.lg.name);
+      }
+      if (!u1Has.length && !u2Has.length) continue;
+
+      html += `<div style="margin-bottom:14px;background:var(--brown-dark);border:1px solid var(--brown-mid);border-radius:2px;padding:12px 16px;">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
+          <span class="card-title">${esc(player.full_name)}</span>
+          <span class="card-meta">${esc(player.position||'')} · ${esc(player.team||'FA')}</span>
+        </div>
+        ${u1Has.length ? `<div class="sect">${u1Name}</div>${u1Has.map(n=>`<div class="data-row"><span>${esc(n)}</span></div>`).join('')}` : ''}
+        ${u2Has.length ? `<div class="sect">${u2Name}</div>${u2Has.map(n=>`<div class="data-row"><span>${esc(n)}</span></div>`).join('')}` : ''}
+      </div>`;
+    }
+    r.innerHTML = html || '<div class="empty-state"><p>Neither user has that player</p></div>';
+  } catch(e) { r.innerHTML = errHtml(e); }
+}
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
