@@ -336,7 +336,7 @@ const PLAYERS_URL = IS_LOCAL ? 'https://api.sleeper.app/v1/players/nfl' : '/api/
 const GQL_URL     = IS_LOCAL ? null : '/api/graphql';
 
 const S = { userId: null, leagues: [], leagueDetails: {}, players: {}, nflState: null, token: null, tab: 'trades', auth: null };
-const TP = { user1Id: null, user2Id: null, user1Leagues: [], user2Leagues: [], allLeagues: [] };
+const TP = { user1Id: null, user2Id: null, user1Leagues: [], user2Leagues: [], allLeagues: [], commonLeagues: [] };
 
 // ── Rostership state ──────────────────────────────────────────────────────────
 const RS = {
@@ -1751,15 +1751,16 @@ document.getElementById('token-input').addEventListener('keydown', e => { if (e.
 
 function renderTradePartners() {
   const u1IsFixed = !!S.auth?.sleeper_username;
+  const inputStyle = 'max-width:220px;';
   const user1Field = u1IsFixed
-    ? `<span class="badge badge-green" style="font-family:'Crimson Text',serif;font-size:1rem;padding:8px 14px;">${esc(S.auth.sleeper_username)}</span>`
-    : `<input id="tp-u1" class="setup-input" placeholder="User 1 username…" style="max-width:220px;" onkeydown="if(event.key==='Enter')doTradePartners()" />`;
+    ? `<span class="search-input" style="${inputStyle}display:inline-block;cursor:default;">${esc(S.auth.sleeper_username)}</span>`
+    : `<input id="tp-u1" class="search-input" placeholder="User 1 username…" style="${inputStyle}" onkeydown="if(event.key==='Enter')doTradePartners()" />`;
   setC(`<div>
     <div class="section-head"><h2>Trade Partners</h2><div class="section-head-line"></div></div>
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px;">
       ${user1Field}
       <span style="color:var(--brown-light);font-family:'Rye',serif;font-size:0.6rem;">vs</span>
-      <input id="tp-u2" class="setup-input" placeholder="User 2 username…" style="max-width:220px;"
+      <input id="tp-u2" class="search-input" placeholder="User 2 username…" style="${inputStyle}"
         onkeydown="if(event.key==='Enter')doTradePartners()" />
       <button class="setup-btn" onclick="doTradePartners()">Find</button>
     </div>
@@ -1795,6 +1796,7 @@ async function doTradePartners() {
     const allMap = {};
     [...TP.user1Leagues, ...TP.user2Leagues].forEach(l => { allMap[l.league_id] = l; });
     TP.allLeagues = Object.values(allMap);
+    TP.commonLeagues = common;
 
     const commonHtml = common.length
       ? `<div class="pf-theirs">${common.map(l => `<div class="data-row">
@@ -1839,8 +1841,10 @@ async function doTradePlayerSearch(u1Name, u2Name) {
   if (!matches.length) { r.innerHTML = '<div class="empty-state"><p>No players found</p></div>'; return; }
   r.innerHTML = loading('Checking rosters…');
 
+  const none = `<span style="font-style:italic;color:var(--brown-light);font-size:0.9rem;">Not owned</span>`;
+
   try {
-    const rData = await Promise.all(TP.allLeagues.map(lg =>
+    const rData = await Promise.all(TP.commonLeagues.map(lg =>
       api('/league/' + lg.league_id + '/rosters').then(rs => ({ lg, rs: rs || [] })).catch(() => null)
     ));
 
@@ -1856,16 +1860,21 @@ async function doTradePlayerSearch(u1Name, u2Name) {
       }
       if (!u1Has.length && !u2Has.length) continue;
 
+      const colStyle = 'min-width:0;';
+      const mkRows = arr => arr.map(l => `<div class="data-row"><a href="https://sleeper.com/leagues/${esc(l.id)}" target="_blank" class="row-link">${esc(l.name)}</a></div>`).join('');
+
       html += `<div style="margin-bottom:14px;background:var(--brown-dark);border:1px solid var(--brown-mid);border-radius:2px;padding:12px 16px;">
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
           <span class="card-title">${esc(player.full_name)}</span>
           <span class="card-meta">${esc(player.position||'')} · ${esc(player.team||'FA')}</span>
         </div>
-        ${u1Has.length ? `<div class="sect">${u1Name}</div><div class="pf-mine">${u1Has.map(l=>`<div class="data-row"><a href="https://sleeper.com/leagues/${esc(l.id)}" target="_blank" class="row-link">${esc(l.name)}</a></div>`).join('')}</div>` : ''}
-        ${u2Has.length ? `<div class="sect">${u2Name}</div><div class="pf-theirs">${u2Has.map(l=>`<div class="data-row"><a href="https://sleeper.com/leagues/${esc(l.id)}" target="_blank" class="row-link">${esc(l.name)}</a></div>`).join('')}</div>` : ''}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div style="${colStyle}"><div class="sect">${u1Name}</div>${u1Has.length ? mkRows(u1Has) : none}</div>
+          <div style="${colStyle}"><div class="sect">${u2Name}</div>${u2Has.length ? mkRows(u2Has) : none}</div>
+        </div>
       </div>`;
     }
-    r.innerHTML = html || '<div class="empty-state"><p>Neither user has that player</p></div>';
+    r.innerHTML = html || '<div class="empty-state"><p>Neither user has that player in shared leagues</p></div>';
   } catch(e) { r.innerHTML = errHtml(e); }
 }
 
