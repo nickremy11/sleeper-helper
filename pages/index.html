@@ -1797,10 +1797,10 @@ async function doTradePartners() {
     TP.allLeagues = Object.values(allMap);
 
     const commonHtml = common.length
-      ? common.map(l => `<div class="data-row">
+      ? `<div class="pf-theirs">${common.map(l => `<div class="data-row">
           <a href="https://sleeper.com/leagues/${esc(l.league_id)}" target="_blank" class="row-link">${esc(l.name)}</a>
           <span class="card-meta">${l.total_rosters} teams</span>
-        </div>`).join('')
+        </div>`).join('')}</div>`
       : '<div class="empty-state" style="padding:12px;"><p>No leagues in common</p></div>';
 
     const u1Label = esc(usr1.display_name || u1);
@@ -1851,8 +1851,8 @@ async function doTradePlayerSearch(u1Name, u2Name) {
         if (!rd) continue;
         const r1 = rd.rs.find(ro => ro.owner_id === TP.user1Id);
         const r2 = rd.rs.find(ro => ro.owner_id === TP.user2Id);
-        if (r1?.players?.includes(pid)) u1Has.push(rd.lg.name);
-        if (r2?.players?.includes(pid)) u2Has.push(rd.lg.name);
+        if (r1?.players?.includes(pid)) u1Has.push({ name: rd.lg.name, id: rd.lg.league_id });
+        if (r2?.players?.includes(pid)) u2Has.push({ name: rd.lg.name, id: rd.lg.league_id });
       }
       if (!u1Has.length && !u2Has.length) continue;
 
@@ -1861,8 +1861,8 @@ async function doTradePlayerSearch(u1Name, u2Name) {
           <span class="card-title">${esc(player.full_name)}</span>
           <span class="card-meta">${esc(player.position||'')} · ${esc(player.team||'FA')}</span>
         </div>
-        ${u1Has.length ? `<div class="sect">${u1Name}</div>${u1Has.map(n=>`<div class="data-row"><span>${esc(n)}</span></div>`).join('')}` : ''}
-        ${u2Has.length ? `<div class="sect">${u2Name}</div>${u2Has.map(n=>`<div class="data-row"><span>${esc(n)}</span></div>`).join('')}` : ''}
+        ${u1Has.length ? `<div class="sect">${u1Name}</div><div class="pf-mine">${u1Has.map(l=>`<div class="data-row"><a href="https://sleeper.com/leagues/${esc(l.id)}" target="_blank" class="row-link">${esc(l.name)}</a></div>`).join('')}</div>` : ''}
+        ${u2Has.length ? `<div class="sect">${u2Name}</div><div class="pf-theirs">${u2Has.map(l=>`<div class="data-row"><a href="https://sleeper.com/leagues/${esc(l.id)}" target="_blank" class="row-link">${esc(l.name)}</a></div>`).join('')}</div>` : ''}
       </div>`;
     }
     r.innerHTML = html || '<div class="empty-state"><p>Neither user has that player</p></div>';
