@@ -403,7 +403,9 @@ async function loadPlayers() {
   if (Object.keys(S.players).length) return;
   const r = await fetch(PLAYERS_URL);
   if (!r.ok) throw new Error('Could not load player data');
-  S.players = await r.json();
+  const all = await r.json();
+  const keep = new Set(['QB','RB','WR','TE','DEF','DL','LB','DB','S','CB','DE','DT','FS','SS']);
+  S.players = Object.fromEntries(Object.entries(all).filter(([,p]) => keep.has(p.position)));
 }
 async function getNflState() {
   if (S.nflState) return S.nflState;
