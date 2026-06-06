@@ -263,6 +263,30 @@ footer a:hover { color: var(--gold); }
 .rs-expand-leagues { display: flex; flex-wrap: wrap; gap: 5px; }
 .rs-expand-tag { font-family: 'Crimson Text', serif; font-size: 0.82rem; color: var(--parchment); background: rgba(255,255,255,0.05); border: 1px solid var(--brown-mid); border-radius: 2px; padding: 2px 8px; white-space: nowrap; }
 .rs-expand-tag .rs-tag-meta { font-size: 0.75rem; color: var(--brown-light); margin-left: 4px; }
+
+/* ── LEAGUE SUMMARIES TAB ── */
+.ls-filter-bar { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+.ls-filter-label { font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); margin-right: 4px; }
+.ls-table { width: 100%; border-collapse: collapse; background: var(--brown-dark); font-size: 0.92rem; }
+.ls-table th { background: #1e0e05; font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); text-align: left; padding: 9px 10px; border-bottom: 2px solid var(--brown-mid); white-space: nowrap; cursor: pointer; user-select: none; transition: color 0.15s; }
+.ls-table th:hover, .ls-table th.ls-sorted { color: var(--gold-light); }
+.ls-table th .ls-arr { margin-left: 3px; font-size: 0.46rem; opacity: 0.5; }
+.ls-table th.ls-sorted .ls-arr { opacity: 1; }
+.ls-table td { padding: 7px 10px; border-bottom: 1px dashed rgba(255,255,255,0.06); vertical-align: middle; color: var(--parchment); font-family: 'Crimson Text', serif; }
+.ls-table tr:last-child td { border-bottom: none; }
+.ls-table tbody tr:hover td { background: rgba(255,255,255,0.025); }
+/* Contender league-name highlight */
+.ls-contender-name { color: var(--gold-light); font-weight: 700; }
+/* Playoff spot standing — all 3 variants shown inline */
+.ls-po-v1 { color: var(--gold-light); font-weight: 700; }
+.ls-po-v2 { border: 2px solid var(--gold); padding: 1px 6px; color: var(--gold-light); border-radius: 2px; display: inline-block; line-height: 1.4; }
+.ls-po-v3 { background: #2d7a2d; color: #fff; padding: 1px 6px; border-radius: 2px; display: inline-block; line-height: 1.4; }
+.ls-po-sep { color: var(--brown-light); margin: 0 4px; font-size: 0.7rem; }
+/* Playoff chances labels */
+.ls-chance-vl    { color: #5cb85c; font-weight: 700; }
+.ls-chance-lg    { color: var(--gold-light); }
+.ls-chance-nervy { color: var(--parchment); font-style: italic; }
+.ls-chance-blny  { color: var(--brown-light); font-style: italic; }
 </style>
 </head>
 <body>
@@ -282,7 +306,8 @@ footer a:hover { color: var(--gold); }
 
   <nav class="tab-bar">
     <div class="tab-bar-inner">
-      <button class="tab-btn active" id="tab-trades"  onclick="sw('trades')">Trades</button>
+      <button class="tab-btn active" id="tab-leagues" onclick="sw('leagues')">League Summaries</button>
+      <button class="tab-btn"        id="tab-trades"  onclick="sw('trades')">Trades</button>
       <button class="tab-btn"        id="tab-player"  onclick="sw('player')">Player Finder</button>
       <button class="tab-btn"        id="tab-lineups" onclick="sw('lineups')">Lineup Check</button>
       <button class="tab-btn"        id="tab-drafts"  onclick="sw('drafts')">Draft Queue</button>
@@ -344,7 +369,7 @@ const API_BASE    = IS_LOCAL ? 'https://api.sleeper.app/v1' : '/api/sleeper';
 const PLAYERS_URL = IS_LOCAL ? 'https://api.sleeper.app/v1/players/nfl' : '/api/players';
 const GQL_URL     = IS_LOCAL ? null : '/api/graphql';
 
-const S = { userId: null, leagues: [], leagueDetails: {}, players: {}, nflState: null, token: null, tab: 'trades', auth: null };
+const S = { userId: null, leagues: [], leagueDetails: {}, players: {}, nflState: null, token: null, tab: 'leagues', auth: null };
 const TP = { user1Id: null, user2Id: null, user1Leagues: [], user2Leagues: [], allLeagues: [], commonLeagues: [], u1Label: '', u2Label: '' };
 
 // ── Rostership state ──────────────────────────────────────────────────────────
@@ -368,6 +393,16 @@ const RS = {
   _teams:          new Set(),
   _sizes:          new Set(),
   expandedKey:     null,   // key of currently expanded player row
+};
+
+// ── League Summaries state ────────────────────────────────────────────────────
+const LS = {
+  leagueData: {},   // {lgId: {standing, numTeams, wins, losses, playoffTeams, apWins, apLosses, myRosterId}}
+  loaded:     false,
+  loading:    false,
+  sortCol:    'record',
+  sortDir:    -1,
+  filter:     'all', // 'all' | 'contenders' | 'rebuilders'
 };
 
 function rsNormPos(raw) {
@@ -488,7 +523,7 @@ function sw(tab) {
 }
 function render(tab) {
   if (!S.userId && tab !== 'partners') { setC('<div class="empty-state"><p>Enter your username above to get started</p></div>'); return; }
-  ({ trades: renderTrades, player: renderPlayerSearch, lineups: renderLineupCheck, drafts: renderDraftQueue, tracker: renderDraftTracker, rostership: renderRostership, partners: renderTradePartners })[tab]?.();
+  ({ leagues: renderLeagueSummaries, trades: renderTrades, player: renderPlayerSearch, lineups: renderLineupCheck, drafts: renderDraftQueue, tracker: renderDraftTracker, rostership: renderRostership, partners: renderTradePartners })[tab]?.();
 }
 function setC(html) { document.getElementById('content').innerHTML = html; }
 
@@ -1779,6 +1814,254 @@ function rsSort(col) {
 }
 
 document.getElementById('token-input').addEventListener('keydown', e => { if (e.key==='Enter') saveToken(); });
+
+// ── League Summaries ──────────────────────────────────────────────────────────
+
+async function renderLeagueSummaries() {
+  if (!S.leagues.length) {
+    setC('<div class="empty-state"><p>No leagues found for this user</p></div>');
+    return;
+  }
+  if (LS.loaded) { lsDrawTable(); return; }
+  if (LS.loading) return;
+  LS.loading = true;
+  // Ensure prefs are loaded (reuse RS.prefs; rsLoadPrefs populates it)
+  if (!Object.keys(RS.prefs).length && RS.selectedLeagues === null) {
+    RS.selectedLeagues = new Set(S.leagues.map(lg => lg.league_id));
+    await rsLoadPrefs();
+  }
+  setC(loading('Loading league standings…'));
+  try {
+    await lsLoadData();
+    LS.loaded = true;
+  } catch(e) {
+    setC(errHtml(e));
+    LS.loading = false;
+    return;
+  }
+  LS.loading = false;
+  lsDrawTable();
+}
+
+async function lsLoadData() {
+  await getNflState();
+  await Promise.allSettled(S.leagues.map(async lg => {
+    try {
+      const rosters = await api('/league/' + lg.league_id + '/rosters');
+      if (!rosters?.length) return;
+      const mine = rosters.find(r => r.owner_id === S.userId);
+      if (!mine) return;
+      const numTeams = rosters.length;
+      const detail = S.leagueDetails[lg.league_id];
+      const playoffTeams = detail?.settings?.playoff_teams ?? Math.floor(numTeams / 2);
+      // Sort by wins desc → points-for desc
+      const sorted = [...rosters].sort((a, b) => {
+        const wa = a.settings?.wins || 0, wb = b.settings?.wins || 0;
+        if (wb !== wa) return wb - wa;
+        const pfA = (a.settings?.fpts || 0) + (a.settings?.fpts_decimal || 0) / 100;
+        const pfB = (b.settings?.fpts || 0) + (b.settings?.fpts_decimal || 0) / 100;
+        return pfB - pfA;
+      });
+      const standing = sorted.findIndex(r => r.roster_id === mine.roster_id) + 1;
+      LS.leagueData[lg.league_id] = {
+        standing, numTeams, playoffTeams,
+        wins:   mine.settings?.wins   || 0,
+        losses: mine.settings?.losses || 0,
+        myRosterId: mine.roster_id,
+        apWins: null, apLosses: null,
+      };
+    } catch(_) {}
+  }));
+  // Now load all-play in parallel
+  await Promise.allSettled(S.leagues.map(async lg => {
+    const d = LS.leagueData[lg.league_id];
+    if (!d) return;
+    const ap = await lsLoadAllPlay(lg.league_id, d.myRosterId);
+    d.apWins   = ap.apWins;
+    d.apLosses = ap.apLosses;
+  }));
+}
+
+async function lsLoadAllPlay(lgId, myRosterId) {
+  const week = S.nflState?.week || 1;
+  const weeksCompleted = Math.max(0, week - 1);
+  if (weeksCompleted === 0) return { apWins: 0, apLosses: 0 };
+  let apWins = 0, apLosses = 0;
+  const results = await Promise.allSettled(
+    Array.from({ length: weeksCompleted }, (_, i) => api('/league/' + lgId + '/matchups/' + (i + 1)))
+  );
+  for (const res of results) {
+    if (res.status !== 'fulfilled' || !res.value) continue;
+    const matchups = res.value;
+    const mine = matchups.find(m => m.roster_id === myRosterId);
+    if (!mine) continue;
+    const myPts = mine.points || 0;
+    if (myPts === 0) continue; // week not yet scored
+    for (const other of matchups) {
+      if (other.roster_id === myRosterId) continue;
+      if (myPts > (other.points || 0)) apWins++; else apLosses++;
+    }
+  }
+  return { apWins, apLosses };
+}
+
+function lsPlayoffChancesLabel(standing, numTeams) {
+  if (standing <= 2) return { label: 'Virtual Lock',          cls: 'ls-chance-vl'    };
+  if (standing <= 4) return { label: 'Looking Good',          cls: 'ls-chance-lg'    };
+  if (numTeams >= 13) {
+    if (standing <= 10) return { label: 'Nervy',              cls: 'ls-chance-nervy' };
+    return               { label: 'Better Luck Next Year',    cls: 'ls-chance-blny'  };
+  }
+  if (standing <= 8)  return { label: 'Nervy',               cls: 'ls-chance-nervy' };
+  return               { label: 'Better Luck Next Year',     cls: 'ls-chance-blny'  };
+}
+
+function lsSortRows(rows) {
+  return [...rows].sort((a, b) => {
+    let v = 0;
+    if (LS.sortCol === 'name') {
+      v = a.name.localeCompare(b.name);
+    } else if (LS.sortCol === 'standing') {
+      v = a.standing - b.standing;
+    } else if (LS.sortCol === 'record') {
+      v = b.wins !== a.wins ? b.wins - a.wins : a.losses - b.losses;
+    } else if (LS.sortCol === 'allplay') {
+      const apA = (a.apWins || 0), apB = (b.apWins || 0);
+      v = apB - apA;
+    } else if (LS.sortCol === 'chances') {
+      v = a.standing - b.standing;
+    }
+    if (v !== 0) return v * LS.sortDir;
+    // secondary: alphabetical
+    return a.name.localeCompare(b.name);
+  });
+}
+
+function lsSetFilter(f) {
+  LS.filter = f;
+  lsDrawTable();
+}
+
+function lsSort(col) {
+  LS.sortDir = LS.sortCol === col ? LS.sortDir * -1 : (col === 'name' ? 1 : -1);
+  LS.sortCol = col;
+  lsDrawTable();
+}
+
+function lsDrawTable() {
+  const hasPrefs = S.leagues.some(lg => RS.prefs[lg.league_id] !== null);
+
+  // Build rows
+  let rows = S.leagues.map(lg => {
+    const d    = LS.leagueData[lg.league_id];
+    const pref = RS.prefs[lg.league_id];
+    return {
+      lgId:       lg.league_id,
+      name:       lg.name || 'Unnamed',
+      contender:  pref?.contender === true,
+      rebuilder:  pref !== null && pref?.contender === false,
+      hasData:    !!d,
+      standing:   d?.standing   ?? 999,
+      numTeams:   d?.numTeams   ?? 0,
+      playoffTeams: d?.playoffTeams ?? 0,
+      wins:       d?.wins       ?? 0,
+      losses:     d?.losses     ?? 0,
+      apWins:     d?.apWins,
+      apLosses:   d?.apLosses,
+    };
+  });
+
+  // Apply filter
+  if (LS.filter === 'contenders') rows = rows.filter(r => r.contender);
+  if (LS.filter === 'rebuilders') rows = rows.filter(r => r.rebuilder);
+
+  rows = lsSortRows(rows);
+
+  const arr = (col) => {
+    if (LS.sortCol !== col) return '<span class="ls-arr">⇅</span>';
+    return `<span class="ls-arr">${LS.sortDir === -1 ? '↓' : '↑'}</span>`;
+  };
+  const thCls = (col) => LS.sortCol === col ? 'ls-sorted' : '';
+
+  const cols = [
+    { key: 'name',     lbl: 'League'         },
+    { key: 'standing', lbl: 'Standing'       },
+    { key: 'record',   lbl: 'Record'         },
+    { key: 'allplay',  lbl: 'All-Play'       },
+    { key: 'chances',  lbl: 'Playoff Chances'},
+  ];
+
+  const thead = `<thead><tr>${cols.map(c =>
+    `<th class="${thCls(c.key)}" onclick="lsSort('${c.key}')">${c.lbl}${arr(c.key)}</th>`
+  ).join('')}</tr></thead>`;
+
+  const tbody = `<tbody>${rows.map(row => {
+    // League name cell
+    const nameCls = row.contender ? ' class="ls-contender-name"' : '';
+    const nameCell = `<td><span${nameCls}>${esc(row.name)}</span></td>`;
+
+    // Standing cell
+    let standingCell;
+    if (!row.hasData) {
+      standingCell = '<td>—</td>';
+    } else {
+      const inPlayoffs = row.standing <= row.playoffTeams;
+      if (inPlayoffs) {
+        standingCell = `<td>
+          <span class="ls-po-v1">${row.standing}</span><span class="ls-po-sep">·</span><span class="ls-po-v2">${row.standing}</span><span class="ls-po-sep">·</span><span class="ls-po-v3">${row.standing}</span>
+          <span style="font-size:0.72rem;color:var(--brown-light);margin-left:6px;">of ${row.numTeams}</span>
+        </td>`;
+      } else {
+        standingCell = `<td>${row.standing} <span style="font-size:0.72rem;color:var(--brown-light);">of ${row.numTeams}</span></td>`;
+      }
+    }
+
+    // Record cell
+    const recordCell = row.hasData
+      ? `<td>${row.wins}-${row.losses}</td>`
+      : '<td>—</td>';
+
+    // All-play cell
+    let apCell;
+    if (!row.hasData || row.apWins === null) {
+      apCell = '<td>—</td>';
+    } else {
+      apCell = `<td>${row.apWins}-${row.apLosses}</td>`;
+    }
+
+    // Playoff chances cell
+    let chancesCell;
+    if (!row.hasData) {
+      chancesCell = '<td>—</td>';
+    } else {
+      const { label, cls } = lsPlayoffChancesLabel(row.standing, row.numTeams);
+      chancesCell = `<td><span class="${cls}">${label}</span></td>`;
+    }
+
+    return `<tr>${nameCell}${standingCell}${recordCell}${apCell}${chancesCell}</tr>`;
+  }).join('')}</tbody>`;
+
+  const filterBtns = `
+    <div class="ls-filter-bar">
+      <span class="ls-filter-label">Filter</span>
+      <button class="ghost-btn${LS.filter==='all'?' active':''}" onclick="lsSetFilter('all')" style="${LS.filter==='all'?'border-color:var(--gold);color:var(--gold);':''}">All</button>
+      <button class="ghost-btn${LS.filter==='contenders'?' active':''}" onclick="lsSetFilter('contenders')"
+        style="${LS.filter==='contenders'?'border-color:var(--gold);color:var(--gold);':''}"
+        ${hasPrefs?'':'disabled title="Fill out Root For Me first"'}>Contenders</button>
+      <button class="ghost-btn${LS.filter==='rebuilders'?' active':''}" onclick="lsSetFilter('rebuilders')"
+        style="${LS.filter==='rebuilders'?'border-color:var(--gold);color:var(--gold);':''}"
+        ${hasPrefs?'':'disabled title="Fill out Root For Me first"'}>Rebuilders</button>
+    </div>`;
+
+  setC(`
+    <div class="section-head"><h2>League Summaries</h2><div class="section-head-line"></div></div>
+    ${filterBtns}
+    <div style="overflow-x:auto;">
+      <table class="ls-table">${thead}${tbody}</table>
+    </div>
+    ${rows.length === 0 ? '<div class="empty-state" style="margin-top:12px;"><p>No leagues match the current filter</p></div>' : ''}
+  `);
+}
 
 // ── 7. Trade Partners ─────────────────────────────────────────────────────────
 
