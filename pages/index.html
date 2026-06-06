@@ -135,6 +135,15 @@ a.row-link:hover { color: var(--gold-light); }
 .search-input:focus { border-color: var(--gold); }
 .search-input::placeholder { color: rgba(255,255,255,0.3); font-style: italic; }
 
+/* ── PLAYER AUTOCOMPLETE DROPDOWN ── */
+.player-ac-wrap { position: relative; flex: 1; }
+.player-ac-wrap .search-input { width: 100%; }
+.player-dropdown { position: absolute; top: 100%; left: 0; right: 0; background: var(--brown-dark); border: 1px solid var(--gold); border-top: none; border-radius: 0 0 2px 2px; z-index: 200; max-height: 260px; overflow-y: auto; }
+.player-dropdown-item { padding: 8px 12px; cursor: pointer; font-family: 'Crimson Text', serif; font-size: 0.95rem; color: var(--cream); border-bottom: 1px dashed rgba(255,255,255,0.07); display: flex; align-items: center; gap: 8px; }
+.player-dropdown-item:last-child { border-bottom: none; }
+.player-dropdown-item:hover { background: rgba(201,150,42,0.15); color: var(--gold-light); }
+.player-dropdown-meta { font-size: 0.82rem; color: var(--brown-light); font-style: italic; }
+
 /* ── PLAYER FINDER ── */
 .pf-mine   { background: rgba(45,74,30,0.15);  border: 1px solid rgba(74,122,47,0.5); border-radius: 2px; padding: 2px 12px; margin-bottom: 4px; }
 .pf-theirs { background: rgba(42,26,14,0.08);  border: 1px solid var(--brown-mid);   border-radius: 2px; padding: 2px 12px; margin-bottom: 4px; }
@@ -336,7 +345,7 @@ const PLAYERS_URL = IS_LOCAL ? 'https://api.sleeper.app/v1/players/nfl' : '/api/
 const GQL_URL     = IS_LOCAL ? null : '/api/graphql';
 
 const S = { userId: null, leagues: [], leagueDetails: {}, players: {}, nflState: null, token: null, tab: 'trades', auth: null };
-const TP = { user1Id: null, user2Id: null, user1Leagues: [], user2Leagues: [], allLeagues: [], commonLeagues: [] };
+const TP = { user1Id: null, user2Id: null, user1Leagues: [], user2Leagues: [], allLeagues: [], commonLeagues: [], u1Label: '', u2Label: '' };
 
 // ── Rostership state ──────────────────────────────────────────────────────────
 const RS = {
@@ -594,15 +603,27 @@ function tradeSides(t, rMap, myRid) {
 function renderPlayerSearch() {
   setC(`<div>
     <div class="search-wrap">
-      <input type="text" id="ps" class="search-input" placeholder="Search player name…" oninput="doPlayerSearch()" autofocus />
+      <div class="player-ac-wrap" id="pf-ac">
+        <input type="text" id="ps" class="search-input" placeholder="Search player name…"
+          oninput="pfShowDropdown()" autocomplete="off" autofocus />
+        <div class="player-dropdown" id="pf-dropdown" style="display:none;"></div>
+      </div>
     </div>
-    <div id="ps-r"><div class="empty-state"><p>Search to see where a player stands across all your leagues</p></div></div>
+    <div id="ps-r"><div class="empty-state"><p>Search and select a player to see where they stand across all your leagues</p></div></div>
   </div>`);
+  document.addEventListener('click', _pfOutsideClick);
 }
-async function doPlayerSearch() {
+
+function _pfOutsideClick(e) {
+  const ac = document.getElementById('pf-ac');
+  if (!ac) { document.removeEventListener('click', _pfOutsideClick); return; }
+  if (!ac.contains(e.target)) document.getElementById('pf-dropdown').style.display = 'none';
+}
+
+async function pfShowDropdown() {
   const q = document.getElementById('ps').value.trim().toLowerCase();
-  const r = document.getElementById('ps-r');
-  if (q.length < 2) return;
+  const dd = document.getElementById('pf-dropdown');
+  if (q.length < 2) { dd.style.display = 'none'; return; }
   await loadPlayers();
   const matches = Object.entries(S.players)
     .filter(([,p]) => p.full_name?.toLowerCase().includes(q))
@@ -610,8 +631,21 @@ async function doPlayerSearch() {
       const aS = a[1].full_name.toLowerCase().startsWith(q) ? 0 : 1;
       const bS = b[1].full_name.toLowerCase().startsWith(q) ? 0 : 1;
       return aS - bS || a[1].full_name.localeCompare(b[1].full_name);
-    }).slice(0, 10);
-  if (!matches.length) { r.innerHTML = '<div class="empty-state"><p>No players found</p></div>'; return; }
+    }).slice(0, 12);
+  if (!matches.length) { dd.style.display = 'none'; return; }
+  dd.innerHTML = matches.map(([pid, p]) =>
+    `<div class="player-dropdown-item" onmousedown="pfSelectPlayer('${esc(pid)}')">`+
+    `${esc(p.full_name)} <span class="player-dropdown-meta">${esc(p.position||'')} · ${esc(p.team||'FA')}</span></div>`
+  ).join('');
+  dd.style.display = 'block';
+}
+
+async function pfSelectPlayer(pid) {
+  document.getElementById('pf-dropdown').style.display = 'none';
+  const player = S.players[pid];
+  if (!player) return;
+  document.getElementById('ps').value = player.full_name;
+  const r = document.getElementById('ps-r');
   r.innerHTML = loading('Checking all leagues');
   try {
     const rData = await Promise.all(S.leagues.map(lg =>
@@ -621,52 +655,49 @@ async function doPlayerSearch() {
           return { lg, rs: rs || [], uMap };
         }).catch(() => null)
     ));
-    let html = '';
-    for (const [pid, player] of matches) {
-      const mine = [], theirs = [], free = [];
-      for (const rd of rData) {
-        if (!rd) continue;
-        let found = false;
-        for (const roster of rd.rs) {
-          if (!roster.players?.includes(pid)) continue;
-          found = true;
-          if (roster.owner_id === S.userId) {
-            mine.push({ lgName: rd.lg.name, lgId: rd.lg.league_id, starter: roster.starters?.includes(pid) });
-          } else {
-            theirs.push({ lgName: rd.lg.name, lgId: rd.lg.league_id, ownerName: rd.uMap[roster.owner_id] || 'Unknown' });
-          }
-          break;
+    const mine = [], theirs = [], free = [];
+    for (const rd of rData) {
+      if (!rd) continue;
+      let found = false;
+      for (const roster of rd.rs) {
+        if (!roster.players?.includes(pid)) continue;
+        found = true;
+        if (roster.owner_id === S.userId) {
+          mine.push({ lgName: rd.lg.name, lgId: rd.lg.league_id, starter: roster.starters?.includes(pid) });
+        } else {
+          theirs.push({ lgName: rd.lg.name, lgId: rd.lg.league_id, ownerName: rd.uMap[roster.owner_id] || 'Unknown' });
         }
-        if (!found) free.push({ name: rd.lg.name, lgId: rd.lg.league_id });
+        break;
       }
-      if (!mine.length && !theirs.length) continue;
-      mine.sort((a,b) => a.lgName.localeCompare(b.lgName));
-      theirs.sort((a,b) => a.lgName.localeCompare(b.lgName));
-      free.sort((a,b) => a.name.localeCompare(b.name));
-
-      html += `<div style="margin-bottom:16px;">
-        <div style="background:var(--brown-dark);border:1px solid var(--brown-mid);border-radius:2px;padding:12px 16px;margin-bottom:6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-          <span class="card-title">${esc(player.full_name)}</span>
-          <span class="card-meta">${esc(player.position||'')} · ${esc(player.team||'FA')}</span>
-        </div>
-        ${mine.length ? `<div class="sect">On your roster</div><div class="pf-mine">${mine.map(f=>`
-          <div class="data-row">
-            <a href="https://sleeper.com/leagues/${esc(f.lgId)}/team" target="_blank" class="row-link">${esc(f.lgName)}</a>
-            <span style="display:flex;align-items:center;gap:6px;">${injuryBadge(player.injury_status)}<span class="badge ${f.starter?'badge-green':'badge-outline'}">${f.starter?'Starting':'Bench'}</span></span>
-          </div>`).join('')}</div>` : ''}
-        ${theirs.length ? `<div class="sect">On other rosters</div><div class="pf-theirs">${theirs.map(f=>`
-          <div class="data-row">
-            <a href="https://sleeper.com/leagues/${esc(f.lgId)}" target="_blank" class="row-link">${esc(f.lgName)}</a>
-            <span class="card-meta">${esc(f.ownerName)}</span>
-          </div>`).join('')}</div>` : ''}
-        ${free.length ? `<div class="sect">Free agent in</div><div class="pf-free">${free.map(f=>`
-          <div class="data-row">
-            <a href="https://sleeper.com/leagues/${esc(f.lgId)}" target="_blank" class="row-link">${esc(f.name)}</a>
-            <span class="badge badge-green">Available</span>
-          </div>`).join('')}</div>` : ''}
-      </div>`;
+      if (!found) free.push({ name: rd.lg.name, lgId: rd.lg.league_id });
     }
-    r.innerHTML = html || '<div class="empty-state"><p>Player not found on any of your rosters</p></div>';
+    if (!mine.length && !theirs.length) {
+      r.innerHTML = '<div class="empty-state"><p>Player not found on any of your rosters</p></div>'; return;
+    }
+    mine.sort((a,b) => a.lgName.localeCompare(b.lgName));
+    theirs.sort((a,b) => a.lgName.localeCompare(b.lgName));
+    free.sort((a,b) => a.name.localeCompare(b.name));
+    r.innerHTML = `<div style="margin-bottom:16px;">
+      <div style="background:var(--brown-dark);border:1px solid var(--brown-mid);border-radius:2px;padding:12px 16px;margin-bottom:6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span class="card-title">${esc(player.full_name)}</span>
+        <span class="card-meta">${esc(player.position||'')} · ${esc(player.team||'FA')}</span>
+      </div>
+      ${mine.length ? `<div class="sect">On your roster</div><div class="pf-mine">${mine.map(f=>`
+        <div class="data-row">
+          <a href="https://sleeper.com/leagues/${esc(f.lgId)}/team" target="_blank" class="row-link">${esc(f.lgName)}</a>
+          <span style="display:flex;align-items:center;gap:6px;">${injuryBadge(player.injury_status)}<span class="badge ${f.starter?'badge-green':'badge-outline'}">${f.starter?'Starting':'Bench'}</span></span>
+        </div>`).join('')}</div>` : ''}
+      ${theirs.length ? `<div class="sect">On other rosters</div><div class="pf-theirs">${theirs.map(f=>`
+        <div class="data-row">
+          <a href="https://sleeper.com/leagues/${esc(f.lgId)}" target="_blank" class="row-link">${esc(f.lgName)}</a>
+          <span class="card-meta">${esc(f.ownerName)}</span>
+        </div>`).join('')}</div>` : ''}
+      ${free.length ? `<div class="sect">Free agent in</div><div class="pf-free">${free.map(f=>`
+        <div class="data-row">
+          <a href="https://sleeper.com/leagues/${esc(f.lgId)}" target="_blank" class="row-link">${esc(f.name)}</a>
+          <span class="badge badge-green">Available</span>
+        </div>`).join('')}</div>` : ''}
+    </div>`;
   } catch(e) { r.innerHTML = errHtml(e); }
 }
 
@@ -1805,8 +1836,8 @@ async function doTradePartners() {
         </div>`).join('')}</div>`
       : '<div class="empty-state" style="padding:12px;"><p>No leagues in common</p></div>';
 
-    const u1Label = esc(usr1.display_name || u1);
-    const u2Label = esc(usr2.display_name || u2);
+    TP.u1Label = usr1.display_name || u1;
+    TP.u2Label = usr2.display_name || u2;
     r.innerHTML = `
       <div class="section-head" style="margin-bottom:12px;">
         <h2>Common Leagues (${common.length})</h2><div class="section-head-line"></div>
@@ -1816,29 +1847,50 @@ async function doTradePartners() {
         <h2>Player Search</h2><div class="section-head-line"></div>
       </div>
       <div style="margin-bottom:12px;">
-        <input id="tp-ps" class="search-input" placeholder="Search player name…"
-          oninput="doTradePlayerSearch('${u1Label}','${u2Label}')" />
+        <div class="player-ac-wrap" id="tp-ac">
+          <input id="tp-ps" class="search-input" placeholder="Search player name…"
+            oninput="tpShowDropdown()" autocomplete="off" />
+          <div class="player-dropdown" id="tp-dropdown" style="display:none;"></div>
+        </div>
       </div>
-      <div id="tp-ps-r"><div class="empty-state"><p>Search a player to see who has them</p></div></div>
+      <div id="tp-ps-r"><div class="empty-state"><p>Search and select a player to see who has them</p></div></div>
     `;
+    document.addEventListener('click', _tpOutsideClick);
   } catch(e) { r.innerHTML = errHtml(e); }
 }
 
-async function doTradePlayerSearch(u1Name, u2Name) {
-  const q = document.getElementById('tp-ps').value.trim().toLowerCase();
-  const r = document.getElementById('tp-ps-r');
-  if (q.length < 2) return;
-  await loadPlayers();
+function _tpOutsideClick(e) {
+  const ac = document.getElementById('tp-ac');
+  if (!ac) { document.removeEventListener('click', _tpOutsideClick); return; }
+  if (!ac.contains(e.target)) document.getElementById('tp-dropdown').style.display = 'none';
+}
 
+async function tpShowDropdown() {
+  const q = document.getElementById('tp-ps').value.trim().toLowerCase();
+  const dd = document.getElementById('tp-dropdown');
+  if (q.length < 2) { dd.style.display = 'none'; return; }
+  await loadPlayers();
   const matches = Object.entries(S.players)
     .filter(([,p]) => p.full_name?.toLowerCase().includes(q))
     .sort((a,b) => {
       const aS = a[1].full_name.toLowerCase().startsWith(q) ? 0 : 1;
       const bS = b[1].full_name.toLowerCase().startsWith(q) ? 0 : 1;
       return aS - bS || a[1].full_name.localeCompare(b[1].full_name);
-    }).slice(0, 8);
+    }).slice(0, 12);
+  if (!matches.length) { dd.style.display = 'none'; return; }
+  dd.innerHTML = matches.map(([pid, p]) =>
+    `<div class="player-dropdown-item" onmousedown="tpSelectPlayer('${esc(pid)}')">`+
+    `${esc(p.full_name)} <span class="player-dropdown-meta">${esc(p.position||'')} · ${esc(p.team||'FA')}</span></div>`
+  ).join('');
+  dd.style.display = 'block';
+}
 
-  if (!matches.length) { r.innerHTML = '<div class="empty-state"><p>No players found</p></div>'; return; }
+async function tpSelectPlayer(pid) {
+  document.getElementById('tp-dropdown').style.display = 'none';
+  const player = S.players[pid];
+  if (!player) return;
+  document.getElementById('tp-ps').value = player.full_name;
+  const r = document.getElementById('tp-ps-r');
   r.innerHTML = loading('Checking rosters…');
 
   const none = `<span style="font-style:italic;color:var(--brown-light);font-size:0.9rem;">Not owned</span>`;
@@ -1848,33 +1900,30 @@ async function doTradePlayerSearch(u1Name, u2Name) {
       api('/league/' + lg.league_id + '/rosters').then(rs => ({ lg, rs: rs || [] })).catch(() => null)
     ));
 
-    let html = '';
-    for (const [pid, player] of matches) {
-      const u1Has = [], u2Has = [];
-      for (const rd of rData) {
-        if (!rd) continue;
-        const r1 = rd.rs.find(ro => ro.owner_id === TP.user1Id);
-        const r2 = rd.rs.find(ro => ro.owner_id === TP.user2Id);
-        if (r1?.players?.includes(pid)) u1Has.push({ name: rd.lg.name, id: rd.lg.league_id });
-        if (r2?.players?.includes(pid)) u2Has.push({ name: rd.lg.name, id: rd.lg.league_id });
-      }
-      if (!u1Has.length && !u2Has.length) continue;
-
-      const colStyle = 'min-width:0;';
-      const mkRows = arr => arr.map(l => `<div class="data-row"><a href="https://sleeper.com/leagues/${esc(l.id)}" target="_blank" class="row-link">${esc(l.name)}</a></div>`).join('');
-
-      html += `<div style="margin-bottom:14px;background:var(--brown-dark);border:1px solid var(--brown-mid);border-radius:2px;padding:12px 16px;">
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
-          <span class="card-title">${esc(player.full_name)}</span>
-          <span class="card-meta">${esc(player.position||'')} · ${esc(player.team||'FA')}</span>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-          <div style="${colStyle}"><div class="sect">${u1Name}</div>${u1Has.length ? mkRows(u1Has) : none}</div>
-          <div style="${colStyle}"><div class="sect">${u2Name}</div>${u2Has.length ? mkRows(u2Has) : none}</div>
-        </div>
-      </div>`;
+    const u1Has = [], u2Has = [];
+    for (const rd of rData) {
+      if (!rd) continue;
+      const r1 = rd.rs.find(ro => ro.owner_id === TP.user1Id);
+      const r2 = rd.rs.find(ro => ro.owner_id === TP.user2Id);
+      if (r1?.players?.includes(pid)) u1Has.push({ name: rd.lg.name, id: rd.lg.league_id });
+      if (r2?.players?.includes(pid)) u2Has.push({ name: rd.lg.name, id: rd.lg.league_id });
     }
-    r.innerHTML = html || '<div class="empty-state"><p>Neither user has that player in shared leagues</p></div>';
+    if (!u1Has.length && !u2Has.length) {
+      r.innerHTML = '<div class="empty-state"><p>Neither user has that player in shared leagues</p></div>'; return;
+    }
+
+    const colStyle = 'min-width:0;';
+    const mkRows = arr => arr.map(l => `<div class="data-row"><a href="https://sleeper.com/leagues/${esc(l.id)}" target="_blank" class="row-link">${esc(l.name)}</a></div>`).join('');
+    r.innerHTML = `<div style="margin-bottom:14px;background:var(--brown-dark);border:1px solid var(--brown-mid);border-radius:2px;padding:12px 16px;">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+        <span class="card-title">${esc(player.full_name)}</span>
+        <span class="card-meta">${esc(player.position||'')} · ${esc(player.team||'FA')}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div style="${colStyle}"><div class="sect">${esc(TP.u1Label)}</div>${u1Has.length ? mkRows(u1Has) : none}</div>
+        <div style="${colStyle}"><div class="sect">${esc(TP.u2Label)}</div>${u2Has.length ? mkRows(u2Has) : none}</div>
+      </div>
+    </div>`;
   } catch(e) { r.innerHTML = errHtml(e); }
 }
 
