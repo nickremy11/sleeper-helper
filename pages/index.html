@@ -277,11 +277,8 @@ footer a:hover { color: var(--gold); }
 .ls-table tbody tr:hover td { background: rgba(255,255,255,0.025); }
 /* Contender league-name highlight */
 .ls-contender-name { color: var(--gold-light); font-weight: 700; }
-/* Playoff spot standing — all 3 variants shown inline */
-.ls-po-v1 { color: var(--gold-light); font-weight: 700; }
+/* Playoff spot standing */
 .ls-po-v2 { border: 2px solid var(--gold); padding: 1px 6px; color: var(--gold-light); border-radius: 2px; display: inline-block; line-height: 1.4; }
-.ls-po-v3 { background: #2d7a2d; color: #fff; padding: 1px 6px; border-radius: 2px; display: inline-block; line-height: 1.4; }
-.ls-po-sep { color: var(--brown-light); margin: 0 4px; font-size: 0.7rem; }
 /* Playoff chances labels */
 .ls-chance-vl    { color: #5cb85c; font-weight: 700; }
 .ls-chance-lg    { color: var(--gold-light); }
@@ -2007,10 +2004,7 @@ function lsDrawTable() {
     } else {
       const inPlayoffs = row.standing <= row.playoffTeams;
       if (inPlayoffs) {
-        standingCell = `<td>
-          <span class="ls-po-v1">${row.standing}</span><span class="ls-po-sep">·</span><span class="ls-po-v2">${row.standing}</span><span class="ls-po-sep">·</span><span class="ls-po-v3">${row.standing}</span>
-          <span style="font-size:0.72rem;color:var(--brown-light);margin-left:6px;">of ${row.numTeams}</span>
-        </td>`;
+        standingCell = `<td><span class="ls-po-v2">${row.standing}</span> <span style="font-size:0.72rem;color:var(--brown-light);">of ${row.numTeams}</span></td>`;
       } else {
         standingCell = `<td>${row.standing} <span style="font-size:0.72rem;color:var(--brown-light);">of ${row.numTeams}</span></td>`;
       }
