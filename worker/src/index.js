@@ -13,6 +13,9 @@
  *   GET  /api/fantasycalc         → FantasyCalc values (KV-cached 24h)
  *   GET  /api/espn/scoreboard     → NFL week schedule: team → kickoff ISO (KV-cached 5m)
  *   GET  /api/espn/games          → NFL week games with pairings [{home,away,kickoff}] (KV-cached 5m)
+ *   GET  /api/espn/settings       → get ESPN league IDs + credential status (auth required)
+ *   POST /api/espn/settings       → save ESPN league IDs + credentials (auth required)
+ *   GET  /api/espn/fantasy/:id    → proxy ESPN fantasy API using stored credentials (auth required)
  *   GET  /api/rootforme/prefs     → get league preferences for logged-in user
  *   POST /api/rootforme/prefs     → save league preferences for logged-in user
  *   POST /api/dispersal           → create dispersal room
@@ -93,6 +96,14 @@ export default {
 
     if (url.pathname === '/api/espn/games' && request.method === 'GET') {
       return handleESPNGames(request, env, url);
+    }
+
+    if (url.pathname === '/api/espn/settings') {
+      return handleEspnSettings(request, env);
+    }
+
+    if (url.pathname.startsWith('/api/espn/fantasy/') && request.method === 'GET') {
+      return handleEspnFantasy(request, env, url);
     }
 
     if (url.pathname === '/api/rootforme/prefs') {
@@ -435,6 +446,97 @@ async function handleProxy(url) {
   return new Response(body, {
     status,
     headers: { ...CORS, 'Content-Type': 'application/json;charset=UTF-8' },
+  });
+}
+
+// ── ESPN Fantasy League Settings ──────────────────────────────────────────────
+
+async function handleEspnSettings(request, env) {
+  const cors = getCors(request);
+  const user = await getAuthUser(request, env);
+  if (!user) {
+    return new Response(JSON.stringify({ error: 'Not authenticated' }), { status: 401, headers: cors });
+  }
+
+  if (request.method === 'GET') {
+    const row = await env.DB.prepare(
+      'SELECT league_ids, espn_s2, swid FROM espn_settings WHERE user_id = ?'
+    ).bind(user.user_id).first();
+
+    return new Response(JSON.stringify({
+      league_ids:      row ? JSON.parse(row.league_ids || '[]') : [],
+      has_credentials: !!(row?.espn_s2 && row?.swid),
+    }), { status: 200, headers: { ...cors, 'Content-Type': 'application/json;charset=UTF-8' } });
+  }
+
+  if (request.method === 'POST') {
+    let body;
+    try { body = await request.json(); } catch {
+      return new Response('Invalid JSON', { status: 400, headers: cors });
+    }
+
+    const league_ids = JSON.stringify(Array.isArray(body.league_ids) ? body.league_ids : []);
+    const now = Date.now();
+
+    // Only update credentials if non-empty values provided; otherwise preserve existing
+    if (body.espn_s2 && body.swid) {
+      await env.DB.prepare(
+        `INSERT INTO espn_settings (user_id, league_ids, espn_s2, swid, updated_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE
+         SET league_ids=excluded.league_ids, espn_s2=excluded.espn_s2, swid=excluded.swid, updated_at=excluded.updated_at`
+      ).bind(user.user_id, league_ids, body.espn_s2, body.swid, now).run();
+    } else {
+      await env.DB.prepare(
+        `INSERT INTO espn_settings (user_id, league_ids, updated_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE
+         SET league_ids=excluded.league_ids, updated_at=excluded.updated_at`
+      ).bind(user.user_id, league_ids, now).run();
+    }
+
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...cors, 'Content-Type': 'application/json;charset=UTF-8' },
+    });
+  }
+
+  return new Response('Method not allowed', { status: 405, headers: cors });
+}
+
+// ── ESPN Fantasy Proxy (uses stored credentials) ───────────────────────────────
+
+async function handleEspnFantasy(request, env, url) {
+  const cors = getCors(request);
+  const user = await getAuthUser(request, env);
+  if (!user) {
+    return new Response(JSON.stringify({ error: 'Not authenticated' }), { status: 401, headers: cors });
+  }
+
+  const row = await env.DB.prepare(
+    'SELECT espn_s2, swid FROM espn_settings WHERE user_id = ?'
+  ).bind(user.user_id).first();
+
+  if (!row?.espn_s2 || !row?.swid) {
+    return new Response(JSON.stringify({ error: 'ESPN credentials not configured' }), { status: 400, headers: cors });
+  }
+
+  // /api/espn/fantasy/{leagueId} → lm-api-reads.fantasy.espn.com/.../{leagueId}
+  const leagueId = url.pathname.replace('/api/espn/fantasy/', '').split('/')[0];
+  const espnUrl  = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${url.searchParams.get('seasonId') || new Date().getFullYear()}/segments/0/leagues/${leagueId}?${url.searchParams.toString()}`;
+
+  const upstream = await fetch(espnUrl, {
+    headers: {
+      'Cookie':     `espn_s2=${row.espn_s2}; SWID=${row.swid}`,
+      'User-Agent': 'sleeper-helper/1.0',
+    },
+  });
+
+  const text   = await upstream.text();
+  const status = upstream.ok ? 200 : upstream.status;
+  return new Response(text, {
+    status,
+    headers: { ...cors, 'Content-Type': 'application/json;charset=UTF-8' },
   });
 }
 

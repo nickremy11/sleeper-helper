@@ -344,6 +344,25 @@ footer a:hover { color: var(--gold); }
           <div class="setup-status" id="token-status">token lives in memory only — clears when you close this tab</div>
         </div>
       </div>
+      <div id="espn-settings-row" style="display:none;">
+        <hr class="setup-divider" />
+        <div>
+          <label class="setup-label-rye">ESPN Leagues <span class="setup-label-sub">— private leagues, requires login</span></label>
+          <div class="setup-row">
+            <input type="text" id="espn-league-ids" class="setup-input" placeholder="ESPN league IDs, comma-separated (e.g. 12345, 67890)…" />
+          </div>
+          <div class="setup-row" style="margin-top:6px;">
+            <input type="password" id="espn-s2" class="setup-input" placeholder="espn_s2 cookie value…" />
+          </div>
+          <div class="setup-row" style="margin-top:6px;">
+            <input type="text" id="espn-swid" class="setup-input" placeholder="SWID cookie value (e.g. {XXXX-XXXX})…" />
+          </div>
+          <div class="setup-row" style="margin-top:6px;">
+            <button class="setup-btn" onclick="saveEspnSettings()">Save ESPN Settings</button>
+          </div>
+          <div class="setup-status" id="espn-settings-status"></div>
+        </div>
+      </div>
     </div>
 
     <div id="content">
@@ -366,7 +385,7 @@ const API_BASE    = IS_LOCAL ? 'https://api.sleeper.app/v1' : '/api/sleeper';
 const PLAYERS_URL = IS_LOCAL ? 'https://api.sleeper.app/v1/players/nfl' : '/api/players';
 const GQL_URL     = IS_LOCAL ? null : '/api/graphql';
 
-const S = { userId: null, leagues: [], leagueDetails: {}, players: {}, nflState: null, token: null, tab: 'leagues', auth: null };
+const S = { userId: null, leagues: [], leagueDetails: {}, players: {}, nflState: null, token: null, tab: 'leagues', auth: null, espnSettings: null, _playersByName: {} };
 const TP = { user1Id: null, user2Id: null, user1Leagues: [], user2Leagues: [], allLeagues: [], commonLeagues: [], u1Label: '', u2Label: '' };
 
 // ── Rostership state ──────────────────────────────────────────────────────────
@@ -438,6 +457,10 @@ async function loadPlayers() {
   const all = await r.json();
   const keep = new Set(['QB','RB','WR','TE','DEF','DL','LB','DB','S','CB','DE','DT','FS','SS']);
   S.players = Object.fromEntries(Object.entries(all).filter(([,p]) => keep.has(p.position)));
+  S._playersByName = {};
+  for (const [id, p] of Object.entries(S.players)) {
+    if (p.full_name) S._playersByName[p.full_name.toLowerCase()] = id;
+  }
 }
 async function getNflState() {
   if (S.nflState) return S.nflState;
@@ -497,6 +520,8 @@ async function loadUser() {
     ));
     st.textContent = S.leagues.length + ' leagues loaded for ' + esc(user.display_name || u) + ' (' + season + ')';
     st.className = 'setup-status ok';
+    // Load ESPN leagues (non-blocking — they append to S.leagues after Sleeper leagues)
+    loadEspnLeagues(season);
     render(S.tab);
     // Auto-save username to account when logged in
     if (S.auth && u !== S.auth.sleeper_username) {
@@ -508,6 +533,47 @@ async function loadUser() {
     st.className = 'setup-status err';
   }
   btn.disabled = false; btn.textContent = 'Load';
+}
+
+async function loadEspnLeagues(season) {
+  if (!S.auth) return;
+  try {
+    const r = await fetch('/api/espn/settings', { credentials: 'include' });
+    if (!r.ok) return;
+    const cfg = await r.json();
+    S.espnSettings = cfg;
+    if (!cfg.has_credentials || !cfg.league_ids?.length) return;
+    await Promise.all(cfg.league_ids.map(id => loadOneEspnLeague(id, season)));
+    // Update the status text to reflect ESPN leagues
+    const st = document.getElementById('u-status');
+    if (st && st.className.includes('ok')) {
+      const sleeperCount = S.leagues.filter(l => !l.source).length;
+      const espnCount    = S.leagues.filter(l => l.source === 'espn').length;
+      if (espnCount > 0) st.textContent = st.textContent.replace(/^\d+ leagues/, `${sleeperCount} Sleeper + ${espnCount} ESPN leagues`);
+    }
+    // If rostership has already been rendered, refresh the league panel
+    if (S.tab === 'rostership' && RS.selectedLeagues !== null) {
+      const newEspnIds = S.leagues.filter(l => l.source === 'espn').map(l => l.league_id);
+      for (const id of newEspnIds) RS.selectedLeagues.add(id);
+      rsDrawFull();
+    }
+  } catch {}
+}
+
+async function loadOneEspnLeague(leagueId, season) {
+  try {
+    const r = await fetch(`/api/espn/fantasy/${leagueId}?view=mSettings&view=mTeam&seasonId=${season}`, { credentials: 'include' });
+    if (!r.ok) return;
+    const d   = await r.json();
+    const lgId = `espn_${leagueId}`;
+    if (S.leagues.some(l => l.league_id === lgId)) return; // already loaded
+    const name = d.settings?.name || `ESPN ${leagueId}`;
+    const size = d.teams?.length || d.settings?.size || 10;
+    const lg = { league_id: lgId, name, total_rosters: size, source: 'espn' };
+    S.leagues.push(lg);
+    S.leagueDetails[lgId] = { ...lg, settings: { type: 0, best_ball: 0 }, _espnId: leagueId };
+    RS.prefs[lgId] = null;  // ESPN leagues have no contender/rebuilder prefs
+  } catch {}
 }
 
 function sw(tab) {
@@ -1231,13 +1297,16 @@ function rsDrawFull() {
   const lgRows = S.leagues.map(lg => {
     const d    = S.leagueDetails[lg.league_id] || lg;
     const isBB = d.settings?.best_ball === 1;
-    const type = isBB ? 'Bestball'
+    const isEspn = lg.source === 'espn';
+    const type = isEspn ? 'Redraft'
+               : isBB   ? 'Bestball'
                : d.settings?.type === 2 ? 'Dynasty'
                : d.settings?.type === 1 ? 'Keeper' : 'Redraft';
     const sz   = d.total_rosters || lg.total_rosters || '?';
     const chk  = RS.selectedLeagues.has(lg.league_id) ? 'checked' : '';
+    const srcBadge = isEspn ? ' <span style="font-size:0.65rem;color:var(--gold);opacity:0.8;font-family:monospace;letter-spacing:0.02em;">ESPN</span>' : '';
     return `<label class="rs-lg-item">
-      <span class="rs-lg-name">${esc(lg.name || 'Unnamed')}</span>
+      <span class="rs-lg-name">${esc(lg.name || 'Unnamed')}${srcBadge}</span>
       <span class="rs-lg-meta">${esc(type)} · ${sz}</span>
       <input type="checkbox" style="width:15px;height:15px;accent-color:var(--gold);flex-shrink:0;cursor:pointer;"
         ${chk} onchange="rsToggleLeague('${lg.league_id}',this.checked)" />
@@ -1319,6 +1388,8 @@ function rsDrawFull() {
         <span style="font-family:'Crimson Text',serif;font-size:0.85rem;font-style:italic;color:var(--brown-light);" id="rs-lg-info">${nSel}/${S.leagues.length} selected</span>
         <button class="ghost-btn" onclick="rsSelectAll()">All</button>
         <button class="ghost-btn" onclick="rsDeselectAll()">None</button>
+        <button class="ghost-btn" onclick="rsSelectRedraft()">Redraft</button>
+        <button class="ghost-btn" onclick="rsSelectDynasty()">Dynasty</button>
         <button class="ghost-btn" id="rs-btn-cont" ${hasPrefs?'':'disabled title="Fill out Root For Me first"'} onclick="rsSelectContenders()">Contenders</button>
         <button class="ghost-btn" id="rs-btn-reb"  ${hasPrefs?'':'disabled title="Fill out Root For Me first"'} onclick="rsSelectRebuilders()">Rebuilders</button>
         <div style="flex:1;"></div>
@@ -1374,7 +1445,7 @@ async function loadRostershipData() {
 
     // Rosters + draft info per league (parallel)
     if (statEl) statEl.textContent = `Fetching ${S.leagues.length} leagues…`;
-    await Promise.all(S.leagues.map(rsLoadLeague));
+    await Promise.all(S.leagues.map(lg => lg.source === 'espn' ? rsLoadEspnLeague(lg) : rsLoadLeague(lg)));
 
     // Build rows
     RS.loaded = true;
@@ -1387,6 +1458,26 @@ async function loadRostershipData() {
     const b = document.getElementById('rs-load-btn');
     if (b) { b.disabled = false; b.textContent = RS.loaded ? 'Reload' : 'Load Rostership'; }
   }
+}
+
+// ── ESPN position + team ID lookup tables ────────────────────────────────────
+const ESPN_POS_MAP = { 1:'QB', 2:'RB', 3:'WR', 4:'TE', 6:'DL', 7:'LB', 8:'DB', 9:'DL', 10:'DL', 12:'LB', 13:'LB', 14:'DB', 15:'DB', 16:'DB' };
+// ESPN proTeamId → NFL abbreviation (Sleeper-compatible)
+const ESPN_TEAM_MAP = {1:'ATL',2:'BUF',3:'CHI',4:'CIN',5:'CLE',6:'DAL',7:'DEN',8:'DET',9:'GB',10:'TEN',11:'IND',12:'KC',13:'OAK',14:'LAR',15:'MIA',16:'MIN',17:'NE',18:'NO',19:'NYG',20:'NYJ',21:'PHI',22:'ARI',23:'PIT',24:'LAC',25:'SF',26:'SEA',27:'TB',28:'WAS',29:'CAR',30:'JAX',33:'BAL',34:'HOU'};
+
+async function rsLoadEspnLeague(lg) {
+  const leagueId = S.leagueDetails[lg.league_id]?._espnId;
+  const season   = S.nflState?.season || new Date().getFullYear().toString();
+  RS.leagueDraftInfo[lg.league_id] = { ridToSlot: null, tradedPicks: [] };
+  try {
+    const r = await fetch(`/api/espn/fantasy/${leagueId}?view=mRoster&view=mTeam&seasonId=${season}`, { credentials: 'include' });
+    if (!r.ok) { RS.leagueRosters[lg.league_id] = []; return; }
+    const d      = await r.json();
+    const mySWID = S.espnSettings?.swid || '';
+    const myTeam = (d.teams || []).find(t => t.primaryOwner === mySWID);
+    if (!myTeam) { RS.leagueRosters[lg.league_id] = []; return; }
+    RS.leagueRosters[lg.league_id] = [{ _isEspn: true, _espnEntries: myTeam.roster?.entries || [] }];
+  } catch { RS.leagueRosters[lg.league_id] = []; }
 }
 
 async function rsLoadLeague(lg) {
@@ -1483,10 +1574,45 @@ function rsBuildRows() {
 
   for (const lg of S.leagues) {
     const rosters  = RS.leagueRosters[lg.league_id] || [];
-    const myRoster = rosters.find(r => r.owner_id === S.userId);
+    const myRoster = lg.source === 'espn'
+      ? rosters[0]   // already filtered to user's team in rsLoadEspnLeague
+      : rosters.find(r => r.owner_id === S.userId);
     if (!myRoster) continue;
 
     // ── Players ────────────────────────────────────────────────────────────────
+    if (myRoster._isEspn) {
+      // ESPN league: resolve players by name lookup into Sleeper player data
+      for (const entry of (myRoster._espnEntries || [])) {
+        const pData    = entry.playerPoolEntry?.playerPoolEntry?.player;
+        if (!pData) continue;
+        const fullName = pData.fullName || `${pData.firstName || ''} ${pData.lastName || ''}`.trim();
+        const espnPos  = ESPN_POS_MAP[pData.defaultPositionId];
+        if (!espnPos) continue;  // K, OL, etc.
+        const pos = rsNormPos(espnPos);
+        if (!pos) continue;
+
+        const sleeperPid = S._playersByName[fullName.toLowerCase()];
+        const sleeperP   = sleeperPid ? S.players[sleeperPid] : null;
+        const rowKey     = sleeperPid || `espn_name_${fullName}`;
+        const teamAbbr   = sleeperP?.team || ESPN_TEAM_MAP[pData.proTeamId] || 'FA';
+        const exp        = sleeperP?.years_exp ?? null;
+        const fcVal      = sleeperPid && RS.fcMap[sleeperPid] != null ? RS.fcMap[sleeperPid] : null;
+
+        if (!playerMap[rowKey]) {
+          playerMap[rowKey] = {
+            key:       rowKey,
+            name:      sleeperP?.full_name || fullName,
+            pos:       sleeperP ? rsNormPos(sleeperP.position) || pos : pos,
+            team:      teamAbbr,
+            exp,
+            leagueSet: new Set(),
+            fcVal,
+            isPick:    false,
+          };
+        }
+        playerMap[rowKey].leagueSet.add(lg.league_id);
+      }
+    } else {
     for (const pid of (myRoster.players || [])) {
       const player = S.players[pid];
       if (!player) continue;
@@ -1507,8 +1633,10 @@ function rsBuildRows() {
       }
       playerMap[pid].leagueSet.add(lg.league_id);
     }
+    }
 
-    // ── Draft picks (1sts & 2nds only) ─────────────────────────────────────────
+    // ── Draft picks (1sts & 2nds only — Sleeper only, ESPN redraft has none) ────
+    if (lg.source === 'espn') continue;
     // Use rsComputePicksForRoster() which derives ownership from traded_picks:
     //   - Start: each team owns their own picks for all upcoming seasons
     //   - Override: apply traded_picks to update ownership
@@ -1689,14 +1817,17 @@ function rsUpdateTable() {
         const lg  = S.leagues.find(l => l.league_id === lgId);
         if (!lg) return '';
         const d   = S.leagueDetails[lgId] || lg;
+        const isEspn = lg.source === 'espn';
         const isBB = d.settings?.best_ball === 1;
-        const type = isBB ? 'Bestball'
+        const type = isEspn ? 'Redraft'
+                   : isBB   ? 'Bestball'
                    : d.settings?.type === 2 ? 'Dynasty'
                    : d.settings?.type === 1 ? 'Keeper' : 'Redraft';
         const sz  = d.total_rosters || lg.total_rosters || '?';
         const cnt = row.isPick && row.leagueCounts[lgId] > 1
           ? ` ×${row.leagueCounts[lgId]}` : '';
-        return `<span class="rs-expand-tag">${esc(lg.name || 'Unnamed')}<span class="rs-tag-meta">${esc(type)} · ${sz}${cnt}</span></span>`;
+        const espnTag = isEspn ? ' ESPN' : '';
+        return `<span class="rs-expand-tag">${esc(lg.name || 'Unnamed')}<span class="rs-tag-meta">${esc(type)}${espnTag} · ${sz}${cnt}</span></span>`;
       }).filter(Boolean).join('');
 
       const label = row.isPick ? 'Leagues holding this pick' : 'Leagues with this player';
@@ -1741,8 +1872,25 @@ function rsToggleLeague(lgId, checked) {
   if (el) el.textContent = `${RS.selectedLeagues.size}/${S.leagues.length} selected`;
   if (RS.loaded) rsUpdateTable();
 }
+function rsLeagueCategory(lgId) {
+  const d = S.leagueDetails[lgId] || S.leagues.find(l => l.league_id === lgId);
+  if (d?.source === 'espn') return 'redraft';
+  if (d?.settings?.best_ball === 1) return 'redraft';
+  return d?.settings?.type === 2 ? 'dynasty' : 'redraft';
+}
+
 function rsSelectAll()    { S.leagues.forEach(l => RS.selectedLeagues.add(l.league_id));  rsSyncSelector(); }
 function rsDeselectAll()  { RS.selectedLeagues.clear(); rsSyncSelector(); }
+function rsSelectRedraft() {
+  RS.selectedLeagues.clear();
+  for (const lg of S.leagues) if (rsLeagueCategory(lg.league_id) === 'redraft') RS.selectedLeagues.add(lg.league_id);
+  rsSyncSelector();
+}
+function rsSelectDynasty() {
+  RS.selectedLeagues.clear();
+  for (const lg of S.leagues) if (rsLeagueCategory(lg.league_id) === 'dynasty') RS.selectedLeagues.add(lg.league_id);
+  rsSyncSelector();
+}
 function rsSelectContenders() {
   RS.selectedLeagues.clear();
   for (const lg of S.leagues) if (RS.prefs[lg.league_id]?.contender) RS.selectedLeagues.add(lg.league_id);
@@ -2220,6 +2368,39 @@ function updateTokenRow(user) {
     inputRow.style.display = '';
     if (saveAcctBtn) saveAcctBtn.style.display = user ? '' : 'none';
   }
+  const espnRow = document.getElementById('espn-settings-row');
+  if (espnRow) espnRow.style.display = user ? '' : 'none';
+  if (user) loadEspnSettings();
+}
+
+async function loadEspnSettings() {
+  if (!S.auth) return;
+  try {
+    const r = await fetch('/api/espn/settings', { credentials: 'include' });
+    if (!r.ok) return;
+    const d = await r.json();
+    const el = document.getElementById('espn-league-ids');
+    if (el) el.value = (d.league_ids || []).join(', ');
+    const status = document.getElementById('espn-settings-status');
+    if (status && d.has_credentials) status.textContent = 'ESPN credentials saved';
+  } catch {}
+}
+
+async function saveEspnSettings() {
+  const ids = (document.getElementById('espn-league-ids')?.value || '')
+    .split(',').map(s => s.trim()).filter(Boolean).map(Number).filter(n => n > 0);
+  const s2   = document.getElementById('espn-s2')?.value.trim()   || '';
+  const swid = document.getElementById('espn-swid')?.value.trim() || '';
+  const status = document.getElementById('espn-settings-status');
+  if (status) status.textContent = 'Saving…';
+  try {
+    const r = await fetch('/api/espn/settings', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ league_ids: ids, espn_s2: s2, swid }),
+    });
+    if (status) status.textContent = r.ok ? 'Saved!' : 'Error saving';
+  } catch { if (status) status.textContent = 'Error saving'; }
 }
 
 function showReplaceToken() {

@@ -93,3 +93,13 @@ CREATE TABLE IF NOT EXISTS user_rankings_shares (
 );
 
 CREATE INDEX IF NOT EXISTS idx_ur_shares_viewer ON user_rankings_shares(shared_with_user_id);
+
+-- ── ESPN Settings ─────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS espn_settings (
+  user_id    TEXT    PRIMARY KEY,
+  league_ids TEXT    NOT NULL DEFAULT '[]',
+  espn_s2    TEXT,
+  swid       TEXT,
+  updated_at INTEGER
+);
