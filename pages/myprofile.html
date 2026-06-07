@@ -208,6 +208,29 @@ footer a:hover { color: var(--gold-light); }
       </div>
 
       <div class="section-head">
+        <h2>ESPN Integration</h2>
+        <div class="section-head-line"></div>
+      </div>
+      <div class="profile-card">
+        <label class="field-label">League IDs <span class="field-label-sub">— comma-separated ESPN league IDs</span></label>
+        <div class="field-row">
+          <input type="text" id="field-espn-ids" class="field-input" placeholder="e.g. 12345, 67890…" />
+        </div>
+        <label class="field-label">espn_s2 Cookie</label>
+        <div class="field-row">
+          <input type="password" id="field-espn-s2" class="field-input" placeholder="espn_s2 cookie value from browser DevTools…" />
+        </div>
+        <label class="field-label">SWID Cookie</label>
+        <div class="field-row">
+          <input type="text" id="field-espn-swid" class="field-input" placeholder="{XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}…" />
+        </div>
+        <div class="field-row" style="margin-bottom:0;">
+          <button class="field-btn" onclick="saveEspnSettings()">Save</button>
+        </div>
+        <div class="field-status" id="espn-status"></div>
+      </div>
+
+      <div class="section-head">
         <h2>Password</h2>
         <div class="section-head-line"></div>
       </div>
@@ -245,6 +268,39 @@ async function populateFields(user) {
   document.getElementById('field-name').value     = user.name  || '';
   document.getElementById('field-username').value = user.sleeper_username || '';
   updateTokenRow(user.has_token);
+  loadEspnSettings();
+}
+
+async function loadEspnSettings() {
+  try {
+    const r = await fetch(API_BASE + '/espn/settings', { credentials: 'include' });
+    if (!r.ok) return;
+    const d = await r.json();
+    const idsEl = document.getElementById('field-espn-ids');
+    if (idsEl) idsEl.value = (d.league_ids || []).join(', ');
+    const st = document.getElementById('espn-status');
+    if (st && d.has_credentials) { st.textContent = 'ESPN credentials saved'; st.className = 'field-status ok'; }
+  } catch {}
+}
+
+async function saveEspnSettings() {
+  const ids  = (document.getElementById('field-espn-ids')?.value || '')
+    .split(',').map(s => s.trim()).filter(Boolean).map(Number).filter(n => n > 0);
+  const s2   = document.getElementById('field-espn-s2')?.value.trim()   || '';
+  const swid = document.getElementById('field-espn-swid')?.value.trim() || '';
+  setStatus('espn-status', 'Saving…', true);
+  try {
+    const r = await fetch(API_BASE + '/espn/settings', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ league_ids: ids, espn_s2: s2, swid }),
+    });
+    if (!r.ok) throw new Error('Server error');
+    document.getElementById('field-espn-s2').value   = '';
+    document.getElementById('field-espn-swid').value = '';
+    setStatus('espn-status', 'Saved', true);
+    loadEspnSettings();
+  } catch(e) { setStatus('espn-status', e.message, false); }
 }
 
 function updateTokenRow(hasToken) {

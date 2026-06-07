@@ -326,41 +326,24 @@ footer a:hover { color: var(--gold); }
         </div>
         <div class="setup-status" id="u-status"></div>
       </div>
-      <hr class="setup-divider" />
-      <div>
-        <label class="setup-label-rye">Auth Token <span class="setup-label-sub">— optional, enables pending trades</span></label>
-        <!-- shown when logged in AND has a stored token -->
-        <div id="token-saved-row" style="display:none;">
-          <div class="setup-status ok" style="margin-bottom:8px;">Token saved to account — trades load automatically</div>
-          <button class="ghost-btn" style="font-size:0.5rem;" onclick="showReplaceToken()">Replace token</button>
-        </div>
-        <!-- shown when no stored token or when replacing -->
-        <div id="token-input-row">
-          <div class="setup-row">
-            <input type="password" id="token-input" class="setup-input" placeholder="sleeper.com → DevTools → Network → any graphql request → Authorization header…" />
-            <button class="setup-btn" onclick="saveToken()">Save</button>
-            <button class="setup-btn" id="token-save-acct-btn" style="display:none;white-space:nowrap;" onclick="saveTokenToAccount()">Save to acct</button>
-          </div>
-          <div class="setup-status" id="token-status">token lives in memory only — clears when you close this tab</div>
-        </div>
-      </div>
-      <div id="espn-settings-row" style="display:none;">
+      <div id="auth-token-section">
         <hr class="setup-divider" />
         <div>
-          <label class="setup-label-rye">ESPN Leagues <span class="setup-label-sub">— private leagues, requires login</span></label>
-          <div class="setup-row">
-            <input type="text" id="espn-league-ids" class="setup-input" placeholder="ESPN league IDs, comma-separated (e.g. 12345, 67890)…" />
+          <label class="setup-label-rye">Auth Token <span class="setup-label-sub">— optional, enables pending trades</span></label>
+          <!-- shown when logged in AND has a stored token -->
+          <div id="token-saved-row" style="display:none;">
+            <div class="setup-status ok" style="margin-bottom:8px;">Token saved to account — trades load automatically</div>
+            <button class="ghost-btn" style="font-size:0.5rem;" onclick="showReplaceToken()">Replace token</button>
           </div>
-          <div class="setup-row" style="margin-top:6px;">
-            <input type="password" id="espn-s2" class="setup-input" placeholder="espn_s2 cookie value…" />
+          <!-- shown when no stored token or when replacing -->
+          <div id="token-input-row">
+            <div class="setup-row">
+              <input type="password" id="token-input" class="setup-input" placeholder="sleeper.com → DevTools → Network → any graphql request → Authorization header…" />
+              <button class="setup-btn" onclick="saveToken()">Save</button>
+              <button class="setup-btn" id="token-save-acct-btn" style="display:none;white-space:nowrap;" onclick="saveTokenToAccount()">Save to acct</button>
+            </div>
+            <div class="setup-status" id="token-status">token lives in memory only — clears when you close this tab</div>
           </div>
-          <div class="setup-row" style="margin-top:6px;">
-            <input type="text" id="espn-swid" class="setup-input" placeholder="SWID cookie value (e.g. {XXXX-XXXX})…" />
-          </div>
-          <div class="setup-row" style="margin-top:6px;">
-            <button class="setup-btn" onclick="saveEspnSettings()">Save ESPN Settings</button>
-          </div>
-          <div class="setup-status" id="espn-settings-status"></div>
         </div>
       </div>
     </div>
@@ -593,12 +576,18 @@ function setC(html) { document.getElementById('content').innerHTML = html; }
 // ── 1. Trades ─────────────────────────────────────────────────────────────────
 async function renderTrades() {
   if (!S.token && !S.auth?.has_token) {
-    setC(`<div class="empty-state">
-      <p>Paste your Sleeper auth token above to see pending trades</p>
-      <p style="margin-top:10px;font-size:0.85rem;color:var(--brown-light);font-family:'Crimson Text',serif;font-style:italic;">
-        sleeper.com → DevTools → Network → any graphql request → Authorization header
-      </p>
-    </div>`);
+    if (S.auth) {
+      setC(`<div class="empty-state">
+        <p>Add your Sleeper auth token in <a href="/myprofile" style="color:var(--gold-light);">your profile</a> to see pending trades</p>
+      </div>`);
+    } else {
+      setC(`<div class="empty-state">
+        <p>Paste your Sleeper auth token above to see pending trades</p>
+        <p style="margin-top:10px;font-size:0.85rem;color:var(--brown-light);font-family:'Crimson Text',serif;font-style:italic;">
+          sleeper.com → DevTools → Network → any graphql request → Authorization header
+        </p>
+      </div>`);
+    }
     return;
   }
   setC(loading('Scanning leagues for pending trades'));
@@ -2357,50 +2346,30 @@ async function tpSelectPlayer(pid) {
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 function updateTokenRow(user) {
-  const savedRow    = document.getElementById('token-saved-row');
-  const inputRow    = document.getElementById('token-input-row');
-  const saveAcctBtn = document.getElementById('token-save-acct-btn');
-  if (user?.has_token) {
-    savedRow.style.display = '';
-    inputRow.style.display = 'none';
+  // When logged in, auth token + ESPN settings live on the profile page — hide from main
+  const tokenSection = document.getElementById('auth-token-section');
+  if (user) {
+    if (tokenSection) tokenSection.style.display = 'none';
+    loadEspnSettings();
   } else {
-    savedRow.style.display = 'none';
-    inputRow.style.display = '';
-    if (saveAcctBtn) saveAcctBtn.style.display = user ? '' : 'none';
+    // Not logged in: show token input (in-memory only)
+    if (tokenSection) tokenSection.style.display = '';
+    const savedRow = document.getElementById('token-saved-row');
+    const inputRow = document.getElementById('token-input-row');
+    if (savedRow) savedRow.style.display = 'none';
+    if (inputRow) inputRow.style.display = '';
   }
-  const espnRow = document.getElementById('espn-settings-row');
-  if (espnRow) espnRow.style.display = user ? '' : 'none';
-  if (user) loadEspnSettings();
 }
 
 async function loadEspnSettings() {
+  // Ensures S.espnSettings is populated — called from updateTokenRow on login
   if (!S.auth) return;
+  if (S.espnSettings) return; // already fetched by loadEspnLeagues
   try {
     const r = await fetch('/api/espn/settings', { credentials: 'include' });
     if (!r.ok) return;
-    const d = await r.json();
-    const el = document.getElementById('espn-league-ids');
-    if (el) el.value = (d.league_ids || []).join(', ');
-    const status = document.getElementById('espn-settings-status');
-    if (status && d.has_credentials) status.textContent = 'ESPN credentials saved';
+    S.espnSettings = await r.json();
   } catch {}
-}
-
-async function saveEspnSettings() {
-  const ids = (document.getElementById('espn-league-ids')?.value || '')
-    .split(',').map(s => s.trim()).filter(Boolean).map(Number).filter(n => n > 0);
-  const s2   = document.getElementById('espn-s2')?.value.trim()   || '';
-  const swid = document.getElementById('espn-swid')?.value.trim() || '';
-  const status = document.getElementById('espn-settings-status');
-  if (status) status.textContent = 'Saving…';
-  try {
-    const r = await fetch('/api/espn/settings', {
-      method: 'POST', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ league_ids: ids, espn_s2: s2, swid }),
-    });
-    if (status) status.textContent = r.ok ? 'Saved!' : 'Error saving';
-  } catch { if (status) status.textContent = 'Error saving'; }
 }
 
 function showReplaceToken() {
