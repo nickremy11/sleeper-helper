@@ -1001,6 +1001,7 @@ const T = {
   draft: null,        // active draft object
   posFilter: 'ALL',   // position filter
   pollTimer: null,
+  myRanksSets: null,  // cached {primary, sets, sharedSets} from myranks API
 };
 
 function renderDraftTracker() {
@@ -1018,6 +1019,12 @@ function renderDraftTracker() {
         </div>
         <div class="setup-status" id="csv-status"></div>
       </div>
+      ${S.auth ? `<hr class="setup-divider" />
+      <div style="margin-bottom:14px;">
+        <label class="setup-label-rye">My Rankings <span class="setup-label-sub">— select one or more saved sets; multiple sets are combined by average rank</span></label>
+        <div id="myranks-tracker-picker" style="margin-top:6px;font-family:'Crimson Text',serif;font-size:0.9rem;color:var(--brown-light);">Loading…</div>
+        <div class="setup-status" id="myranks-status"></div>
+      </div>` : ''}
       <hr class="setup-divider" />
       <div>
         <label class="setup-label-rye">Active Draft <span class="setup-label-sub">— auto-updates picks every 15s</span></label>
@@ -1038,6 +1045,7 @@ function renderDraftTracker() {
 
   // Populate draft selector with active drafts if we already have them
   populateDraftSelector();
+  if (S.auth) populateMyRanksPicker();
 }
 
 async function populateDraftSelector() {
@@ -1249,6 +1257,141 @@ function renderTrackerBody() {
 function setTrackerPos(pos) {
   T.posFilter = pos;
   renderTrackerBody();
+}
+
+const MYRANKS_API = 'https://myranks.ffhistorian.com';
+
+async function populateMyRanksPicker() {
+  const div = document.getElementById('myranks-tracker-picker');
+  if (!div) return;
+  try {
+    const [dataRes, setsRes] = await Promise.all([
+      fetch(MYRANKS_API + '/api/myranks/data', { credentials: 'include' }),
+      fetch(MYRANKS_API + '/api/myranks/sets', { credentials: 'include' }),
+    ]);
+    if (!dataRes.ok || !setsRes.ok) throw new Error('Failed to load');
+    const [data, setsData] = await Promise.all([dataRes.json(), setsRes.json()]);
+    T.myRanksSets = { primary: data.rankings || [], sets: setsData.sets || [], sharedSets: setsData.sharedSets || [] };
+
+    const options = [];
+    if (data.rankings?.length) options.push({ id: 'primary', label: 'My Rankings' });
+    for (const s of (setsData.sets || [])) options.push({ id: 'set:' + s.id, label: s.name });
+    for (const s of (setsData.sharedSets || [])) {
+      const label = s.is_primary
+        ? (s.owner_name ? `${s.owner_name}'s Rankings` : 'Shared Rankings')
+        : (s.owner_name ? `${s.name} (${s.owner_name})` : s.name);
+      options.push({ id: String(s.id), label });
+    }
+
+    if (!options.length) {
+      div.innerHTML = `<span>No ranking sets found — create some at <a href="https://myranks.ffhistorian.com" target="_blank" style="color:var(--gold);">My Ranks</a></span>`;
+      return;
+    }
+
+    div.innerHTML = `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+      ${options.map(o => `<label style="display:flex;align-items:center;gap:4px;cursor:pointer;color:var(--cream);font-family:'Crimson Text',serif;font-size:0.9rem;white-space:nowrap;">
+        <input type="checkbox" value="${esc(o.id)}" onchange="updateMyRanksLoadBtn()" style="accent-color:var(--gold);cursor:pointer;" />
+        ${esc(o.label)}
+      </label>`).join('')}
+      <button class="setup-btn" id="myranks-load-btn" disabled onclick="loadFromMyRanks()">Load</button>
+    </div>`;
+  } catch(e) {
+    if (div) div.innerHTML = '<span>Error loading ranking sets</span>';
+  }
+}
+
+function updateMyRanksLoadBtn() {
+  const div = document.getElementById('myranks-tracker-picker');
+  if (!div) return;
+  const n = div.querySelectorAll('input[type=checkbox]:checked').length;
+  const btn = document.getElementById('myranks-load-btn');
+  if (!btn) return;
+  btn.disabled = !n;
+  btn.textContent = n > 1 ? `Load (avg of ${n})` : 'Load';
+}
+
+async function loadFromMyRanks() {
+  const div = document.getElementById('myranks-tracker-picker');
+  const st = document.getElementById('myranks-status');
+  if (!div) return;
+  const checked = [...div.querySelectorAll('input[type=checkbox]:checked')].map(cb => cb.value);
+  if (!checked.length) return;
+  if (st) { st.textContent = 'Loading…'; st.className = 'setup-status'; }
+  try {
+    await loadPlayers();
+    const fetches = checked.map(id => {
+      if (id === 'primary') return Promise.resolve(T.myRanksSets.primary);
+      // shared primary: id looks like "primary:userId"
+      if (id.startsWith('primary:')) {
+        const ownerId = id.slice(8);
+        return fetch(MYRANKS_API + '/api/myranks/data?owner_id=' + encodeURIComponent(ownerId), { credentials: 'include' })
+          .then(r => r.json()).then(d => d.rankings || []);
+      }
+      // named set: id looks like "set:123"
+      if (id.startsWith('set:')) {
+        const setId = id.slice(4);
+        return fetch(MYRANKS_API + '/api/myranks/sets/' + setId + '/data', { credentials: 'include' })
+          .then(r => r.json()).then(d => d.rankings || []);
+      }
+      // shared named set: plain numeric id (from sharedSets list)
+      return fetch(MYRANKS_API + '/api/myranks/sets/' + id + '/data', { credentials: 'include' })
+        .then(r => r.json()).then(d => d.rankings || []);
+    });
+    const lists = await Promise.all(fetches);
+    const combined = combineRankingLists(lists);
+    T.rankings = combined;
+    T.posFilter = 'ALL';
+    const fi = document.getElementById('csv-file');
+    if (fi) fi.value = '';
+    const csvSt = document.getElementById('csv-status');
+    if (csvSt) { csvSt.textContent = ''; csvSt.className = 'setup-status'; }
+    if (st) {
+      const desc = checked.length > 1 ? `${checked.length} sets combined (average rank)` : '1 ranking set';
+      st.textContent = `✦ Loaded ${combined.length} players from ${desc}`;
+      st.className = 'setup-status ok';
+    }
+    renderTrackerBody();
+  } catch(e) {
+    if (st) { st.textContent = 'Error: ' + e.message; st.className = 'setup-status err'; }
+  }
+}
+
+function combineRankingLists(lists) {
+  // Each list is [{player_name, position, team, tier}] already in rank order (tier asc, then name)
+  // Build rank maps per list: playerName.toLowerCase() → 1-based rank
+  const rankMaps = lists.map(list => {
+    const map = {};
+    list.forEach((p, i) => { map[p.player_name.toLowerCase()] = i + 1; });
+    return { map, size: list.length };
+  });
+
+  // Collect all unique players
+  const playerData = {};
+  for (const list of lists) {
+    for (const p of list) {
+      const key = p.player_name.toLowerCase();
+      if (!playerData[key]) playerData[key] = p;
+    }
+  }
+
+  // Average rank; players missing from a list get penalized with size+1
+  const players = Object.entries(playerData).map(([key, p]) => {
+    const avg = rankMaps.reduce((sum, { map, size }) => sum + (map[key] ?? size + 1), 0) / rankMaps.length;
+    return { key, p, avg };
+  });
+
+  players.sort((a, b) => a.avg - b.avg);
+
+  const singleList = lists.length === 1;
+  return players.map(({ key, p }, i) => ({
+    rank: i + 1,
+    name: p.player_name,
+    pos:  (p.position || '').toUpperCase(),
+    team: p.team || '',
+    sleeper_id: S._playersByName?.[key] || '',
+    adp:  '',
+    tier: singleList ? String(p.tier ?? '') : '',
+  }));
 }
 
 
