@@ -389,6 +389,7 @@ const RS = {
   filtTeam:        '',
   filtSize:        '',
   filtType:        'all',
+  filtContReb:     'all',   // 'all' | 'contender' | 'rebuilder'
   _teams:          new Set(),
   _sizes:          new Set(),
   expandedKey:     null,   // key of currently expanded player row
@@ -1430,10 +1431,7 @@ function rsDrawFull() {
     const d    = S.leagueDetails[lg.league_id] || lg;
     const isBB = d.settings?.best_ball === 1;
     const isEspn = lg.source === 'espn';
-    const type = isEspn ? 'Redraft'
-               : isBB   ? 'Bestball'
-               : d.settings?.type === 2 ? 'Dynasty'
-               : d.settings?.type === 1 ? 'Keeper' : 'Redraft';
+    const type = d.settings?.type === 2 && !isEspn ? 'Dynasty' : 'Redraft';
     const sz   = d.total_rosters || lg.total_rosters || '?';
     const chk  = RS.selectedLeagues.has(lg.league_id) ? 'checked' : '';
     const srcBadge = isEspn ? ' <span style="font-size:0.65rem;color:var(--gold);opacity:0.8;font-family:monospace;letter-spacing:0.02em;">ESPN</span>' : '';
@@ -1511,6 +1509,14 @@ function rsDrawFull() {
           <button class="pos-pill${RS.filtType==='lineup'   ?' active':''}" onclick="rsSetType('lineup')">Lineup</button>
         </div>
       </div>
+      <div class="filter-group-rs">
+        <span class="filter-lbl-rs">League Role</span>
+        <div style="display:flex;gap:4px;">
+          <button class="pos-pill${RS.filtContReb==='all'       ?' active':''}" onclick="rsSetContReb('all')">All</button>
+          <button class="pos-pill${RS.filtContReb==='contender' ?' active':''}" onclick="rsSetContReb('contender')" ${hasPrefs?'':'disabled title="Fill out Root For Me first"'}>Contenders</button>
+          <button class="pos-pill${RS.filtContReb==='rebuilder' ?' active':''}" onclick="rsSetContReb('rebuilder')"  ${hasPrefs?'':'disabled title="Fill out Root For Me first"'}>Rebuilders</button>
+        </div>
+      </div>
     </div>` : '';
 
   setC(`<div>
@@ -1522,8 +1528,6 @@ function rsDrawFull() {
         <button class="ghost-btn" onclick="rsDeselectAll()">None</button>
         <button class="ghost-btn" onclick="rsSelectRedraft()">Redraft</button>
         <button class="ghost-btn" onclick="rsSelectDynasty()">Dynasty</button>
-        <button class="ghost-btn" id="rs-btn-cont" ${hasPrefs?'':'disabled title="Fill out Root For Me first"'} onclick="rsSelectContenders()">Contenders</button>
-        <button class="ghost-btn" id="rs-btn-reb"  ${hasPrefs?'':'disabled title="Fill out Root For Me first"'} onclick="rsSelectRebuilders()">Rebuilders</button>
         <div style="flex:1;"></div>
         <button class="setup-btn" id="rs-load-btn" onclick="loadRostershipData()" style="height:32px;">${RS.loaded?'Reload':'Load Rostership'}</button>
         <span class="setup-status" id="rs-load-status" style="margin:0;"></span>
@@ -1850,6 +1854,11 @@ function rsRowStats(row) {
 
     if (sizeFilter && lsize !== sizeFilter)           continue;
     if (RS.filtType !== 'all' && ltype !== RS.filtType) continue;
+    if (RS.filtContReb !== 'all') {
+      const pref = RS.prefs[lgId];
+      if (RS.filtContReb === 'contender' && pref?.contender !== true) continue;
+      if (RS.filtContReb === 'rebuilder' && !(pref !== null && pref?.contender === false)) continue;
+    }
 
     total++;
     if (row.isPick) shares += (row.leagueCounts[lgId] || 0);
@@ -2069,6 +2078,14 @@ function rsSetType(type) {
   pills.forEach(b => {
     const t = b.getAttribute('onclick').match(/'(\w+)'/)?.[1];
     if (t) b.classList.toggle('active', t === type);
+  });
+  rsUpdateTable();
+}
+function rsSetContReb(val) {
+  RS.filtContReb = val;
+  document.querySelectorAll('[onclick^="rsSetContReb"]').forEach(b => {
+    const v = b.getAttribute('onclick').match(/'(\w+)'/)?.[1];
+    if (v) b.classList.toggle('active', v === val);
   });
   rsUpdateTable();
 }
