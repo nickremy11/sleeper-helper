@@ -16,15 +16,20 @@
   display: flex; align-items: center; gap: 20px;
 }
 /* ── NAV ── */
-.tab-bar { background: var(--brown-dark); border-bottom: 3px solid var(--gold); position: sticky; top: 0; z-index: 100; }
-.tab-bar-inner { max-width: 900px; margin: 0 auto; display: flex; flex-wrap: wrap; }
+.tab-bar { background: var(--brown-dark); border-bottom: 3px solid var(--gold); position: sticky; top: 0; z-index: 100; overflow-x: auto; }
+.tab-bar-inner { max-width: 900px; margin: 0 auto; display: flex; min-width: max-content; }
+.tab-group { display: flex; flex-direction: column; border-right: 1px solid rgba(255,255,255,0.18); }
+.tab-group:last-child { border-right: none; }
+.tab-group-label { font-family: 'Rye', serif; font-size: 0.36rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--gold); opacity: 0.5; padding: 5px 14px 2px; white-space: nowrap; }
+.tab-group-btns { display: flex; flex: 1; align-items: stretch; }
 .tab-btn {
   background: none; border: none; cursor: pointer;
-  font-family: 'Rye', serif; font-size: 0.6rem; letter-spacing: 0.18em; text-transform: uppercase;
-  color: var(--parchment); opacity: 0.55; padding: 14px 18px;
+  font-family: 'Rye', serif; font-size: 0.58rem; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--parchment); opacity: 0.55; padding: 8px 13px 12px;
   border-right: 1px solid rgba(255,255,255,0.07);
   transition: opacity 0.2s, background 0.2s; position: relative;
 }
+.tab-btn:last-child { border-right: none; }
 .tab-btn:hover { opacity: 0.85; background: rgba(255,255,255,0.04); }
 .tab-btn.active { opacity: 1; color: var(--gold-light); background: rgba(255,255,255,0.05); }
 .tab-btn.active::after { content: ''; position: absolute; bottom: -3px; left: 0; right: 0; height: 3px; background: var(--gold-light); }
@@ -163,7 +168,8 @@ footer a:hover { color: var(--gold); }
 
 @media (max-width: 600px) {
   .banner-inner { padding: 20px 16px; }
-  .tab-btn { padding: 12px 10px; font-size: 0.5rem; letter-spacing: 0.1em; }
+  .tab-group-label { font-size: 0.32rem; padding: 4px 10px 2px; }
+  .tab-btn { padding: 6px 10px 10px; font-size: 0.5rem; letter-spacing: 0.1em; }
   .main { padding: 20px 16px 60px; }
   .setup-card { padding: 16px; }
   .trade-sides { grid-template-columns: 1fr 18px 1fr; }
@@ -275,15 +281,37 @@ footer a:hover { color: var(--gold); }
 
   <nav class="tab-bar">
     <div class="tab-bar-inner">
-      <button class="tab-btn active" id="tab-leagues" onclick="sw('leagues')">League Summaries</button>
-      <button class="tab-btn"        id="tab-trades"  onclick="sw('trades')">Trades</button>
-      <button class="tab-btn"        id="tab-player"  onclick="sw('player')">Player Finder</button>
-      <button class="tab-btn"        id="tab-lineups" onclick="sw('lineups')">Lineup Check</button>
-      <button class="tab-btn"        id="tab-drafts"  onclick="sw('drafts')">Draft Queue</button>
-      <button class="tab-btn"        id="tab-tracker" onclick="sw('tracker')">Draft Tracker</button>
-      <button class="tab-btn"        id="tab-rostership" onclick="sw('rostership')">Rostership</button>
-      <button class="tab-btn"        id="tab-partners"   onclick="sw('partners')">Trade Partners</button>
-      <a class="tab-btn" href="/rootforme" style="text-decoration:none;display:inline-flex;align-items:center;">Root For Me</a>
+      <div class="tab-group">
+        <div class="tab-group-label">My Leagues</div>
+        <div class="tab-group-btns">
+          <button class="tab-btn active" id="tab-leagues"    onclick="sw('leagues')">League Summaries</button>
+          <button class="tab-btn"        id="tab-rostership" onclick="sw('rostership')">Rostership</button>
+          <button class="tab-btn"        id="tab-lineups"    onclick="sw('lineups')">Lineup Checker</button>
+          <button class="tab-btn"        id="tab-player"     onclick="sw('player')">Player Finder</button>
+        </div>
+      </div>
+      <div class="tab-group">
+        <div class="tab-group-label">Trades</div>
+        <div class="tab-group-btns">
+          <button class="tab-btn" id="tab-trades"   onclick="sw('trades')">Open Trades</button>
+          <button class="tab-btn" id="tab-partners" onclick="sw('partners')">Trade Partners</button>
+        </div>
+      </div>
+      <div class="tab-group">
+        <div class="tab-group-label">Drafts</div>
+        <div class="tab-group-btns">
+          <button class="tab-btn" id="tab-drafts"  onclick="sw('drafts')">Draft Queue</button>
+          <button class="tab-btn" id="tab-tracker" onclick="sw('tracker')">In-Draft Tracker</button>
+          <a class="tab-btn" href="/dispersal" style="text-decoration:none;display:inline-flex;align-items:center;">Dispersal</a>
+        </div>
+      </div>
+      <div class="tab-group">
+        <div class="tab-group-label">Other Tools</div>
+        <div class="tab-group-btns">
+          <a class="tab-btn" href="/my-ranks" style="text-decoration:none;display:inline-flex;align-items:center;">My Ranks</a>
+          <a class="tab-btn" href="/rootforme" style="text-decoration:none;display:inline-flex;align-items:center;">Root For Me</a>
+        </div>
+      </div>
     </div>
   </nav>
 
