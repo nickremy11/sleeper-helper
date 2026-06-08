@@ -154,12 +154,12 @@ body::before {
 .asset-row td.val { text-align:right; font-family:'Playfair Display',serif; font-size:0.82rem; color:var(--gold); }
 .asset-name { color:var(--cream); }
 .pos-tag { display:inline-block; font-family:'Rye',serif; font-size:0.38rem; letter-spacing:0.1em; padding:2px 5px; border-radius:2px; margin-right:4px; }
-.pos-QB { background:#3a2a00; color:#e8b84b; }
+.pos-QB { background:#3a0a0a; color:#e05252; }
 .pos-RB { background:#1a3a1a; color:#5cb85c; }
 .pos-WR { background:#0d2a36; color:#5bc0de; }
 .pos-TE { background:#3a1a0a; color:#e8734b; }
 .pos-K  { background:#2a1a36; color:#9b59b6; }
-.pos-PICK { background:#1a2a3a; color:#7ec8e3; }
+.pos-PICK { background:#2a2a28; color:#d8d5ce; }
 .pos-DEF { background:#1e1e1e; color:#aaa; }
 .pick-btn { background:var(--green); border:1px solid var(--gold); color:var(--gold-light); font-family:'Rye',serif; font-size:0.4rem; letter-spacing:0.12em; text-transform:uppercase; padding:4px 10px; cursor:pointer; border-radius:2px; transition:background 0.15s; white-space:nowrap; }
 .pick-btn:hover { background:var(--gold); color:var(--brown-dark); }
@@ -199,7 +199,7 @@ body::before {
 .roster-slot { display:flex; align-items:center; gap:10px; padding:6px 14px; border-bottom:1px dashed rgba(255,255,255,0.05); }
 .roster-slot:last-child { border-bottom:none; }
 .slot-pos { font-family:'Rye',serif; font-size:0.4rem; letter-spacing:0.1em; width:32px; flex-shrink:0; }
-.slot-pos.QB { color:#e8b84b; } .slot-pos.RB { color:#5cb85c; }
+.slot-pos.QB { color:#e05252; } .slot-pos.RB { color:#5cb85c; }
 .slot-pos.WR { color:#5bc0de; } .slot-pos.TE { color:#e8734b; }
 .slot-pos.K  { color:#9b59b6; } .slot-pos.FLEX,.slot-pos.SF { color:var(--gold-light); }
 .slot-pos.BN { color:var(--brown-light); }
@@ -328,7 +328,7 @@ async function fcApi() {
 
 // ── Position helpers ──────────────────────────────────────────────────────────
 
-const POS_COLORS = { QB:'#e8b84b', RB:'#5cb85c', WR:'#5bc0de', TE:'#e8734b', K:'#9b59b6', PICK:'#7ec8e3', DEF:'#aaa' };
+const POS_COLORS = { QB:'#e05252', RB:'#5cb85c', WR:'#5bc0de', TE:'#e8734b', K:'#9b59b6', PICK:'#d8d5ce', DEF:'#aaa' };
 
 function posTag(pos) {
   const p = String(pos || '').toUpperCase();

@@ -192,7 +192,7 @@ a.row-link:hover { color: var(--gold-light); }
 .tp-name { font-family: 'Crimson Text', serif; font-size: 0.82rem; color: var(--parchment); line-height: 1.25; word-break: break-word; overflow-wrap: break-word; white-space: normal; }
 .tp-team { font-family: 'Rye', serif; font-size: 0.48rem; letter-spacing: 0.1em; color: var(--brown-light); line-height: 1.4; }
 /* Position colors */
-.pos-qb { border-left-color: #e8b84b; } .pos-qb .tp-pos { color: #e8b84b; }
+.pos-qb { border-left-color: #e05252; } .pos-qb .tp-pos { color: #e05252; }
 .pos-rb { border-left-color: #5cb85c; } .pos-rb .tp-pos { color: #5cb85c; }
 .pos-wr { border-left-color: #5bc0de; } .pos-wr .tp-pos { color: #5bc0de; }
 .pos-te { border-left-color: #e8734b; } .pos-te .tp-pos { color: #e8734b; }
@@ -241,14 +241,14 @@ footer a:hover { color: var(--gold); }
 .rs-table tr:last-child td { border-bottom: none; }
 .rs-table tbody tr:hover td { background: rgba(255,255,255,0.025); }
 .rs-pos { display: inline-block; font-family: 'Crimson Text', serif; font-size: 0.82rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 7px; border-radius: 2px; min-width: 32px; text-align: center; }
-.rs-pos-QB   { background: rgba(232,184,75,0.18);  color: #e8b84b; }
+.rs-pos-QB   { background: rgba(224,82,82,0.18);   color: #e05252; }
 .rs-pos-RB   { background: rgba(92,184,92,0.18);   color: #5cb85c; }
 .rs-pos-WR   { background: rgba(91,192,222,0.18);  color: #5bc0de; }
 .rs-pos-TE   { background: rgba(232,115,75,0.18);  color: #e8734b; }
 .rs-pos-DL   { background: rgba(155,89,182,0.18);  color: #9b59b6; }
 .rs-pos-LB   { background: rgba(41,128,185,0.18);  color: #3498db; }
 .rs-pos-DB   { background: rgba(26,188,156,0.18);  color: #1abc9c; }
-.rs-pos-PICK { background: rgba(201,150,42,0.2);   color: var(--gold-light); }
+.rs-pos-PICK { background: rgba(210,205,195,0.14);  color: #d8d5ce; }
 .rs-pct-wrap { display: flex; align-items: center; gap: 7px; }
 .rs-pct-bar  { height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; width: 60px; flex-shrink: 0; }
 .rs-pct-fill { height: 4px; border-radius: 2px; background: var(--gold); }
@@ -284,6 +284,28 @@ footer a:hover { color: var(--gold); }
 .ls-chance-lg    { color: var(--gold-light); }
 .ls-chance-nervy { color: var(--parchment); font-style: italic; }
 .ls-chance-blny  { color: var(--brown-light); font-style: italic; }
+
+/* ── PLAYER FINDER — Trade Comparison ── */
+.pf-trade-list { margin-bottom: 6px; }
+.pf-trade-card { background: var(--brown-dark); border: 1px solid var(--brown-mid); border-radius: 2px; margin-bottom: 4px; transition: border-color 0.15s; }
+.pf-trade-card:hover { border-color: rgba(201,150,42,0.5); }
+.pf-trade-header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; user-select: none; }
+.pf-trade-chevron { font-size: 0.9rem; color: var(--brown-light); transition: transform 0.2s; flex-shrink: 0; display: inline-block; }
+.pf-trade-chevron.open { transform: rotate(90deg); color: var(--gold); }
+.pf-compare-wrap { padding: 0 14px 14px; border-top: 1px solid var(--brown-mid); }
+.pf-compare-header-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 10px 0 6px; margin-bottom: 8px; }
+.pf-compare-col-header { font-family: 'Rye', serif; font-size: 0.45rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--gold); }
+.pf-pos-section { margin-bottom: 10px; }
+.pf-pos-label-row { padding: 5px 0 4px; border-bottom: 1px dashed rgba(255,255,255,0.08); margin-bottom: 4px; }
+.pf-pos-content-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.pf-compare-col { min-width: 0; }
+.pf-player-row { display: flex; align-items: center; gap: 6px; padding: 3px 6px 3px 4px; border-radius: 2px; margin-bottom: 2px; font-family: 'Crimson Text', serif; font-size: 0.88rem; color: var(--parchment); border-left: 2px solid transparent; }
+.pf-player-row.starter { background: rgba(255,255,255,0.055); border-left-color: var(--gold); }
+.pf-player-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-player-val { color: var(--brown-light); font-size: 0.78rem; white-space: nowrap; font-family: 'Playfair Display', serif; flex-shrink: 0; }
+.pf-empty-pos { color: var(--brown-light); font-style: italic; font-size: 0.82rem; padding: 2px 4px; font-family: 'Crimson Text', serif; }
+.pf-p2-wrap { margin: 8px 0 4px; }
+.pf-p2-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 </style>
 </head>
 <body>
@@ -403,6 +425,15 @@ const LS = {
   sortCol:    'record',
   sortDir:    -1,
   filter:     'all', // 'all' | 'contenders' | 'rebuilders'
+};
+
+// ── Player Finder state ───────────────────────────────────────────────────────
+const PF = {
+  targetPid:     null,   // player 1 — the player I want to acquire
+  myPid:         null,   // player 2 — the player I'm filtering by (what I'd offer)
+  allRosterData: null,   // [{lg, rs, uMap}] from the initial fetch
+  fcMap:         null,   // FantasyCalc values (lazy-loaded on first comparison open)
+  expanded:      null,   // lgId of currently expanded comparison panel
 };
 
 function rsNormPos(raw) {
@@ -694,7 +725,7 @@ function renderPlayerSearch() {
   setC(`<div>
     <div class="search-wrap">
       <div class="player-ac-wrap" id="pf-ac">
-        <input type="text" id="ps" class="search-input" placeholder="Search player name…"
+        <input type="text" id="ps" class="search-input" placeholder="Search player to target…"
           oninput="pfShowDropdown()" autocomplete="off" autofocus />
         <div class="player-dropdown" id="pf-dropdown" style="display:none;"></div>
       </div>
@@ -708,6 +739,11 @@ function _pfOutsideClick(e) {
   const ac = document.getElementById('pf-ac');
   if (!ac) { document.removeEventListener('click', _pfOutsideClick); return; }
   if (!ac.contains(e.target)) document.getElementById('pf-dropdown').style.display = 'none';
+  const ac2 = document.getElementById('pf-ac2');
+  if (ac2 && !ac2.contains(e.target)) {
+    const dd2 = document.getElementById('pf-dropdown2');
+    if (dd2) dd2.style.display = 'none';
+  }
 }
 
 async function pfShowDropdown() {
@@ -730,65 +766,315 @@ async function pfShowDropdown() {
   dd.style.display = 'block';
 }
 
+async function pfShowDropdown2() {
+  const q = document.getElementById('ps2')?.value.trim().toLowerCase();
+  const dd = document.getElementById('pf-dropdown2');
+  if (!q || q.length < 2) { if (dd) dd.style.display = 'none'; return; }
+  await loadPlayers();
+  const matches = Object.entries(S.players)
+    .filter(([,p]) => p.full_name?.toLowerCase().includes(q))
+    .sort((a,b) => {
+      const aS = a[1].full_name.toLowerCase().startsWith(q) ? 0 : 1;
+      const bS = b[1].full_name.toLowerCase().startsWith(q) ? 0 : 1;
+      return aS - bS || a[1].full_name.localeCompare(b[1].full_name);
+    }).slice(0, 12);
+  if (!matches.length || !dd) { if (dd) dd.style.display = 'none'; return; }
+  dd.innerHTML = matches.map(([pid, p]) =>
+    `<div class="player-dropdown-item" onmousedown="pfSelectMyPlayer('${esc(pid)}')">`+
+    `${esc(p.full_name)} <span class="player-dropdown-meta">${esc(p.position||'')} · ${esc(p.team||'FA')}</span></div>`
+  ).join('');
+  dd.style.display = 'block';
+}
+
+function pfSelectMyPlayer(pid) {
+  const dd2 = document.getElementById('pf-dropdown2');
+  if (dd2) dd2.style.display = 'none';
+  const p = S.players[pid];
+  if (!p) return;
+  const inp = document.getElementById('ps2');
+  if (inp) inp.value = p.full_name;
+  PF.myPid = pid;
+  PF.expanded = null;
+  pfRenderResults();
+}
+
+function pfClearMyPlayer() {
+  PF.myPid = null;
+  PF.expanded = null;
+  pfRenderResults();
+}
+
 async function pfSelectPlayer(pid) {
   document.getElementById('pf-dropdown').style.display = 'none';
   const player = S.players[pid];
   if (!player) return;
   document.getElementById('ps').value = player.full_name;
+  PF.targetPid = pid;
+  PF.myPid = null;
+  PF.expanded = null;
   const r = document.getElementById('ps-r');
   r.innerHTML = loading('Checking all leagues');
   try {
-    const rData = await Promise.all(S.leagues.map(lg =>
+    PF.allRosterData = await Promise.all(S.leagues.map(lg =>
       Promise.all([ api('/league/' + lg.league_id + '/rosters'), api('/league/' + lg.league_id + '/users') ])
         .then(([rs, us]) => {
           const uMap = Object.fromEntries((us || []).map(u => [u.user_id, u.display_name || u.username]));
           return { lg, rs: rs || [], uMap };
         }).catch(() => null)
     ));
-    const mine = [], theirs = [], free = [];
-    for (const rd of rData) {
-      if (!rd) continue;
-      let found = false;
-      for (const roster of rd.rs) {
-        if (!roster.players?.includes(pid)) continue;
-        found = true;
-        if (roster.owner_id === S.userId) {
-          mine.push({ lgName: rd.lg.name, lgId: rd.lg.league_id, starter: roster.starters?.includes(pid) });
-        } else {
-          theirs.push({ lgName: rd.lg.name, lgId: rd.lg.league_id, ownerName: rd.uMap[roster.owner_id] || 'Unknown' });
-        }
-        break;
-      }
-      if (!found) free.push({ name: rd.lg.name, lgId: rd.lg.league_id });
-    }
-    if (!mine.length && !theirs.length) {
-      r.innerHTML = '<div class="empty-state"><p>Player not found on any of your rosters</p></div>'; return;
-    }
-    mine.sort((a,b) => a.lgName.localeCompare(b.lgName));
-    theirs.sort((a,b) => a.lgName.localeCompare(b.lgName));
-    free.sort((a,b) => a.name.localeCompare(b.name));
-    r.innerHTML = `<div style="margin-bottom:16px;">
-      <div style="background:var(--brown-dark);border:1px solid var(--brown-mid);border-radius:2px;padding:12px 16px;margin-bottom:6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        <span class="card-title">${esc(player.full_name)}</span>
-        <span class="card-meta">${esc(player.position||'')} · ${esc(player.team||'FA')}</span>
-      </div>
-      ${mine.length ? `<div class="sect">On your roster</div><div class="pf-mine">${mine.map(f=>`
-        <div class="data-row">
-          <a href="https://sleeper.com/leagues/${esc(f.lgId)}/team" target="_blank" class="row-link">${esc(f.lgName)}</a>
-          <span style="display:flex;align-items:center;gap:6px;">${injuryBadge(player.injury_status)}<span class="badge ${f.starter?'badge-green':'badge-outline'}">${f.starter?'Starting':'Bench'}</span></span>
-        </div>`).join('')}</div>` : ''}
-      ${theirs.length ? `<div class="sect">On other rosters</div><div class="pf-theirs">${theirs.map(f=>`
-        <div class="data-row">
-          <a href="https://sleeper.com/leagues/${esc(f.lgId)}" target="_blank" class="row-link">${esc(f.lgName)}</a>
-          <span class="card-meta">${esc(f.ownerName)}</span>
-        </div>`).join('')}</div>` : ''}
-      ${free.length ? `<div class="sect">Free agent in</div><div class="pf-free">${free.map(f=>`
-        <div class="data-row">
-          <a href="https://sleeper.com/leagues/${esc(f.lgId)}" target="_blank" class="row-link">${esc(f.name)}</a>
-          <span class="badge badge-green">Available</span>
-        </div>`).join('')}</div>` : ''}
-    </div>`;
+    pfRenderResults();
   } catch(e) { r.innerHTML = errHtml(e); }
+}
+
+function pfRenderResults() {
+  const pid    = PF.targetPid;
+  const player = S.players[pid];
+  if (!player || !PF.allRosterData) return;
+
+  const mine = [], theirs = [], free = [];
+  for (const rd of PF.allRosterData) {
+    if (!rd) continue;
+    let found = false;
+    for (const roster of rd.rs) {
+      if (!roster.players?.includes(pid)) continue;
+      found = true;
+      if (roster.owner_id === S.userId) {
+        mine.push({ lgName: rd.lg.name, lgId: rd.lg.league_id, starter: roster.starters?.includes(pid) });
+      } else {
+        theirs.push({ lgName: rd.lg.name, lgId: rd.lg.league_id, ownerName: rd.uMap[roster.owner_id] || 'Unknown', theirRosterId: roster.roster_id });
+      }
+      break;
+    }
+    if (!found) free.push({ name: rd.lg.name, lgId: rd.lg.league_id });
+  }
+  mine.sort((a,b)   => a.lgName.localeCompare(b.lgName));
+  theirs.sort((a,b) => a.lgName.localeCompare(b.lgName));
+  free.sort((a,b)   => a.name.localeCompare(b.name));
+
+  // Trade targets: leagues where I have player 2 AND someone else has player 1
+  let tradeTargets = [];
+  if (PF.myPid) {
+    const myP2Leagues = new Set();
+    for (const rd of PF.allRosterData) {
+      if (!rd) continue;
+      for (const roster of rd.rs) {
+        if (roster.owner_id === S.userId && roster.players?.includes(PF.myPid)) {
+          myP2Leagues.add(rd.lg.league_id);
+          break;
+        }
+      }
+    }
+    tradeTargets = theirs.filter(t => myP2Leagues.has(t.lgId));
+  }
+
+  const p2 = PF.myPid ? S.players[PF.myPid] : null;
+
+  const r = document.getElementById('ps-r');
+  r.innerHTML = `<div style="margin-bottom:16px;">
+    <div style="background:var(--brown-dark);border:1px solid var(--brown-mid);border-radius:2px;padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <span class="card-title">${esc(player.full_name)}</span>
+      <span class="card-meta">${esc(player.position||'')} · ${esc(player.team||'FA')}</span>
+    </div>
+
+    <div class="pf-p2-wrap">
+      <div class="sect" style="margin-top:0;margin-bottom:6px;">Filter by player I'm offering</div>
+      <div class="pf-p2-row">
+        <div class="player-ac-wrap" id="pf-ac2" style="flex:1;min-width:180px;position:relative;">
+          <input type="text" id="ps2" class="search-input"
+            placeholder="Search a player I own (optional)…"
+            oninput="pfShowDropdown2()" autocomplete="off"
+            value="${p2 ? esc(p2.full_name) : ''}" />
+          <div class="player-dropdown" id="pf-dropdown2" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;"></div>
+        </div>
+        ${p2 ? `<button class="ghost-btn" onclick="pfClearMyPlayer()" style="flex-shrink:0;">✕ Clear</button>` : ''}
+      </div>
+    </div>
+
+    ${PF.myPid ? pfTradeTargetsHtml(tradeTargets, player, p2) : ''}
+
+    ${mine.length ? `<div class="sect">On your roster</div><div class="pf-mine">${mine.map(f=>`
+      <div class="data-row">
+        <a href="https://sleeper.com/leagues/${esc(f.lgId)}/team" target="_blank" class="row-link">${esc(f.lgName)}</a>
+        <span style="display:flex;align-items:center;gap:6px;">${injuryBadge(player.injury_status)}<span class="badge ${f.starter?'badge-green':'badge-outline'}">${f.starter?'Starting':'Bench'}</span></span>
+      </div>`).join('')}</div>` : ''}
+
+    ${theirs.length ? `<div class="sect">On other rosters</div><div class="pf-theirs">${theirs.map(f=>`
+      <div class="data-row">
+        <a href="https://sleeper.com/leagues/${esc(f.lgId)}" target="_blank" class="row-link">${esc(f.lgName)}</a>
+        <span class="card-meta">${esc(f.ownerName)}</span>
+      </div>`).join('')}</div>` : ''}
+
+    ${free.length ? `<div class="sect">Free agent in</div><div class="pf-free">${free.map(f=>`
+      <div class="data-row">
+        <a href="https://sleeper.com/leagues/${esc(f.lgId)}" target="_blank" class="row-link">${esc(f.name)}</a>
+        <span class="badge badge-green">Available</span>
+      </div>`).join('')}</div>` : ''}
+
+    ${!mine.length && !theirs.length ? '<div class="empty-state" style="margin-top:12px;"><p>Player not found on any roster</p></div>' : ''}
+  </div>`;
+}
+
+function pfTradeTargetsHtml(targets, targetPlayer, myPlayer) {
+  const count = targets.length;
+  const header = `<div class="sect">Trade Targets — ${count} league${count !== 1 ? 's' : ''} where I have ${esc(myPlayer.full_name)} &amp; ${esc(targetPlayer.full_name)} is available</div>`;
+  if (!count) {
+    return header + `<div style="font-family:'Crimson Text',serif;font-size:0.9rem;color:var(--brown-light);font-style:italic;padding:4px 0 8px;">No leagues match — you may already own ${esc(targetPlayer.full_name)}, or ${esc(myPlayer.full_name)} isn't on your roster in any league where ${esc(targetPlayer.full_name)} is owned by someone else.</div>`;
+  }
+  return header + `<div class="pf-trade-list">${targets.map(t => `
+    <div class="pf-trade-card" id="pf-tc-${esc(t.lgId)}">
+      <div class="pf-trade-header" onclick="pfToggleComparison('${esc(t.lgId)}', ${t.theirRosterId})">
+        <span class="pf-trade-chevron" id="pf-chev-${esc(t.lgId)}">›</span>
+        <span style="font-family:'Crimson Text',serif;font-size:0.95rem;color:var(--parchment);">${esc(t.lgName)}</span>
+        <span class="card-meta">vs. ${esc(t.ownerName)}</span>
+      </div>
+      <div id="pf-compare-${esc(t.lgId)}" style="display:none;"></div>
+    </div>`).join('')}
+  </div>`;
+}
+
+async function pfToggleComparison(lgId, theirRosterId) {
+  const container = document.getElementById(`pf-compare-${lgId}`);
+  const chevron   = document.getElementById(`pf-chev-${lgId}`);
+  if (!container) return;
+
+  if (PF.expanded === lgId) {
+    PF.expanded = null;
+    container.style.display = 'none';
+    if (chevron) { chevron.textContent = '›'; chevron.classList.remove('open'); }
+    return;
+  }
+
+  // Close previously expanded panel
+  if (PF.expanded) {
+    const prev = document.getElementById(`pf-compare-${PF.expanded}`);
+    const prevChev = document.getElementById(`pf-chev-${PF.expanded}`);
+    if (prev) prev.style.display = 'none';
+    if (prevChev) { prevChev.textContent = '›'; prevChev.classList.remove('open'); }
+  }
+
+  PF.expanded = lgId;
+  container.style.display = 'block';
+  if (chevron) { chevron.textContent = '›'; chevron.classList.add('open'); }
+  container.innerHTML = `<div class="pf-compare-wrap">${loading('Loading rosters…')}</div>`;
+
+  try {
+    await loadPlayers();
+
+    // Lazy-load FC values
+    if (!PF.fcMap) {
+      const fc = await fetch('/api/fantasycalc').then(r => r.ok ? r.json() : []);
+      PF.fcMap = {};
+      for (const item of (Array.isArray(fc) ? fc : [])) {
+        const sid = item.player?.sleeperId || item.player?.maybeSleeperID;
+        if (sid) PF.fcMap[String(sid)] = item.value ?? 0;
+      }
+    }
+
+    const rd = PF.allRosterData?.find(d => d?.lg?.league_id === lgId);
+    if (!rd) throw new Error('League data not found');
+
+    const myRoster    = rd.rs.find(r => r.owner_id === S.userId);
+    const theirRoster = rd.rs.find(r => r.roster_id === theirRosterId);
+    if (!myRoster || !theirRoster) throw new Error('Could not locate rosters');
+
+    const nflSeason = S.nflState?.season || new Date().getFullYear().toString();
+    let tradedPicks = [], ridToSlot = null;
+    try {
+      const [draftsRes, tradedRes] = await Promise.all([
+        fetch(`/api/sleeper/league/${lgId}/drafts`),
+        fetch(`/api/sleeper/league/${lgId}/traded_picks`),
+      ]);
+      tradedPicks = tradedRes.ok  ? (await tradedRes.json()  || []) : [];
+      const drafts = draftsRes.ok ? (await draftsRes.json() || []) : [];
+      const curDraft = drafts.find(d => d.season === nflSeason);
+      const rawSlots = curDraft?.slot_to_roster_id;
+      if (rawSlots && Object.keys(rawSlots).length > 0) {
+        ridToSlot = {};
+        for (const [slot, rid] of Object.entries(rawSlots)) ridToSlot[String(rid)] = parseInt(slot);
+      }
+    } catch { /* picks won't be shown */ }
+
+    const myData    = pfBuildRosterData(myRoster,    rd.rs, tradedPicks, ridToSlot, nflSeason);
+    const theirData = pfBuildRosterData(theirRoster, rd.rs, tradedPicks, ridToSlot, nflSeason);
+    const theirName = rd.uMap[theirRoster.owner_id] || 'Opponent';
+
+    container.innerHTML = pfCompareHtml(myData, theirData, theirName);
+  } catch(e) {
+    container.innerHTML = `<div class="pf-compare-wrap">${errHtml(e)}</div>`;
+  }
+}
+
+function pfBuildRosterData(roster, allRosters, tradedPicks, ridToSlot, nflSeason) {
+  const starters = new Set(roster.starters || []);
+  const groups   = { QB: [], RB: [], WR: [], TE: [], PICK: [] };
+
+  for (const pid of (roster.players || [])) {
+    const player = S.players[pid];
+    if (!player) continue;
+    const pos = rsNormPos(player.position);
+    if (!['QB','RB','WR','TE'].includes(pos)) continue;
+    groups[pos].push({
+      name:      player.full_name || player.last_name || pid,
+      fcVal:     PF.fcMap?.[String(pid)] ?? null,
+      isStarter: starters.has(pid),
+    });
+  }
+  for (const pos of ['QB','RB','WR','TE']) {
+    groups[pos].sort((a,b) => (b.fcVal ?? -1) - (a.fcVal ?? -1));
+  }
+
+  const picks = rsComputePicksForRoster(roster.roster_id, allRosters, tradedPicks, nflSeason);
+  for (const pick of picks) {
+    const { round, season } = pick;
+    if (season === nflSeason) continue;
+    const roundStr = round === 1 ? '1st' : '2nd';
+    let label;
+    if (ridToSlot) {
+      const slot = ridToSlot[String(pick.roster_id)];
+      label = slot ? `${season} ${round}.${String(slot).padStart(2,'0')}` : `${season} ${roundStr}`;
+    } else {
+      label = `${season} ${roundStr}`;
+    }
+    groups.PICK.push({ name: label, fcVal: null, isStarter: false });
+  }
+  groups.PICK.sort((a,b) => a.name.localeCompare(b.name));
+
+  return { groups };
+}
+
+function pfCompareHtml(myData, theirData, theirName) {
+  const POS_ORDER = ['QB','RB','WR','TE','PICK'];
+  const posColorClass = { QB:'rs-pos-QB', RB:'rs-pos-RB', WR:'rs-pos-WR', TE:'rs-pos-TE', PICK:'rs-pos-PICK' };
+
+  const renderSide = (groups, pos) => {
+    const items = groups[pos] || [];
+    if (!items.length) return `<div class="pf-empty-pos">None</div>`;
+    return items.map(item => {
+      const valStr = item.fcVal != null ? Number(item.fcVal).toLocaleString() : '—';
+      return `<div class="pf-player-row${item.isStarter ? ' starter' : ''}">
+        ${item.isStarter ? `<span style="color:var(--gold);font-size:0.7rem;flex-shrink:0;">★</span>` : ''}
+        <span class="pf-player-name">${esc(item.name)}</span>
+        <span class="pf-player-val">${valStr}</span>
+      </div>`;
+    }).join('');
+  };
+
+  const sections = POS_ORDER.map(pos => `
+    <div class="pf-pos-section">
+      <div class="pf-pos-label-row"><span class="rs-pos ${posColorClass[pos]}">${pos}</span></div>
+      <div class="pf-pos-content-row">
+        <div class="pf-compare-col">${renderSide(myData.groups, pos)}</div>
+        <div class="pf-compare-col">${renderSide(theirData.groups, pos)}</div>
+      </div>
+    </div>`).join('');
+
+  return `<div class="pf-compare-wrap">
+    <div class="pf-compare-header-row">
+      <div class="pf-compare-col-header">My Roster</div>
+      <div class="pf-compare-col-header">${esc(theirName)}'s Roster</div>
+    </div>
+    ${sections}
+  </div>`;
 }
 
 // ── 3. Lineup Check ───────────────────────────────────────────────────────────
