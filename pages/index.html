@@ -16,23 +16,41 @@
   display: flex; align-items: center; gap: 20px;
 }
 /* ── NAV ── */
-.tab-bar { background: var(--brown-dark); border-bottom: 3px solid var(--gold); position: sticky; top: 0; z-index: 100; overflow-x: auto; }
-.tab-bar-inner { max-width: 900px; margin: 0 auto; display: flex; min-width: max-content; }
-.tab-group { display: flex; flex-direction: column; border-right: 1px solid rgba(255,255,255,0.18); }
+.tab-bar { background: var(--brown-dark); border-bottom: 3px solid var(--gold); position: sticky; top: 0; z-index: 100; }
+.tab-bar-inner { max-width: 900px; margin: 0 auto; display: flex; }
+.tab-group { position: relative; border-right: 1px solid rgba(255,255,255,0.18); }
 .tab-group:last-child { border-right: none; }
-.tab-group-label { font-family: 'Rye', serif; font-size: 0.36rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--gold); opacity: 0.5; padding: 5px 14px 2px; white-space: nowrap; }
-.tab-group-btns { display: flex; flex: 1; align-items: stretch; }
+.tab-group-btn {
+  background: none; border: none; cursor: pointer;
+  font-family: 'Rye', serif; font-size: 0.58rem; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--parchment); opacity: 0.55; padding: 14px 20px;
+  transition: opacity 0.2s, background 0.2s; position: relative;
+  display: flex; align-items: center; gap: 7px; white-space: nowrap; width: 100%; height: 100%;
+}
+.tab-group-btn:hover { opacity: 0.85; background: rgba(255,255,255,0.04); }
+.tab-group-btn.active { opacity: 1; color: var(--gold-light); background: rgba(255,255,255,0.05); }
+.tab-group-btn.active::after { content: ''; position: absolute; bottom: -3px; left: 0; right: 0; height: 3px; background: var(--gold-light); }
+.tab-group-arrow { font-size: 0.6rem; transition: transform 0.15s; display: inline-block; }
+.tab-group.open .tab-group-arrow { transform: rotate(180deg); }
+.tab-group-dropdown {
+  display: none; position: absolute; top: calc(100% + 3px); left: 0;
+  background: var(--brown-dark); border: 1px solid var(--gold);
+  z-index: 200; min-width: 100%; flex-direction: column;
+  box-shadow: 4px 4px 0 rgba(0,0,0,0.4);
+}
+.tab-group.open .tab-group-dropdown { display: flex; }
 .tab-btn {
   background: none; border: none; cursor: pointer;
   font-family: 'Rye', serif; font-size: 0.58rem; letter-spacing: 0.16em; text-transform: uppercase;
-  color: var(--parchment); opacity: 0.55; padding: 8px 13px 12px;
-  border-right: 1px solid rgba(255,255,255,0.07);
+  color: var(--parchment); opacity: 0.55; padding: 11px 18px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
   transition: opacity 0.2s, background 0.2s; position: relative;
+  white-space: nowrap; text-align: left; width: 100%;
 }
-.tab-btn:last-child { border-right: none; }
+.tab-btn:last-child { border-bottom: none; }
 .tab-btn:hover { opacity: 0.85; background: rgba(255,255,255,0.04); }
 .tab-btn.active { opacity: 1; color: var(--gold-light); background: rgba(255,255,255,0.05); }
-.tab-btn.active::after { content: ''; position: absolute; bottom: -3px; left: 0; right: 0; height: 3px; background: var(--gold-light); }
+.tab-btn.active::before { content: '▸'; position: absolute; left: 6px; font-size: 0.5rem; }
 
 /* ── MAIN ── */
 .main { max-width: 900px; margin: 0 auto; padding: 32px 32px 80px; }
@@ -168,8 +186,8 @@ footer a:hover { color: var(--gold); }
 
 @media (max-width: 600px) {
   .banner-inner { padding: 20px 16px; }
-  .tab-group-label { font-size: 0.32rem; padding: 4px 10px 2px; }
-  .tab-btn { padding: 6px 10px 10px; font-size: 0.5rem; letter-spacing: 0.1em; }
+  .tab-group-btn { padding: 12px 13px; font-size: 0.5rem; letter-spacing: 0.1em; }
+  .tab-btn { padding: 10px 14px; font-size: 0.5rem; letter-spacing: 0.1em; }
   .main { padding: 20px 16px 60px; }
   .setup-card { padding: 16px; }
   .trade-sides { grid-template-columns: 1fr 18px 1fr; }
@@ -281,35 +299,35 @@ footer a:hover { color: var(--gold); }
 
   <nav class="tab-bar">
     <div class="tab-bar-inner">
-      <div class="tab-group">
-        <div class="tab-group-label">My Leagues</div>
-        <div class="tab-group-btns">
+      <div class="tab-group active" id="grp-my-leagues">
+        <button class="tab-group-btn active" onclick="toggleGrp('grp-my-leagues')">My Leagues <span class="tab-group-arrow">▾</span></button>
+        <div class="tab-group-dropdown">
           <button class="tab-btn active" id="tab-leagues"    onclick="sw('leagues')">League Summaries</button>
           <button class="tab-btn"        id="tab-rostership" onclick="sw('rostership')">Rostership</button>
           <button class="tab-btn"        id="tab-lineups"    onclick="sw('lineups')">Lineup Checker</button>
           <button class="tab-btn"        id="tab-player"     onclick="sw('player')">Player Finder</button>
         </div>
       </div>
-      <div class="tab-group">
-        <div class="tab-group-label">Trades</div>
-        <div class="tab-group-btns">
+      <div class="tab-group" id="grp-trades">
+        <button class="tab-group-btn" onclick="toggleGrp('grp-trades')">Trades <span class="tab-group-arrow">▾</span></button>
+        <div class="tab-group-dropdown">
           <button class="tab-btn" id="tab-trades"   onclick="sw('trades')">Open Trades</button>
           <button class="tab-btn" id="tab-partners" onclick="sw('partners')">Trade Partners</button>
         </div>
       </div>
-      <div class="tab-group">
-        <div class="tab-group-label">Drafts</div>
-        <div class="tab-group-btns">
+      <div class="tab-group" id="grp-drafts">
+        <button class="tab-group-btn" onclick="toggleGrp('grp-drafts')">Drafts <span class="tab-group-arrow">▾</span></button>
+        <div class="tab-group-dropdown">
           <button class="tab-btn" id="tab-drafts"  onclick="sw('drafts')">Draft Queue</button>
           <button class="tab-btn" id="tab-tracker" onclick="sw('tracker')">In-Draft Tracker</button>
-          <a class="tab-btn" href="/dispersal" style="text-decoration:none;display:inline-flex;align-items:center;">Dispersal</a>
+          <a class="tab-btn" href="/dispersal" style="text-decoration:none;">Dispersal</a>
         </div>
       </div>
-      <div class="tab-group">
-        <div class="tab-group-label">Other Tools</div>
-        <div class="tab-group-btns">
-          <a class="tab-btn" href="/my-ranks" style="text-decoration:none;display:inline-flex;align-items:center;">My Ranks</a>
-          <a class="tab-btn" href="/rootforme" style="text-decoration:none;display:inline-flex;align-items:center;">Root For Me</a>
+      <div class="tab-group" id="grp-tools">
+        <button class="tab-group-btn" onclick="toggleGrp('grp-tools')">Other Tools <span class="tab-group-arrow">▾</span></button>
+        <div class="tab-group-dropdown">
+          <a class="tab-btn" href="https://myranks.ffhistorian.com" style="text-decoration:none;">My Ranks</a>
+          <a class="tab-btn" href="/rootforme"  style="text-decoration:none;">Root For Me</a>
         </div>
       </div>
     </div>
@@ -565,11 +583,31 @@ async function loadOneEspnLeague(leagueId, season) {
   } catch {}
 }
 
+const TAB_GROUP_MAP = {
+  leagues: 'grp-my-leagues', rostership: 'grp-my-leagues',
+  lineups: 'grp-my-leagues', player: 'grp-my-leagues',
+  trades: 'grp-trades', partners: 'grp-trades',
+  drafts: 'grp-drafts', tracker: 'grp-drafts',
+};
+function toggleGrp(id) {
+  const grp = document.getElementById(id);
+  const isOpen = grp.classList.contains('open');
+  document.querySelectorAll('.tab-group').forEach(g => g.classList.remove('open'));
+  if (!isOpen) grp.classList.add('open');
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('.tab-group')) {
+    document.querySelectorAll('.tab-group').forEach(g => g.classList.remove('open'));
+  }
+});
 function sw(tab) {
   S.tab = tab;
   document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
-  // Stop tracker polling when leaving that tab
+  document.querySelectorAll('.tab-group-btn').forEach(b => b.classList.remove('active'));
+  const grpId = TAB_GROUP_MAP[tab];
+  if (grpId) document.querySelector('#' + grpId + ' .tab-group-btn').classList.add('active');
+  document.querySelectorAll('.tab-group').forEach(g => g.classList.remove('open'));
   if (tab !== 'tracker' && T.pollTimer) { clearInterval(T.pollTimer); T.pollTimer = null; }
   render(tab);
 }
