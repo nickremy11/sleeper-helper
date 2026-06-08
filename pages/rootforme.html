@@ -5,57 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Root For Me — FF Historian</title>
 <link href="https://fonts.googleapis.com/css2?family=Rye&family=Playfair+Display:ital,wght@0,700;1,400&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/shared-styles.css" />
 <style>
-:root {
-  --cream:       #f5ead6;
-  --parchment:   #e8d5b0;
-  --brown-dark:  #2a1a0e;
-  --brown-mid:   #5c3d1e;
-  --brown-light: #8b5e2e;
-  --green:       #2d4a1e;
-  --green-light: #4a7a2f;
-  --red:         #8b1a1a;
-  --gold:        #c9962a;
-  --gold-light:  #e8b84b;
-  --ink:         #1a1008;
-}
-*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-body {
-  background-color: var(--cream);
-  color: var(--ink);
-  font-family: 'Crimson Text', Georgia, serif;
-  min-height: 100vh;
-  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23c9962a' fill-opacity='0.06'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
-}
-body::before {
-  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: 0.3;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.15'/%3E%3C/svg%3E");
-}
-.page-wrap { position: relative; z-index: 1; }
 
 /* ── BANNER ── */
-.banner { background: var(--green); border-bottom: 6px double var(--gold); position: relative; overflow: hidden; }
-.banner::before {
-  content: ''; position: absolute; inset: 0;
-  background: repeating-linear-gradient(-45deg, transparent, transparent 10px, rgba(0,0,0,0.06) 10px, rgba(0,0,0,0.06) 11px);
-}
 .banner-inner {
   position: relative; z-index: 1;
   max-width: 960px; margin: 0 auto;
   padding: 24px 32px 20px;
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
 }
-.banner-text { flex: 1; }
-.banner-back {
-  font-family: 'Rye', serif; font-size: 0.58rem; letter-spacing: 0.3em;
-  text-transform: uppercase; color: var(--gold-light); text-decoration: none;
-  opacity: 0.7; display: inline-block; margin-bottom: 8px;
-}
-.banner-back:hover { opacity: 1; }
-.banner h1 { font-family: 'Rye', serif; font-size: clamp(1.2rem, 3vw, 1.9rem); color: var(--cream); text-shadow: 2px 2px 0 rgba(0,0,0,0.4); line-height: 1.1; }
-.banner h1 span { color: var(--gold-light); }
-.banner-sub { margin-top: 5px; font-family: 'Playfair Display', serif; font-style: italic; font-size: 0.85rem; color: var(--parchment); opacity: 0.75; }
-.banner-divider { margin-top: 8px; height: 2px; width: 100px; background: linear-gradient(to right, var(--gold), transparent); }
 
 /* ── MAIN ── */
 .main { max-width: 960px; margin: 0 auto; padding: 28px 24px 80px; }
@@ -153,20 +112,9 @@ details.leagues-details[open] > summary .leagues-toggle { transform: rotate(90de
   color: var(--brown-light); font-style: italic; white-space: nowrap; flex-shrink: 0;
 }
 
-/* ── STATES ── */
-.loading-state {
-  text-align: center; padding: 40px 20px;
-  font-family: 'Rye', serif; font-size: 0.62rem; letter-spacing: 0.3em; color: var(--brown-light);
-  display: flex; flex-direction: column; align-items: center; gap: 14px;
-}
-.spinner { width: 26px; height: 26px; border: 3px solid var(--brown-mid); border-top-color: var(--gold); border-radius: 50%; animation: spin 0.8s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-.empty-state { text-align: center; padding: 50px 20px; border: 2px dashed var(--brown-mid); border-radius: 2px; }
-.empty-state p { font-family: 'Playfair Display', serif; font-style: italic; font-size: 1rem; color: var(--brown-light); }
+/* ── STATES (rootforme override) ── */
 .err-state {
   background: rgba(139,26,26,0.2); border: 1px solid var(--red); color: #e08080;
-  font-family: 'Crimson Text', serif; font-style: italic; font-size: 0.9rem;
-  padding: 10px 14px; border-radius: 2px; margin-bottom: 14px;
 }
 
 /* ── GAME CARDS ── */
@@ -400,6 +348,7 @@ details.pos-group[open] > summary .pos-group-toggle { transform: rotate(90deg); 
 </main>
 
 <script src="/shared-auth.js"></script>
+<script src="/shared-utils.js"></script>
 <script>
 // ── Constants ─────────────────────────────────────────────────────────────────
 const API = '/api';
@@ -571,7 +520,7 @@ function renderLeagueTable() {
     return `
       <tr>
         <td>
-          <div class="league-name">${escHtml(lg.name || 'Unnamed League')}</div>
+          <div class="league-name">${esc(lg.name || 'Unnamed League')}</div>
           <div class="league-type">${type} · ${lg.total_rosters || '?'} teams</div>
         </td>
         <td><input type="number" min="0" class="value-input" placeholder="0" value="${val}"
@@ -640,7 +589,7 @@ async function loadMatchups() {
     renderGameCards();
     renderPlayersSection();
   } catch (e) {
-    container.innerHTML = `<div class="err-state">Failed to load matchup data: ${escHtml(e.message)}</div>`;
+    container.innerHTML = `<div class="err-state">Failed to load matchup data: ${esc(e.message)}</div>`;
   } finally {
     btn.disabled = false;
     btn.textContent = 'Load Matchups';
@@ -810,7 +759,7 @@ function playerRowHtml(p, side, gameKey) {
     <div class="player-row ${posClass}" id="pr-${gameKey}-${p.pid}"
          onclick="togglePlayerDetail('${gameKey}', '${p.pid}')">
       <span class="player-pos">${pos || '—'}</span>
-      <span class="player-name">${escHtml(p.player.full_name || p.player.last_name || p.pid)}
+      <span class="player-name">${esc(p.player.full_name || p.player.last_name || p.pid)}
         <span class="player-count">(x${count})</span></span>
       <span class="root-chip" style="background:${color}">${p.rootScore}</span>
     </div>
@@ -827,7 +776,7 @@ function buildDetailHtml(p, pid) {
 
   const leagueRow = l => `
     <div class="detail-league">
-      <span>${escHtml(l.name)}</span>
+      <span>${esc(l.name)}</span>
       <span class="detail-league-right">
         <span class="detail-league-pts">${(l.points || 0).toFixed(1)} pts</span>
         <span class="detail-league-val">$${l.value}</span>
@@ -839,7 +788,7 @@ function buildDetailHtml(p, pid) {
 
   return `
     <div class="player-detail">
-      <div class="detail-name">${escHtml(p.player.full_name || p.player.last_name || pid)}</div>
+      <div class="detail-name">${esc(p.player.full_name || p.player.last_name || pid)}</div>
       <div class="detail-score-line">
         <span class="detail-root-chip" style="background:${color}">${p.rootScore}</span>
         <span class="detail-score-label">${pct}</span>
@@ -932,7 +881,7 @@ function renderPlayersSection() {
         <div class="player-row ${posClass}" id="ps-pr-${p.pid}"
              onclick="togglePlayerSectionDetail('${p.pid}', '${p.gameKey}')">
           <span class="player-pos">${pos || '—'}</span>
-          <span class="player-name">${escHtml(p.player.full_name || p.player.last_name || p.pid)}<span class="player-count">${escHtml(teamStr)}</span></span>
+          <span class="player-name">${esc(p.player.full_name || p.player.last_name || p.pid)}<span class="player-count">${esc(teamStr)}</span></span>
           <span class="root-chip" style="background:${color}">${p.rootScore}</span>
         </div>
         <div id="ps-detail-${p.pid}"></div>
@@ -1013,11 +962,6 @@ function rootColor(score) {
 document.getElementById('username-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') submitUsername();
 });
-
-// ── Utilities ─────────────────────────────────────────────────────────────────
-function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 init();
