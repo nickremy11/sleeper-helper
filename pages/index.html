@@ -381,7 +381,7 @@ const RS = {
   allRows:         [],
   loaded:          false,
   sortCol:         'pct',
-  sortDir:         -1,
+  sortDir:         1,
   search:          '',
   filtPositions:   new Set(['QB','RB','WR','TE','DL','LB','DB','PICK']),
   filtExp:         { op: '', val: '' },
@@ -2016,7 +2016,6 @@ function rsToggleLeague(lgId, checked) {
 function rsLeagueCategory(lgId) {
   const d = S.leagueDetails[lgId] || S.leagues.find(l => l.league_id === lgId);
   if (d?.source === 'espn') return 'redraft';
-  if (d?.settings?.best_ball === 1) return 'redraft';
   return d?.settings?.type === 2 ? 'dynasty' : 'redraft';
 }
 
