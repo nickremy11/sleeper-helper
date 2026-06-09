@@ -450,6 +450,7 @@ const WV = {
   expandedKey:        null,
   sortCol:            'adjVal',
   sortDir:            -1,
+  skippedCount:       0,
 };
 
 function rsNormPos(raw) {
@@ -1134,9 +1135,10 @@ function renderWaivers() {
       </span>
     </div>
     ${uploadSection}
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
       <button class="setup-btn" id="wv-load-btn" onclick="loadWaiverData()" style="height:32px;">${WV.loaded ? 'Reload' : 'Load Waivers'}</button>
       <span class="setup-status" id="wv-load-status" style="margin:0;"></span>
+      ${WV.loaded && WV.skippedCount > 0 ? `<span class="setup-status" style="margin:0;font-style:italic;">— ${WV.skippedCount} league${WV.skippedCount > 1 ? 's' : ''} skipped (draft not yet complete)</span>` : ''}
     </div>
     <div id="wv-table-wrap">
       ${WV.loaded ? wvRenderTable() : '<div class="empty-state"><p>Click Load Waivers to scan all leagues for available players</p></div>'}
@@ -1171,12 +1173,38 @@ async function loadWaiverData() {
     }
 
     // Only scan leagues matching the current mode
-    const targetLeagues = S.leagues.filter(lg => rsLeagueCategory(lg.league_id) === WV.mode);
-    if (statEl) statEl.textContent = `Fetching ${targetLeagues.length} leagues…`;
-    await Promise.all(targetLeagues.map(lg => wvLoadLeagueRosters(lg)));
+    const allTarget = S.leagues.filter(lg => rsLeagueCategory(lg.league_id) === WV.mode);
+
+    // Filter out leagues whose startup or rookie draft isn't complete yet
+    if (statEl) statEl.textContent = 'Checking draft status…';
+    const nflSeason = S.nflState?.season || new Date().getFullYear().toString();
+    const eligible = [];
+    let skipped = 0;
+    await Promise.all(allTarget.map(async lg => {
+      if (lg.source === 'espn') { eligible.push(lg); return; }
+      let status = RS.leagueDraftInfo[lg.league_id]?.draftStatus;
+      if (status === undefined) {
+        try {
+          const r = await fetch(`/api/sleeper/league/${lg.league_id}/drafts`);
+          const drafts = r.ok ? (await r.json() || []) : [];
+          const cur = drafts.find(d => d.season === nflSeason);
+          status = cur?.status;
+          if (!RS.leagueDraftInfo[lg.league_id]) {
+            RS.leagueDraftInfo[lg.league_id] = { ridToSlot: null, tradedPicks: [], draftStatus: status };
+          }
+        } catch {}
+      }
+      if (status === 'pre_draft' || status === 'drafting') { skipped++; }
+      else { eligible.push(lg); }
+    }));
+
+    WV.rosteredByLeague = {}; // clear stale data before new load
+    if (statEl) statEl.textContent = `Fetching ${eligible.length} leagues…`;
+    await Promise.all(eligible.map(lg => wvLoadLeagueRosters(lg)));
 
     wvBuildRows();
     WV.loaded = true;
+    WV.skippedCount = skipped;
     renderWaivers();
   } catch(e) {
     if (statEl) statEl.textContent = 'Error: ' + e.message;
