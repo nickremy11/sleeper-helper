@@ -371,6 +371,7 @@ const S = {
   season:          '2025',
   week:            1,
   leagues:         [],
+  espnSettings:    null,
   prefs:           {},
   playerMap:       {},
   nflGames:        [],
@@ -438,6 +439,7 @@ async function loadLeagues() {
     const lgRes = await fetch(`${API}/sleeper/user/${S.userId}/leagues/nfl/${S.season}`);
     S.leagues = (await lgRes.json()) || [];
 
+    await loadEspnLeagues();
     await loadPrefs();
 
     statusEl.className  = 'setup-status ok';
@@ -453,6 +455,31 @@ async function loadLeagues() {
   } finally {
     btn.disabled = false;
   }
+}
+
+async function loadEspnLeagues() {
+  if (!S.auth) return;
+  try {
+    const r = await fetch(`${API}/espn/settings`, { credentials: 'include' });
+    if (!r.ok) return;
+    const cfg = await r.json();
+    S.espnSettings = cfg;
+    if (!cfg.has_credentials || !cfg.league_ids?.length) return;
+    await Promise.all(cfg.league_ids.map(id => loadOneEspnLeague(id)));
+  } catch {}
+}
+
+async function loadOneEspnLeague(leagueId) {
+  try {
+    const r = await fetch(`${API}/espn/fantasy/${leagueId}?view=mSettings&view=mTeam&seasonId=${S.season}`, { credentials: 'include' });
+    if (!r.ok) return;
+    const d   = await r.json();
+    const lgId = `espn_${leagueId}`;
+    if (S.leagues.some(l => l.league_id === lgId)) return;
+    const name = d.settings?.name || `ESPN ${leagueId}`;
+    const size = d.teams?.length || d.settings?.size || 10;
+    S.leagues.push({ league_id: lgId, name, total_rosters: size, source: 'espn' });
+  } catch {}
 }
 
 // ── Prefs ─────────────────────────────────────────────────────────────────────
@@ -512,11 +539,12 @@ function renderLeagueTable() {
   }
 
   const rows = S.leagues.map(lg => {
-    const pref  = S.prefs[lg.league_id] || { value: 0, contender: true };
-    const isBB  = lg.settings?.best_ball === 1;
-    const type  = isBB ? 'Bestball' : lg.settings?.type === 2 ? 'Dynasty' : lg.settings?.type === 1 ? 'Keeper' : 'Redraft';
-    const val   = pref.value || '';
-    const chk   = pref.contender ? 'checked' : '';
+    const pref    = S.prefs[lg.league_id] || { value: 0, contender: true };
+    const isEspn  = lg.source === 'espn';
+    const isBB    = lg.settings?.best_ball === 1;
+    const type    = isEspn ? 'ESPN · Redraft' : isBB ? 'Bestball' : lg.settings?.type === 2 ? 'Dynasty' : lg.settings?.type === 1 ? 'Keeper' : 'Redraft';
+    const val     = pref.value || '';
+    const chk     = pref.contender ? 'checked' : '';
     return `
       <tr>
         <td>
@@ -573,14 +601,15 @@ async function loadMatchups() {
   try {
     const contenderLeagues = S.leagues.filter(lg => S.prefs[lg.league_id]?.contender);
 
-    const [players, nflGames, ...matchupResults] = await Promise.all([
+    // Players must load before matchups so ESPN name lookup can resolve Sleeper IDs
+    const [players, nflGames] = await Promise.all([
       fetch(`${API}/players`).then(r => r.json()),
       fetch(`${API}/espn/games?week=${S.week}&season=${S.season}`).then(r => r.ok ? r.json() : []),
-      ...contenderLeagues.map(lg => fetchLeagueMatchup(lg)),
     ]);
+    S.playerMap = players || {};
+    S.nflGames  = nflGames || [];
 
-    S.playerMap      = players || {};
-    S.nflGames       = nflGames || [];
+    const matchupResults = await Promise.all(contenderLeagues.map(lg => fetchLeagueMatchup(lg)));
     S.matchupResults = matchupResults.filter(Boolean);
     S.activeDetail   = null;
     S.psActiveDetail = null;
@@ -597,6 +626,7 @@ async function loadMatchups() {
 }
 
 async function fetchLeagueMatchup(league) {
+  if (league.source === 'espn') return fetchEspnLeagueMatchup(league);
   const [rosters, matchups] = await Promise.all([
     fetch(`${API}/sleeper/league/${league.league_id}/rosters`).then(r => r.json()),
     fetch(`${API}/sleeper/league/${league.league_id}/matchups/${S.week}`).then(r => r.json()),
@@ -613,6 +643,66 @@ async function fetchLeagueMatchup(league) {
   );
 
   return { league, myMatchup, oppMatchup: oppMatchup || null };
+}
+
+async function fetchEspnLeagueMatchup(league) {
+  try {
+    const espnId = league.league_id.replace('espn_', '');
+    const r = await fetch(
+      `${API}/espn/fantasy/${espnId}?view=mMatchup&view=mRoster&scoringPeriodId=${S.week}&seasonId=${S.season}`,
+      { credentials: 'include' }
+    );
+    if (!r.ok) return null;
+    const d = await r.json();
+
+    const mySWID = S.espnSettings?.swid || '';
+    const myTeam = (d.teams || []).find(t => t.primaryOwner === mySWID);
+    if (!myTeam) return null;
+
+    const matchup = (d.schedule || []).find(m =>
+      m.matchupPeriodId === S.week &&
+      (m.home?.teamId === myTeam.id || m.away?.teamId === myTeam.id)
+    );
+    if (!matchup) return null;
+
+    const iAmHome  = matchup.home?.teamId === myTeam.id;
+    const oppTeamId = iAmHome ? matchup.away?.teamId : matchup.home?.teamId;
+    const oppTeam  = (d.teams || []).find(t => t.id === oppTeamId);
+
+    // Build name → sleeperId lookup from already-loaded S.playerMap
+    const byName = {};
+    for (const [pid, p] of Object.entries(S.playerMap || {})) {
+      if (p.full_name) byName[p.full_name.toLowerCase()] = pid;
+    }
+
+    const parseRoster = (team) => {
+      if (!team) return { starters: [], players_points: {} };
+      const starters = [], players_points = {};
+      for (const entry of (team.roster?.entries || [])) {
+        // 20 = Bench, 21 = IR — skip non-starters
+        if (entry.lineupSlotId === 20 || entry.lineupSlotId === 21) continue;
+        const pData = entry.playerPoolEntry?.playerPoolEntry?.player
+                   || entry.playerPoolEntry?.player;
+        if (!pData) continue;
+        const fullName = pData.fullName
+          || `${pData.firstName || ''} ${pData.lastName || ''}`.trim();
+        if (!fullName) continue;
+        const pid = byName[fullName.toLowerCase()];
+        if (!pid) continue;
+        starters.push(pid);
+        players_points[pid] = entry.playerPoolEntry?.appliedStatTotal ?? 0;
+      }
+      return { starters, players_points };
+    };
+
+    const my  = parseRoster(myTeam);
+    const opp = parseRoster(oppTeam);
+    return {
+      league,
+      myMatchup:  { starters: my.starters,  players: my.starters,  players_points: my.players_points  },
+      oppMatchup: oppTeam ? { starters: opp.starters, players: opp.starters, players_points: opp.players_points } : null,
+    };
+  } catch { return null; }
 }
 
 // ── Process Games ─────────────────────────────────────────────────────────────
