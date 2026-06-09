@@ -2908,8 +2908,8 @@ function lsDrawTable() {
 
   const tbody = `<tbody>${rows.map(row => {
     // League name cell
-    const nameCls = row.contender ? ' class="ls-contender-name"' : '';
-    const nameCell = `<td><span${nameCls}>${esc(row.name)}</span></td>`;
+    const nameCls = row.contender ? ' ls-contender-name' : '';
+    const nameCell = `<td><a href="/analyzer/${row.lgId}" class="row-link${nameCls}">${esc(row.name)}</a></td>`;
 
     // Standing cell
     let standingCell;
