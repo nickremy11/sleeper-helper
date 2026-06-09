@@ -146,7 +146,7 @@
     : '/api';
 
   // Read league ID from path: /analyzer/{lgId}
-  const lgId      = window.location.pathname.split('/').filter(Boolean).pop() || '';
+  const lgId      = new URLSearchParams(window.location.search).get('league') || '';
   const isEspn    = lgId.startsWith('espn_');
   const espnNumId = isEspn ? lgId.replace('espn_', '') : null;
 
@@ -190,7 +190,7 @@
 
   async function init() {
     SharedAuth.init({ onLogin: () => {}, onLogout: () => {} });
-    if (!lgId || lgId === 'analyzer') {
+    if (!lgId) {
       document.getElementById('content').innerHTML = errHtml(new Error('No league ID in URL'));
       return;
     }
