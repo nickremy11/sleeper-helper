@@ -397,6 +397,115 @@
     return { players, byName };
   }
 
+  // ── Playoff simulation ───────────────────────────────────────────────────────
+
+  const POS_CV = { QB: 0.43, RB: 0.50, WR: 0.52, TE: 0.58, DL: 0.55, LB: 0.55, DB: 0.55 };
+
+  function computeProjPts(stats, scoringSettings) {
+    let pts = 0;
+    for (const [k, v] of Object.entries(stats || {})) {
+      if (typeof v === 'number' && scoringSettings[k]) pts += v * scoringSettings[k];
+    }
+    return pts;
+  }
+
+  // Returns {mu, sigma} for a team's optimal projected lineup for one week.
+  // sigma derived from player projections via position CV — no historical data needed.
+  function optimalLineupAndSigma(playerIds, projMap, scoringSettings, rosterPositions, playersMap) {
+    const starterSlots  = rosterPositions.filter(p => !['BN','IR','TAXI'].includes(p));
+    const specificSlots = starterSlots.filter(s => !['FLEX','SUPER_FLEX','IDP_FLEX'].includes(s));
+    const flexSlots     = starterSlots.filter(s =>  ['FLEX','SUPER_FLEX','IDP_FLEX'].includes(s));
+
+    const pool = playerIds.map(pid => {
+      const p = playersMap[pid];
+      if (!p) return null;
+      const pos = normPos(p.position);
+      if (!pos) return null;
+      return { pid, pos, pts: computeProjPts(projMap[pid], scoringSettings) };
+    }).filter(Boolean);
+
+    const used = new Set();
+    let mu = 0, sigSq = 0;
+
+    const slotCounts = {};
+    for (const s of specificSlots) slotCounts[s] = (slotCounts[s] || 0) + 1;
+
+    for (const [pos, count] of Object.entries(slotCounts)) {
+      const eligible = pool.filter(p => p.pos === pos && !used.has(p.pid))
+                          .sort((a, b) => b.pts - a.pts);
+      for (let i = 0; i < Math.min(count, eligible.length); i++) {
+        const pl = eligible[i];
+        used.add(pl.pid);
+        mu += pl.pts;
+        const cv = POS_CV[pl.pos] ?? 0.50;
+        sigSq += (cv * pl.pts) ** 2;
+      }
+    }
+
+    for (const slot of flexSlots) {
+      const eligPos =
+        slot === 'FLEX'       ? ['RB','WR','TE'] :
+        slot === 'SUPER_FLEX' ? ['QB','RB','WR','TE'] :
+        slot === 'IDP_FLEX'   ? ['DL','LB','DB'] : [];
+      const eligible = pool.filter(p => eligPos.includes(p.pos) && !used.has(p.pid))
+                          .sort((a, b) => b.pts - a.pts);
+      if (eligible.length) {
+        const pl = eligible[0];
+        used.add(pl.pid);
+        mu += pl.pts;
+        const cv = POS_CV[pl.pos] ?? 0.50;
+        sigSq += (cv * pl.pts) ** 2;
+      }
+    }
+
+    return { mu, sigma: Math.max(10, Math.sqrt(sigSq)) };
+  }
+
+  function gaussianRandom(mu, sigma) {
+    let u, v;
+    do { u = Math.random(); } while (!u);
+    do { v = Math.random(); } while (!v);
+    return Math.max(0, mu + sigma * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v));
+  }
+
+  function runSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams, N = 5000) {
+    const count = {};
+    for (const t of teams) count[t.rosterId] = 0;
+
+    for (let sim = 0; sim < N; sim++) {
+      const wins = {}, pts = {};
+      for (const t of teams) { wins[t.rosterId] = t.wins; pts[t.rosterId] = t.fpts; }
+
+      for (const week of futureWeeks) {
+        const groups = {};
+        for (const m of (matchupsByWeek[week] || [])) {
+          if (!m.matchup_id) continue;
+          (groups[m.matchup_id] = groups[m.matchup_id] || []).push(m);
+        }
+        for (const pair of Object.values(groups)) {
+          if (pair.length !== 2) continue;
+          const [a, b] = pair;
+          const sA = gaussianRandom(muMap[a.roster_id]?.[week] ?? 100, sigmaMap[a.roster_id]?.[week] ?? 20);
+          const sB = gaussianRandom(muMap[b.roster_id]?.[week] ?? 100, sigmaMap[b.roster_id]?.[week] ?? 20);
+          pts[a.roster_id] = (pts[a.roster_id] || 0) + sA;
+          pts[b.roster_id] = (pts[b.roster_id] || 0) + sB;
+          if      (sA > sB) wins[a.roster_id] = (wins[a.roster_id] || 0) + 1;
+          else if (sB > sA) wins[b.roster_id] = (wins[b.roster_id] || 0) + 1;
+        }
+      }
+
+      const ranked = teams.slice().sort((a, b) => {
+        const wd = (wins[b.rosterId] || 0) - (wins[a.rosterId] || 0);
+        return wd !== 0 ? wd : (pts[b.rosterId] || 0) - (pts[a.rosterId] || 0);
+      });
+      for (let i = 0; i < Math.min(playoffTeams, ranked.length); i++) count[ranked[i].rosterId]++;
+    }
+
+    const odds = {};
+    for (const t of teams) odds[t.rosterId] = count[t.rosterId] / N;
+    return odds;
+  }
+
   // ── Sleeper load ──────────────────────────────────────────────────────────────
 
   async function loadSleeper() {
@@ -523,6 +632,62 @@
     const byStand = [...teams].sort((a, b) => b.wins !== a.wins ? b.wins - a.wins : b.fpts - a.fpts);
     byStand.forEach((t, i) => { t.standing = i + 1; });
     for (const t of teams) t.playoffChances = playoffLabel(t.standing, playoffTeams, numTeams);
+
+    // ── Playoff simulation ────────────────────────────────────────────────────
+    const playoffWeekStart   = leagueRes?.settings?.playoff_week_start ?? 15;
+    const regularSeasonWeeks = playoffWeekStart - 1;
+    const scoringSettings    = leagueRes?.scoring_settings || {};
+
+    // Fetch all regular-season matchup weeks in parallel
+    const matchupWeeks = await Promise.all(
+      Array.from({ length: regularSeasonWeeks }, (_, i) => i + 1).map(w =>
+        fetch(`${API}/sleeper/league/${lgId}/matchups/${w}`)
+          .then(r => r.ok ? r.json() : []).catch(() => [])
+      )
+    );
+
+    const matchupsByWeek = {};
+    const futureWeeks    = [];
+    matchupWeeks.forEach((matchups, idx) => {
+      const week = idx + 1;
+      matchupsByWeek[week] = matchups || [];
+      if (!(matchups || []).some(m => (m.points ?? 0) > 0)) futureWeeks.push(week);
+    });
+
+    if (futureWeeks.length === 0) {
+      // Post-season: standings are final — assign hard 1.0 / 0.0
+      byStand.forEach((t, i) => { t.playoffOdds = i < playoffTeams ? 1.0 : 0.0; });
+    } else {
+      // Fetch player projections for every remaining week in parallel
+      const projResults = await Promise.all(
+        futureWeeks.map(w =>
+          fetch(`${API}/sleeper/stats/nfl/projections/regular/${nflSeason}/${w}`)
+            .then(r => r.ok ? r.json() : {}).catch(() => ({}))
+        )
+      );
+      const projectionsByWeek = {};
+      futureWeeks.forEach((w, idx) => { projectionsByWeek[w] = projResults[idx] || {}; });
+
+      // Build mu + sigma per roster per future week
+      const muMap = {}, sigmaMap = {};
+      for (const roster of allRosters) {
+        const rid = roster.roster_id;
+        muMap[rid] = {}; sigmaMap[rid] = {};
+        for (const week of futureWeeks) {
+          const { mu, sigma } = optimalLineupAndSigma(
+            roster.players || [], projectionsByWeek[week], scoringSettings, rp, players
+          );
+          muMap[rid][week] = mu;
+          sigmaMap[rid][week] = sigma;
+        }
+      }
+
+      const simTeams = teams.filter(t => t.overall > 0 || t.wins > 0 || t.losses > 0);
+      const odds = runSimulation(simTeams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams);
+      for (const t of teams) {
+        if (odds[t.rosterId] !== undefined) t.playoffOdds = odds[t.rosterId];
+      }
+    }
 
     return { teams: teams.filter(t => t.overall > 0 || t.wins > 0 || t.losses > 0), lgName, category, season: nflSeason, formatFlags, numTeams };
   }
@@ -703,6 +868,18 @@
 
       const rankCellsHtml = rankCols.map(col => {
         if (col.key === 'chances') {
+          if (team.playoffOdds != null) {
+            const p = team.playoffOdds;
+            let label, color, weight;
+            if (p >= 0.995)      { label = 'Lock'; color = '#5cb85c'; weight = '700'; }
+            else if (p <= 0.005) { label = 'Out';  color = 'var(--brown-light)'; weight = '400'; }
+            else {
+              label  = Math.round(p * 100) + '%';
+              color  = p >= 0.70 ? '#5cb85c' : p >= 0.40 ? 'var(--gold-light)' : 'var(--brown-light)';
+              weight = p >= 0.70 || p <= 0.15 ? '700' : '400';
+            }
+            return `<div class="az-rank-cell"><span class="az-chances-badge" style="color:${color};font-weight:${weight};">${label}</span></div>`;
+          }
           const { label, cls } = team.playoffChances || { label: '—', cls: 'az-chances-nervy' };
           return `<div class="az-rank-cell"><span class="az-chances-badge ${cls}">${label}</span></div>`;
         }
