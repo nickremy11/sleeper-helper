@@ -20,26 +20,11 @@
     /* ── Format flags strip ── */
     .az-flags { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 20px; align-items: center; }
     .az-flag {
-      font-family: 'Rye', serif; font-size: 0.46rem; letter-spacing: 0.14em;
-      text-transform: uppercase; padding: 4px 10px; border: 1px solid var(--brown-mid);
-      border-radius: 2px; color: var(--brown-dark); background: rgba(0,0,0,0.04);
-    }
-    .az-flag-hi { border-color: var(--gold); color: var(--ink); background: rgba(201,150,42,0.14); }
-
-    /* ── Sort bar ── */
-    .az-sort-bar { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 18px; align-items: center; }
-    .az-sort-label {
-      font-family: 'Rye', serif; font-size: 0.48rem; letter-spacing: 0.2em;
-      text-transform: uppercase; color: var(--brown-light); margin-right: 2px;
-    }
-    .az-pill {
       font-family: 'Rye', serif; font-size: 0.52rem; letter-spacing: 0.12em;
       text-transform: uppercase; padding: 6px 14px; border: 1.5px solid var(--brown-mid);
-      border-radius: 2px; background: none; color: var(--brown-light); cursor: pointer;
-      transition: all 0.15s;
+      border-radius: 2px; color: var(--brown-light); background: none;
     }
-    .az-pill:hover  { border-color: var(--gold); color: var(--gold); }
-    .az-pill.active { border-color: var(--gold); color: var(--gold); background: rgba(201,150,42,0.08); }
+    .az-flag-hi { border-color: var(--gold); color: var(--gold); background: rgba(201,150,42,0.08); }
 
     /* ── Scrollable table wrapper ── */
     .az-table-wrap { overflow-x: auto; }
@@ -58,6 +43,9 @@
       font-family: 'Rye', serif; font-size: 0.46rem; letter-spacing: 0.16em;
       text-transform: uppercase; color: var(--gold); text-align: center;
     }
+    .az-th-sortable { cursor: pointer; user-select: none; transition: color 0.15s; }
+    .az-th-sortable:hover { color: var(--gold-light); }
+    .az-th-active { color: var(--gold-light) !important; }
 
     /* ── Cards ── */
     .az-cards { display: flex; flex-direction: column; min-width: 680px; }
@@ -144,7 +132,7 @@
     .pf-player-val  { font-size: 0.8rem; color: var(--brown-light); flex-shrink: 0; }
     .pf-player-via  { font-size: 0.7rem; color: var(--brown-light); font-style: italic; }
 
-    .az-badge { font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.15em; text-transform: uppercase; padding: 2px 8px; border: 1px solid; border-radius: 2px; display: inline-block; }
+    .az-badge { font-family: 'Rye', serif; font-size: 0.52rem; letter-spacing: 0.12em; text-transform: uppercase; padding: 6px 14px; border: 1.5px solid; border-radius: 2px; display: inline-block; }
     .az-badge-dynasty  { color: var(--gold);        border-color: var(--gold);        }
     .az-badge-redraft  { color: var(--green-light);  border-color: var(--green-light); }
     .az-badge-bestball { color: var(--brown-light);  border-color: var(--brown-light); }
@@ -225,6 +213,7 @@
   const espnNumId = isEspn ? lgId.replace('espn_', '') : null;
 
   let sortKey = 'overall';
+  let sortDir = -1; // -1 = desc (highest value first), 1 = asc
   let hasIDP  = false;
 
   // Column layout — same grid template applied to header and every card row.
@@ -663,13 +652,14 @@
     }
 
     const SORT_KEYS = getSortKeys();
+    const sortableKeys = new Set(SORT_KEYS.map(s => s.key));
     const valOf = key => t =>
       key === 'overall'   ? t.overall   :
       key === 'contender' ? t.contender :
       key === 'draft'     ? t.draft     :
       (t.posValues[key] ?? 0);
 
-    const sorted = [...teams].sort((a, b) => valOf(sortKey)(b) - valOf(sortKey)(a));
+    const sorted = [...teams].sort((a, b) => sortDir * (valOf(sortKey)(b) - valOf(sortKey)(a)));
 
     const tpl = gridTpl();
 
@@ -681,11 +671,6 @@
       <span style="font-family:'Crimson Text',serif;font-size:0.9rem;color:var(--parchment);">${numTeams} teams</span>
       ${(formatFlags || []).map(f => `<span class="az-flag${f.hi ? ' az-flag-hi' : ''}">${f.label}</span>`).join('')}
     </div>`;
-
-    // Sort pills
-    const sortPills = SORT_KEYS.map(s =>
-      `<button class="az-pill${sortKey === s.key ? ' active' : ''}" onclick="setSort('${s.key}')">${s.label}</button>`
-    ).join('');
 
     // Column definitions (header + rank cells must match exactly)
     const posCols = ['QB','RB','WR','TE'];
@@ -700,7 +685,12 @@
 
     const headerHtml = `<div class="az-table-header" style="grid-template-columns:${tpl};">
       <div class="az-th-team">Team</div>
-      ${rankCols.map(c => `<div class="az-th">${c.label}</div>`).join('')}
+      ${rankCols.map(c => {
+        if (!sortableKeys.has(c.key)) return `<div class="az-th">${c.label}</div>`;
+        const isActive = c.key === sortKey;
+        const arrow = isActive ? (sortDir === -1 ? ' ▾' : ' ▴') : '';
+        return `<div class="az-th az-th-sortable${isActive ? ' az-th-active' : ''}" onclick="setSort('${c.key}')">${c.label}${arrow}</div>`;
+      }).join('')}
       <div></div>
     </div>`;
 
@@ -796,10 +786,6 @@
 
     document.getElementById('content').innerHTML = `
       ${flagsHtml}
-      <div class="az-sort-bar">
-        <span class="az-sort-label">Sort by</span>
-        ${sortPills}
-      </div>
       <div class="az-table-wrap">
         ${headerHtml}
         <div class="az-cards">${cards}</div>
@@ -808,7 +794,12 @@
   }
 
   function setSort(key) {
-    sortKey = key;
+    if (key === sortKey) {
+      sortDir = -sortDir;
+    } else {
+      sortKey = key;
+      sortDir = -1;
+    }
     renderAll();
   }
 
