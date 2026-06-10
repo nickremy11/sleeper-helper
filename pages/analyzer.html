@@ -94,6 +94,11 @@
     .az-chances-nervy { color: var(--parchment); }
     .az-chances-long  { color: var(--brown-light); }
 
+    /* ── Playoff progress bar ── */
+    .az-playoff-cell { padding: 0 8px; display: flex; flex-direction: column; justify-content: center; gap: 3px; }
+    .az-playoff-bar-wrap { width: 100%; height: 5px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; }
+    .az-playoff-bar-fill { height: 100%; border-radius: 3px; opacity: 0.8; }
+
     .az-chevron {
       font-size: 1.1rem; color: var(--brown-light); justify-self: end;
       transition: transform 0.2s;
@@ -219,7 +224,7 @@
   // Column layout — same grid template applied to header and every card row.
   // Rebuilt after hasIDP is known. Includes: team | overall | contender | QB | RB | WR | TE | [DL] | draft | playoff | chevron
   function gridTpl() {
-    return `1fr 68px 78px 58px 58px 58px 58px${hasIDP ? ' 74px' : ''} 64px 92px 22px`;
+    return `minmax(0,1fr) 68px 78px 58px 58px 58px 58px${hasIDP ? ' 74px' : ''} 64px 140px 22px`;
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -289,7 +294,8 @@
       { key: 'TE',        label: 'TE'        },
     ];
     if (hasIDP) keys.push({ key: 'DL', label: 'DL/LB/DB' });
-    keys.push({ key: 'draft', label: 'Draft' });
+    keys.push({ key: 'draft',   label: 'Draft'   });
+    keys.push({ key: 'chances', label: 'Playoff' });
     return keys;
   }
 
@@ -331,21 +337,32 @@
   // Build map of FC pick values: {year_round_qualifier: value, year_round: bestValue}
   function buildPickValueMap(fcRes) {
     const map = {};
-    for (const item of (fcRes || [])) {
+    const arr = fcRes || [];
+
+    // Log first pick-like item so we can verify the FC format if values come back empty
+    const samplePick = arr.find(item => {
       const sid = item.player?.sleeperId || item.player?.maybeSleeperID;
-      if (sid) continue;
+      return (!sid || String(sid) === '0') && /pick|round|\d(st|nd|rd|th)/i.test(item.player?.name || '');
+    });
+    if (samplePick) console.log('[Analyzer] FC pick sample:', JSON.stringify(samplePick.player), 'value:', samplePick.value);
+    else            console.warn('[Analyzer] No FC pick entries found — pick values will be empty');
+
+    for (const item of arr) {
+      // Skip real players; treat "0" / null / undefined as "no ID" (i.e. a pick)
+      const sid = item.player?.sleeperId || item.player?.maybeSleeperID;
+      if (sid && String(sid) !== '0') continue;
       const name = (item.player?.name || '').toLowerCase();
       if (!name) continue;
       const yearM = name.match(/20(\d\d)/);
       if (!yearM) continue;
       const year = '20' + yearM[1];
       let round = 0;
-      if      (/\b1(st)?\b/.test(name) || /first/.test(name))   round = 1;
-      else if (/\b2(nd)?\b/.test(name) || /second/.test(name))  round = 2;
-      else if (/\b3(rd)?\b/.test(name) || /third/.test(name))   round = 3;
-      else if (/\b4(th)?\b/.test(name) || /fourth/.test(name))  round = 4;
-      else if (/\b5(th)?\b/.test(name) || /fifth/.test(name))   round = 5;
-      else if (/\b6(th)?\b/.test(name) || /sixth/.test(name))   round = 6;
+      if      (/\b1(st)?\b/.test(name) || /first/.test(name))  round = 1;
+      else if (/\b2(nd)?\b/.test(name) || /second/.test(name)) round = 2;
+      else if (/\b3(rd)?\b/.test(name) || /third/.test(name))  round = 3;
+      else if (/\b4(th)?\b/.test(name) || /fourth/.test(name)) round = 4;
+      else if (/\b5(th)?\b/.test(name) || /fifth/.test(name))  round = 5;
+      else if (/\b6(th)?\b/.test(name) || /sixth/.test(name))  round = 6;
       if (!round) continue;
       let q = 'mid';
       if (/early/.test(name)) q = 'early';
@@ -355,6 +372,7 @@
         map[`${year}_${round}`] = item.value;
       }
     }
+    console.log('[Analyzer] FC pick map built:', Object.keys(map).length, 'entries');
     return map;
   }
 
@@ -654,7 +672,17 @@
       if (!(matchups || []).some(m => (m.points ?? 0) > 0)) futureWeeks.push(week);
     });
 
-    if (futureWeeks.length === 0) {
+    // Check session cache — keyed by league + season + regular-season length
+    const _simCacheKey = `az_odds_${lgId}_${nflSeason}_w${regularSeasonWeeks}`;
+    let _cachedOdds = null;
+    try {
+      const _c = JSON.parse(sessionStorage.getItem(_simCacheKey) || 'null');
+      if (_c && Date.now() - _c.ts < 2 * 3600 * 1000) _cachedOdds = _c.odds;
+    } catch {}
+
+    if (_cachedOdds) {
+      for (const t of teams) { if (_cachedOdds[t.rosterId] !== undefined) t.playoffOdds = _cachedOdds[t.rosterId]; }
+    } else if (futureWeeks.length === 0) {
       // Post-season: standings are final — assign hard 1.0 / 0.0
       byStand.forEach((t, i) => { t.playoffOdds = i < playoffTeams ? 1.0 : 0.0; });
     } else {
@@ -683,13 +711,6 @@
         }
       }
 
-      // Diagnostic: log sample mu values so we can verify projections loaded
-      const sampleRid = allRosters[0]?.roster_id;
-      const sampleWeek = futureWeeks[0];
-      console.log('[Analyzer] projection sample — roster', sampleRid, 'week', sampleWeek,
-        '→ mu', muMap[sampleRid]?.[sampleWeek]?.toFixed(1),
-        'sigma', sigmaMap[sampleRid]?.[sampleWeek]?.toFixed(1));
-
       // Fallback: if projections returned empty (avg mu < 20 pts) use FC overall values
       // scaled to realistic weekly scoring range so results are still meaningful.
       const simTeams = teams.filter(t => t.overall > 0 || t.wins > 0 || t.losses > 0);
@@ -698,7 +719,6 @@
       ) / Math.max(1, simTeams.length * futureWeeks.length);
 
       if (avgMu < 20) {
-        console.warn('[Analyzer] Projections appear empty (avgMu=' + avgMu.toFixed(1) + ') — falling back to FC overall values');
         const meanOverall = simTeams.reduce((s, t) => s + t.overall, 0) / Math.max(1, simTeams.length);
         for (const roster of allRosters) {
           const t = teams.find(tm => tm.rosterId === roster.roster_id);
@@ -711,14 +731,13 @@
             sigmaMap[roster.roster_id][week] = sigma;
           }
         }
-        console.log('[Analyzer] FC fallback sample — roster', sampleRid,
-          '→ mu', muMap[sampleRid]?.[sampleWeek]?.toFixed(1));
       }
 
       const odds = runSimulation(simTeams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams);
       for (const t of teams) {
         if (odds[t.rosterId] !== undefined) t.playoffOdds = odds[t.rosterId];
       }
+      try { sessionStorage.setItem(_simCacheKey, JSON.stringify({ ts: Date.now(), odds })); } catch {}
     }
 
     return { teams: teams.filter(t => t.overall > 0 || t.wins > 0 || t.losses > 0), lgName, category, season: nflSeason, formatFlags, numTeams };
@@ -851,9 +870,10 @@
     const SORT_KEYS = getSortKeys();
     const sortableKeys = new Set(SORT_KEYS.map(s => s.key));
     const valOf = key => t =>
-      key === 'overall'   ? t.overall   :
-      key === 'contender' ? t.contender :
-      key === 'draft'     ? t.draft     :
+      key === 'overall'   ? t.overall              :
+      key === 'contender' ? t.contender            :
+      key === 'draft'     ? t.draft                :
+      key === 'chances'   ? (t.playoffOdds ?? -1)  :
       (t.posValues[key] ?? 0);
 
     const sorted = [...teams].sort((a, b) => sortDir * (valOf(sortKey)(b) - valOf(sortKey)(a)));
@@ -902,15 +922,19 @@
         if (col.key === 'chances') {
           if (team.playoffOdds != null) {
             const p = team.playoffOdds;
-            let label, color, weight;
-            if (p >= 0.995)      { label = 'Lock'; color = '#5cb85c'; weight = '700'; }
-            else if (p <= 0.005) { label = 'Out';  color = 'var(--brown-light)'; weight = '400'; }
+            let label, color, weight, barPct;
+            if (p >= 0.995)      { label = 'Lock'; color = '#5cb85c'; weight = '700'; barPct = 100; }
+            else if (p <= 0.005) { label = 'Out';  color = 'var(--brown-light)'; weight = '400'; barPct = 0; }
             else {
-              label  = Math.round(p * 100) + '%';
+              barPct = Math.round(p * 100);
+              label  = barPct + '%';
               color  = p >= 0.70 ? '#5cb85c' : p >= 0.40 ? 'var(--gold-light)' : 'var(--brown-light)';
               weight = p >= 0.70 || p <= 0.15 ? '700' : '400';
             }
-            return `<div class="az-rank-cell"><span class="az-chances-badge" style="color:${color};font-weight:${weight};">${label}</span></div>`;
+            return `<div class="az-rank-cell az-playoff-cell">
+              <span class="az-chances-badge" style="color:${color};font-weight:${weight};">${label}</span>
+              <div class="az-playoff-bar-wrap"><div class="az-playoff-bar-fill" style="width:${barPct}%;background:${color};"></div></div>
+            </div>`;
           }
           const { label, cls } = team.playoffChances || { label: '—', cls: 'az-chances-nervy' };
           return `<div class="az-rank-cell"><span class="az-chances-badge ${cls}">${label}</span></div>`;
