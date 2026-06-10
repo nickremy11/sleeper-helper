@@ -339,18 +339,20 @@
     const map = {};
     const arr = fcRes || [];
 
-    // Log first pick-like item so we can verify the FC format if values come back empty
-    const samplePick = arr.find(item => {
+    // FC marks picks with position "PI"; fall back to no-sleeperId check for older formats
+    const isPickItem = item => {
+      const pos = (item.player?.position || '').toUpperCase();
+      if (pos === 'PI' || pos === 'PICK') return true;
       const sid = item.player?.sleeperId || item.player?.maybeSleeperID;
-      return (!sid || String(sid) === '0') && /pick|round|\d(st|nd|rd|th)/i.test(item.player?.name || '');
-    });
+      return !sid || String(sid) === '0';
+    };
+
+    const samplePick = arr.find(isPickItem);
     if (samplePick) console.log('[Analyzer] FC pick sample:', JSON.stringify(samplePick.player), 'value:', samplePick.value);
     else            console.warn('[Analyzer] No FC pick entries found — pick values will be empty');
 
     for (const item of arr) {
-      // Skip real players; treat "0" / null / undefined as "no ID" (i.e. a pick)
-      const sid = item.player?.sleeperId || item.player?.maybeSleeperID;
-      if (sid && String(sid) !== '0') continue;
+      if (!isPickItem(item)) continue;
       const name = (item.player?.name || '').toLowerCase();
       if (!name) continue;
       const yearM = name.match(/20(\d\d)/);
@@ -924,12 +926,12 @@
             const p = team.playoffOdds;
             let label, color, weight, barPct;
             if (p >= 0.995)      { label = 'Lock'; color = '#5cb85c'; weight = '700'; barPct = 100; }
-            else if (p <= 0.005) { label = 'Out';  color = 'var(--brown-light)'; weight = '400'; barPct = 0; }
+            else if (p <= 0.005) { label = 'Out';  color = '#e05252'; weight = '700'; barPct = 0; }
             else {
               barPct = Math.round(p * 100);
               label  = barPct + '%';
-              color  = p >= 0.70 ? '#5cb85c' : p >= 0.40 ? 'var(--gold-light)' : 'var(--brown-light)';
-              weight = p >= 0.70 || p <= 0.15 ? '700' : '400';
+              color  = p >= 0.70 ? '#5cb85c' : p >= 0.30 ? 'var(--gold-light)' : '#e05252';
+              weight = p >= 0.70 || p < 0.30 ? '700' : '400';
             }
             return `<div class="az-rank-cell az-playoff-cell">
               <span class="az-chances-badge" style="color:${color};font-weight:${weight};">${label}</span>
