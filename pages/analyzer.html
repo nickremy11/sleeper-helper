@@ -577,6 +577,7 @@
 
     // League meta
     const rp           = leagueRes?.roster_positions || [];
+    const te2Mult      = rp.filter(p => p === 'TE').length >= 2 ? 1.4 : 1.0;
     const IDP_SLOTS    = new Set(['DL','LB','DB','DE','DT','IDP_FLEX','CB','S']);
     hasIDP             = rp.some(p => IDP_SLOTS.has(p));
     const lgType       = leagueRes?.settings?.type ?? 0;
@@ -605,7 +606,7 @@
         if (!p) continue;
         const pos = normPos(p.position);
         if (!pos) continue;
-        const val = fcMap[pid] ?? 0;
+        const val = (fcMap[pid] ?? 0) * (pos === 'TE' ? te2Mult : 1.0);
         overall += val;
         const bucket = DEF_P.has(pos) ? 'DL' : pos;
         if (bucket in posValues) posValues[bucket] += val;
@@ -633,7 +634,7 @@
           label = `${pick.season} ${roundStr}`;
         }
         const isTraded = pick.originalRosterId !== roster.roster_id;
-        return { label, val: pv, viaName: isTraded ? (rosterNames[pick.originalRosterId] || null) : null, season: pick.season, round: pick.round };
+        return { label, val: pv, viaName: isTraded ? (rosterNames[pick.originalRosterId] || null) : null, season: pick.season, round: pick.round, originalRosterId: pick.originalRosterId };
       }).sort((a, b) => a.season !== b.season ? a.season.localeCompare(b.season) : a.round - b.round);
 
       return {
@@ -740,6 +741,26 @@
         if (odds[t.rosterId] !== undefined) t.playoffOdds = odds[t.rosterId];
       }
       try { sessionStorage.setItem(_simCacheKey, JSON.stringify({ ts: Date.now(), odds })); } catch {}
+    }
+
+    // Re-value next-year picks based on original team's playoff odds
+    // (bad team → likely early pick → more valuable)
+    const _nextSeason = String(parseInt(nflSeason) + 1);
+    const _oddsMap = {};
+    for (const t of teams) _oddsMap[t.rosterId] = t.playoffOdds ?? null;
+    for (const t of teams) {
+      let _adj = 0;
+      for (const pick of t.pickList) {
+        if (pick.season === _nextSeason && pick.originalRosterId != null) {
+          const origOdds = _oddsMap[pick.originalRosterId];
+          if (origOdds != null) {
+            const mult = origOdds >= 0.70 ? 1.0 : origOdds >= 0.30 ? 1.4 : 2.0;
+            pick.val = Math.round(pick.val * mult);
+          }
+        }
+        _adj += pick.val;
+      }
+      t.draft = Math.round(_adj);
     }
 
     return { teams: teams.filter(t => t.overall > 0 || t.wins > 0 || t.losses > 0), lgName, category, season: nflSeason, formatFlags, numTeams };
