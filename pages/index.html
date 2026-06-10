@@ -552,7 +552,7 @@ async function loadUser() {
     st.className = 'setup-status ok';
     // Load ESPN leagues (non-blocking — they append to S.leagues after Sleeper leagues)
     loadEspnLeagues(season);
-    if (S.tab === 'home') sw('leagues'); else render(S.tab);
+    render(S.tab);
     // Auto-save username to account when logged in
     if (S.auth && u !== S.auth.sleeper_username) {
       fetch('/api/auth/me', { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sleeper_username: u }) })
