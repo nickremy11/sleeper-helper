@@ -22,9 +22,9 @@
     .az-flag {
       font-family: 'Rye', serif; font-size: 0.46rem; letter-spacing: 0.14em;
       text-transform: uppercase; padding: 4px 10px; border: 1px solid var(--brown-mid);
-      border-radius: 2px; color: var(--parchment); background: rgba(255,255,255,0.05);
+      border-radius: 2px; color: var(--brown-dark); background: rgba(0,0,0,0.04);
     }
-    .az-flag-hi { border-color: var(--gold); color: var(--gold-light); background: rgba(201,150,42,0.07); }
+    .az-flag-hi { border-color: var(--gold); color: var(--ink); background: rgba(201,150,42,0.14); }
 
     /* ── Sort bar ── */
     .az-sort-bar { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 18px; align-items: center; }
@@ -148,6 +148,39 @@
     .az-badge-dynasty  { color: var(--gold);        border-color: var(--gold);        }
     .az-badge-redraft  { color: var(--green-light);  border-color: var(--green-light); }
     .az-badge-bestball { color: var(--brown-light);  border-color: var(--brown-light); }
+
+    /* ── League switcher ── */
+    .az-switcher-bar { display: flex; justify-content: flex-end; margin-bottom: 14px; }
+    .az-switcher-wrap { position: relative; }
+    .az-switcher-btn {
+      font-family: 'Rye', serif; font-size: 0.44rem; letter-spacing: 0.14em;
+      text-transform: uppercase; padding: 7px 13px; border: 1.5px solid var(--brown-mid);
+      border-radius: 2px; background: transparent; color: var(--brown-mid);
+      cursor: pointer; transition: all 0.15s; white-space: nowrap;
+    }
+    .az-switcher-btn:hover { border-color: var(--gold); color: var(--gold); background: rgba(201,150,42,0.06); }
+    .az-switcher-panel {
+      position: absolute; right: 0; top: calc(100% + 6px); width: 300px;
+      background: var(--brown-dark); border: 1px solid var(--brown-mid);
+      border-radius: 3px; box-shadow: 0 4px 24px rgba(0,0,0,0.5); z-index: 300;
+    }
+    .az-switcher-search {
+      width: 100%; padding: 9px 12px; background: rgba(0,0,0,0.25);
+      border: none; border-bottom: 1px solid var(--brown-mid);
+      color: var(--cream); font-family: 'Crimson Text', serif; font-size: 0.95rem;
+      outline: none; border-radius: 3px 3px 0 0;
+    }
+    .az-switcher-search::placeholder { color: var(--brown-light); }
+    .az-switcher-list { max-height: 300px; overflow-y: auto; }
+    .az-switcher-item {
+      display: block; padding: 9px 14px; font-family: 'Crimson Text', serif;
+      font-size: 0.9rem; color: var(--parchment); text-decoration: none;
+      border-bottom: 1px dashed rgba(255,255,255,0.05); transition: background 0.1s;
+    }
+    .az-switcher-item:last-child { border-bottom: none; }
+    .az-switcher-item:hover { background: rgba(255,255,255,0.06); color: var(--cream); }
+    .az-switcher-item.current { color: var(--gold-light); font-weight: 600; background: rgba(201,150,42,0.07); pointer-events: none; }
+    .az-switcher-empty { padding: 12px 14px; font-family: 'Crimson Text', serif; font-size: 0.86rem; color: var(--brown-light); font-style: italic; }
   </style>
 </head>
 <body>
@@ -155,7 +188,7 @@
     <div class="banner">
       <div style="position:relative;z-index:1;padding:18px 20px;display:flex;justify-content:space-between;align-items:flex-start;">
         <div class="banner-text">
-          <a href="/" class="banner-back">← League Summaries</a>
+          <a href="/?tab=leagues" class="banner-back">← League Summaries</a>
           <h1>League <span>Analyzer</span></h1>
           <div class="az-league-title" id="league-title">Loading…</div>
           <div class="banner-divider"></div>
@@ -165,6 +198,15 @@
     </div>
 
     <div class="az-wrap">
+      <div class="az-switcher-bar">
+        <div class="az-switcher-wrap">
+          <button class="az-switcher-btn" onclick="toggleSwitcher(event)">⇅ Switch League</button>
+          <div id="az-switcher-panel" class="az-switcher-panel" style="display:none;">
+            <input id="az-switcher-search" class="az-switcher-search" type="text" placeholder="Search leagues…" oninput="filterSwitcher(this.value)" autocomplete="off">
+            <div id="az-switcher-list" class="az-switcher-list"><div class="az-switcher-empty">Loading…</div></div>
+          </div>
+        </div>
+      </div>
       <div id="content"></div>
     </div>
   </div>
@@ -264,9 +306,11 @@
 
   // ── Pick computation ──────────────────────────────────────────────────────────
 
-  // All rounds 1-6; value 0 for rounds 5+
-  function computePicksForRoster(myRosterId, allRosters, tradedPicks, nflSeason) {
+  // Only generates picks for rounds the league actually uses.
+  // numRounds: from draft settings, falling back to max traded pick round, then 4.
+  function computePicksForRoster(myRosterId, allRosters, tradedPicks, nflSeason, numRounds) {
     const curYear = parseInt(nflSeason);
+    const rounds  = Array.from({ length: numRounds }, (_, i) => i + 1);
     const seasons = new Set();
     for (let y = curYear; y <= curYear + 3; y++) seasons.add(String(y));
     for (const tp of (tradedPicks || [])) {
@@ -275,13 +319,13 @@
     const ownership = {};
     for (const r of allRosters) {
       for (const season of seasons) {
-        for (const round of [1, 2, 3, 4, 5, 6]) {
+        for (const round of rounds) {
           ownership[`${season}_${round}_${r.roster_id}`] = r.roster_id;
         }
       }
     }
     for (const tp of (tradedPicks || [])) {
-      if (tp.round > 6) continue;
+      if (tp.round > numRounds) continue;
       if (parseInt(tp.season) < curYear) continue;
       ownership[`${tp.season}_${tp.round}_${tp.roster_id}`] = tp.owner_id;
     }
@@ -399,6 +443,9 @@
       ridToSlot = {};
       for (const [slot, rid] of Object.entries(rawSlots)) ridToSlot[String(rid)] = parseInt(slot);
     }
+    // Actual rounds the league drafts — from draft settings, then highest traded pick round, then 4
+    const maxTradedRound = tradedPicks.reduce((m, tp) => Math.max(m, tp.round || 0), 0);
+    const numRounds = curDraft?.settings?.rounds || maxTradedRound || 4;
 
     const allRosters = rostersRes || [];
     const numTeams   = allRosters.length;
@@ -454,7 +501,7 @@
       });
 
       // Picks
-      const rawPicks = computePicksForRoster(roster.roster_id, allRosters, tradedPicks, nflSeason);
+      const rawPicks = computePicksForRoster(roster.roster_id, allRosters, tradedPicks, nflSeason, numRounds);
       let draftValue = 0;
       const pickList = rawPicks.map(pick => {
         const pv       = getPickValue(pick.season, pick.round, pick.originalRosterId, ridToSlot, numTeams, fcPickMap);
@@ -763,6 +810,74 @@
   function setSort(key) {
     sortKey = key;
     renderAll();
+  }
+
+  // ── League switcher ──────────────────────────────────────────────────────────
+
+  let _switcherLoaded = false;
+  let _switcherLeagues = [];
+
+  function toggleSwitcher(e) {
+    e.stopPropagation();
+    const panel = document.getElementById('az-switcher-panel');
+    const open  = panel.style.display !== 'none';
+    panel.style.display = open ? 'none' : 'block';
+    if (!open) {
+      const inp = document.getElementById('az-switcher-search');
+      inp.value = '';
+      inp.focus();
+      if (!_switcherLoaded) loadSwitcherLeagues();
+      else filterSwitcher('');
+    }
+  }
+
+  document.addEventListener('click', e => {
+    const panel = document.getElementById('az-switcher-panel');
+    if (panel && !panel.contains(e.target) && !e.target.closest('.az-switcher-wrap')) {
+      panel.style.display = 'none';
+    }
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      const panel = document.getElementById('az-switcher-panel');
+      if (panel) panel.style.display = 'none';
+    }
+  });
+
+  async function loadSwitcherLeagues() {
+    const list = document.getElementById('az-switcher-list');
+    const user = SharedAuth.getUser?.();
+    const username = user?.sleeper_username;
+    if (!username) {
+      list.innerHTML = '<div class="az-switcher-empty">Sign in and set your Sleeper username in your profile to switch leagues.</div>';
+      return;
+    }
+    list.innerHTML = '<div class="az-switcher-empty">Loading…</div>';
+    try {
+      const [nflRes, sleeperUser] = await Promise.all([
+        fetch(`${API}/sleeper/state/nfl`).then(r => r.json()),
+        fetch(`${API}/sleeper/user/${encodeURIComponent(username)}`).then(r => r.json()),
+      ]);
+      const season  = nflRes?.season || String(new Date().getFullYear());
+      const leagues = await fetch(`${API}/sleeper/user/${sleeperUser.user_id}/leagues/nfl/${season}`).then(r => r.json());
+      _switcherLeagues = (leagues || []).map(lg => ({ id: lg.league_id, name: lg.name || lg.league_id }));
+      _switcherLoaded  = true;
+      filterSwitcher(document.getElementById('az-switcher-search')?.value || '');
+    } catch(e) {
+      list.innerHTML = `<div class="az-switcher-empty">Error loading leagues: ${esc(String(e.message))}</div>`;
+    }
+  }
+
+  function filterSwitcher(q) {
+    const list     = document.getElementById('az-switcher-list');
+    const term     = q.toLowerCase();
+    const filtered = term ? _switcherLeagues.filter(l => l.name.toLowerCase().includes(term)) : _switcherLeagues;
+    if (!filtered.length) { list.innerHTML = '<div class="az-switcher-empty">No matches</div>'; return; }
+    list.innerHTML = filtered.map(lg => {
+      const cur = lg.id === lgId;
+      return `<a class="az-switcher-item${cur ? ' current' : ''}" href="/analyzer?league=${encodeURIComponent(lg.id)}">${esc(lg.name)}</a>`;
+    }).join('');
   }
 
   init();
