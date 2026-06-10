@@ -20,9 +20,9 @@
     /* ── Format flags strip ── */
     .az-flags { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 20px; align-items: center; }
     .az-flag {
-      font-family: 'Rye', serif; font-size: 0.52rem; letter-spacing: 0.12em;
+      font-family: 'Rye', serif; font-size: 0.57rem; letter-spacing: 0.12em;
       text-transform: uppercase; padding: 6px 14px; border: 1.5px solid var(--brown-mid);
-      border-radius: 2px; color: var(--brown-light); background: none;
+      border-radius: 2px; color: var(--brown-light); background: rgba(0,0,0,0.22);
     }
     .az-flag-hi { border-color: var(--gold); color: var(--gold); background: rgba(201,150,42,0.08); }
 
@@ -132,7 +132,7 @@
     .pf-player-val  { font-size: 0.8rem; color: var(--brown-light); flex-shrink: 0; }
     .pf-player-via  { font-size: 0.7rem; color: var(--brown-light); font-style: italic; }
 
-    .az-badge { font-family: 'Rye', serif; font-size: 0.52rem; letter-spacing: 0.12em; text-transform: uppercase; padding: 6px 14px; border: 1.5px solid; border-radius: 2px; display: inline-block; }
+    .az-badge { font-family: 'Rye', serif; font-size: 0.57rem; letter-spacing: 0.12em; text-transform: uppercase; padding: 6px 14px; border: 1.5px solid; border-radius: 2px; display: inline-block; }
     .az-badge-dynasty  { color: var(--gold);        border-color: var(--gold);        }
     .az-badge-redraft  { color: var(--green-light);  border-color: var(--green-light); }
     .az-badge-bestball { color: var(--brown-light);  border-color: var(--brown-light); }
@@ -213,7 +213,7 @@
   const espnNumId = isEspn ? lgId.replace('espn_', '') : null;
 
   let sortKey = 'overall';
-  let sortDir = -1; // -1 = desc (highest value first), 1 = asc
+  let sortDir = 1; // -1 = desc (highest value first), 1 = asc
   let hasIDP  = false;
 
   // Column layout — same grid template applied to header and every card row.
@@ -261,21 +261,21 @@
     const starters = rp.filter(p => !['BN','IR','TAXI'].includes(p)).length;
     if (starters)                    flags.push({ label: starters + ' Starters', hi: false });
     flags.push(rp.includes('SUPER_FLEX')
-      ? { label: 'SF',   hi: true  }
+      ? { label: 'SF',   hi: false }
       : { label: '1QB',  hi: false });
     const rec = sc.rec ?? 1;
     if (rec === 0)      flags.push({ label: 'Std',       hi: false });
     else if (rec < 1)   flags.push({ label: rec + 'PPR', hi: true  });
     else                flags.push({ label: 'PPR',        hi: true  });
     if ((sc.bonus_rec_te ?? 0) > 0) flags.push({ label: '+' + sc.bonus_rec_te + 'TEP',  hi: true  });
-    if ((sc.bonus_rec_wr ?? 0) > 0) flags.push({ label: '+' + sc.bonus_rec_wr + 'WRP',  hi: false });
-    if (rp.filter(p => p === 'TE').length >= 2) flags.push({ label: '2xTE', hi: true });
+    if ((sc.bonus_rec_wr ?? 0) > 0) flags.push({ label: '+' + sc.bonus_rec_wr + 'WRP',  hi: true  });
+    if (rp.filter(p => p === 'TE').length >= 2) flags.push({ label: '2xTE', hi: false });
     if ((sc.bonus_rec_fd  ?? 0) > 0) flags.push({ label: '+' + sc.bonus_rec_fd + 'FD',   hi: true  });
-    if ((sc.bonus_rush_fd ?? sc.rush_fd ?? 0) > 0) flags.push({ label: '+' + (sc.bonus_rush_fd ?? sc.rush_fd) + 'RFD', hi: false });
-    if ((sc.rush_att ?? sc.rush_attempt ?? 0) > 0) flags.push({ label: 'PPC', hi: false });
-    if ((sc.pass_td ?? 4) !== 4) flags.push({ label: (sc.pass_td ?? 4) + 'ptTD', hi: false });
-    if ((sc.bonus_rush_yd_100 ?? sc.bonus_rec_yd_100 ?? 0) > 0) flags.push({ label: 'BigPlay', hi: false });
-    if ((sc.kr_yd ?? sc.pr_yd ?? sc.kr_td ?? sc.pr_td ?? 0) > 0) flags.push({ label: 'Ret', hi: false });
+    if ((sc.bonus_rush_fd ?? sc.rush_fd ?? 0) > 0) flags.push({ label: '+' + (sc.bonus_rush_fd ?? sc.rush_fd) + 'RFD', hi: true  });
+    if ((sc.rush_att ?? sc.rush_attempt ?? 0) > 0) flags.push({ label: 'PPC', hi: true  });
+    if ((sc.pass_td ?? 4) !== 4) flags.push({ label: (sc.pass_td ?? 4) + 'ptTD', hi: true  });
+    if ((sc.bonus_rush_yd_100 ?? sc.bonus_rec_yd_100 ?? 0) > 0) flags.push({ label: 'BigPlay', hi: true  });
+    if ((sc.kr_yd ?? sc.pr_yd ?? sc.kr_td ?? sc.pr_td ?? 0) > 0) flags.push({ label: 'Ret', hi: true  });
     return flags;
   }
 
@@ -668,7 +668,7 @@
     const badgeLbl = category === 'dynasty' ? 'Dynasty' : category === 'bestball' ? 'Best Ball' : 'Redraft';
     const flagsHtml = `<div class="az-flags">
       <span class="az-badge ${badgeCls}">${badgeLbl}</span>
-      <span style="font-family:'Crimson Text',serif;font-size:0.9rem;color:var(--parchment);">${numTeams} teams</span>
+      <span class="az-flag">${numTeams} Teams</span>
       ${(formatFlags || []).map(f => `<span class="az-flag${f.hi ? ' az-flag-hi' : ''}">${f.label}</span>`).join('')}
     </div>`;
 
@@ -798,7 +798,7 @@
       sortDir = -sortDir;
     } else {
       sortKey = key;
-      sortDir = -1;
+      sortDir = 1;
     }
     renderAll();
   }
