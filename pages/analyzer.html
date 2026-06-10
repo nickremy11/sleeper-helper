@@ -658,10 +658,11 @@
       // Post-season: standings are final — assign hard 1.0 / 0.0
       byStand.forEach((t, i) => { t.playoffOdds = i < playoffTeams ? 1.0 : 0.0; });
     } else {
-      // Fetch player projections for every remaining week in parallel
+      // Fetch player projections for every remaining week in parallel.
+      // Sleeper projection endpoint: /projections/nfl/{season_type}/{season}/{week}
       const projResults = await Promise.all(
         futureWeeks.map(w =>
-          fetch(`${API}/sleeper/stats/nfl/projections/regular/${nflSeason}/${w}`)
+          fetch(`${API}/sleeper/projections/nfl/regular/${nflSeason}/${w}`)
             .then(r => r.ok ? r.json() : {}).catch(() => ({}))
         )
       );
@@ -682,7 +683,38 @@
         }
       }
 
+      // Diagnostic: log sample mu values so we can verify projections loaded
+      const sampleRid = allRosters[0]?.roster_id;
+      const sampleWeek = futureWeeks[0];
+      console.log('[Analyzer] projection sample — roster', sampleRid, 'week', sampleWeek,
+        '→ mu', muMap[sampleRid]?.[sampleWeek]?.toFixed(1),
+        'sigma', sigmaMap[sampleRid]?.[sampleWeek]?.toFixed(1));
+
+      // Fallback: if projections returned empty (avg mu < 20 pts) use FC overall values
+      // scaled to realistic weekly scoring range so results are still meaningful.
       const simTeams = teams.filter(t => t.overall > 0 || t.wins > 0 || t.losses > 0);
+      const avgMu = simTeams.reduce((s, t) =>
+        s + futureWeeks.reduce((ws, w) => ws + (muMap[t.rosterId]?.[w] ?? 0), 0), 0
+      ) / Math.max(1, simTeams.length * futureWeeks.length);
+
+      if (avgMu < 20) {
+        console.warn('[Analyzer] Projections appear empty (avgMu=' + avgMu.toFixed(1) + ') — falling back to FC overall values');
+        const meanOverall = simTeams.reduce((s, t) => s + t.overall, 0) / Math.max(1, simTeams.length);
+        for (const roster of allRosters) {
+          const t = teams.find(tm => tm.rosterId === roster.roster_id);
+          if (!t) continue;
+          const mu = meanOverall > 0 ? 110 * (t.overall / meanOverall) : 110;
+          const clampedMu = Math.max(60, Math.min(160, mu));
+          const sigma = Math.max(12, clampedMu * 0.20);
+          for (const week of futureWeeks) {
+            muMap[roster.roster_id][week]    = clampedMu;
+            sigmaMap[roster.roster_id][week] = sigma;
+          }
+        }
+        console.log('[Analyzer] FC fallback sample — roster', sampleRid,
+          '→ mu', muMap[sampleRid]?.[sampleWeek]?.toFixed(1));
+      }
+
       const odds = runSimulation(simTeams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams);
       for (const t of teams) {
         if (odds[t.rosterId] !== undefined) t.playoffOdds = odds[t.rosterId];
