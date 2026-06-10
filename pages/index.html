@@ -304,10 +304,13 @@ footer a:hover { color: var(--gold); }
 
   <nav class="tab-bar">
     <div class="tab-bar-inner">
-      <div class="tab-group active" id="grp-my-leagues">
-        <button class="tab-group-btn active" onclick="toggleGrp('grp-my-leagues')">My Leagues <span class="tab-group-arrow">▾</span></button>
+      <div class="tab-group active" id="grp-home">
+        <button class="tab-group-btn tab-btn active" id="tab-home" onclick="sw('home')">Home</button>
+      </div>
+      <div class="tab-group" id="grp-my-leagues">
+        <button class="tab-group-btn" onclick="toggleGrp('grp-my-leagues')">My Leagues <span class="tab-group-arrow">▾</span></button>
         <div class="tab-group-dropdown">
-          <button class="tab-btn active" id="tab-leagues"    onclick="sw('leagues')">League Summaries</button>
+          <button class="tab-btn" id="tab-leagues"    onclick="sw('leagues')">League Summaries</button>
           <button class="tab-btn"        id="tab-rostership" onclick="sw('rostership')">Rostership</button>
           <button class="tab-btn"        id="tab-lineups"    onclick="sw('lineups')">Lineup Checker</button>
           <button class="tab-btn"        id="tab-player"     onclick="sw('player')">Player Finder</button>
@@ -393,7 +396,7 @@ const API_BASE    = IS_LOCAL ? 'https://api.sleeper.app/v1' : '/api/sleeper';
 const PLAYERS_URL = IS_LOCAL ? 'https://api.sleeper.app/v1/players/nfl' : '/api/players';
 const GQL_URL     = IS_LOCAL ? null : '/api/graphql';
 
-const S = { userId: null, leagues: [], leagueDetails: {}, players: {}, nflState: null, token: null, tab: 'leagues', auth: null, espnSettings: null, _playersByName: {} };
+const S = { userId: null, leagues: [], leagueDetails: {}, players: {}, nflState: null, token: null, tab: 'home', auth: null, espnSettings: null, _playersByName: {} };
 const TP = { user1Id: null, user2Id: null, user1Leagues: [], user2Leagues: [], allLeagues: [], commonLeagues: [], u1Label: '', u2Label: '' };
 
 // ── Rostership state ──────────────────────────────────────────────────────────
@@ -549,7 +552,7 @@ async function loadUser() {
     st.className = 'setup-status ok';
     // Load ESPN leagues (non-blocking — they append to S.leagues after Sleeper leagues)
     loadEspnLeagues(season);
-    render(S.tab);
+    if (S.tab === 'home') sw('leagues'); else render(S.tab);
     // Auto-save username to account when logged in
     if (S.auth && u !== S.auth.sleeper_username) {
       fetch('/api/auth/me', { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sleeper_username: u }) })
@@ -604,6 +607,7 @@ async function loadOneEspnLeague(leagueId, season) {
 }
 
 const TAB_GROUP_MAP = {
+  home: 'grp-home',
   leagues: 'grp-my-leagues', rostership: 'grp-my-leagues',
   lineups: 'grp-my-leagues', player: 'grp-my-leagues', waivers: 'grp-my-leagues',
   trades: 'grp-trades', partners: 'grp-trades',
@@ -632,10 +636,56 @@ function sw(tab) {
   render(tab);
 }
 function render(tab) {
-  if (!S.userId && tab !== 'partners') { setC('<div class="empty-state"><p>Enter your username above to get started</p></div>'); return; }
-  ({ leagues: renderLeagueSummaries, trades: renderTrades, player: renderPlayerSearch, lineups: renderLineupCheck, drafts: renderDraftQueue, tracker: renderDraftTracker, rostership: renderRostership, partners: renderTradePartners, waivers: renderWaivers })[tab]?.();
+  if (!S.userId && tab !== 'partners' && tab !== 'home') { setC('<div class="empty-state"><p>Enter your username above to get started</p></div>'); return; }
+  ({ home: renderHome, leagues: renderLeagueSummaries, trades: renderTrades, player: renderPlayerSearch, lineups: renderLineupCheck, drafts: renderDraftQueue, tracker: renderDraftTracker, rostership: renderRostership, partners: renderTradePartners, waivers: renderWaivers })[tab]?.();
 }
 function setC(html) { document.getElementById('content').innerHTML = html; }
+
+// ── 0. Home ───────────────────────────────────────────────────────────────────
+function renderHome() {
+  setC(`
+    <div style="text-align:center; padding: 48px 24px 64px; max-width: 700px; margin: 0 auto;">
+      <img src="/assets/ffhistorianlogo.png" alt="FF Historian" style="width: clamp(120px, 28vw, 200px); height: auto; display: block; margin: 0 auto 28px; filter: drop-shadow(0 4px 12px rgba(0,0,0,0.35));" />
+      <h2 style="font-family: 'Rye', serif; font-size: clamp(1.4rem, 4vw, 2.2rem); color: var(--brown-dark); line-height: 1.15; margin-bottom: 14px; letter-spacing: 0.04em;">
+        Welcome to the <span style="color: var(--green);">FF Historian</span>
+      </h2>
+      <div style="height: 2px; width: 80px; background: linear-gradient(to right, transparent, var(--gold), transparent); margin: 0 auto 20px;"></div>
+      <p style="font-family: 'Playfair Display', serif; font-style: italic; font-size: clamp(1rem, 2.5vw, 1.2rem); color: var(--brown-light); line-height: 1.6; margin-bottom: 40px;">
+        Explore all the tools to help you manage your leagues
+      </p>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; text-align: left; margin-bottom: 40px;">
+        <button onclick="sw('leagues')" style="background: var(--brown-dark); border: 1px solid var(--brown-mid); border-radius: 2px; padding: 16px 18px; cursor: pointer; transition: border-color 0.2s; text-align: left;" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--brown-mid)'">
+          <div style="font-family: 'Rye', serif; font-size: 0.52rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin-bottom: 6px;">League Summaries</div>
+          <div style="font-family: 'Crimson Text', serif; font-size: 0.88rem; color: var(--brown-light); font-style: italic;">Standings, records &amp; playoff odds</div>
+        </button>
+        <button onclick="sw('rostership')" style="background: var(--brown-dark); border: 1px solid var(--brown-mid); border-radius: 2px; padding: 16px 18px; cursor: pointer; transition: border-color 0.2s; text-align: left;" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--brown-mid)'">
+          <div style="font-family: 'Rye', serif; font-size: 0.52rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin-bottom: 6px;">Rostership</div>
+          <div style="font-family: 'Crimson Text', serif; font-size: 0.88rem; color: var(--brown-light); font-style: italic;">Cross-league player ownership</div>
+        </button>
+        <button onclick="sw('trades')" style="background: var(--brown-dark); border: 1px solid var(--brown-mid); border-radius: 2px; padding: 16px 18px; cursor: pointer; transition: border-color 0.2s; text-align: left;" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--brown-mid)'">
+          <div style="font-family: 'Rye', serif; font-size: 0.52rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin-bottom: 6px;">Open Trades</div>
+          <div style="font-family: 'Crimson Text', serif; font-size: 0.88rem; color: var(--brown-light); font-style: italic;">Pending trades across leagues</div>
+        </button>
+        <button onclick="sw('player')" style="background: var(--brown-dark); border: 1px solid var(--brown-mid); border-radius: 2px; padding: 16px 18px; cursor: pointer; transition: border-color 0.2s; text-align: left;" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--brown-mid)'">
+          <div style="font-family: 'Rye', serif; font-size: 0.52rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin-bottom: 6px;">Player Finder</div>
+          <div style="font-family: 'Crimson Text', serif; font-size: 0.88rem; color: var(--brown-light); font-style: italic;">Dynasty values &amp; roster lookup</div>
+        </button>
+        <button onclick="sw('lineups')" style="background: var(--brown-dark); border: 1px solid var(--brown-mid); border-radius: 2px; padding: 16px 18px; cursor: pointer; transition: border-color 0.2s; text-align: left;" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--brown-mid)'">
+          <div style="font-family: 'Rye', serif; font-size: 0.52rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin-bottom: 6px;">Lineup Checker</div>
+          <div style="font-family: 'Crimson Text', serif; font-size: 0.88rem; color: var(--brown-light); font-style: italic;">Optimal lineup &amp; start/sit</div>
+        </button>
+        <button onclick="sw('drafts')" style="background: var(--brown-dark); border: 1px solid var(--brown-mid); border-radius: 2px; padding: 16px 18px; cursor: pointer; transition: border-color 0.2s; text-align: left;" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--brown-mid)'">
+          <div style="font-family: 'Rye', serif; font-size: 0.52rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin-bottom: 6px;">Draft Queue</div>
+          <div style="font-family: 'Crimson Text', serif; font-size: 0.88rem; color: var(--brown-light); font-style: italic;">Upcoming drafts at a glance</div>
+        </button>
+      </div>
+      <div style="height: 1px; background: linear-gradient(to right, transparent, var(--brown-mid), transparent); margin-bottom: 24px;"></div>
+      <p style="font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--brown-light); font-style: italic;">
+        Enter your Sleeper username above to load your leagues and get started.
+      </p>
+    </div>
+  `);
+}
 
 // ── 1. Trades ─────────────────────────────────────────────────────────────────
 async function renderTrades() {
@@ -3174,6 +3224,8 @@ async function saveTokenToAccount() {
 }
 
 (async function () {
+  render('home');
+
   function _applyAuth(user) {
     S.auth = user;
     updateTokenRow(user);
