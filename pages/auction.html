@@ -489,54 +489,76 @@
   // ─── CSV Parsing ──────────────────────────────────────────────────────────────
 
   const CSV_COL_MAP = {
-    player: ['player', 'name', 'player name'],
-    pos: ['position', 'pos'],
-    nflTeam: ['team', 'nfl team', 'nfl_team'],
-    myVal: ['my $ value', 'my $', 'my value', 'myval', 'value'],
-    espnVal: ['espn $ value', 'espn $', 'espn value', 'espnval'],
-    draftedFor: ['$ drafted for', 'drafted for', 'keeper $', 'keeper price'],
-    draftedTo: ['team drafted to', 'drafted to', 'keeper team'],
+    player:     ['player', 'name', 'player name', 'full name'],
+    pos:        ['position', 'pos'],
+    nflTeam:    ['team', 'nfl team', 'nfl_team', 'nfl', 'pro team'],
+    myVal:      ['my $ value', 'my $', 'my value', 'myval', 'value', 'my_value', 'my$', 'my dollar value'],
+    espnVal:    ['espn $ value', 'espn $', 'espn value', 'espnval', 'espn_value', 'espn$', 'espn dollar value'],
+    draftedFor: ['$ drafted for', 'drafted for', 'keeper $', 'keeper price', 'keeper cost', 'draft $', 'kept for', 'kept $'],
+    draftedTo:  ['team drafted to', 'drafted to', 'keeper team', 'kept by', 'owner'],
   };
 
   function matchHeader(raw) {
-    const h = raw.trim().toLowerCase();
+    const h = raw.trim().toLowerCase().replace(/\s+/g, ' ');
     for (const [key, aliases] of Object.entries(CSV_COL_MAP)) {
       if (aliases.includes(h)) return key;
     }
     return null;
   }
 
+  // Strip $, commas, spaces before parsing — handles "$52", "52.00", "1,200"
+  function parseNum(str) {
+    const cleaned = String(str || '').replace(/[$,\s]/g, '');
+    const n = parseFloat(cleaned);
+    return isNaN(n) ? 0 : n;
+  }
+
+  // Like parseNum but returns NaN for empty/blank strings (used for optional fields)
+  function parseNumOpt(str) {
+    const cleaned = String(str || '').replace(/[$,\s]/g, '');
+    if (!cleaned) return NaN;
+    const n = parseFloat(cleaned);
+    return n;
+  }
+
   function parseCSV(text) {
     const lines = text.split(/\r?\n/).filter(l => l.trim());
     if (lines.length < 2) throw new Error('CSV must have a header row and at least one data row.');
 
-    const headers = lines[0].split(',').map((h, i) => ({ key: matchHeader(h), idx: i }));
+    // Use the same quoted-aware splitter for headers
+    const rawHeaders = splitCSVLine(lines[0]);
     const col = {};
-    headers.forEach(h => { if (h.key) col[h.key] = h.idx; });
+    rawHeaders.forEach((h, i) => {
+      const key = matchHeader(h);
+      if (key && col[key] === undefined) col[key] = i;
+    });
 
-    if (col.player === undefined) throw new Error('Could not find a "Player" column. Check column headers.');
+    if (col.player === undefined) {
+      const found = rawHeaders.map(h => `"${h}"`).join(', ');
+      throw new Error(`Could not find a "Player" column. Found headers: ${found}`);
+    }
 
     const players = [];
     for (let i = 1; i < lines.length; i++) {
       const parts = splitCSVLine(lines[i]);
       const name = (parts[col.player] || '').trim();
       if (!name) continue;
-      const draftedFor = col.draftedFor !== undefined ? parseFloat(parts[col.draftedFor]) : NaN;
+      const draftedFor = col.draftedFor !== undefined ? parseNumOpt(parts[col.draftedFor]) : NaN;
       const draftedTo  = col.draftedTo  !== undefined ? (parts[col.draftedTo] || '').trim() : '';
       const isKeeper = !isNaN(draftedFor) && draftedFor > 0 && draftedTo.length > 0;
       players.push({
         name,
-        pos:      col.pos     !== undefined ? normPos((parts[col.pos] || '').trim()) || (parts[col.pos] || '').trim().toUpperCase() : '?',
-        nflTeam:  col.nflTeam !== undefined ? (parts[col.nflTeam] || '').trim().toUpperCase() : '',
-        myVal:    col.myVal   !== undefined ? parseFloat(parts[col.myVal])  || 0 : 0,
-        espnVal:  col.espnVal !== undefined ? parseFloat(parts[col.espnVal]) || 0 : 0,
+        pos:     col.pos     !== undefined ? normPos((parts[col.pos] || '').trim()) || (parts[col.pos] || '').trim().toUpperCase() : '?',
+        nflTeam: col.nflTeam !== undefined ? (parts[col.nflTeam] || '').trim().toUpperCase() : '',
+        myVal:   col.myVal   !== undefined ? parseNum(parts[col.myVal])  : 0,
+        espnVal: col.espnVal !== undefined ? parseNum(parts[col.espnVal]) : 0,
         drafted:  isKeeper,
         keeper:   isKeeper,
         price:    isKeeper ? draftedFor : 0,
         teamId:   isKeeper ? draftedTo : null,
       });
     }
-    return players;
+    return { players, detectedCols: col, rawHeaders };
   }
 
   function splitCSVLine(line) {
@@ -811,13 +833,44 @@
     reader.onload = ev => {
       const summaryEl = document.getElementById('csv-summary');
       try {
-        const players = parseCSV(ev.target.result);
+        const { players, detectedCols, rawHeaders } = parseCSV(ev.target.result);
         if (players.length === 0) throw new Error('No player rows found.');
         window._pendingPlayers = players;
+
         const keepers = players.filter(p => p.keeper).length;
-        summaryEl.innerHTML = `<div class="auc-import-summary">
-          ✓ ${players.length} players loaded${keepers ? `, ${keepers} keepers detected` : ''}.
-        </div>`;
+        const keeperTeams = [...new Set(players.filter(p=>p.keeper).map(p=>p.teamId))];
+
+        // Column detection summary
+        const COL_LABELS = { player:'Player', pos:'Position', nflTeam:'NFL Team',
+          myVal:'My $', espnVal:'ESPN $', draftedFor:'$ Drafted For', draftedTo:'Team Drafted To' };
+        const colPills = Object.entries(COL_LABELS).map(([k, lbl]) =>
+          detectedCols[k] !== undefined
+            ? `<span style="color:var(--green-light);margin-right:6px;">✓ ${lbl}</span>`
+            : `<span style="color:var(--brown-light);margin-right:6px;">— ${lbl}</span>`
+        ).join('');
+
+        // Team name mapper (appears when keepers detected)
+        const teamMapHtml = keeperTeams.length ? `
+          <div style="margin-top:14px;padding-top:12px;border-top:1px dashed rgba(255,255,255,0.08);">
+            <div class="auc-label" style="margin-bottom:8px;">Team Names — rename if needed</div>
+            <div style="font-family:'Crimson Text',serif;font-size:0.8rem;color:var(--brown-light);margin-bottom:10px;">
+              Use any shorthand you like (Nick, James, etc.). These map the "Team Drafted To" values from your CSV.
+            </div>
+            ${keeperTeams.map(t => `
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+                <span style="font-family:'Crimson Text',serif;font-size:0.85rem;color:var(--brown-light);min-width:120px;overflow:hidden;text-overflow:ellipsis;" title="${esc(t)}">${esc(t)}</span>
+                <span style="color:var(--brown-light);font-size:0.9rem;">→</span>
+                <input class="auc-input team-name-input" data-csv-id="${esc(t)}" value="${esc(t)}"
+                  style="flex:1;padding:6px 10px;" placeholder="Display name">
+              </div>`).join('')}
+          </div>` : '';
+
+        summaryEl.innerHTML = `
+          <div class="auc-import-summary">
+            ✓ ${players.length} players loaded${keepers ? `, ${keepers} keepers` : ''}.
+          </div>
+          <div style="font-family:'Crimson Text',serif;font-size:0.8rem;margin-top:8px;line-height:1.8;">${colPills}</div>
+          ${teamMapHtml}`;
         document.getElementById('start-btn').disabled = false;
       } catch(err) {
         summaryEl.innerHTML = `<div class="auc-import-summary auc-import-err">✗ ${esc(err.message)}</div>`;
@@ -830,7 +883,19 @@
 
   function startDraft() {
     if (!window._pendingPlayers) return;
-    A.players = window._pendingPlayers;
+
+    // Read team name overrides from the mapper inputs
+    const nameOverrides = {};
+    document.querySelectorAll('.team-name-input').forEach(inp => {
+      const csvId = inp.dataset.csvId;
+      const display = inp.value.trim();
+      if (csvId && display) nameOverrides[csvId] = display;
+    });
+
+    A.players = window._pendingPlayers.map(p => ({
+      ...p,
+      teamId: p.teamId && nameOverrides[p.teamId] ? nameOverrides[p.teamId] : p.teamId,
+    }));
     A.budget = parseInt(document.getElementById('setup-budget')?.value) || 200;
     A.rosterSpots = parseInt(document.getElementById('setup-spots')?.value) || 16;
     const lgSel = document.getElementById('setup-league');
@@ -839,7 +904,6 @@
       ? (A.espnLeagues.find(l => l.id === lgSel.value) || {}).name || lgSel.value
       : 'Manual';
 
-    // Init teams from keepers first, then fetch from ESPN if connected
     A.teams = teamsFromKeepers(A.players);
     buildNameMap();
     persist();
@@ -1027,7 +1091,7 @@
       return `
       <div class="auc-team-card">
         <div class="auc-team-name-row">
-          <div class="auc-team-name">${esc(t.name)}</div>
+          <div class="auc-team-name" title="Click to rename" style="cursor:pointer;" onclick="renameTeam('${esc(t.id)}')">${esc(t.name)} <span style="font-size:0.7rem;color:var(--brown-light);font-family:'Crimson Text',serif;">✎</span></div>
           <div class="auc-team-budget">$${spent} / <span>$${remaining}</span> left</div>
         </div>
         <div class="auc-budget-bar">
@@ -1074,6 +1138,19 @@
   function setSearch(val) { A.search = val; renderMain(); }
   function setTeamFilter(val) { A.teamFilter = val; renderMain(); }
   function setShowDrafted(v) { A.showDrafted = v; renderMain(); }
+
+  function renameTeam(teamId) {
+    const team = findTeamById(teamId);
+    if (!team) return;
+    const newName = prompt('Rename team:', team.name);
+    if (!newName || !newName.trim() || newName.trim() === team.name) return;
+    // Update teamId references in players too
+    A.players.forEach(p => { if (p.teamId === team.id) p.teamId = newName.trim(); });
+    team.id = newName.trim();
+    team.name = newName.trim();
+    persist();
+    renderMain();
+  }
 
   function addTeamPrompt() {
     const name = prompt('Team name:');
@@ -1225,6 +1302,7 @@
   window.saveDraft     = saveDraft;
   window.undoDraft     = undoDraft;
   window.addTeamPrompt = addTeamPrompt;
+  window.renameTeam    = renameTeam;
   window.goReset       = goReset;
   window.handleDrop    = handleDrop;
   window.handleFileInput = handleFileInput;
