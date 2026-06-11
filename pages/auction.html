@@ -1,0 +1,1236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Auction Draft Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Rye&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/shared-styles.css">
+  <style>
+    .auc-wrap { max-width: 1300px; margin: 0 auto; padding: 20px 16px 60px; }
+
+    /* ── Setup card ── */
+    .auc-setup {
+      max-width: 620px; margin: 0 auto;
+      background: var(--brown-dark); border: 1px solid var(--brown-mid);
+      border-radius: 4px; padding: 28px 32px;
+    }
+    .auc-setup-title {
+      font-family: 'Rye', serif; font-size: 0.85rem; letter-spacing: 0.18em;
+      text-transform: uppercase; color: var(--gold); margin-bottom: 22px;
+    }
+    .auc-field { margin-bottom: 18px; }
+    .auc-label {
+      display: block; font-family: 'Rye', serif; font-size: 0.46rem;
+      letter-spacing: 0.16em; text-transform: uppercase;
+      color: var(--brown-light); margin-bottom: 7px;
+    }
+    .auc-input, .auc-select {
+      width: 100%; padding: 9px 12px; background: rgba(0,0,0,0.3);
+      border: 1px solid var(--brown-mid); border-radius: 3px;
+      color: var(--cream); font-family: 'Crimson Text', serif; font-size: 0.98rem;
+      outline: none; box-sizing: border-box;
+    }
+    .auc-input:focus, .auc-select:focus { border-color: var(--gold); }
+    .auc-select option { background: #1e0e05; }
+    .auc-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .auc-csv-drop {
+      border: 2px dashed var(--brown-mid); border-radius: 4px;
+      padding: 28px 20px; text-align: center; cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .auc-csv-drop:hover, .auc-csv-drop.drag-over {
+      border-color: var(--gold); background: rgba(201,150,42,0.05);
+    }
+    .auc-csv-drop-label {
+      font-family: 'Crimson Text', serif; font-size: 1rem; color: var(--brown-light);
+    }
+    .auc-csv-drop-label span { color: var(--gold); cursor: pointer; text-decoration: underline; }
+    .auc-csv-hint {
+      font-family: 'Crimson Text', serif; font-size: 0.78rem;
+      color: var(--brown-light); margin-top: 8px; font-style: italic;
+    }
+    .auc-import-summary {
+      font-family: 'Crimson Text', serif; font-size: 0.9rem;
+      color: var(--green-light); margin-top: 10px;
+    }
+    .auc-import-err { color: #e05252; }
+    .auc-btn {
+      font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.16em;
+      text-transform: uppercase; padding: 11px 28px;
+      background: var(--gold); color: var(--brown-dark);
+      border: none; border-radius: 3px; cursor: pointer;
+      transition: background 0.15s; margin-top: 8px;
+    }
+    .auc-btn:hover { background: var(--gold-light); }
+    .auc-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .auc-btn-ghost {
+      background: transparent; color: var(--brown-light);
+      border: 1px solid var(--brown-mid); margin-left: 10px;
+    }
+    .auc-btn-ghost:hover { border-color: var(--gold); color: var(--gold); background: transparent; }
+    .auc-resume-banner {
+      background: rgba(201,150,42,0.1); border: 1px solid var(--gold);
+      border-radius: 3px; padding: 12px 16px; margin-bottom: 20px;
+      font-family: 'Crimson Text', serif; font-size: 0.92rem; color: var(--cream);
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    }
+
+    /* ── Main layout ── */
+    .auc-main { display: grid; grid-template-columns: 1fr 310px; gap: 16px; }
+    @media (max-width: 860px) { .auc-main { grid-template-columns: 1fr; } }
+
+    /* ── Stats bar ── */
+    .auc-stats-bar {
+      background: var(--brown-dark); border: 1px solid var(--brown-mid);
+      border-radius: 4px; padding: 14px 18px; margin-bottom: 14px;
+    }
+    .auc-stats-row1 {
+      display: flex; gap: 28px; align-items: center; flex-wrap: wrap;
+      margin-bottom: 12px; padding-bottom: 10px;
+      border-bottom: 1px dashed rgba(255,255,255,0.08);
+    }
+    .auc-stat-item { text-align: center; }
+    .auc-stat-val {
+      font-family: 'Playfair Display', serif; font-weight: 700;
+      font-size: 1.3rem; color: var(--gold);
+    }
+    .auc-stat-val.inflation-low  { color: var(--green-light); }
+    .auc-stat-val.inflation-high { color: #e05252; }
+    .auc-stat-label {
+      font-family: 'Rye', serif; font-size: 0.38rem; letter-spacing: 0.14em;
+      text-transform: uppercase; color: var(--brown-light); margin-top: 2px;
+    }
+    .auc-stats-row2 { display: flex; gap: 10px; flex-wrap: wrap; }
+    .auc-pos-tile {
+      background: rgba(0,0,0,0.2); border: 1px solid var(--brown-mid);
+      border-radius: 3px; padding: 8px 12px; min-width: 200px; flex: 1;
+    }
+    .auc-pos-tile-header {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+    }
+    .auc-pos-tile-pct {
+      font-family: 'Crimson Text', serif; font-size: 0.78rem;
+      color: var(--brown-light); margin-left: auto;
+    }
+    .auc-pos-tile-bar {
+      height: 3px; background: rgba(255,255,255,0.08); border-radius: 2px;
+      margin-bottom: 7px; overflow: hidden;
+    }
+    .auc-pos-tile-bar-fill { height: 100%; border-radius: 2px; opacity: 0.7; }
+    .auc-pos-tile-players { display: flex; flex-direction: column; gap: 2px; }
+    .auc-pos-player {
+      font-family: 'Crimson Text', serif; font-size: 0.82rem; color: var(--parchment);
+      display: flex; justify-content: space-between; gap: 6px;
+    }
+    .auc-pos-player-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .auc-pos-player-val { color: var(--gold); flex-shrink: 0; font-weight: 600; }
+
+    /* ── Player pool ── */
+    .auc-pool {
+      background: var(--brown-dark); border: 1px solid var(--brown-mid);
+      border-radius: 4px; overflow: hidden;
+    }
+    .auc-pool-controls {
+      padding: 12px 14px; border-bottom: 1px solid var(--brown-mid);
+      display: flex; flex-direction: column; gap: 9px;
+    }
+    .auc-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+    .auc-pill {
+      font-family: 'Rye', serif; font-size: 0.4rem; letter-spacing: 0.14em;
+      text-transform: uppercase; padding: 5px 11px;
+      border: 1.5px solid var(--brown-mid); border-radius: 2px;
+      background: transparent; color: var(--brown-light);
+      cursor: pointer; transition: all 0.12s;
+    }
+    .auc-pill:hover { border-color: var(--gold); color: var(--gold); }
+    .auc-pill.active {
+      border-color: var(--gold); color: var(--brown-dark);
+      background: var(--gold);
+    }
+    .auc-pool-controls-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .auc-search {
+      flex: 1; min-width: 120px; padding: 7px 10px;
+      background: rgba(0,0,0,0.25); border: 1px solid var(--brown-mid);
+      border-radius: 3px; color: var(--cream);
+      font-family: 'Crimson Text', serif; font-size: 0.92rem; outline: none;
+    }
+    .auc-search:focus { border-color: var(--gold); }
+    .auc-search::placeholder { color: var(--brown-light); }
+    .auc-team-filter {
+      padding: 7px 10px; background: rgba(0,0,0,0.25);
+      border: 1px solid var(--brown-mid); border-radius: 3px;
+      color: var(--cream); font-family: 'Crimson Text', serif;
+      font-size: 0.9rem; outline: none;
+    }
+    .auc-team-filter:focus { border-color: var(--gold); }
+    .auc-team-filter option { background: #1e0e05; }
+    .auc-show-drafted {
+      display: flex; align-items: center; gap: 6px;
+      font-family: 'Crimson Text', serif; font-size: 0.86rem;
+      color: var(--brown-light); cursor: pointer; white-space: nowrap;
+    }
+    .auc-show-drafted input { cursor: pointer; accent-color: var(--gold); }
+
+    /* ── Pool table ── */
+    .auc-pool-table { width: 100%; border-collapse: collapse; }
+    .auc-pool-table thead tr {
+      background: #1e0e05;
+    }
+    .auc-pool-table th {
+      font-family: 'Rye', serif; font-size: 0.38rem; letter-spacing: 0.16em;
+      text-transform: uppercase; color: var(--gold); padding: 8px 10px;
+      text-align: left; white-space: nowrap; border-bottom: 1px solid var(--brown-mid);
+    }
+    .auc-pool-table th.sortable { cursor: pointer; user-select: none; }
+    .auc-pool-table th.sortable:hover { color: var(--gold-light); }
+    .auc-pool-table th.sort-active { color: var(--gold-light); }
+    .auc-pool-table th.num, .auc-pool-table td.num { text-align: right; }
+    .auc-pool-table tbody tr {
+      border-bottom: 1px dashed rgba(255,255,255,0.04);
+      transition: background 0.1s; cursor: pointer;
+    }
+    .auc-pool-table tbody tr:hover { background: rgba(255,255,255,0.04); }
+    .auc-pool-table tbody tr.drafted {
+      opacity: 0.45; cursor: default;
+    }
+    .auc-pool-table tbody tr.drafted td { text-decoration: line-through; }
+    .auc-pool-table tbody tr.drafted td.no-strike { text-decoration: none; }
+    .auc-pool-table td {
+      font-family: 'Crimson Text', serif; font-size: 0.9rem;
+      color: var(--parchment); padding: 7px 10px;
+    }
+    .auc-pool-table td.val-my { color: var(--gold); font-weight: 600; }
+    .auc-pool-table td.val-inf { color: var(--green-light); font-weight: 600; }
+    .auc-pool-table td.val-espn { color: var(--brown-light); }
+    .auc-pool-table td.status-cell {
+      font-size: 0.8rem; color: var(--brown-light); text-decoration: none !important;
+    }
+    .auc-pool-table td.status-cell .drafted-tag {
+      color: var(--parchment); font-style: italic;
+    }
+    .auc-pool-empty {
+      padding: 28px 16px; text-align: center;
+      font-family: 'Crimson Text', serif; font-size: 0.92rem;
+      color: var(--brown-light); font-style: italic;
+    }
+    .auc-undo-btn {
+      background: none; border: none; cursor: pointer;
+      color: var(--brown-light); font-size: 0.78rem; padding: 0 4px;
+      line-height: 1; vertical-align: middle;
+      text-decoration: none !important;
+    }
+    .auc-undo-btn:hover { color: #e05252; }
+
+    /* ── Position badges ── */
+    .auc-pos {
+      display: inline-block; font-family: 'Crimson Text', serif; font-weight: 700;
+      font-size: 0.76rem; letter-spacing: 0.06em; text-transform: uppercase;
+      padding: 2px 6px; border-radius: 2px; min-width: 30px; text-align: center;
+    }
+    .auc-pos-QB { background: rgba(224,82,82,0.18);  color: #e05252; }
+    .auc-pos-RB { background: rgba(92,184,92,0.18);  color: #5cb85c; }
+    .auc-pos-WR { background: rgba(91,192,222,0.18); color: #5bc0de; }
+    .auc-pos-TE { background: rgba(232,115,75,0.18); color: #e8734b; }
+    .auc-pos-K  { background: rgba(210,205,195,0.1); color: #a8a49e; }
+    .auc-pos-DST { background: rgba(155,89,182,0.18); color: #9b59b6; }
+
+    /* ── Sort indicator ── */
+    .sort-arrow { margin-left: 4px; }
+
+    /* ── Teams panel ── */
+    .auc-teams {
+      background: var(--brown-dark); border: 1px solid var(--brown-mid);
+      border-radius: 4px; overflow: hidden; display: flex; flex-direction: column;
+    }
+    .auc-teams-header {
+      padding: 10px 14px; background: #1e0e05;
+      border-bottom: 1px solid var(--brown-mid);
+      font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.18em;
+      text-transform: uppercase; color: var(--gold);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .auc-teams-list { overflow-y: auto; max-height: 680px; }
+    .auc-team-card {
+      border-bottom: 1px dashed rgba(255,255,255,0.06); padding: 10px 14px;
+    }
+    .auc-team-card:last-child { border-bottom: none; }
+    .auc-team-name-row {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 5px;
+    }
+    .auc-team-name {
+      font-family: 'Playfair Display', serif; font-weight: 700;
+      font-size: 0.88rem; color: var(--cream);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .auc-team-budget {
+      font-family: 'Crimson Text', serif; font-size: 0.82rem;
+      color: var(--brown-light); flex-shrink: 0; margin-left: 8px;
+    }
+    .auc-team-budget span { color: var(--gold); font-weight: 600; }
+    .auc-budget-bar {
+      height: 4px; background: rgba(255,255,255,0.08);
+      border-radius: 2px; margin-bottom: 6px; overflow: hidden;
+    }
+    .auc-budget-bar-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+    .auc-team-needs {
+      font-family: 'Crimson Text', serif; font-size: 0.76rem;
+      color: var(--brown-light); margin-bottom: 5px;
+    }
+    .auc-team-needs span { color: var(--parchment); }
+    .auc-team-roster { display: flex; flex-direction: column; gap: 2px; }
+    .auc-team-player {
+      display: flex; align-items: center; gap: 6px;
+      font-family: 'Crimson Text', serif; font-size: 0.8rem; color: var(--parchment);
+    }
+    .auc-team-player-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .auc-team-player-price { color: var(--gold); font-weight: 600; flex-shrink: 0; }
+    .auc-team-player-keeper {
+      font-size: 0.68rem; color: var(--brown-light); font-style: italic; flex-shrink: 0;
+    }
+    .auc-team-card details summary { cursor: pointer; list-style: none; }
+    .auc-team-card details summary::-webkit-details-marker { display: none; }
+    .auc-roster-toggle {
+      font-family: 'Crimson Text', serif; font-size: 0.76rem;
+      color: var(--brown-light); margin-top: 4px; display: inline-block;
+    }
+    .auc-roster-toggle:hover { color: var(--gold); }
+    .auc-add-team-btn {
+      margin: 10px 14px;
+      font-family: 'Crimson Text', serif; font-size: 0.86rem;
+      color: var(--brown-light); background: none; border: 1px dashed var(--brown-mid);
+      border-radius: 3px; padding: 7px 14px; cursor: pointer; width: calc(100% - 28px);
+      transition: all 0.12s;
+    }
+    .auc-add-team-btn:hover { border-color: var(--gold); color: var(--gold); }
+
+    /* ── Modal ── */
+    .auc-modal-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.65);
+      z-index: 500; display: flex; align-items: center; justify-content: center;
+    }
+    .auc-modal {
+      background: var(--brown-dark); border: 1px solid var(--brown-mid);
+      border-radius: 4px; padding: 28px 28px 22px; width: 340px; max-width: 90vw;
+    }
+    .auc-modal-title {
+      font-family: 'Playfair Display', serif; font-weight: 700;
+      font-size: 1.1rem; color: var(--cream); margin-bottom: 4px;
+    }
+    .auc-modal-sub {
+      font-family: 'Crimson Text', serif; font-size: 0.82rem;
+      color: var(--brown-light); margin-bottom: 20px;
+    }
+    .auc-modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+    .auc-modal-err {
+      font-family: 'Crimson Text', serif; font-size: 0.84rem;
+      color: #e05252; margin-top: 6px; min-height: 18px;
+    }
+
+    /* ── Poll status ── */
+    .auc-poll-dot {
+      display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+      background: var(--brown-light); margin-right: 5px; vertical-align: middle;
+    }
+    .auc-poll-dot.live { background: var(--green-light); animation: pulse 1.4s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+    .auc-poll-status {
+      font-family: 'Crimson Text', serif; font-size: 0.8rem; color: var(--brown-light);
+    }
+  </style>
+</head>
+<body>
+  <div class="page-wrap">
+    <div class="banner">
+      <div style="position:relative;z-index:1;padding:18px 20px;display:flex;justify-content:space-between;align-items:flex-start;">
+        <div class="banner-text">
+          <a href="/" class="banner-back">← Home</a>
+          <h1>Auction <span>Draft Tracker</span></h1>
+          <div class="banner-divider"></div>
+        </div>
+        <div id="auth-chip"></div>
+      </div>
+    </div>
+
+    <div class="auc-wrap">
+      <div id="app"></div>
+    </div>
+  </div>
+
+  <!-- Mark as Drafted modal (rendered here, shown/hidden via JS) -->
+  <div id="auc-modal" class="auc-modal-backdrop" style="display:none;" onclick="modalBackdropClick(event)">
+    <div class="auc-modal" onclick="event.stopPropagation()">
+      <div class="auc-modal-title" id="modal-player-name"></div>
+      <div class="auc-modal-sub" id="modal-player-meta"></div>
+      <div class="auc-field">
+        <label class="auc-label">Team</label>
+        <select id="modal-team" class="auc-select"></select>
+      </div>
+      <div class="auc-field">
+        <label class="auc-label">Winning Bid ($)</label>
+        <input id="modal-bid" class="auc-input" type="number" min="1" max="999" placeholder="e.g. 42">
+      </div>
+      <div class="auc-modal-err" id="modal-err"></div>
+      <div class="auc-modal-actions">
+        <button class="auc-btn" onclick="saveDraft()">Save Pick</button>
+        <button class="auc-btn auc-btn-ghost" onclick="closeModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/shared-utils.js"></script>
+  <script src="/shared-auth.js"></script>
+  <script>
+  'use strict';
+
+  const API = window.location.hostname === 'ffhistorian.com'
+    ? 'https://helper.ffhistorian.com/api'
+    : '/api';
+
+  // ─── State ────────────────────────────────────────────────────────────────────
+
+  const A = {
+    leagueId: null,      // ESPN numeric league ID or null
+    leagueName: '',
+    budget: 200,
+    rosterSpots: 16,
+    teams: [],           // [{id, name, spent, draftedCount, players:[{name,pos,price,keeper}]}]
+    players: [],         // [{name, pos, nflTeam, myVal, espnVal, drafted, price, teamId, keeper}]
+    posFilter: 'ALL',
+    teamFilter: '',
+    sortBy: 'inflated',  // 'my' | 'inflated' | 'espn'
+    sortDir: -1,         // -1 = desc
+    search: '',
+    showDrafted: true,
+    pollTimer: null,
+    espnLeagues: [],     // [{id, name}] from settings
+    _modalPlayer: null,  // index into A.players
+    _nameMap: null,      // Map<normalizedName, idx> for ESPN matching
+  };
+
+  // ─── Persistence ─────────────────────────────────────────────────────────────
+
+  function saveKey() {
+    return 'auction_' + (A.leagueId || 'manual');
+  }
+
+  function persist() {
+    const snap = {
+      leagueId: A.leagueId, leagueName: A.leagueName,
+      budget: A.budget, rosterSpots: A.rosterSpots,
+      teams: A.teams, players: A.players,
+    };
+    try {
+      const key = saveKey();
+      localStorage.setItem(key, JSON.stringify(snap));
+      localStorage.setItem('auction_last_key', key);
+    } catch (_) {}
+  }
+
+  function loadSaved(key) {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : null;
+    } catch (_) { return null; }
+  }
+
+  function clearSaved() {
+    try { localStorage.removeItem(saveKey()); } catch (_) {}
+  }
+
+  // ─── Inflation ────────────────────────────────────────────────────────────────
+
+  function calcInflation() {
+    const available = A.players.filter(p => !p.drafted);
+    const totalBase = available.reduce((s, p) => s + (p.myVal || 0), 0);
+    if (totalBase <= 0) return 1;
+    const totalSpendable = A.teams.reduce((s, t) => {
+      const remaining = A.budget - t.spent;
+      const spots = A.rosterSpots - t.draftedCount;
+      return s + Math.max(0, remaining - Math.max(0, spots));
+    }, 0);
+    return totalSpendable / totalBase;
+  }
+
+  function inflatedVal(p) {
+    if (!p.myVal) return 0;
+    return Math.round(p.myVal * calcInflation());
+  }
+
+  // ─── Stats ────────────────────────────────────────────────────────────────────
+
+  function calcStats() {
+    const totalBudget = A.teams.length * A.budget;
+    const spent = A.teams.reduce((s, t) => s + t.spent, 0);
+    const remaining = A.teams.reduce((s, t) => s + (A.budget - t.spent), 0);
+    const infl = calcInflation();
+    return { totalBudget, spent, remaining, infl };
+  }
+
+  function posTiles() {
+    const POSITIONS = ['QB', 'RB', 'WR', 'TE'];
+    const inflation = calcInflation();
+    return POSITIONS.map(pos => {
+      const all = A.players.filter(p => normPos(p.pos) === pos);
+      const avail = all.filter(p => !p.drafted);
+      const totalVal = all.reduce((s, p) => s + (p.myVal || 0), 0);
+      const leftVal  = avail.reduce((s, p) => s + (p.myVal || 0), 0);
+      const pct = totalVal > 0 ? Math.round(leftVal / totalVal * 100) : 0;
+      const top2 = avail
+        .map(p => ({ ...p, _inf: Math.round((p.myVal || 0) * inflation) }))
+        .sort((a, b) => b._inf - a._inf)
+        .slice(0, 2);
+      return { pos, pct, top2 };
+    });
+  }
+
+  // ─── CSV Parsing ──────────────────────────────────────────────────────────────
+
+  const CSV_COL_MAP = {
+    player: ['player', 'name', 'player name'],
+    pos: ['position', 'pos'],
+    nflTeam: ['team', 'nfl team', 'nfl_team'],
+    myVal: ['my $ value', 'my $', 'my value', 'myval', 'value'],
+    espnVal: ['espn $ value', 'espn $', 'espn value', 'espnval'],
+    draftedFor: ['$ drafted for', 'drafted for', 'keeper $', 'keeper price'],
+    draftedTo: ['team drafted to', 'drafted to', 'keeper team'],
+  };
+
+  function matchHeader(raw) {
+    const h = raw.trim().toLowerCase();
+    for (const [key, aliases] of Object.entries(CSV_COL_MAP)) {
+      if (aliases.includes(h)) return key;
+    }
+    return null;
+  }
+
+  function parseCSV(text) {
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) throw new Error('CSV must have a header row and at least one data row.');
+
+    const headers = lines[0].split(',').map((h, i) => ({ key: matchHeader(h), idx: i }));
+    const col = {};
+    headers.forEach(h => { if (h.key) col[h.key] = h.idx; });
+
+    if (col.player === undefined) throw new Error('Could not find a "Player" column. Check column headers.');
+
+    const players = [];
+    for (let i = 1; i < lines.length; i++) {
+      const parts = splitCSVLine(lines[i]);
+      const name = (parts[col.player] || '').trim();
+      if (!name) continue;
+      const draftedFor = col.draftedFor !== undefined ? parseFloat(parts[col.draftedFor]) : NaN;
+      const draftedTo  = col.draftedTo  !== undefined ? (parts[col.draftedTo] || '').trim() : '';
+      const isKeeper = !isNaN(draftedFor) && draftedFor > 0 && draftedTo.length > 0;
+      players.push({
+        name,
+        pos:      col.pos     !== undefined ? normPos((parts[col.pos] || '').trim()) || (parts[col.pos] || '').trim().toUpperCase() : '?',
+        nflTeam:  col.nflTeam !== undefined ? (parts[col.nflTeam] || '').trim().toUpperCase() : '',
+        myVal:    col.myVal   !== undefined ? parseFloat(parts[col.myVal])  || 0 : 0,
+        espnVal:  col.espnVal !== undefined ? parseFloat(parts[col.espnVal]) || 0 : 0,
+        drafted:  isKeeper,
+        keeper:   isKeeper,
+        price:    isKeeper ? draftedFor : 0,
+        teamId:   isKeeper ? draftedTo : null,
+      });
+    }
+    return players;
+  }
+
+  function splitCSVLine(line) {
+    const out = []; let cur = ''; let inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') { inQ = !inQ; }
+      else if (c === ',' && !inQ) { out.push(cur); cur = ''; }
+      else { cur += c; }
+    }
+    out.push(cur);
+    return out.map(s => s.trim());
+  }
+
+  function normPos(raw) {
+    if (!raw) return null;
+    const p = raw.toUpperCase().trim();
+    if (['QB'].includes(p)) return 'QB';
+    if (['RB'].includes(p)) return 'RB';
+    if (['WR'].includes(p)) return 'WR';
+    if (['TE'].includes(p)) return 'TE';
+    if (['K', 'PK'].includes(p)) return 'K';
+    if (['DST', 'D/ST', 'DEF', 'D', 'ST'].includes(p)) return 'DST';
+    return null;
+  }
+
+  function normalizePlayerName(name) {
+    return name.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+  }
+
+  function buildNameMap() {
+    const m = new Map();
+    A.players.forEach((p, i) => m.set(normalizePlayerName(p.name), i));
+    A._nameMap = m;
+  }
+
+  // ─── Teams helpers ────────────────────────────────────────────────────────────
+
+  function teamsFromKeepers(players) {
+    const seen = new Map();
+    players.forEach(p => {
+      if (p.keeper && p.teamId) {
+        const key = p.teamId;
+        if (!seen.has(key)) seen.set(key, { id: key, name: key, spent: 0, draftedCount: 0, players: [] });
+        const t = seen.get(key);
+        t.spent += p.price;
+        t.draftedCount += 1;
+        t.players.push({ name: p.name, pos: p.pos, price: p.price, keeper: true });
+      }
+    });
+    return [...seen.values()];
+  }
+
+  function findTeamById(id) {
+    return A.teams.find(t => t.id === id || t.name === id);
+  }
+
+  function teamNeeds(team) {
+    const SLOT_ORDER = ['QB','RB','RB','WR','WR','TE','RB/WR/TE','K','DST'];
+    const slots = SLOT_ORDER.slice(0, A.rosterSpots);
+    const roster = [...team.players];
+    const needs = [];
+    const filled = { QB:0, RB:0, WR:0, TE:0, K:0, DST:0, FLEX:0 };
+    roster.forEach(p => {
+      const pos = normPos(p.pos) || p.pos;
+      if (filled[pos] !== undefined) filled[pos]++;
+    });
+    const want = { QB:1, RB:2, WR:2, TE:1, K:1, DST:1 };
+    for (const [pos, n] of Object.entries(want)) {
+      const need = n - (filled[pos] || 0);
+      if (need > 0) needs.push(`${need} ${pos}`);
+    }
+    return needs;
+  }
+
+  function budgetPct(team) {
+    return Math.max(0, Math.min(100, team.spent / A.budget * 100));
+  }
+
+  function budgetColor(pct) {
+    if (pct < 50) return '#5cb85c';
+    if (pct < 80) return 'var(--gold)';
+    return '#e05252';
+  }
+
+  // ─── Modal ────────────────────────────────────────────────────────────────────
+
+  function openModal(playerIdx) {
+    const p = A.players[playerIdx];
+    if (!p || p.drafted) return;
+    A._modalPlayer = playerIdx;
+    document.getElementById('modal-player-name').textContent = p.name;
+    document.getElementById('modal-player-meta').textContent =
+      `${p.pos}  ·  ${p.nflTeam || '—'}  ·  My $: $${p.myVal || '—'}`;
+    document.getElementById('modal-err').textContent = '';
+    document.getElementById('modal-bid').value = '';
+
+    const sel = document.getElementById('modal-team');
+    sel.innerHTML = A.teams.map(t =>
+      `<option value="${esc(t.id)}">${esc(t.name)}</option>`
+    ).join('');
+
+    document.getElementById('auc-modal').style.display = 'flex';
+    setTimeout(() => document.getElementById('modal-bid').focus(), 50);
+  }
+
+  function closeModal() {
+    document.getElementById('auc-modal').style.display = 'none';
+    A._modalPlayer = null;
+  }
+
+  function modalBackdropClick(e) {
+    if (e.target.id === 'auc-modal') closeModal();
+  }
+
+  function saveDraft() {
+    const idx = A._modalPlayer;
+    if (idx === null || idx === undefined) return;
+    const teamId = document.getElementById('modal-team').value;
+    const bid = parseFloat(document.getElementById('modal-bid').value);
+    const errEl = document.getElementById('modal-err');
+    if (!teamId) { errEl.textContent = 'Select a team.'; return; }
+    if (isNaN(bid) || bid < 1) { errEl.textContent = 'Enter a valid bid ($1 or more).'; return; }
+
+    const p = A.players[idx];
+    const team = findTeamById(teamId);
+    if (!team) { errEl.textContent = 'Team not found.'; return; }
+    if (bid > A.budget - team.spent) {
+      errEl.textContent = `${team.name} only has $${A.budget - team.spent} remaining.`;
+      return;
+    }
+
+    p.drafted = true;
+    p.price = bid;
+    p.teamId = teamId;
+    team.spent += bid;
+    team.draftedCount += 1;
+    team.players.push({ name: p.name, pos: p.pos, price: bid, keeper: false });
+
+    persist();
+    closeModal();
+    renderMain();
+  }
+
+  function undoDraft(playerIdx, e) {
+    e.stopPropagation();
+    const p = A.players[playerIdx];
+    if (!p || !p.drafted || p.keeper) return;
+    const team = findTeamById(p.teamId);
+    if (team) {
+      team.spent -= p.price;
+      team.draftedCount -= 1;
+      team.players = team.players.filter(tp => tp.name !== p.name || tp.price !== p.price);
+    }
+    p.drafted = false;
+    p.price = 0;
+    p.teamId = null;
+    persist();
+    renderMain();
+  }
+
+  // ─── Rendering ────────────────────────────────────────────────────────────────
+
+  function esc(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function posHtml(pos) {
+    const cls = `auc-pos auc-pos-${pos || 'K'}`;
+    return `<span class="${cls}">${esc(pos || '?')}</span>`;
+  }
+
+  function fmtDollar(n) {
+    if (!n && n !== 0) return '—';
+    return '$' + Math.round(n);
+  }
+
+  function renderSetup(resumeData) {
+    const espnOptions = A.espnLeagues.length
+      ? `<option value="">— No ESPN league (CSV only) —</option>` +
+        A.espnLeagues.map(l => `<option value="${esc(l.id)}">${esc(l.name)}</option>`).join('')
+      : `<option value="">— No ESPN leagues found —</option>`;
+
+    const resumeBanner = resumeData ? `
+      <div class="auc-resume-banner">
+        <span>Resume saved draft? <strong>${esc(resumeData.leagueName || 'Manual')}</strong>
+          — ${resumeData.players ? resumeData.players.filter(p=>p.drafted).length : 0} picks recorded.</span>
+        <div style="display:flex;gap:8px;flex-shrink:0;">
+          <button class="auc-btn" style="margin-top:0;" onclick="doResume()">Resume</button>
+          <button class="auc-btn auc-btn-ghost" style="margin-top:0;" onclick="dismissResume()">Start Fresh</button>
+        </div>
+      </div>` : '';
+
+    document.getElementById('app').innerHTML = `
+      ${resumeBanner}
+      <div class="auc-setup">
+        <div class="auc-setup-title">Setup</div>
+
+        ${A.espnLeagues.length ? `
+        <div class="auc-field">
+          <label class="auc-label">ESPN League (optional — enables live sync)</label>
+          <select id="setup-league" class="auc-select">${espnOptions}</select>
+        </div>` : ''}
+
+        <div class="auc-row2">
+          <div class="auc-field">
+            <label class="auc-label">Budget Per Team ($)</label>
+            <input id="setup-budget" class="auc-input" type="number" value="200" min="1">
+          </div>
+          <div class="auc-field">
+            <label class="auc-label">Roster Spots Per Team</label>
+            <input id="setup-spots" class="auc-input" type="number" value="16" min="1">
+          </div>
+        </div>
+
+        <div class="auc-field">
+          <label class="auc-label">Player Values CSV</label>
+          <div class="auc-csv-drop" id="csv-drop" onclick="document.getElementById('csv-file').click()"
+            ondragover="event.preventDefault();this.classList.add('drag-over')"
+            ondragleave="this.classList.remove('drag-over')"
+            ondrop="handleDrop(event)">
+            <div class="auc-csv-drop-label">
+              Drop CSV here or <span>browse</span>
+            </div>
+            <div class="auc-csv-hint">
+              Columns: Player, Position, Team, My $ Value, ESPN $ Value, $ Drafted For, Team Drafted To<br>
+              Last two columns optional — fill them for keepers.
+            </div>
+          </div>
+          <input id="csv-file" type="file" accept=".csv,text/csv" style="display:none" onchange="handleFileInput(this)">
+          <div id="csv-summary"></div>
+        </div>
+
+        <button id="start-btn" class="auc-btn" disabled onclick="startDraft()">Start Tracking</button>
+      </div>
+    `;
+    window._pendingPlayers = null;
+    window._resumeData = resumeData;
+  }
+
+  function dismissResume() {
+    clearSaved();
+    renderSetup(null);
+  }
+
+  function doResume() {
+    const d = window._resumeData;
+    if (!d) return;
+    Object.assign(A, {
+      leagueId: d.leagueId, leagueName: d.leagueName,
+      budget: d.budget, rosterSpots: d.rosterSpots,
+      teams: d.teams, players: d.players,
+    });
+    buildNameMap();
+    if (A.leagueId) startEspnPoll();
+    renderMain();
+  }
+
+  function handleDrop(e) {
+    e.preventDefault();
+    document.getElementById('csv-drop').classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) processCSVFile(file);
+  }
+
+  function handleFileInput(input) {
+    if (input.files[0]) processCSVFile(input.files[0]);
+  }
+
+  function processCSVFile(file) {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const summaryEl = document.getElementById('csv-summary');
+      try {
+        const players = parseCSV(ev.target.result);
+        if (players.length === 0) throw new Error('No player rows found.');
+        window._pendingPlayers = players;
+        const keepers = players.filter(p => p.keeper).length;
+        summaryEl.innerHTML = `<div class="auc-import-summary">
+          ✓ ${players.length} players loaded${keepers ? `, ${keepers} keepers detected` : ''}.
+        </div>`;
+        document.getElementById('start-btn').disabled = false;
+      } catch(err) {
+        summaryEl.innerHTML = `<div class="auc-import-summary auc-import-err">✗ ${esc(err.message)}</div>`;
+        window._pendingPlayers = null;
+        document.getElementById('start-btn').disabled = true;
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function startDraft() {
+    if (!window._pendingPlayers) return;
+    A.players = window._pendingPlayers;
+    A.budget = parseInt(document.getElementById('setup-budget')?.value) || 200;
+    A.rosterSpots = parseInt(document.getElementById('setup-spots')?.value) || 16;
+    const lgSel = document.getElementById('setup-league');
+    A.leagueId = lgSel ? lgSel.value || null : null;
+    A.leagueName = lgSel && lgSel.value
+      ? (A.espnLeagues.find(l => l.id === lgSel.value) || {}).name || lgSel.value
+      : 'Manual';
+
+    // Init teams from keepers first, then fetch from ESPN if connected
+    A.teams = teamsFromKeepers(A.players);
+    buildNameMap();
+    persist();
+    if (A.leagueId) {
+      loadEspnTeams(A.leagueId).then(() => { persist(); renderMain(); });
+    } else {
+      renderMain();
+    }
+  }
+
+  // ─── Main render ──────────────────────────────────────────────────────────────
+
+  function renderMain() {
+    const stats = calcStats();
+    const inflation = stats.infl;
+    const inflPct = Math.round((inflation - 1) * 100);
+    const inflCls = inflation < 0.95 ? 'inflation-low' : inflation > 1.15 ? 'inflation-high' : '';
+
+    document.getElementById('app').innerHTML = `
+      ${renderStatsBar(stats, inflation, inflPct, inflCls)}
+      <div class="auc-main">
+        ${renderPoolPanel(inflation)}
+        ${renderTeamsPanel()}
+      </div>
+    `;
+    attachPoolHandlers();
+  }
+
+  function renderStatsBar(stats, inflation, inflPct, inflCls) {
+    const tiles = posTiles();
+    const TILE_COLORS = { QB: '#e05252', RB: '#5cb85c', WR: '#5bc0de', TE: '#e8734b' };
+
+    return `
+    <div class="auc-stats-bar">
+      <div class="auc-stats-row1">
+        <div class="auc-stat-item">
+          <div class="auc-stat-val">$${stats.spent.toLocaleString()}</div>
+          <div class="auc-stat-label">Total Spent</div>
+        </div>
+        <div class="auc-stat-item">
+          <div class="auc-stat-val">$${stats.remaining.toLocaleString()}</div>
+          <div class="auc-stat-label">Total Remaining</div>
+        </div>
+        <div class="auc-stat-item">
+          <div class="auc-stat-val ${inflCls}">${inflPct >= 0 ? '+' : ''}${inflPct}%</div>
+          <div class="auc-stat-label">Inflation</div>
+        </div>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+          <span class="auc-poll-dot${A.pollTimer ? ' live' : ''}"></span>
+          <span class="auc-poll-status">${A.pollTimer ? 'Live · ESPN' : 'Manual mode'}</span>
+          <button class="auc-btn auc-btn-ghost" style="margin-top:0;padding:5px 14px;font-size:0.38rem;" onclick="goReset()">New Draft</button>
+        </div>
+      </div>
+      <div class="auc-stats-row2">
+        ${tiles.map(t => {
+          const barColor = TILE_COLORS[t.pos] || 'var(--gold)';
+          return `
+          <div class="auc-pos-tile">
+            <div class="auc-pos-tile-header">
+              ${posHtml(t.pos)}
+              <span class="auc-pos-tile-pct">${t.pct}% value left</span>
+            </div>
+            <div class="auc-pos-tile-bar">
+              <div class="auc-pos-tile-bar-fill" style="width:${t.pct}%;background:${barColor};"></div>
+            </div>
+            <div class="auc-pos-tile-players">
+              ${t.top2.length ? t.top2.map(p => `
+                <div class="auc-pos-player">
+                  <span class="auc-pos-player-name">${esc(p.name)}</span>
+                  <span class="auc-pos-player-val">${fmtDollar(p._inf)}</span>
+                </div>`).join('') : '<div style="font-family:Crimson Text,serif;font-size:0.78rem;color:var(--brown-light);font-style:italic;">None available</div>'}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }
+
+  function renderPoolPanel(inflation) {
+    const POSITIONS = ['ALL','QB','RB','WR','TE','K','DST'];
+    const nflTeams = [...new Set(A.players.map(p => p.nflTeam).filter(Boolean))].sort();
+
+    const posPills = POSITIONS.map(pos => `
+      <button class="auc-pill${A.posFilter === pos ? ' active' : ''}"
+        onclick="setPosFilter('${pos}')">${pos}</button>`).join('');
+
+    const sortPills = [
+      ['inflated', 'Inflated $'], ['my', 'My $'], ['espn', 'ESPN $']
+    ].map(([key, lbl]) => `
+      <button class="auc-pill${A.sortBy === key ? ' active' : ''}"
+        onclick="setSort('${key}')">${lbl}</button>`).join('');
+
+    const teamOpts = `<option value="">All NFL Teams</option>` +
+      nflTeams.map(t => `<option value="${esc(t)}"${A.teamFilter===t?' selected':''}>${esc(t)}</option>`).join('');
+
+    let rows = A.players.map((p, i) => ({ ...p, _i: i, _inf: inflatedVal(p) }));
+
+    // filters
+    if (A.posFilter !== 'ALL') rows = rows.filter(p => normPos(p.pos) === A.posFilter || p.pos === A.posFilter);
+    if (A.teamFilter) rows = rows.filter(p => p.nflTeam === A.teamFilter);
+    if (A.search) {
+      const q = A.search.toLowerCase();
+      rows = rows.filter(p => p.name.toLowerCase().includes(q));
+    }
+    if (!A.showDrafted) rows = rows.filter(p => !p.drafted);
+
+    // sort
+    rows.sort((a, b) => {
+      let va, vb;
+      if (A.sortBy === 'my')       { va = a.myVal || 0;   vb = b.myVal || 0; }
+      else if (A.sortBy === 'espn') { va = a.espnVal || 0; vb = b.espnVal || 0; }
+      else                          { va = a._inf || 0;    vb = b._inf || 0; }
+      if (va !== vb) return (vb - va) * A.sortDir * -1;
+      return (a.name || '').localeCompare(b.name || '');
+    });
+
+    const sortArrow = (key) => A.sortBy === key ? `<span class="sort-arrow">${A.sortDir < 0 ? '↓' : '↑'}</span>` : '';
+
+    const tableBody = rows.length ? rows.map(p => {
+      const draftedTeam = p.drafted ? findTeamById(p.teamId) : null;
+      const statusHtml = p.drafted
+        ? `<span class="drafted-tag">${p.keeper ? '🔒 ' : ''}$${p.price} — ${esc(draftedTeam?.name || p.teamId || '?')}</span>
+           ${!p.keeper ? `<button class="auc-undo-btn" onclick="undoDraft(${p._i}, event)" title="Undo">✕</button>` : ''}`
+        : '<span style="color:var(--green-light)">Available</span>';
+
+      return `<tr class="${p.drafted ? 'drafted' : ''}" data-idx="${p._i}">
+        <td>${esc(p.name)}</td>
+        <td>${posHtml(p.pos)}</td>
+        <td>${esc(p.nflTeam || '—')}</td>
+        <td class="num val-my">${fmtDollar(p.myVal)}</td>
+        <td class="num val-inf">${p.drafted ? '—' : fmtDollar(p._inf)}</td>
+        <td class="num val-espn">${fmtDollar(p.espnVal || null)}</td>
+        <td class="status-cell no-strike">${statusHtml}</td>
+      </tr>`;
+    }).join('') : `<tr><td colspan="7" class="auc-pool-empty">No players match your filters.</td></tr>`;
+
+    return `
+    <div class="auc-pool">
+      <div class="auc-pool-controls">
+        <div class="auc-pills">${posPills}</div>
+        <div class="auc-pills">${sortPills}</div>
+        <div class="auc-pool-controls-row">
+          <input class="auc-search" type="text" placeholder="Search player…" value="${esc(A.search)}"
+            oninput="setSearch(this.value)">
+          <select class="auc-team-filter" onchange="setTeamFilter(this.value)">${teamOpts}</select>
+          <label class="auc-show-drafted">
+            <input type="checkbox" ${A.showDrafted ? 'checked' : ''} onchange="setShowDrafted(this.checked)">
+            Show Drafted
+          </label>
+        </div>
+      </div>
+      <table class="auc-pool-table">
+        <thead><tr>
+          <th>Player</th>
+          <th>Pos</th>
+          <th>Team</th>
+          <th class="num sortable${A.sortBy==='my'?' sort-active':''}" onclick="setSort('my')">My ${sortArrow('my')}</th>
+          <th class="num sortable${A.sortBy==='inflated'?' sort-active':''}" onclick="setSort('inflated')">Inflated ${sortArrow('inflated')}</th>
+          <th class="num sortable${A.sortBy==='espn'?' sort-active':''}" onclick="setSort('espn')">ESPN ${sortArrow('espn')}</th>
+          <th>Status</th>
+        </tr></thead>
+        <tbody>${tableBody}</tbody>
+      </table>
+    </div>`;
+  }
+
+  function renderTeamsPanel() {
+    const addBtn = `<button class="auc-add-team-btn" onclick="addTeamPrompt()">+ Add Team</button>`;
+
+    const cards = A.teams.map(t => {
+      const spent = t.spent || 0;
+      const remaining = A.budget - spent;
+      const pct = budgetPct(t);
+      const color = budgetColor(pct);
+      const needs = teamNeeds(t);
+
+      const rosterRows = (t.players || []).map(p => `
+        <div class="auc-team-player">
+          <span class="auc-pos auc-pos-${p.pos || 'K'}" style="font-size:0.68rem;padding:1px 4px;">${esc(p.pos||'?')}</span>
+          <span class="auc-team-player-name">${esc(p.name)}</span>
+          <span class="auc-team-player-price">$${p.price}</span>
+          ${p.keeper ? '<span class="auc-team-player-keeper">keeper</span>' : ''}
+        </div>`).join('');
+
+      return `
+      <div class="auc-team-card">
+        <div class="auc-team-name-row">
+          <div class="auc-team-name">${esc(t.name)}</div>
+          <div class="auc-team-budget">$${spent} / <span>$${remaining}</span> left</div>
+        </div>
+        <div class="auc-budget-bar">
+          <div class="auc-budget-bar-fill" style="width:${pct}%;background:${color};"></div>
+        </div>
+        ${needs.length ? `<div class="auc-team-needs">Needs: <span>${needs.join(', ')}</span></div>` : ''}
+        ${rosterRows ? `
+        <details>
+          <summary class="auc-roster-toggle">▸ ${t.players.length} player${t.players.length !== 1 ? 's' : ''}</summary>
+          <div class="auc-team-roster" style="margin-top:6px;">${rosterRows}</div>
+        </details>` : '<div style="font-family:Crimson Text,serif;font-size:0.78rem;color:var(--brown-light);font-style:italic;margin-top:2px;">No players yet</div>'}
+      </div>`;
+    }).join('');
+
+    return `
+    <div class="auc-teams">
+      <div class="auc-teams-header">
+        <span>Teams</span>
+        <span class="auc-poll-status">${A.teams.length} team${A.teams.length !== 1 ? 's' : ''}</span>
+      </div>
+      <div class="auc-teams-list">${cards || '<div class="auc-pool-empty">No teams yet. Add teams or import a CSV with keeper data.</div>'}</div>
+      ${addBtn}
+    </div>`;
+  }
+
+  function attachPoolHandlers() {
+    document.querySelectorAll('.auc-pool-table tbody tr[data-idx]').forEach(row => {
+      row.addEventListener('click', () => {
+        const idx = parseInt(row.dataset.idx);
+        const p = A.players[idx];
+        if (p && !p.drafted) openModal(idx);
+      });
+    });
+  }
+
+  // ─── UI controls ─────────────────────────────────────────────────────────────
+
+  function setPosFilter(pos) { A.posFilter = pos; renderMain(); }
+  function setSort(key) {
+    if (A.sortBy === key) A.sortDir *= -1;
+    else { A.sortBy = key; A.sortDir = -1; }
+    renderMain();
+  }
+  function setSearch(val) { A.search = val; renderMain(); }
+  function setTeamFilter(val) { A.teamFilter = val; renderMain(); }
+  function setShowDrafted(v) { A.showDrafted = v; renderMain(); }
+
+  function addTeamPrompt() {
+    const name = prompt('Team name:');
+    if (!name || !name.trim()) return;
+    const id = 'team_' + Date.now();
+    A.teams.push({ id, name: name.trim(), spent: 0, draftedCount: 0, players: [] });
+    persist();
+    renderMain();
+  }
+
+  function goReset() {
+    if (!confirm('Start a new draft? All current data will be cleared.')) return;
+    clearSaved();
+    if (A.pollTimer) { clearInterval(A.pollTimer); A.pollTimer = null; }
+    Object.assign(A, { leagueId: null, leagueName: '', teams: [], players: [], posFilter: 'ALL', teamFilter: '', sortBy: 'inflated', sortDir: -1, search: '', showDrafted: true, _modalPlayer: null, _nameMap: null });
+    init();
+  }
+
+  // ─── ESPN integration ─────────────────────────────────────────────────────────
+
+  async function fetchEspnSettings() {
+    try {
+      const r = await fetch(`${API}/espn/settings`, { credentials: 'include' });
+      if (!r.ok) return;
+      const d = await r.json();
+      if (d.league_ids && d.league_ids.length) {
+        // Fetch names for each league ID
+        const results = await Promise.allSettled(
+          d.league_ids.map(id =>
+            fetch(`${API}/espn/fantasy/${id}?view=mSettings`, { credentials: 'include' })
+              .then(r => r.ok ? r.json() : null)
+              .then(data => data ? { id: String(id), name: data.settings?.name || `League ${id}` } : null)
+          )
+        );
+        A.espnLeagues = results
+          .filter(r => r.status === 'fulfilled' && r.value)
+          .map(r => r.value);
+      }
+    } catch (_) {}
+  }
+
+  async function loadEspnTeams(leagueId) {
+    try {
+      const r = await fetch(`${API}/espn/fantasy/${leagueId}?view=mTeam&view=mSettings`, { credentials: 'include' });
+      if (!r.ok) return;
+      const d = await r.json();
+      const espnTeams = d.teams || [];
+
+      // Merge ESPN teams with any existing keeper-derived teams
+      const existing = new Map(A.teams.map(t => [t.name.toLowerCase(), t]));
+      espnTeams.forEach(et => {
+        const name = et.name || et.abbrev || `Team ${et.id}`;
+        const key = name.toLowerCase();
+        if (existing.has(key)) {
+          existing.get(key).id = String(et.id);
+        } else {
+          A.teams.push({ id: String(et.id), name, spent: 0, draftedCount: 0, players: [] });
+        }
+      });
+
+      // Roster spots from settings
+      const slotCounts = d.settings?.rosterSettings?.lineupSlotCounts;
+      if (slotCounts) {
+        const total = Object.values(slotCounts).reduce((s, v) => s + v, 0);
+        if (total > 0) A.rosterSpots = total;
+      }
+    } catch (_) {}
+  }
+
+  async function pollEspnDraft() {
+    if (!A.leagueId) return;
+    try {
+      const r = await fetch(
+        `${API}/espn/fantasy/${A.leagueId}?view=mDraftDetail&view=mTeam`,
+        { credentials: 'include' }
+      );
+      if (!r.ok) return;
+      const d = await r.json();
+      const picks = d.draftDetail?.picks || [];
+      let changed = false;
+
+      picks.forEach(pick => {
+        // Try to match by ESPN player ID first, then fall back to name map
+        const espnId = String(pick.playerId);
+        const price = pick.bidAmount ?? pick.auctionValue ?? 0;
+        const teamId = String(pick.teamId ?? pick.rosterId ?? '');
+
+        // Find the player in our CSV by ESPN ID stored at import, or by name map
+        let pIdx = A.players.findIndex(p => p._espnId === espnId);
+        if (pIdx < 0 && pick.playerPoolEntry) {
+          const fullName = pick.playerPoolEntry?.onTeamId !== undefined
+            ? normalizePlayerName(pick.playerPoolEntry?.player?.fullName || '')
+            : null;
+          if (fullName) pIdx = A._nameMap?.get(fullName) ?? -1;
+        }
+        if (pIdx < 0) return;
+
+        const p = A.players[pIdx];
+        if (p.drafted) return; // already recorded
+
+        const team = A.teams.find(t => t.id === teamId);
+        if (!team) return;
+
+        p.drafted = true;
+        p.price = price;
+        p.teamId = teamId;
+        team.spent += price;
+        team.draftedCount += 1;
+        team.players.push({ name: p.name, pos: p.pos, price, keeper: false });
+        changed = true;
+      });
+
+      if (changed) { persist(); renderMain(); }
+    } catch (_) {}
+  }
+
+  function startEspnPoll() {
+    if (A.pollTimer) clearInterval(A.pollTimer);
+    A.pollTimer = setInterval(pollEspnDraft, 10000);
+    pollEspnDraft();
+  }
+
+  // ─── Init ─────────────────────────────────────────────────────────────────────
+
+  async function init() {
+    SharedAuth.init({ chipContainerId: 'auth-chip' });
+
+    // Try to load saved state
+    const savedKey = localStorage.getItem('auction_last_key');
+    const resumeData = savedKey ? loadSaved(savedKey) : loadSaved('auction_manual');
+
+    // Fetch ESPN leagues if logged in
+    await fetchEspnSettings();
+
+    renderSetup(resumeData && resumeData.players && resumeData.players.length ? resumeData : null);
+  }
+
+  window.addEventListener('DOMContentLoaded', init);
+
+  // Expose handlers to inline onclick
+  window.setPosFilter  = setPosFilter;
+  window.setSort       = setSort;
+  window.setSearch     = setSearch;
+  window.setTeamFilter = setTeamFilter;
+  window.setShowDrafted = setShowDrafted;
+  window.openModal     = openModal;
+  window.closeModal    = closeModal;
+  window.modalBackdropClick = modalBackdropClick;
+  window.saveDraft     = saveDraft;
+  window.undoDraft     = undoDraft;
+  window.addTeamPrompt = addTeamPrompt;
+  window.goReset       = goReset;
+  window.handleDrop    = handleDrop;
+  window.handleFileInput = handleFileInput;
+  window.startDraft    = startDraft;
+  window.doResume      = doResume;
+  window.dismissResume = dismissResume;
+  </script>
+</body>
+</html>
