@@ -446,12 +446,18 @@
     const available = A.players.filter(p => !p.drafted);
     const totalBase = available.reduce((s, p) => s + (p.myVal || 0), 0);
     if (totalBase <= 0) return 1;
-    const totalSpendable = A.teams.reduce((s, t) => {
-      const remaining = A.budget - t.spent;
-      const spots = A.rosterSpots - t.draftedCount;
-      return s + Math.max(0, remaining - Math.max(0, spots));
-    }, 0);
-    return totalSpendable / totalBase;
+    // Total dollars still in the pool across all teams (full remaining budgets)
+    // The $1/spot reserve only constrains per-player bids, not total available money
+    const totalRemaining = A.teams.reduce((s, t) => s + Math.max(0, A.budget - t.spent), 0);
+    if (totalRemaining <= 0) return 1;
+    return totalRemaining / totalBase;
+  }
+
+  // Max a team can bid on one player: remaining budget minus $1 for every other unfilled spot
+  function maxBid(team) {
+    const remaining = A.budget - team.spent;
+    const otherSpots = Math.max(0, A.rosterSpots - team.draftedCount - 1);
+    return Math.max(1, remaining - otherSpots);
   }
 
   function inflatedVal(p) {
@@ -522,7 +528,9 @@
   }
 
   function parseCSV(text) {
-    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    // Strip UTF-8 BOM that Excel sometimes adds
+    const clean = text.replace(/^﻿/, '');
+    const lines = clean.split(/\r?\n/).filter(l => l.trim());
     if (lines.length < 2) throw new Error('CSV must have a header row and at least one data row.');
 
     // Use the same quoted-aware splitter for headers
@@ -686,8 +694,9 @@
     const p = A.players[idx];
     const team = findTeamById(teamId);
     if (!team) { errEl.textContent = 'Team not found.'; return; }
-    if (bid > A.budget - team.spent) {
-      errEl.textContent = `${team.name} only has $${A.budget - team.spent} remaining.`;
+    const max = maxBid(team);
+    if (bid > max) {
+      errEl.textContent = `${team.name} can bid max $${max} (needs $1 per remaining roster spot).`;
       return;
     }
 
@@ -833,7 +842,7 @@
     reader.onload = ev => {
       const summaryEl = document.getElementById('csv-summary');
       try {
-        const { players, detectedCols, rawHeaders } = parseCSV(ev.target.result);
+        const { players, detectedCols, rawHeaders } = parseCSV(ev.target.result || '');
         if (players.length === 0) throw new Error('No player rows found.');
         window._pendingPlayers = players;
 
@@ -865,11 +874,43 @@
               </div>`).join('')}
           </div>` : '';
 
+        // Keeper preview — shows first 3 keepers parsed so user can verify
+        const keeperRows = players.filter(p => p.keeper).slice(0, 3);
+        const samplePlayer = players.find(p => p.myVal > 0) || players[0];
+        const keeperPreviewHtml = keepers > 0
+          ? `<div style="margin-top:10px;">
+              <div class="auc-label" style="margin-bottom:6px;">Keepers detected (sample)</div>
+              <table style="width:100%;border-collapse:collapse;font-family:'Crimson Text',serif;font-size:0.82rem;">
+                <tr style="color:var(--brown-light);">
+                  <td style="padding:2px 8px 4px 0;">Player</td>
+                  <td style="padding:2px 8px 4px;">Pos</td>
+                  <td style="padding:2px 8px 4px;">Price</td>
+                  <td style="padding:2px 0 4px;">Team Drafted To</td>
+                </tr>
+                ${keeperRows.map(p => `<tr style="color:var(--parchment);">
+                  <td style="padding:2px 8px 2px 0;">${esc(p.name)}</td>
+                  <td style="padding:2px 8px;">${esc(p.pos)}</td>
+                  <td style="padding:2px 8px;">$${p.price}</td>
+                  <td style="padding:2px 0;">${esc(p.teamId || '—')}</td>
+                </tr>`).join('')}
+              </table>
+            </div>`
+          : detectedCols.draftedFor !== undefined
+            ? `<div style="margin-top:8px;font-family:'Crimson Text',serif;font-size:0.8rem;color:var(--brown-light);">
+                <em>0 keepers detected</em> — "$ Drafted For" column found but all values empty/zero.
+                ${samplePlayer ? `Sample My $ parsed: ${samplePlayer.name} = $${samplePlayer.myVal}` : ''}
+              </div>`
+            : `<div style="margin-top:8px;font-family:'Crimson Text',serif;font-size:0.8rem;color:var(--brown-light);font-style:italic;">
+                No keeper columns detected. Use "$ Drafted For" and "Team Drafted To" headers for keepers.
+              </div>`;
+
         summaryEl.innerHTML = `
           <div class="auc-import-summary">
             ✓ ${players.length} players loaded${keepers ? `, ${keepers} keepers` : ''}.
+            ${samplePlayer ? `<span style="color:var(--brown-light);font-size:0.85rem;margin-left:8px;">Sample: ${esc(samplePlayer.name)} My$=${samplePlayer.myVal}</span>` : ''}
           </div>
           <div style="font-family:'Crimson Text',serif;font-size:0.8rem;margin-top:8px;line-height:1.8;">${colPills}</div>
+          ${keeperPreviewHtml}
           ${teamMapHtml}`;
         document.getElementById('start-btn').disabled = false;
       } catch(err) {
