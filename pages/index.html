@@ -250,7 +250,7 @@ footer a:hover { color: var(--gold); }
 .ls-table tr:last-child td { border-bottom: none; }
 .ls-table tbody tr:hover td { background: rgba(255,255,255,0.025); }
 /* Contender league-name highlight */
-.ls-contender-name { color: var(--gold-light); font-weight: 700; }
+a.row-link.ls-contender-name { color: var(--gold-light); font-weight: 700; }
 /* Playoff spot standing */
 .ls-po-v2 { border: 2px solid var(--gold); padding: 1px 6px; color: var(--gold-light); border-radius: 2px; display: inline-block; line-height: 1.4; }
 /* Playoff chances labels */
@@ -3136,7 +3136,13 @@ function lsSortRows(rows) {
       const apA = (a.apWins || 0), apB = (b.apWins || 0);
       v = apB - apA;
     } else if (LS.sortCol === 'chances') {
-      v = a.standing - b.standing;
+      const oddsA = a.playoffOdds ?? null;
+      const oddsB = b.playoffOdds ?? null;
+      if (oddsA !== null || oddsB !== null) {
+        v = (oddsB ?? -1) - (oddsA ?? -1);
+      } else {
+        v = a.standing - b.standing;
+      }
     }
     if (v !== 0) return v * LS.sortDir;
     // secondary: alphabetical
