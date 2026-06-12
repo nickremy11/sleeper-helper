@@ -555,7 +555,6 @@ async function loadUser() {
     loadEspnLeagues(season);
     const _urlTab = new URLSearchParams(location.search).get('tab');
     if (_urlTab && document.getElementById('tab-' + _urlTab)) S.tab = _urlTab;
-    else if (S.tab === 'home') S.tab = 'leagues';
     render(S.tab);
     // Auto-save username to account when logged in
     if (S.auth && u !== S.auth.sleeper_username) {

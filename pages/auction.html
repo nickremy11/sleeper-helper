@@ -306,6 +306,19 @@
     }
     .auc-add-team-btn:hover { border-color: var(--gold); color: var(--gold); }
 
+    /* ── Tier shading ── */
+    .auc-pool-table tbody tr.tier-odd  { background: rgba(201,150,42,0.07); }
+    .auc-pool-table tbody tr.tier-even { background: rgba(91,192,222,0.05); }
+    .auc-pool-table tbody tr.tier-odd:hover  { background: rgba(201,150,42,0.13); }
+    .auc-pool-table tbody tr.tier-even:hover { background: rgba(91,192,222,0.10); }
+    .auc-tier-badge {
+      display: inline-block; font-family: 'Rye', serif; font-size: 0.34rem;
+      letter-spacing: 0.08em; padding: 1px 4px; border-radius: 2px;
+      vertical-align: middle; margin-left: 5px; opacity: 0.65;
+    }
+    .auc-tier-badge-odd  { background: rgba(201,150,42,0.18); color: var(--gold); }
+    .auc-tier-badge-even { background: rgba(91,192,222,0.15); color: #5bc0de; }
+
     /* ── Modal ── */
     .auc-modal-backdrop {
       position: fixed; inset: 0; background: rgba(0,0,0,0.65);
@@ -502,6 +515,7 @@
     espnVal:    ['espn $ value', 'espn $', 'espn value', 'espnval', 'espn_value', 'espn$', 'espn dollar value'],
     draftedFor: ['$ drafted for', 'drafted for', 'keeper $', 'keeper price', 'keeper cost', 'draft $', 'kept for', 'kept $'],
     draftedTo:  ['team drafted to', 'drafted to', 'keeper team', 'kept by', 'owner'],
+    tier:       ['position tier', 'tier', 'pos tier', 'rank tier', 'player tier'],
   };
 
   function matchHeader(raw) {
@@ -560,6 +574,7 @@
         nflTeam: col.nflTeam !== undefined ? (parts[col.nflTeam] || '').trim().toUpperCase() : '',
         myVal:   col.myVal   !== undefined ? parseNum(parts[col.myVal])  : 0,
         espnVal: col.espnVal !== undefined ? parseNum(parts[col.espnVal]) : 0,
+        tier:    col.tier !== undefined ? (parseInt(parts[col.tier]) || 0) : 0,
         drafted:  isKeeper,
         keeper:   isKeeper,
         price:    isKeeper ? draftedFor : 0,
@@ -852,7 +867,7 @@
 
         // Column detection summary
         const COL_LABELS = { player:'Player', pos:'Position', nflTeam:'NFL Team',
-          myVal:'My $', espnVal:'ESPN $', draftedFor:'$ Drafted For', draftedTo:'Team Drafted To' };
+          myVal:'My $', espnVal:'ESPN $', draftedFor:'$ Drafted For', draftedTo:'Team Drafted To', tier:'Tier' };
         const colPills = Object.entries(COL_LABELS).map(([k, lbl]) =>
           detectedCols[k] !== undefined
             ? `<span style="color:var(--green-light);margin-right:6px;">✓ ${lbl}</span>`
@@ -1103,8 +1118,13 @@
            ${!p.keeper ? `<button class="auc-undo-btn" onclick="undoDraft(${p._i}, event)" title="Undo">✕</button>` : ''}`
         : '<span style="color:var(--green-light)">Available</span>';
 
-      return `<tr class="${p.drafted ? 'drafted' : ''}" data-idx="${p._i}">
-        <td>${esc(p.name)}</td>
+      const tierCls = p.tier ? (p.tier % 2 === 1 ? 'tier-odd' : 'tier-even') : '';
+      const tierBadge = p.tier
+        ? `<span class="auc-tier-badge ${p.tier % 2 === 1 ? 'auc-tier-badge-odd' : 'auc-tier-badge-even'}">T${p.tier}</span>`
+        : '';
+
+      return `<tr class="${[p.drafted ? 'drafted' : '', tierCls].filter(Boolean).join(' ')}" data-idx="${p._i}">
+        <td>${esc(p.name)}${tierBadge}</td>
         <td>${posHtml(p.pos)}</td>
         <td>${esc(p.nflTeam || '—')}</td>
         <td class="num val-my">${fmtDollar(p.myVal)}</td>
