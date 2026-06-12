@@ -769,8 +769,9 @@
         ${A.espnLeagues.length ? `
         <div class="auc-field">
           <label class="auc-label">ESPN League (optional — enables live sync)</label>
-          <select id="setup-league" class="auc-select">${espnOptions}</select>
-        </div>` : ''}
+          <select id="setup-league" class="auc-select" onchange="onLeagueSelect(this.value)">${espnOptions}</select>
+        </div>
+        <div id="espn-team-mapping"></div>` : ''}
 
         <div class="auc-row2">
           <div class="auc-field">
@@ -794,7 +795,7 @@
             </div>
             <div class="auc-csv-hint">
               Columns: Player, Position, Team, My $ Value, ESPN $ Value, $ Drafted For, Team Drafted To<br>
-              Last two columns optional — fill them for keepers.
+              For keepers: fill $ Drafted For + Team Drafted To using the shorthand from your ESPN team mapping above.
             </div>
           </div>
           <input id="csv-file" type="file" accept=".csv,text/csv" style="display:none" onchange="handleFileInput(this)">
@@ -925,34 +926,66 @@
   function startDraft() {
     if (!window._pendingPlayers) return;
 
-    // Read team name overrides from the mapper inputs
-    const nameOverrides = {};
+    // Read ESPN team shorthands from the mapping section
+    const espnShorthands = {}; // { espnTeamId: 'Nick' }
+    document.querySelectorAll('.espn-team-input').forEach(inp => {
+      const id = inp.dataset.espnId;
+      const name = inp.value.trim();
+      if (id && name) espnShorthands[id] = name;
+    });
+
+    // Read CSV-only keeper team renames (CSV-only mode fallback)
+    const csvOverrides = {};
     document.querySelectorAll('.team-name-input').forEach(inp => {
       const csvId = inp.dataset.csvId;
       const display = inp.value.trim();
-      if (csvId && display) nameOverrides[csvId] = display;
+      if (csvId && display) csvOverrides[csvId] = display;
     });
 
     A.players = window._pendingPlayers.map(p => ({
       ...p,
-      teamId: p.teamId && nameOverrides[p.teamId] ? nameOverrides[p.teamId] : p.teamId,
+      teamId: p.teamId && csvOverrides[p.teamId] ? csvOverrides[p.teamId] : p.teamId,
     }));
-    A.budget = parseInt(document.getElementById('setup-budget')?.value) || 200;
+    A.budget     = parseInt(document.getElementById('setup-budget')?.value) || 200;
     A.rosterSpots = parseInt(document.getElementById('setup-spots')?.value) || 16;
-    const lgSel = document.getElementById('setup-league');
-    A.leagueId = lgSel ? lgSel.value || null : null;
-    A.leagueName = lgSel && lgSel.value
+    const lgSel   = document.getElementById('setup-league');
+    A.leagueId    = lgSel ? lgSel.value || null : null;
+    A.leagueName  = lgSel && lgSel.value
       ? (A.espnLeagues.find(l => l.id === lgSel.value) || {}).name || lgSel.value
       : 'Manual';
+    A.espnTeamMap = espnShorthands;
 
-    A.teams = teamsFromKeepers(A.players);
+    const useEspn = A.leagueId && window._espnTeams && window._espnTeams.length > 0;
+
+    if (useEspn) {
+      // Build all teams from ESPN, using the user-supplied shorthands as display names
+      A.teams = window._espnTeams.map(et => ({
+        id:           String(et.id),
+        name:         espnShorthands[String(et.id)] || et.name || et.abbrev || `Team ${et.id}`,
+        spent:        0,
+        draftedCount: 0,
+        players:      [],
+      }));
+
+      // Merge keeper rows: match player.teamId (shorthand) → team by name, case-insensitive
+      A.players.forEach(p => {
+        if (!p.keeper || !p.teamId) return;
+        const team = A.teams.find(t => t.name.toLowerCase() === p.teamId.toLowerCase());
+        if (team) {
+          team.spent        += p.price;
+          team.draftedCount += 1;
+          team.players.push({ name: p.name, pos: p.pos, price: p.price, keeper: true });
+        }
+      });
+    } else {
+      // CSV-only mode: derive teams purely from keeper rows
+      A.teams = teamsFromKeepers(A.players);
+    }
+
     buildNameMap();
     persist();
-    if (A.leagueId) {
-      loadEspnTeams(A.leagueId).then(() => { persist(); renderMain(); });
-    } else {
-      renderMain();
-    }
+    if (A.leagueId) startEspnPoll();
+    renderMain();
   }
 
   // ─── Main render ──────────────────────────────────────────────────────────────
@@ -1233,32 +1266,59 @@
     } catch (_) {}
   }
 
-  async function loadEspnTeams(leagueId) {
+  async function onLeagueSelect(leagueId) {
+    const el = document.getElementById('espn-team-mapping');
+    if (!leagueId) { if (el) el.innerHTML = ''; window._espnTeams = null; return; }
+
+    if (el) el.innerHTML = `<div style="font-family:'Crimson Text',serif;font-size:0.86rem;color:var(--brown-light);padding:8px 0;">Loading teams…</div>`;
+
     try {
       const r = await fetch(`${API}/espn/fantasy/${leagueId}?view=mTeam&view=mSettings`, { credentials: 'include' });
-      if (!r.ok) return;
+      if (!r.ok) throw new Error(`ESPN returned ${r.status}`);
       const d = await r.json();
-      const espnTeams = d.teams || [];
+      window._espnTeams = d.teams || [];
 
-      // Merge ESPN teams with any existing keeper-derived teams
-      const existing = new Map(A.teams.map(t => [t.name.toLowerCase(), t]));
-      espnTeams.forEach(et => {
-        const name = et.name || et.abbrev || `Team ${et.id}`;
-        const key = name.toLowerCase();
-        if (existing.has(key)) {
-          existing.get(key).id = String(et.id);
-        } else {
-          A.teams.push({ id: String(et.id), name, spent: 0, draftedCount: 0, players: [] });
-        }
-      });
-
-      // Roster spots from settings
+      // Pre-fill roster spots from league settings
       const slotCounts = d.settings?.rosterSettings?.lineupSlotCounts;
       if (slotCounts) {
         const total = Object.values(slotCounts).reduce((s, v) => s + v, 0);
-        if (total > 0) A.rosterSpots = total;
+        const spotsEl = document.getElementById('setup-spots');
+        if (total > 0 && spotsEl) spotsEl.value = total;
       }
-    } catch (_) {}
+
+      if (!window._espnTeams.length) {
+        if (el) el.innerHTML = `<div style="font-family:'Crimson Text',serif;font-size:0.82rem;color:var(--brown-light);font-style:italic;padding:8px 0;">No teams found for this league.</div>`;
+        return;
+      }
+
+      if (el) el.innerHTML = `
+        <div style="border-top:1px dashed rgba(255,255,255,0.08);padding-top:14px;margin-top:2px;">
+          <div class="auc-label" style="margin-bottom:6px;">Team Nicknames</div>
+          <div style="font-family:'Crimson Text',serif;font-size:0.8rem;color:var(--brown-light);margin-bottom:12px;">
+            Give each ESPN team a shorthand. Use the <em>same shorthand</em> in your CSV's
+            <strong style="color:var(--parchment);">Team Drafted To</strong> column for keepers.
+          </div>
+          ${window._espnTeams.map(t => {
+            const espnName = t.name || t.abbrev || `Team ${t.id}`;
+            return `
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+                <span style="font-family:'Crimson Text',serif;font-size:0.82rem;color:var(--brown-light);
+                             flex:1.2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                      title="${esc(espnName)}">${esc(espnName)}</span>
+                <span style="color:var(--brown-light);flex-shrink:0;">→</span>
+                <input class="auc-input espn-team-input"
+                       data-espn-id="${esc(String(t.id))}"
+                       data-espn-name="${esc(espnName)}"
+                       value="${esc(espnName)}"
+                       style="flex:1;padding:6px 10px;"
+                       placeholder="e.g. Nick">
+              </div>`;
+          }).join('')}
+        </div>`;
+    } catch (err) {
+      if (el) el.innerHTML = `<div style="font-family:'Crimson Text',serif;font-size:0.82rem;color:#e05252;padding:8px 0;">Could not load ESPN teams: ${esc(err.message)}</div>`;
+      window._espnTeams = null;
+    }
   }
 
   async function pollEspnDraft() {
@@ -1344,6 +1404,7 @@
   window.undoDraft     = undoDraft;
   window.addTeamPrompt = addTeamPrompt;
   window.renameTeam    = renameTeam;
+  window.onLeagueSelect = onLeagueSelect;
   window.goReset       = goReset;
   window.handleDrop    = handleDrop;
   window.handleFileInput = handleFileInput;
