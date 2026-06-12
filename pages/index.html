@@ -2794,7 +2794,10 @@ async function renderLeagueSummaries() {
   if (LS.loading) return;
   LS.loading = true;
   // Ensure prefs are loaded (reuse RS.prefs; rsLoadPrefs populates it)
-  if (!Object.keys(RS.prefs).length && RS.selectedLeagues === null) {
+  // Only skip if Rostership has already been visited (which sets RS.selectedLeagues).
+  // Don't gate on RS.prefs being empty — ESPN entries from loadEspnLeagues can
+  // populate it before we get here, causing prefs to never load for Sleeper leagues.
+  if (RS.selectedLeagues === null) {
     RS.selectedLeagues = new Set(S.leagues.map(lg => lg.league_id));
     await rsLoadPrefs();
   }
@@ -2802,6 +2805,7 @@ async function renderLeagueSummaries() {
   try {
     await lsLoadData();
     LS.loaded = true;
+    lsRestoreOddsCache();
   } catch(e) {
     setC(errHtml(e));
     LS.loading = false;
@@ -2989,6 +2993,29 @@ function lsRunSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, pl
   return odds;
 }
 
+function lsRestoreOddsCache() {
+  const nflSeason = S.nflState?.season || String(new Date().getFullYear());
+  let anyRestored = false;
+  for (const lg of S.leagues) {
+    if (lg.source === 'espn') continue;
+    const d      = LS.leagueData[lg.league_id];
+    const detail = S.leagueDetails[lg.league_id];
+    if (!d || !detail) continue;
+    const regularSeasonWeeks = (detail.settings?.playoff_week_start ?? 15) - 1;
+    const cacheKey = `ls_odds_${lg.league_id}_${nflSeason}_w${regularSeasonWeeks}`;
+    try {
+      const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
+      if (cached && Date.now() - cached.ts < 24 * 3600 * 1000) {
+        d.playoffOdds = cached.odds;
+        anyRestored = true;
+      }
+    } catch (_) {}
+  }
+  if (anyRestored) {
+    LS.oddsLoaded = true;
+  }
+}
+
 async function lsSimulateAllLeagues() {
   if (LS.oddsLoading) return;
   LS.oddsLoading = true;
@@ -3038,8 +3065,8 @@ async function lsSimulateAllLeagues() {
       try {
         const cacheKey = `ls_odds_${lgId}_${nflSeason}_w${regularSeasonWeeks}`;
         try {
-          const cached = JSON.parse(sessionStorage.getItem(cacheKey) || 'null');
-          if (cached && Date.now() - cached.ts < 2 * 3600 * 1000) {
+          const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
+          if (cached && Date.now() - cached.ts < 24 * 3600 * 1000) {
             d.playoffOdds = cached.odds;
             return;
           }
@@ -3096,7 +3123,7 @@ async function lsSimulateAllLeagues() {
         d.playoffOdds = odds[d.myRosterId] ?? null;
 
         try {
-          sessionStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), odds: d.playoffOdds }));
+          localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), odds: d.playoffOdds }));
         } catch (_) {}
       } catch (e) {
         d.playoffOddsError = e.message;
