@@ -254,6 +254,7 @@ footer a:hover { color: var(--gold); }
 /* Playoff spot standing */
 .ls-po-v2 { border: 2px solid var(--gold); padding: 1px 6px; color: var(--gold-light); border-radius: 2px; display: inline-block; line-height: 1.4; }
 /* Playoff chances labels */
+.ls-odds-pct     { font-weight: 700; }
 .ls-chance-vl    { color: #5cb85c; font-weight: 700; }
 .ls-chance-lg    { color: var(--gold-light); }
 .ls-chance-nervy { color: var(--parchment); font-style: italic; }
@@ -426,12 +427,15 @@ const RS = {
 
 // ── League Summaries state ────────────────────────────────────────────────────
 const LS = {
-  leagueData: {},   // {lgId: {standing, numTeams, wins, losses, playoffTeams, apWins, apLosses, myRosterId}}
+  leagueData: {},   // {lgId: {standing, numTeams, wins, losses, playoffTeams, apWins, apLosses, myRosterId, rosterPlayers}}
   loaded:     false,
   loading:    false,
   sortCol:    'record',
   sortDir:    -1,
   filter:     'all', // 'all' | 'contenders' | 'rebuilders'
+  oddsLoaded:  false,
+  oddsLoading: false,
+  oddsError:   null,
 };
 
 // ── Player Finder state ───────────────────────────────────────────────────────
@@ -2827,12 +2831,21 @@ async function lsLoadData() {
         return pfB - pfA;
       });
       const standing = sorted.findIndex(r => r.roster_id === mine.roster_id) + 1;
+      const rosterPlayers = {}, rosterStats = {};
+      for (const r of rosters) {
+        rosterPlayers[r.roster_id] = r.players || [];
+        rosterStats[r.roster_id]   = {
+          wins: r.settings?.wins  || 0,
+          fpts: (r.settings?.fpts || 0) + (r.settings?.fpts_decimal || 0) / 100,
+        };
+      }
       LS.leagueData[lg.league_id] = {
         standing, numTeams, playoffTeams,
         wins:   mine.settings?.wins   || 0,
         losses: mine.settings?.losses || 0,
         myRosterId: mine.roster_id,
         apWins: null, apLosses: null,
+        rosterPlayers, rosterStats,
       };
     } catch(_) {}
   }));
@@ -2867,6 +2880,236 @@ async function lsLoadAllPlay(lgId, myRosterId) {
     }
   }
   return { apWins, apLosses };
+}
+
+// ── Playoff simulation (ported from analyzer.html) ───────────────────────────
+
+const LS_POS_CV = { QB: 0.43, RB: 0.50, WR: 0.52, TE: 0.58, DL: 0.55, LB: 0.55, DB: 0.55 };
+
+function lsComputeProjPts(stats, scoringSettings) {
+  let pts = 0;
+  for (const [k, v] of Object.entries(stats || {})) {
+    if (typeof v === 'number' && scoringSettings[k]) pts += v * scoringSettings[k];
+  }
+  return pts;
+}
+
+function lsOptimalLineupAndSigma(playerIds, projMap, scoringSettings, rosterPositions, playersMap) {
+  const starterSlots  = rosterPositions.filter(p => !['BN','IR','TAXI'].includes(p));
+  const specificSlots = starterSlots.filter(s => !['FLEX','SUPER_FLEX','IDP_FLEX'].includes(s));
+  const flexSlots     = starterSlots.filter(s =>  ['FLEX','SUPER_FLEX','IDP_FLEX'].includes(s));
+
+  const pool = playerIds.map(pid => {
+    const p = playersMap[pid];
+    if (!p) return null;
+    const pos = rsNormPos(p.position);
+    if (!pos) return null;
+    return { pid, pos, pts: lsComputeProjPts(projMap[pid], scoringSettings) };
+  }).filter(Boolean);
+
+  const used = new Set();
+  let mu = 0, sigSq = 0;
+
+  const slotCounts = {};
+  for (const s of specificSlots) slotCounts[s] = (slotCounts[s] || 0) + 1;
+
+  for (const [pos, count] of Object.entries(slotCounts)) {
+    const eligible = pool.filter(p => p.pos === pos && !used.has(p.pid))
+                        .sort((a, b) => b.pts - a.pts);
+    for (let i = 0; i < Math.min(count, eligible.length); i++) {
+      const pl = eligible[i];
+      used.add(pl.pid);
+      mu += pl.pts;
+      const cv = LS_POS_CV[pl.pos] ?? 0.50;
+      sigSq += (cv * pl.pts) ** 2;
+    }
+  }
+
+  for (const slot of flexSlots) {
+    const eligPos =
+      slot === 'FLEX'       ? ['RB','WR','TE'] :
+      slot === 'SUPER_FLEX' ? ['QB','RB','WR','TE'] :
+      slot === 'IDP_FLEX'   ? ['DL','LB','DB'] : [];
+    const eligible = pool.filter(p => eligPos.includes(p.pos) && !used.has(p.pid))
+                        .sort((a, b) => b.pts - a.pts);
+    if (eligible.length) {
+      const pl = eligible[0];
+      used.add(pl.pid);
+      mu += pl.pts;
+      const cv = LS_POS_CV[pl.pos] ?? 0.50;
+      sigSq += (cv * pl.pts) ** 2;
+    }
+  }
+
+  return { mu, sigma: Math.max(10, Math.sqrt(sigSq)) };
+}
+
+function lsGaussianRandom(mu, sigma) {
+  let u, v;
+  do { u = Math.random(); } while (!u);
+  do { v = Math.random(); } while (!v);
+  return Math.max(0, mu + sigma * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v));
+}
+
+function lsRunSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams, N = 5000) {
+  const count = {};
+  for (const t of teams) count[t.rosterId] = 0;
+
+  for (let sim = 0; sim < N; sim++) {
+    const wins = {}, pts = {};
+    for (const t of teams) { wins[t.rosterId] = t.wins; pts[t.rosterId] = t.fpts; }
+
+    for (const week of futureWeeks) {
+      const groups = {};
+      for (const m of (matchupsByWeek[week] || [])) {
+        if (!m.matchup_id) continue;
+        (groups[m.matchup_id] = groups[m.matchup_id] || []).push(m);
+      }
+      for (const pair of Object.values(groups)) {
+        if (pair.length !== 2) continue;
+        const [a, b] = pair;
+        const sA = lsGaussianRandom(muMap[a.roster_id]?.[week] ?? 100, sigmaMap[a.roster_id]?.[week] ?? 20);
+        const sB = lsGaussianRandom(muMap[b.roster_id]?.[week] ?? 100, sigmaMap[b.roster_id]?.[week] ?? 20);
+        pts[a.roster_id] = (pts[a.roster_id] || 0) + sA;
+        pts[b.roster_id] = (pts[b.roster_id] || 0) + sB;
+        if      (sA > sB) wins[a.roster_id] = (wins[a.roster_id] || 0) + 1;
+        else if (sB > sA) wins[b.roster_id] = (wins[b.roster_id] || 0) + 1;
+      }
+    }
+
+    const ranked = teams.slice().sort((a, b) => {
+      const wd = (wins[b.rosterId] || 0) - (wins[a.rosterId] || 0);
+      return wd !== 0 ? wd : (pts[b.rosterId] || 0) - (pts[a.rosterId] || 0);
+    });
+    for (let i = 0; i < Math.min(playoffTeams, ranked.length); i++) count[ranked[i].rosterId]++;
+  }
+
+  const odds = {};
+  for (const t of teams) odds[t.rosterId] = count[t.rosterId] / N;
+  return odds;
+}
+
+async function lsSimulateAllLeagues() {
+  if (LS.oddsLoading) return;
+  LS.oddsLoading = true;
+  LS.oddsError   = null;
+  lsDrawTable();
+
+  try {
+    await loadPlayers();
+    const nflSeason      = S.nflState?.season || String(new Date().getFullYear());
+    const currentWeek    = S.nflState?.week || 1;
+    const weeksCompleted = Math.max(0, currentWeek - 1);
+
+    // Collect unique future weeks across all leagues
+    const leagueInfos = [];
+    for (const lg of S.leagues) {
+      if (lg.source === 'espn') continue; // ESPN leagues don't have Sleeper matchup data
+      const d      = LS.leagueData[lg.league_id];
+      const detail = S.leagueDetails[lg.league_id];
+      if (!d || !detail) continue;
+      const playoffWeekStart   = detail.settings?.playoff_week_start ?? 15;
+      const regularSeasonWeeks = playoffWeekStart - 1;
+      const futureWeeks        = [];
+      for (let w = weeksCompleted + 1; w <= regularSeasonWeeks; w++) futureWeeks.push(w);
+      leagueInfos.push({ lgId: lg.league_id, d, detail, regularSeasonWeeks, futureWeeks });
+    }
+
+    const allFutureWeeks = [...new Set(leagueInfos.flatMap(li => li.futureWeeks))].sort((a, b) => a - b);
+
+    // Fetch projections for each unique future week (shared across all leagues)
+    let projectionsByWeek = {};
+    if (allFutureWeeks.length > 0) {
+      const projResults = await Promise.all(
+        allFutureWeeks.map(w =>
+          fetch(`/api/sleeper/projections/nfl/regular/${nflSeason}/${w}`)
+            .then(r => { if (!r.ok) throw new Error(`projections week ${w} failed`); return r.json(); })
+        )
+      );
+      allFutureWeeks.forEach((w, i) => { projectionsByWeek[w] = projResults[i] || {}; });
+
+      // Validate projection data is non-empty
+      const sampleProj = projResults.find(p => p && Object.keys(p).length > 0);
+      if (!sampleProj) throw new Error('No projection data available — try again once the season begins');
+    }
+
+    // Per league: fetch future matchup schedules and run simulation
+    await Promise.allSettled(leagueInfos.map(async ({ lgId, d, detail, regularSeasonWeeks, futureWeeks }) => {
+      try {
+        const cacheKey = `ls_odds_${lgId}_${nflSeason}_w${regularSeasonWeeks}`;
+        try {
+          const cached = JSON.parse(sessionStorage.getItem(cacheKey) || 'null');
+          if (cached && Date.now() - cached.ts < 2 * 3600 * 1000) {
+            d.playoffOdds = cached.odds;
+            return;
+          }
+        } catch (_) {}
+
+        if (futureWeeks.length === 0) {
+          // Season is over — standings are final
+          d.playoffOdds = d.standing <= d.playoffTeams ? 1.0 : 0.0;
+          return;
+        }
+
+        // Fetch only future matchup weeks (for schedule structure — who plays whom)
+        const matchupResults = await Promise.all(
+          futureWeeks.map(w =>
+            api('/league/' + lgId + '/matchups/' + w)
+              .then(r => { if (!r) throw new Error(`matchups week ${w} unavailable`); return r; })
+          )
+        );
+
+        const matchupsByWeek = {};
+        futureWeeks.forEach((w, i) => { matchupsByWeek[w] = matchupResults[i] || []; });
+
+        const scoringSettings = detail.scoring_settings || {};
+        const rosterPositions = detail.roster_positions || [];
+
+        // Build teams list using roster standings already stored from lsLoadData
+        const teams = Object.entries(d.rosterStats).map(([ridStr, stats]) => ({
+          rosterId: Number(ridStr),
+          wins:     stats.wins,
+          fpts:     stats.fpts,
+        }));
+
+        // Build mu/sigma per roster per future week from projections
+        const muMap = {}, sigmaMap = {};
+        for (const [ridStr, playerIds] of Object.entries(d.rosterPlayers)) {
+          const rid = Number(ridStr);
+          muMap[rid] = {}; sigmaMap[rid] = {};
+          for (const week of futureWeeks) {
+            const { mu, sigma } = lsOptimalLineupAndSigma(
+              playerIds, projectionsByWeek[week] || {}, scoringSettings, rosterPositions, S.players
+            );
+            muMap[rid][week] = mu;
+            sigmaMap[rid][week] = sigma;
+          }
+        }
+
+        // Validate: if all mus are near zero, projections are empty for this league
+        const avgMu = teams.reduce((s, t) =>
+          s + futureWeeks.reduce((ws, w) => ws + (muMap[t.rosterId]?.[w] ?? 0), 0), 0
+        ) / Math.max(1, teams.length * futureWeeks.length);
+        if (avgMu < 20) throw new Error('Projection data empty for this league');
+
+        const odds = lsRunSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, d.playoffTeams);
+        d.playoffOdds = odds[d.myRosterId] ?? null;
+
+        try {
+          sessionStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), odds: d.playoffOdds }));
+        } catch (_) {}
+      } catch (e) {
+        d.playoffOddsError = e.message;
+      }
+    }));
+
+  } catch (e) {
+    LS.oddsError = e.message;
+  }
+
+  LS.oddsLoading = false;
+  LS.oddsLoaded  = true;
+  lsDrawTable();
 }
 
 function lsPlayoffChancesLabel(standing, numTeams) {
@@ -2930,8 +3173,10 @@ function lsDrawTable() {
       playoffTeams: d?.playoffTeams ?? 0,
       wins:       d?.wins       ?? 0,
       losses:     d?.losses     ?? 0,
-      apWins:     d?.apWins,
-      apLosses:   d?.apLosses,
+      apWins:          d?.apWins,
+      apLosses:        d?.apLosses,
+      playoffOdds:     d?.playoffOdds,
+      playoffOddsError: d?.playoffOddsError,
     };
   });
 
@@ -2994,6 +3239,12 @@ function lsDrawTable() {
     let chancesCell;
     if (!row.hasData) {
       chancesCell = '<td>—</td>';
+    } else if (row.playoffOdds !== undefined && row.playoffOdds !== null) {
+      const pct  = Math.round(row.playoffOdds * 100);
+      const hue  = Math.round(pct * 1.2); // 0→red, 100→green
+      chancesCell = `<td><span class="ls-odds-pct" style="color:hsl(${hue},70%,38%)">${pct}%</span></td>`;
+    } else if (row.playoffOddsError) {
+      chancesCell = '<td><span style="color:var(--brown-light);font-size:0.8rem;">—</span></td>';
     } else {
       const { label, cls } = lsPlayoffChancesLabel(row.standing, row.numTeams);
       chancesCell = `<td><span class="${cls}">${label}</span></td>`;
@@ -3014,9 +3265,23 @@ function lsDrawTable() {
         ${hasPrefs?'':'disabled title="Fill out Root For Me first"'}>Rebuilders</button>
     </div>`;
 
+  const oddsBtn = LS.oddsLoading
+    ? `<button class="ghost-btn" disabled style="opacity:0.6;">Calculating odds…</button>`
+    : LS.oddsLoaded
+      ? `<button class="ghost-btn" onclick="lsSimulateAllLeagues()" title="Recalculate playoff odds">↺ Recalculate Odds</button>`
+      : `<button class="ghost-btn" onclick="lsSimulateAllLeagues()">Calculate Playoff Odds</button>`;
+
+  const oddsErr = LS.oddsError
+    ? `<div style="color:#c0392b;font-size:0.82rem;margin:8px 0 4px;">${esc(LS.oddsError)}</div>`
+    : '';
+
   setC(`
     <div class="section-head"><h2>League Summaries</h2><div class="section-head-line"></div></div>
-    ${filterBtns}
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+      ${filterBtns}
+      ${oddsBtn}
+    </div>
+    ${oddsErr}
     <div style="overflow-x:auto;">
       <table class="ls-table">${thead}${tbody}</table>
     </div>
