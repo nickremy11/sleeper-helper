@@ -89,6 +89,7 @@
       background: var(--brown-dark); border: 1.5px solid var(--brown-mid);
       border-radius: 3px; padding: 14px 16px; margin-bottom: 20px;
       display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: start;
+      min-height: 190px; box-sizing: border-box;
     }
     .ta-summary-team-lbl {
       font-family: 'Rye', serif; font-size: 0.44rem; letter-spacing: 0.14em;
@@ -238,8 +239,10 @@
     ? 'https://helper.ffhistorian.com/api'
     : '/api';
 
-  const lgId   = new URLSearchParams(window.location.search).get('league') || '';
-  const isEspn = lgId.startsWith('espn_');
+  const _params = new URLSearchParams(window.location.search);
+  const lgId    = _params.get('league') || '';
+  const isEspn  = lgId.startsWith('espn_');
+  const presetB = parseInt(_params.get('b') || '0') || null;
 
   // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -839,13 +842,11 @@
 
     const selA = getSelAssets(tA, _selectedA);
     const selB = getSelAssets(tB, _selectedB);
-    if (!selA.length && !selB.length) return '';
-
     const valA = selA.reduce((s, a) => s + (a.val || 0), 0);
     const valB = selB.reduce((s, a) => s + (a.val || 0), 0);
 
     const renderItems = (items) => {
-      if (!items.length) return `<div class="ta-summary-empty">Nothing selected yet</div>`;
+      if (!items.length) return `<div class="ta-summary-empty">Select players or picks to include in the trade</div>`;
       return items.map(a => {
         const pos = a.pid ? a.pos : 'PICK';
         const cls = POS_CLS[pos] || 'rs-pos-PICK';
@@ -1032,12 +1033,15 @@
     const valB = selB.reduce((s, a) => s + (a.val || 0), 0);
     const noteHtml = hasAssets
       ? `<span class="ta-btn-note">${esc(displayName(tA))} ~${Number(Math.round(valA)).toLocaleString()} ↔ ${esc(displayName(tB))} ~${Number(Math.round(valB)).toLocaleString()}</span>`
-      : `<span class="ta-btn-note">Check players and picks to build the trade</span>`;
+      : `<span class="ta-btn-note">Check players and picks below</span>`;
 
     document.getElementById('content').innerHTML = `
       ${renderFlags()}
-      <div style="margin-bottom:14px;">
+      <div class="ta-btn-row" style="margin-bottom:20px;">
         <button class="ta-btn-secondary" onclick="backToTeamSelect()">← Change Teams</button>
+        <button class="ta-btn" onclick="analyzeClick()" ${hasAssets ? '' : 'disabled'}>Analyze Trade</button>
+        <button class="ta-btn-secondary" onclick="clearTrade()">Clear</button>
+        ${noteHtml}
       </div>
 
       ${renderTradeSummary()}
@@ -1047,11 +1051,6 @@
       <div class="ta-builder">
         ${renderPanel(tA, _selectedA, 'A')}
         ${renderPanel(tB, _selectedB, 'B')}
-      </div>
-      <div class="ta-btn-row">
-        <button class="ta-btn" onclick="analyzeClick()" ${hasAssets ? '' : 'disabled'}>Analyze Trade</button>
-        <button class="ta-btn-secondary" onclick="clearTrade()">Clear</button>
-        ${noteHtml}
       </div>
     `;
   }
@@ -1269,7 +1268,14 @@
         } catch {}
       }
 
-      renderTeamSelect();
+      // If a partner was pre-selected (from analyzer), skip straight to builder
+      if (presetB) {
+        const presetTeam = _rawData.teams.find(t => t.rosterId === presetB);
+        if (presetTeam && presetTeam.rosterId !== _teamAId) _teamBId = presetB;
+      }
+
+      if (_teamAId && _teamBId) renderTradeBuilder();
+      else renderTeamSelect();
     } catch(e) {
       document.getElementById('content').innerHTML = errHtml(e);
     }

@@ -148,9 +148,29 @@
       font-family: 'Rye', serif; font-size: 0.44rem; letter-spacing: 0.14em;
       text-transform: uppercase; padding: 7px 13px; border: 1.5px solid var(--brown-mid);
       border-radius: 2px; background: transparent; color: var(--brown-mid);
-      text-decoration: none; transition: all 0.15s; white-space: nowrap; display: none;
+      cursor: pointer; transition: all 0.15s; white-space: nowrap; display: none;
     }
     .az-trade-btn:hover { border-color: var(--gold); color: var(--gold); background: rgba(201,150,42,0.06); }
+    /* Trade picker panel */
+    .az-trade-wrap { position: relative; }
+    .az-trade-panel {
+      position: absolute; right: 0; top: calc(100% + 6px); width: 280px;
+      background: var(--brown-dark); border: 1px solid var(--brown-mid);
+      border-radius: 3px; box-shadow: 0 4px 24px rgba(0,0,0,0.5); z-index: 300;
+    }
+    .az-trade-panel-hdr {
+      padding: 9px 13px; border-bottom: 1px solid var(--brown-mid);
+      font-family: 'Rye', serif; font-size: 0.4rem; letter-spacing: 0.16em;
+      text-transform: uppercase; color: var(--brown-light);
+    }
+    .az-trade-item {
+      display: block; padding: 9px 13px; border-bottom: 1px dashed rgba(255,255,255,0.05);
+      font-family: 'Crimson Text', serif; font-size: 0.9rem; color: var(--parchment);
+      text-decoration: none; transition: background 0.1s;
+    }
+    .az-trade-item:last-child { border-bottom: none; }
+    .az-trade-item:hover { background: rgba(255,255,255,0.06); color: var(--cream); }
+    .az-trade-item-sub { font-size: 0.74rem; color: var(--brown-light); margin-top: 1px; }
     .az-switcher-wrap { position: relative; }
     .az-switcher-btn {
       font-family: 'Rye', serif; font-size: 0.44rem; letter-spacing: 0.14em;
@@ -199,7 +219,13 @@
 
     <div class="az-wrap">
       <div class="az-switcher-bar">
-        <a id="az-trade-btn" class="az-trade-btn" href="#">⇄ Trade Analyzer</a>
+        <div class="az-trade-wrap">
+          <button id="az-trade-btn" class="az-trade-btn" onclick="toggleTradePicker(event)">⇄ Trade Analyzer</button>
+          <div id="az-trade-panel" class="az-trade-panel" style="display:none;">
+            <div class="az-trade-panel-hdr">Select Trade Partner</div>
+            <div id="az-trade-list"></div>
+          </div>
+        </div>
         <div class="az-switcher-wrap">
           <button class="az-switcher-btn" onclick="toggleSwitcher(event)">⇅ Switch League</button>
           <div id="az-switcher-panel" class="az-switcher-panel" style="display:none;">
@@ -880,7 +906,6 @@
     document.title = 'Analyzer — ' + lgName;
     const _tradeBtn = document.getElementById('az-trade-btn');
     if (_tradeBtn && !isEspn) {
-      _tradeBtn.href = `/trade-analyzer?league=${encodeURIComponent(lgId)}`;
       _tradeBtn.style.display = 'inline-block';
     }
 
@@ -1096,14 +1121,51 @@
     if (panel && !panel.contains(e.target) && !e.target.closest('.az-switcher-wrap')) {
       panel.style.display = 'none';
     }
+    const tPanel = document.getElementById('az-trade-panel');
+    if (tPanel && !tPanel.contains(e.target) && !e.target.closest('.az-trade-wrap')) {
+      tPanel.style.display = 'none';
+    }
   });
 
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
       const panel = document.getElementById('az-switcher-panel');
       if (panel) panel.style.display = 'none';
+      const tPanel = document.getElementById('az-trade-panel');
+      if (tPanel) tPanel.style.display = 'none';
     }
   });
+
+  // ── Trade picker ─────────────────────────────────────────────────────────────
+
+  function toggleTradePicker(e) {
+    e.stopPropagation();
+    const panel = document.getElementById('az-trade-panel');
+    if (!panel) return;
+    const open = panel.style.display !== 'none';
+    if (open) { panel.style.display = 'none'; return; }
+    panel.style.display = 'block';
+    const list = document.getElementById('az-trade-list');
+    const teams = window._azTeams || [];
+    const ranks = window._azRanks || {};
+    if (!teams.length) {
+      list.innerHTML = '<div class="az-switcher-empty">No teams found</div>';
+      return;
+    }
+    list.innerHTML = teams
+      .slice()
+      .sort((a, b) => (ranks.overall?.[a.rosterId] || 99) - (ranks.overall?.[b.rosterId] || 99))
+      .map(t => {
+        const name = t.teamName || t.ownerName || ('Team ' + t.rosterId);
+        const owner = t.teamName ? t.ownerName : null;
+        const rank  = ranks.overall?.[t.rosterId];
+        const rec   = `${t.wins}-${t.losses}`;
+        return `<a class="az-trade-item" href="/trade-analyzer?league=${encodeURIComponent(lgId)}&b=${t.rosterId}">
+          ${esc(name)}
+          <div class="az-trade-item-sub">${owner ? esc(owner) + ' · ' : ''}${rec}${rank ? ' · #' + rank + ' overall' : ''}</div>
+        </a>`;
+      }).join('');
+  }
 
   async function loadSwitcherLeagues() {
     const list = document.getElementById('az-switcher-list');
