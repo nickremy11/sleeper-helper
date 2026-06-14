@@ -26,14 +26,17 @@
 
     /* ── Position pill ── */
     .rs-pos { display: inline-block; font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.1em; padding: 3px 7px; border-radius: 2px; text-transform: uppercase; }
-    .rs-pos-QB { background: rgba(139,26,26,0.5);  color: #ff9999; border: 1px solid rgba(139,26,26,0.7); }
-    .rs-pos-RB { background: rgba(45,74,30,0.5);   color: #a8e08a; border: 1px solid rgba(45,74,30,0.7); }
-    .rs-pos-WR { background: rgba(30,50,100,0.5);  color: #80aaee; border: 1px solid rgba(30,50,100,0.7); }
-    .rs-pos-TE { background: rgba(100,60,10,0.5);  color: #e0aa60; border: 1px solid rgba(100,60,10,0.7); }
-    .rs-pos-DL { background: rgba(80,30,100,0.5);  color: #c890ee; border: 1px solid rgba(80,30,100,0.7); }
-    .rs-pos-LB { background: rgba(80,30,100,0.5);  color: #c890ee; border: 1px solid rgba(80,30,100,0.7); }
-    .rs-pos-DB { background: rgba(80,30,100,0.5);  color: #c890ee; border: 1px solid rgba(80,30,100,0.7); }
-    .rs-pos-PICK { background: rgba(50,50,50,0.5); color: var(--parchment); border: 1px solid rgba(255,255,255,0.15); }
+    .rs-pos-QB   { background: rgba(139,26,26,0.5);  color: #ff9999; border: 1px solid rgba(139,26,26,0.7); }
+    .rs-pos-RB   { background: rgba(45,74,30,0.5);   color: #a8e08a; border: 1px solid rgba(45,74,30,0.7); }
+    .rs-pos-WR   { background: rgba(30,50,100,0.5);  color: #80aaee; border: 1px solid rgba(30,50,100,0.7); }
+    .rs-pos-TE   { background: rgba(100,60,10,0.5);  color: #e0aa60; border: 1px solid rgba(100,60,10,0.7); }
+    .rs-pos-DL   { background: rgba(80,30,100,0.5);  color: #c890ee; border: 1px solid rgba(80,30,100,0.7); }
+    .rs-pos-LB   { background: rgba(80,30,100,0.5);  color: #c890ee; border: 1px solid rgba(80,30,100,0.7); }
+    .rs-pos-DB   { background: rgba(80,30,100,0.5);  color: #c890ee; border: 1px solid rgba(80,30,100,0.7); }
+    .rs-pos-PICK { background: rgba(50,50,50,0.7);   color: var(--parchment); border: 1px solid rgba(255,255,255,0.15); }
+    .rs-pos-FLEX { background: rgba(60,40,10,0.5);   color: #d4a060; border: 1px solid rgba(120,80,20,0.7); }
+    .rs-pos-SF   { background: rgba(80,20,20,0.5);   color: #ff8080; border: 1px solid rgba(139,26,26,0.7); }
+    .rs-pos-IDP  { background: rgba(60,20,80,0.5);   color: #cc88ee; border: 1px solid rgba(80,30,100,0.7); }
 
     /* ── Step header ── */
     .ta-step-hdr {
@@ -46,18 +49,18 @@
     .ta-team-card {
       background: var(--brown-dark); border: 1.5px solid var(--brown-mid);
       border-radius: 3px; padding: 12px 14px; cursor: pointer;
-      transition: border-color 0.15s, background 0.15s; user-select: none;
-      text-decoration: none; display: block;
+      transition: border-color 0.15s; user-select: none; text-decoration: none; display: block;
     }
-    .ta-team-card:hover { border-color: var(--gold); background: rgba(201,150,42,0.06); }
-    .ta-team-card.selected-a { border-color: #5cb85c; background: rgba(92,184,92,0.1); }
-    .ta-team-card.selected-b { border-color: #5b9bd5; background: rgba(91,155,213,0.1); }
+    .ta-team-card:hover { border-color: var(--gold); }
+    /* Solid dark tinted backgrounds so text remains readable */
+    .ta-team-card.selected-a { border: 2px solid #5cb85c; background: #192813; }
+    .ta-team-card.selected-b { border: 2px solid #5b9bd5; background: #111e2e; }
     .ta-team-badge {
       display: inline-block; font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.1em;
       padding: 3px 8px; border-radius: 2px; margin-bottom: 6px; text-transform: uppercase;
     }
-    .ta-team-badge-a { background: rgba(92,184,92,0.2); color: #7ed07e; border: 1px solid rgba(92,184,92,0.4); }
-    .ta-team-badge-b { background: rgba(91,155,213,0.2); color: #8eb8e5; border: 1px solid rgba(91,155,213,0.4); }
+    .ta-team-badge-a { background: rgba(92,184,92,0.25); color: #7ed07e; border: 1px solid rgba(92,184,92,0.5); }
+    .ta-team-badge-b { background: rgba(91,155,213,0.25); color: #8eb8e5; border: 1px solid rgba(91,155,213,0.5); }
     .ta-team-name   { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 0.9rem; color: var(--cream); }
     .ta-team-owner  { font-family: 'Crimson Text', serif; font-size: 0.78rem; color: var(--brown-light); margin-top: 2px; }
     .ta-team-record { font-family: 'Crimson Text', serif; font-size: 0.78rem; color: var(--parchment); margin-top: 4px; }
@@ -80,6 +83,27 @@
     .ta-btn-secondary:hover { border-color: var(--gold); color: var(--gold); background: rgba(201,150,42,0.06); }
     .ta-btn-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 24px; }
     .ta-btn-note { font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--brown-light); font-style: italic; }
+
+    /* ── Trade summary visual ── */
+    .ta-summary-box {
+      background: var(--brown-dark); border: 1.5px solid var(--brown-mid);
+      border-radius: 3px; padding: 14px 16px; margin-bottom: 20px;
+      display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: start;
+    }
+    .ta-summary-team-lbl {
+      font-family: 'Rye', serif; font-size: 0.44rem; letter-spacing: 0.14em;
+      text-transform: uppercase; margin-bottom: 8px;
+    }
+    .ta-summary-row {
+      display: flex; align-items: center; gap: 7px; padding: 4px 0;
+      border-bottom: 1px dashed rgba(255,255,255,0.05); font-family: 'Crimson Text', serif;
+    }
+    .ta-summary-row:last-of-type { border-bottom: none; }
+    .ta-summary-player { font-size: 0.88rem; color: var(--parchment); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ta-summary-val    { font-size: 0.78rem; color: var(--brown-light); white-space: nowrap; }
+    .ta-summary-total  { font-family: 'Crimson Text', serif; font-size: 0.82rem; color: var(--gold-light); margin-top: 8px; border-top: 1px solid var(--brown-mid); padding-top: 6px; }
+    .ta-summary-empty  { font-family: 'Crimson Text', serif; font-style: italic; font-size: 0.82rem; color: var(--brown-light); padding: 4px 0; }
+    .ta-summary-divider { display: flex; align-items: center; justify-content: center; color: var(--gold); font-size: 1.2rem; padding-top: 24px; }
 
     /* ── Trade builder panels ── */
     .ta-builder { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
@@ -119,7 +143,7 @@
     .ta-asset-val  { font-family: 'Crimson Text', serif; font-size: 0.78rem; color: var(--brown-light); white-space: nowrap; flex-shrink: 0; }
 
     /* ── Results section ── */
-    .ta-divider { border: none; border-top: 2px solid var(--brown-mid); margin: 8px 0 24px; }
+    .ta-divider { border: none; border-top: 2px solid var(--brown-mid); margin: 4px 0 24px; }
     .ta-results-hdr {
       font-family: 'Rye', serif; font-size: 0.62rem; letter-spacing: 0.25em;
       text-transform: uppercase; color: var(--gold); margin-bottom: 20px;
@@ -158,36 +182,32 @@
     .ta-odds-bar-wrap { height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; position: relative; }
     .ta-odds-bar-behind { height: 100%; position: absolute; left: 0; border-radius: 3px; opacity: 0.35; }
     .ta-odds-bar-front  { height: 100%; position: absolute; left: 0; border-radius: 3px; opacity: 0.85; }
-    .ta-delta-up-txt { color: #5cb85c; }
-    .ta-delta-dn-txt { color: #e05252; }
-    .ta-delta-flat-txt { color: var(--brown-light); }
+    .ta-delta-up-txt  { color: #5cb85c; }
+    .ta-delta-dn-txt  { color: #e05252; }
+    .ta-delta-flat-txt{ color: var(--brown-light); }
 
-    /* ── Lineup changes ── */
+    /* ── Full lineup display ── */
     .ta-lineup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
     @media (max-width: 620px) { .ta-lineup-grid { grid-template-columns: 1fr; } }
     .ta-lineup-card { background: var(--brown-dark); border: 1px solid var(--brown-mid); border-radius: 3px; padding: 14px; }
     .ta-lineup-lbl  { font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brown-light); margin-bottom: 10px; }
-    .ta-lineup-change {
-      display: flex; align-items: center; gap: 8px; padding: 6px 0;
-      border-bottom: 1px dashed rgba(255,255,255,0.06);
-      font-family: 'Crimson Text', serif;
-    }
-    .ta-lineup-change:last-child { border-bottom: none; }
-    .ta-lineup-out { color: var(--brown-light); font-size: 0.88rem; text-decoration: line-through; }
-    .ta-lineup-in  { color: var(--cream); font-size: 0.88rem; font-weight: 600; }
-    .ta-lineup-none { color: var(--brown-light); font-size: 0.82rem; font-style: italic; }
-    .ta-lineup-empty { font-family: 'Crimson Text', serif; font-style: italic; font-size: 0.85rem; color: var(--brown-light); padding: 4px 0; }
 
-    /* ── League picker (no lgId) ── */
-    .ta-picker-wrap { max-width: 400px; }
-    .ta-picker-input {
-      width: 100%; padding: 10px 14px; background: var(--brown-dark);
-      border: 1.5px solid var(--brown-mid); border-radius: 3px;
-      color: var(--cream); font-family: 'Crimson Text', serif; font-size: 0.95rem;
-      outline: none; margin-bottom: 12px; transition: border-color 0.15s;
+    .ta-full-row {
+      display: flex; align-items: center; gap: 9px; padding: 5px 0;
+      border-bottom: 1px dashed rgba(255,255,255,0.05); font-family: 'Crimson Text', serif;
     }
-    .ta-picker-input:focus { border-color: var(--gold); }
-    .ta-picker-input::placeholder { color: var(--brown-light); }
+    .ta-full-row:last-child { border-bottom: none; }
+    .ta-full-row.changed { background: rgba(201,150,42,0.05); border-radius: 2px; padding-left: 4px; margin-left: -4px; }
+    .ta-full-slot { min-width: 40px; flex-shrink: 0; }
+    .ta-full-content { flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+    .ta-full-player     { font-size: 0.88rem; color: var(--parchment); }
+    .ta-full-out  { font-size: 0.85rem; color: var(--brown-light); text-decoration: line-through; white-space: nowrap; }
+    .ta-full-in   { font-size: 0.88rem; color: var(--cream); font-weight: 600; white-space: nowrap; }
+    .ta-full-none { font-size: 0.82rem; color: var(--brown-light); font-style: italic; }
+    .ta-full-arr  { color: var(--gold); font-size: 0.9rem; flex-shrink: 0; }
+
+    /* ── League picker ── */
+    .ta-picker-wrap { max-width: 400px; }
   </style>
 </head>
 <body>
@@ -223,13 +243,13 @@
 
   // ── State ─────────────────────────────────────────────────────────────────────
 
-  let _rawData  = null;   // all loaded league data
-  let _simData  = null;   // simulation inputs
+  let _rawData  = null;
+  let _simData  = null;
   let _teamAId  = null;
   let _teamBId  = null;
-  let _selectedA = new Set();  // asset keys being sent from Team A
-  let _selectedB = new Set();  // asset keys being sent from Team B
-  let _analysis  = null;       // last analysis result
+  let _selectedA = new Set();
+  let _selectedB = new Set();
+  let _analysis  = null;
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -249,7 +269,7 @@
   }
 
   function fmtOdds(p) {
-    if (p == null)   return { label: '—',   color: 'var(--brown-light)', weight: '400' };
+    if (p == null)   return { label: '—',    color: 'var(--brown-light)', weight: '400' };
     if (p >= 0.995)  return { label: 'Lock', color: '#5cb85c',            weight: '700' };
     if (p <= 0.005)  return { label: 'Out',  color: '#e05252',            weight: '700' };
     const pct = Math.round(p * 100);
@@ -260,16 +280,22 @@
     };
   }
 
-  function displayName(t) {
-    return t.teamName || t.ownerName || ('Team ' + t.rosterId);
-  }
+  function displayName(t) { return t.teamName || t.ownerName || ('Team ' + t.rosterId); }
+  function pickKey(k)  { return `k:${k.season}_${k.round}_${k.originalRosterId}`; }
+  function playerKey(p){ return `p:${p.pid}`; }
 
-  function pickKey(pick) {
-    return `k:${pick.season}_${pick.round}_${pick.originalRosterId}`;
-  }
+  const POS_CLS = { QB:'rs-pos-QB', RB:'rs-pos-RB', WR:'rs-pos-WR', TE:'rs-pos-TE', DL:'rs-pos-DL', LB:'rs-pos-LB', DB:'rs-pos-DB' };
 
-  function playerKey(pl) {
-    return `p:${pl.pid}`;
+  function slotCls(slot, playerPos) {
+    if (slot === 'FLEX')       return 'rs-pos-FLEX';
+    if (slot === 'SUPER_FLEX') return 'rs-pos-SF';
+    if (slot === 'IDP_FLEX')   return 'rs-pos-IDP';
+    return POS_CLS[playerPos] || POS_CLS[slot] || '';
+  }
+  function slotLabel(slot) {
+    if (slot === 'SUPER_FLEX') return 'SF';
+    if (slot === 'IDP_FLEX')   return 'IDP';
+    return slot;
   }
 
   // ── Pick computation (verbatim from analyzer.html) ─────────────────────────
@@ -291,8 +317,7 @@
       }
     }
     for (const tp of (tradedPicks || [])) {
-      if (tp.round > numRounds) continue;
-      if (parseInt(tp.season) < curYear) continue;
+      if (tp.round > numRounds || parseInt(tp.season) < curYear) continue;
       ownership[`${tp.season}_${tp.round}_${tp.roster_id}`] = tp.owner_id;
     }
     const picks = [];
@@ -317,8 +342,7 @@
       if (!isPickItem(item)) continue;
       const name = (item.player?.name || '').toLowerCase();
       if (!name) continue;
-      const yearM = name.match(/20(\d\d)/);
-      if (!yearM) continue;
+      const yearM = name.match(/20(\d\d)/); if (!yearM) continue;
       const year = '20' + yearM[1];
       let round = 0;
       if      (/\b1(st)?\b/.test(name) || /first/.test(name))  round = 1;
@@ -329,12 +353,9 @@
       else if (/\b6(th)?\b/.test(name) || /sixth/.test(name))  round = 6;
       if (!round) continue;
       let q = 'mid';
-      if (/early/.test(name)) q = 'early';
-      else if (/late/.test(name)) q = 'late';
+      if (/early/.test(name)) q = 'early'; else if (/late/.test(name)) q = 'late';
       map[`${year}_${round}_${q}`] = item.value;
-      if (!map[`${year}_${round}`] || item.value > map[`${year}_${round}`]) {
-        map[`${year}_${round}`] = item.value;
-      }
+      if (!map[`${year}_${round}`] || item.value > map[`${year}_${round}`]) map[`${year}_${round}`] = item.value;
     }
     return map;
   }
@@ -345,14 +366,10 @@
     let q = 'mid';
     if (slot && numTeams > 0) {
       const third = Math.ceil(numTeams / 3);
-      if (slot <= third) q = 'early';
-      else if (slot > numTeams - third) q = 'late';
+      if (slot <= third) q = 'early'; else if (slot > numTeams - third) q = 'late';
     }
-    return fcPickMap[`${season}_${round}_${q}`]
-        || fcPickMap[`${season}_${round}_mid`]
-        || fcPickMap[`${season}_${round}_early`]
-        || fcPickMap[`${season}_${round}`]
-        || 0;
+    return fcPickMap[`${season}_${round}_${q}`] || fcPickMap[`${season}_${round}_mid`]
+        || fcPickMap[`${season}_${round}_early`] || fcPickMap[`${season}_${round}`] || 0;
   }
 
   function buildFcMap(fcRes) {
@@ -391,35 +408,32 @@
     return flags;
   }
 
-  // ── Playoff simulation (verbatim from analyzer.html) ──────────────────────
+  // ── Simulation helpers ─────────────────────────────────────────────────────
 
   const POS_CV = { QB: 0.43, RB: 0.50, WR: 0.52, TE: 0.58, DL: 0.55, LB: 0.55, DB: 0.55 };
 
-  function computeProjPts(stats, scoringSettings) {
+  function computeProjPts(stats, sc) {
     let pts = 0;
-    for (const [k, v] of Object.entries(stats || {})) {
-      if (typeof v === 'number' && scoringSettings[k]) pts += v * scoringSettings[k];
-    }
+    for (const [k, v] of Object.entries(stats || {})) { if (typeof v === 'number' && sc[k]) pts += v * sc[k]; }
     return pts;
   }
 
-  function optimalLineupAndSigma(playerIds, projMap, scoringSettings, rp, players) {
+  function optimalLineupAndSigma(pids, projMap, sc, rp, players) {
     const starterSlots  = rp.filter(p => !['BN','IR','TAXI'].includes(p));
     const specificSlots = starterSlots.filter(s => !['FLEX','SUPER_FLEX','IDP_FLEX'].includes(s));
     const flexSlots     = starterSlots.filter(s =>  ['FLEX','SUPER_FLEX','IDP_FLEX'].includes(s));
-    const pool = playerIds.map(pid => {
+    const pool = pids.map(pid => {
       const p = players[pid]; if (!p) return null;
       const pos = normPos(p.position); if (!pos) return null;
-      return { pid, pos, pts: computeProjPts(projMap?.[pid], scoringSettings) };
+      return { pid, pos, pts: computeProjPts(projMap?.[pid], sc) };
     }).filter(Boolean);
     const used = new Set(); let mu = 0, sigSq = 0;
-    const slotCounts = {};
-    for (const s of specificSlots) slotCounts[s] = (slotCounts[s] || 0) + 1;
-    for (const [pos, count] of Object.entries(slotCounts)) {
+    const sc2 = {};
+    for (const s of specificSlots) sc2[s] = (sc2[s] || 0) + 1;
+    for (const [pos, count] of Object.entries(sc2)) {
       const elig = pool.filter(p => p.pos === pos && !used.has(p.pid)).sort((a,b) => b.pts - a.pts);
       for (let i = 0; i < Math.min(count, elig.length); i++) {
-        const pl = elig[i]; used.add(pl.pid); mu += pl.pts;
-        sigSq += ((POS_CV[pl.pos] ?? 0.5) * pl.pts) ** 2;
+        const pl = elig[i]; used.add(pl.pid); mu += pl.pts; sigSq += ((POS_CV[pl.pos] ?? 0.5) * pl.pts) ** 2;
       }
     }
     for (const slot of flexSlots) {
@@ -430,23 +444,21 @@
     return { mu, sigma: Math.max(10, Math.sqrt(sigSq)) };
   }
 
-  // Returns starters list and bench in addition to mu/sigma
-  function buildOptimalLineup(playerIds, fcMap, projMap, useFc, scoringSettings, rp, players) {
+  // Returns starters list (with slot property) and bench
+  function buildOptimalLineup(pids, fcMap, projMap, useFc, sc, rp, players) {
     const starterSlots  = rp.filter(p => !['BN','IR','TAXI'].includes(p));
     const specificSlots = starterSlots.filter(s => !['FLEX','SUPER_FLEX','IDP_FLEX'].includes(s));
     const flexSlots     = starterSlots.filter(s =>  ['FLEX','SUPER_FLEX','IDP_FLEX'].includes(s));
-    const pool = playerIds.map(pid => {
+    const pool = pids.map(pid => {
       const p = players[pid]; if (!p) return null;
       const pos = normPos(p.position); if (!pos) return null;
-      const pts = useFc
-        ? ((fcMap[pid] ?? 0) / 100)
-        : computeProjPts(projMap?.[pid], scoringSettings);
+      const pts = useFc ? ((fcMap[pid] ?? 0) / 100) : computeProjPts(projMap?.[pid], sc);
       return { pid, pos, name: p.full_name || pid, pts };
     }).filter(Boolean);
     const starters = [], used = new Set();
-    const slotCounts = {};
-    for (const s of specificSlots) slotCounts[s] = (slotCounts[s] || 0) + 1;
-    for (const [pos, count] of Object.entries(slotCounts)) {
+    const sc2 = {};
+    for (const s of specificSlots) sc2[s] = (sc2[s] || 0) + 1;
+    for (const [pos, count] of Object.entries(sc2)) {
       const elig = pool.filter(p => p.pos === pos && !used.has(p.pid)).sort((a,b) => b.pts - a.pts);
       for (let i = 0; i < Math.min(count, elig.length); i++) {
         const pl = elig[i]; used.add(pl.pid); starters.push({ ...pl, slot: pos });
@@ -490,8 +502,8 @@
         }
       }
       const ranked = teams.slice().sort((a, b) => {
-        const wd = (wins[b.rosterId] || 0) - (wins[a.rosterId] || 0);
-        return wd !== 0 ? wd : (pts[b.rosterId] || 0) - (pts[a.rosterId] || 0);
+        const wd = (wins[b.rosterId]||0) - (wins[a.rosterId]||0);
+        return wd !== 0 ? wd : (pts[b.rosterId]||0) - (pts[a.rosterId]||0);
       });
       for (let i = 0; i < Math.min(playoffTeams, ranked.length); i++) count[ranked[i].rosterId]++;
     }
@@ -507,14 +519,10 @@
       return map;
     };
     return {
-      overall:   rankBy(t => t.overall),
-      contender: rankBy(t => t.contender),
-      QB:        rankBy(t => t.posValues.QB),
-      RB:        rankBy(t => t.posValues.RB),
-      WR:        rankBy(t => t.posValues.WR),
-      TE:        rankBy(t => t.posValues.TE),
-      DL:        rankBy(t => t.posValues.DL),
-      draft:     rankBy(t => t.draft),
+      overall: rankBy(t => t.overall), contender: rankBy(t => t.contender),
+      QB: rankBy(t => t.posValues.QB), RB: rankBy(t => t.posValues.RB),
+      WR: rankBy(t => t.posValues.WR), TE: rankBy(t => t.posValues.TE),
+      DL: rankBy(t => t.posValues.DL), draft: rankBy(t => t.draft),
     };
   }
 
@@ -566,8 +574,8 @@
     const category     = isBB ? 'bestball' : lgType === 2 ? 'dynasty' : 'redraft';
     const lgName       = leagueRes?.name || lgId;
     const playoffTeams = leagueRes?.settings?.playoff_teams ?? Math.floor(numTeams / 2);
-    const scoringSettings   = leagueRes?.scoring_settings || {};
-    const playoffWeekStart  = leagueRes?.settings?.playoff_week_start ?? 15;
+    const scoringSettings    = leagueRes?.scoring_settings || {};
+    const playoffWeekStart   = leagueRes?.settings?.playoff_week_start ?? 15;
     const regularSeasonWeeks = playoffWeekStart - 1;
 
     const rosterNames = {};
@@ -602,9 +610,7 @@
       }
       playerList.sort((a, b) => {
         const ORDER = ['QB','RB','WR','TE','DL','LB','DB'];
-        return ORDER.indexOf(a.pos) !== ORDER.indexOf(b.pos)
-          ? ORDER.indexOf(a.pos) - ORDER.indexOf(b.pos)
-          : b.val - a.val;
+        return ORDER.indexOf(a.pos) !== ORDER.indexOf(b.pos) ? ORDER.indexOf(a.pos) - ORDER.indexOf(b.pos) : b.val - a.val;
       });
 
       const rawPicks = computePicksForRoster(roster.roster_id, allRosters, tradedPicks, nflSeason, numRounds);
@@ -613,13 +619,8 @@
         const pv = getPickValue(pick.season, pick.round, pick.originalRosterId, ridToSlot, numTeams, fcPickMap);
         draftValue += pv;
         const roundStr = ['1st','2nd','3rd'][pick.round - 1] || pick.round + 'th';
-        let label;
-        if (ridToSlot) {
-          const slot = ridToSlot[String(pick.originalRosterId)];
-          label = slot ? `${pick.season} ${pick.round}.${String(slot).padStart(2,'0')}` : `${pick.season} ${roundStr}`;
-        } else {
-          label = `${pick.season} ${roundStr}`;
-        }
+        const slot = ridToSlot?.[String(pick.originalRosterId)];
+        const label = slot ? `${pick.season} ${pick.round}.${String(slot).padStart(2,'0')}` : `${pick.season} ${roundStr}`;
         const isTraded = pick.originalRosterId !== roster.roster_id;
         return { label, val: pv, viaName: isTraded ? (rosterNames[pick.originalRosterId] || null) : null, season: pick.season, round: pick.round, originalRosterId: pick.originalRosterId };
       }).sort((a, b) => a.season !== b.season ? a.season.localeCompare(b.season) : a.round - b.round);
@@ -629,19 +630,16 @@
         wins, losses, fpts,
         overall: Math.round(overall), contender: Math.round(contenderBase + wins * 50),
         posValues: { QB: Math.round(posValues.QB), RB: Math.round(posValues.RB), WR: Math.round(posValues.WR), TE: Math.round(posValues.TE), DL: Math.round(posValues.DL) },
-        draft: Math.round(draftValue),
-        playerList, pickList, standing: 0, playoffOdds: null,
+        draft: Math.round(draftValue), playerList, pickList, standing: 0, playoffOdds: null,
       };
     });
 
     const byStand = [...teams].sort((a, b) => b.wins !== a.wins ? b.wins - a.wins : b.fpts - a.fpts);
     byStand.forEach((t, i) => { t.standing = i + 1; });
 
-    // Matchups + future weeks
     const matchupWeeks = await Promise.all(
       Array.from({ length: regularSeasonWeeks }, (_, i) => i + 1).map(w =>
-        fetch(`${API}/sleeper/league/${lgId}/matchups/${w}`)
-          .then(r => r.ok ? r.json() : []).catch(() => [])
+        fetch(`${API}/sleeper/league/${lgId}/matchups/${w}`).then(r => r.ok ? r.json() : []).catch(() => [])
       )
     );
     const matchupsByWeek = {};
@@ -652,7 +650,6 @@
       if (!(matchups || []).some(m => (m.points ?? 0) > 0)) futureWeeks.push(week);
     });
 
-    // Playoff simulation
     let playoffOdds = {};
     let projectionsByWeek = {};
     let muMap = {}, sigmaMap = {};
@@ -665,8 +662,7 @@
     } else {
       const projResults = await Promise.all(
         futureWeeks.map(w =>
-          fetch(`${API}/sleeper/projections/nfl/regular/${nflSeason}/${w}`)
-            .then(r => r.ok ? r.json() : {}).catch(() => ({}))
+          fetch(`${API}/sleeper/projections/nfl/regular/${nflSeason}/${w}`).then(r => r.ok ? r.json() : {}).catch(() => ({}))
         )
       );
       futureWeeks.forEach((w, idx) => { projectionsByWeek[w] = projResults[idx] || {}; });
@@ -696,21 +692,17 @@
           }
         }
       }
-
       playoffOdds = runSimulation(simTeams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams);
     }
 
-    // Assign odds + adjust next-year pick values by playoff odds
     const nextSeason = String(parseInt(nflSeason) + 1);
     for (const t of teams) {
       t.playoffOdds = playoffOdds[t.rosterId] ?? null;
       let adj = 0;
       for (const pick of t.pickList) {
         if (pick.season === nextSeason && pick.originalRosterId != null) {
-          const origOdds = playoffOdds[pick.originalRosterId];
-          if (origOdds != null) {
-            pick.val = Math.round(pick.val * (origOdds >= 0.70 ? 1.0 : origOdds >= 0.30 ? 1.4 : 2.0));
-          }
+          const o = playoffOdds[pick.originalRosterId];
+          if (o != null) pick.val = Math.round(pick.val * (o >= 0.70 ? 1.0 : o >= 0.30 ? 1.4 : 2.0));
         }
         adj += pick.val;
       }
@@ -718,20 +710,20 @@
     }
 
     _rawData = {
-      teams: simTeams,
-      lgName, category, season: nflSeason,
+      teams: simTeams, lgName, category, season: nflSeason,
       formatFlags: buildFormatFlags(leagueRes || {}),
       numTeams, playoffTeams, hasIDP,
       allRosters, tradedPicks, players, fcMap, fcPickMap, ridToSlot, numRounds,
       rp, scoringSettings, rosterNames,
     };
-
     _simData = { matchupsByWeek, futureWeeks, projectionsByWeek, muMap, sigmaMap, useFc };
   }
 
   // ── Trade analysis ──────────────────────────────────────────────────────────
 
-  function recomputeTeamValues(t, SKILL, DEF_P) {
+  function recomputeTeamValues(t) {
+    const SKILL = new Set(['QB','RB','WR','TE']);
+    const DEF_P = new Set(['DL','LB','DB']);
     let overall = 0, contenderBase = 0;
     const pv = { QB: 0, RB: 0, WR: 0, TE: 0, DL: 0 };
     for (const pl of t.playerList) {
@@ -749,38 +741,31 @@
   }
 
   function executeTradeAnalysis() {
-    const { teams, players, rp, scoringSettings, numTeams, fcMap } = _rawData;
+    const { teams, players, rp, scoringSettings, fcMap } = _rawData;
     const { matchupsByWeek, futureWeeks, projectionsByWeek, muMap, sigmaMap, useFc } = _simData;
 
-    // Deep-clone all teams
     const cloned = teams.map(t => ({ ...t, playerList: t.playerList.map(p => ({...p})), pickList: t.pickList.map(p => ({...p})) }));
     const cA = cloned.find(t => t.rosterId === _teamAId);
     const cB = cloned.find(t => t.rosterId === _teamBId);
 
-    // Collect assets leaving each team
     const aToB_p = cA.playerList.filter(p => _selectedA.has(playerKey(p)));
     const aToB_k = cA.pickList.filter(k => _selectedA.has(pickKey(k)));
     const bToA_p = cB.playerList.filter(p => _selectedB.has(playerKey(p)));
     const bToA_k = cB.pickList.filter(k => _selectedB.has(pickKey(k)));
 
-    // Move players A → B
     for (const p of aToB_p) { cA.playerList.splice(cA.playerList.indexOf(p), 1); cB.playerList.push({...p}); }
     for (const k of aToB_k) { cA.pickList.splice(cA.pickList.indexOf(k), 1);   cB.pickList.push({...k}); }
-    // Move players B → A
     for (const p of bToA_p) { cB.playerList.splice(cB.playerList.indexOf(p), 1); cA.playerList.push({...p}); }
     for (const k of bToA_k) { cB.pickList.splice(cB.pickList.indexOf(k), 1);   cA.pickList.push({...k}); }
 
-    const SKILL = new Set(['QB','RB','WR','TE']);
-    const DEF_P = new Set(['DL','LB','DB']);
-    recomputeTeamValues(cA, SKILL, DEF_P);
-    recomputeTeamValues(cB, SKILL, DEF_P);
+    recomputeTeamValues(cA);
+    recomputeTeamValues(cB);
 
     const beforeRanks = computeRanks(teams);
     const afterRanks  = computeRanks(cloned);
 
     const beforeOddsA = teams.find(t => t.rosterId === _teamAId)?.playoffOdds ?? null;
     const beforeOddsB = teams.find(t => t.rosterId === _teamBId)?.playoffOdds ?? null;
-
     let afterOddsA = null, afterOddsB = null;
 
     if (futureWeeks.length > 0) {
@@ -794,7 +779,6 @@
           const { mu, sigma } = optimalLineupAndSigma(pids, projectionsByWeek[week] || {}, scoringSettings, rp, players);
           newMu[cTeam.rosterId][week] = mu; newSigma[cTeam.rosterId][week] = sigma;
         }
-        // Reapply FC fallback if needed
         if (useFc) {
           const meanOverall = teams.reduce((s, t) => s + t.overall, 0) / Math.max(1, teams.length);
           const clampedMu = Math.max(60, Math.min(160, meanOverall > 0 ? 110 * (cTeam.overall / meanOverall) : 110));
@@ -811,35 +795,28 @@
       afterOddsB = after[_teamBId] ?? null;
     }
 
-    // Lineup analysis — use first future week's projections, fall back to FC values
-    const projMap = futureWeeks.length > 0 ? (projectionsByWeek[futureWeeks[0]] || {}) : {};
-    const useLineupFc = useFc || futureWeeks.length === 0;
+    const projMap   = futureWeeks.length > 0 ? (projectionsByWeek[futureWeeks[0]] || {}) : {};
+    const lineupFc  = useFc || futureWeeks.length === 0;
 
     const origA = teams.find(t => t.rosterId === _teamAId);
     const origB = teams.find(t => t.rosterId === _teamBId);
 
-    const lineupBeforeA = buildOptimalLineup(origA.playerList.map(p => p.pid), fcMap, projMap, useLineupFc, scoringSettings, rp, players);
-    const lineupAfterA  = buildOptimalLineup(cA.playerList.map(p => p.pid),    fcMap, projMap, useLineupFc, scoringSettings, rp, players);
-    const lineupBeforeB = buildOptimalLineup(origB.playerList.map(p => p.pid), fcMap, projMap, useLineupFc, scoringSettings, rp, players);
-    const lineupAfterB  = buildOptimalLineup(cB.playerList.map(p => p.pid),    fcMap, projMap, useLineupFc, scoringSettings, rp, players);
+    const lineupBeforeA = buildOptimalLineup(origA.playerList.map(p => p.pid), fcMap, projMap, lineupFc, scoringSettings, rp, players);
+    const lineupAfterA  = buildOptimalLineup(cA.playerList.map(p => p.pid),    fcMap, projMap, lineupFc, scoringSettings, rp, players);
+    const lineupBeforeB = buildOptimalLineup(origB.playerList.map(p => p.pid), fcMap, projMap, lineupFc, scoringSettings, rp, players);
+    const lineupAfterB  = buildOptimalLineup(cB.playerList.map(p => p.pid),    fcMap, projMap, lineupFc, scoringSettings, rp, players);
 
-    return {
-      beforeRanks, afterRanks,
-      beforeOddsA, afterOddsA,
-      beforeOddsB, afterOddsB,
-      lineupBeforeA, lineupAfterA,
-      lineupBeforeB, lineupAfterB,
-      numTeams,
-    };
+    return { beforeRanks, afterRanks, beforeOddsA, afterOddsA, beforeOddsB, afterOddsB,
+             lineupBeforeA, lineupAfterA, lineupBeforeB, lineupAfterB, numTeams: _rawData.numTeams };
   }
 
-  // ── Render: format flags ───────────────────────────────────────────────────
+  // ── Render helpers ──────────────────────────────────────────────────────────
 
   function renderFlags() {
     if (!_rawData) return '';
     const { formatFlags, category, numTeams } = _rawData;
     const badgeCls = category === 'dynasty' ? 'az-badge-dynasty' : category === 'bestball' ? 'az-badge-bestball' : 'az-badge-redraft';
-    const badgeLbl = category === 'dynasty' ? 'Dynasty'         : category === 'bestball' ? 'Best Ball'         : 'Redraft';
+    const badgeLbl = category === 'dynasty' ? 'Dynasty' : category === 'bestball' ? 'Best Ball' : 'Redraft';
     return `<div class="az-flags">
       <span class="az-badge ${badgeCls}">${badgeLbl}</span>
       <span class="az-flag">${numTeams} Teams</span>
@@ -847,7 +824,55 @@
     </div>`;
   }
 
-  // ── Render: league picker (no lgId) ─────────────────────────────────────
+  // ── Trade summary visual ────────────────────────────────────────────────────
+
+  function renderTradeSummary() {
+    const { teams } = _rawData;
+    const tA = teams.find(t => t.rosterId === _teamAId);
+    const tB = teams.find(t => t.rosterId === _teamBId);
+    if (!tA || !tB) return '';
+
+    const getSelAssets = (team, sel) => [
+      ...team.playerList.filter(p => sel.has(playerKey(p))),
+      ...team.pickList.filter(k => sel.has(pickKey(k))),
+    ];
+
+    const selA = getSelAssets(tA, _selectedA);
+    const selB = getSelAssets(tB, _selectedB);
+    if (!selA.length && !selB.length) return '';
+
+    const valA = selA.reduce((s, a) => s + (a.val || 0), 0);
+    const valB = selB.reduce((s, a) => s + (a.val || 0), 0);
+
+    const renderItems = (items) => {
+      if (!items.length) return `<div class="ta-summary-empty">Nothing selected yet</div>`;
+      return items.map(a => {
+        const pos = a.pid ? a.pos : 'PICK';
+        const cls = POS_CLS[pos] || 'rs-pos-PICK';
+        return `<div class="ta-summary-row">
+          <span class="rs-pos ${cls}" style="font-size:0.36rem;">${pos}</span>
+          <span class="ta-summary-player">${esc(a.pid ? a.name : a.label)}</span>
+          <span class="ta-summary-val">${a.val > 0 ? Number(Math.round(a.val)).toLocaleString() : '—'}</span>
+        </div>`;
+      }).join('');
+    };
+
+    return `<div class="ta-summary-box">
+      <div>
+        <div class="ta-summary-team-lbl" style="color:#7ed07e;">${esc(displayName(tA))} gives</div>
+        ${renderItems(selA)}
+        ${selA.length ? `<div class="ta-summary-total">~${Number(Math.round(valA)).toLocaleString()} value</div>` : ''}
+      </div>
+      <div class="ta-summary-divider">⇄</div>
+      <div>
+        <div class="ta-summary-team-lbl" style="color:#8eb8e5;">${esc(displayName(tB))} gives</div>
+        ${renderItems(selB)}
+        ${selB.length ? `<div class="ta-summary-total">~${Number(Math.round(valB)).toLocaleString()} value</div>` : ''}
+      </div>
+    </div>`;
+  }
+
+  // ── League picker ──────────────────────────────────────────────────────────
 
   function renderLeaguePicker() {
     document.getElementById('content').innerHTML = `
@@ -861,11 +886,13 @@
 
   async function loadPickerLeagues() {
     const el = document.getElementById('picker-list');
+    if (!el) return;
     const user = SharedAuth.getUser?.();
     if (!user?.sleeper_username) {
       el.innerHTML = `<div style="color:var(--brown-light);font-family:'Crimson Text',serif;font-style:italic;">Sign in and set your Sleeper username to load leagues.</div>`;
       return;
     }
+    el.innerHTML = `<div style="color:var(--brown-light);font-family:'Crimson Text',serif;font-style:italic;">Loading…</div>`;
     try {
       const [nflRes, sleeperUser] = await Promise.all([
         fetch(`${API}/sleeper/state/nfl`).then(r => r.json()),
@@ -883,7 +910,7 @@
     }
   }
 
-  // ── Render: team selection ───────────────────────────────────────────────
+  // ── Team selection ──────────────────────────────────────────────────────────
 
   function renderTeamSelect() {
     const { teams, numTeams } = _rawData;
@@ -908,9 +935,6 @@
     const tA = _teamAId ? teams.find(t => t.rosterId === _teamAId) : null;
     const tB = _teamBId ? teams.find(t => t.rosterId === _teamBId) : null;
     const canBuild = tA && tB;
-    const note = canBuild
-      ? `<span class="ta-btn-note">${esc(displayName(tA))} ↔ ${esc(displayName(tB))}</span>`
-      : `<span class="ta-btn-note">Click two teams to select trade partners</span>`;
 
     document.getElementById('content').innerHTML = `
       ${renderFlags()}
@@ -918,13 +942,15 @@
       <div class="ta-team-grid">${cards}</div>
       <div class="ta-btn-row">
         <button class="ta-btn" onclick="proceedToBuilder()" ${canBuild ? '' : 'disabled'}>Build Trade →</button>
-        ${note}
+        ${canBuild
+          ? `<span class="ta-btn-note">${esc(displayName(tA))} ↔ ${esc(displayName(tB))}</span>`
+          : `<span class="ta-btn-note">Click two teams to select trade partners</span>`}
       </div>
     `;
   }
 
   function selectTeam(rid) {
-    if (_teamAId === rid)      { _teamAId = null; _selectedA.clear(); }
+    if      (_teamAId === rid) { _teamAId = null; _selectedA.clear(); }
     else if (_teamBId === rid) { _teamBId = null; _selectedB.clear(); }
     else if (!_teamAId)        { _teamAId = rid;  _selectedA.clear(); }
     else if (!_teamBId)        { _teamBId = rid;  _selectedB.clear(); }
@@ -938,18 +964,14 @@
     renderTradeBuilder();
   }
 
-  // ── Render: trade builder ──────────────────────────────────────────────
-
-  const POS_CLS = { QB: 'rs-pos-QB', RB: 'rs-pos-RB', WR: 'rs-pos-WR', TE: 'rs-pos-TE', DL: 'rs-pos-DL', LB: 'rs-pos-LB', DB: 'rs-pos-DB' };
+  // ── Trade builder ──────────────────────────────────────────────────────────
 
   function renderPanel(team, selSet, side) {
     const dotCls = side === 'A' ? 'ta-panel-dot-a' : 'ta-panel-dot-b';
-
     const selVal = [...team.playerList, ...team.pickList]
       .filter(a => selSet.has(a.pid ? playerKey(a) : pickKey(a)))
       .reduce((s, a) => s + (a.val || 0), 0);
 
-    // Group players by position
     const POS_ORDER = ['QB','RB','WR','TE','DL','LB','DB'];
     const byPos = {};
     for (const pl of team.playerList) (byPos[pl.pos] = byPos[pl.pos] || []).push(pl);
@@ -1009,20 +1031,19 @@
     const valA = selA.reduce((s, a) => s + (a.val || 0), 0);
     const valB = selB.reduce((s, a) => s + (a.val || 0), 0);
     const noteHtml = hasAssets
-      ? `<span class="ta-btn-note">
-          ${esc(displayName(tA))} gives ~${Number(Math.round(valA)).toLocaleString()}
-          &nbsp;↔&nbsp;
-          ${esc(displayName(tB))} gives ~${Number(Math.round(valB)).toLocaleString()}
-        </span>`
+      ? `<span class="ta-btn-note">${esc(displayName(tA))} ~${Number(Math.round(valA)).toLocaleString()} ↔ ${esc(displayName(tB))} ~${Number(Math.round(valB)).toLocaleString()}</span>`
       : `<span class="ta-btn-note">Check players and picks to build the trade</span>`;
-
-    const resultsHtml = _analysis ? buildResultsHtml(_analysis) : '';
 
     document.getElementById('content').innerHTML = `
       ${renderFlags()}
       <div style="margin-bottom:14px;">
         <button class="ta-btn-secondary" onclick="backToTeamSelect()">← Change Teams</button>
       </div>
+
+      ${renderTradeSummary()}
+
+      ${_analysis ? buildResultsHtml(_analysis) : ''}
+
       <div class="ta-builder">
         ${renderPanel(tA, _selectedA, 'A')}
         ${renderPanel(tB, _selectedB, 'B')}
@@ -1032,7 +1053,6 @@
         <button class="ta-btn-secondary" onclick="clearTrade()">Clear</button>
         ${noteHtml}
       </div>
-      ${resultsHtml}
     `;
   }
 
@@ -1047,31 +1067,69 @@
     renderTradeBuilder();
   }
 
-  function backToTeamSelect() {
-    renderTeamSelect();
-  }
+  function backToTeamSelect() { renderTeamSelect(); }
 
   function analyzeClick() {
-    const prevContent = document.getElementById('content').innerHTML;
     document.getElementById('content').innerHTML = loading('Running trade simulation…');
     setTimeout(() => {
       try {
         _analysis = executeTradeAnalysis();
         renderTradeBuilder();
       } catch(e) {
-        document.getElementById('content').innerHTML = errHtml(e) + `<div style="margin-top:12px;"><button class="ta-btn-secondary" onclick="document.getElementById('content').innerHTML=prevContent">← Back</button></div>`;
+        document.getElementById('content').innerHTML = errHtml(e);
       }
     }, 20);
   }
 
-  // ── Render: analysis results ─────────────────────────────────────────────
+  // ── Full lineup display ─────────────────────────────────────────────────────
+
+  // Shows all starting slots in roster-position order, annotating changed slots
+  function fullLineupHtml(before, after) {
+    const { rp } = _rawData;
+    const starterSlots = rp.filter(p => !['BN','IR','TAXI'].includes(p));
+
+    const befBySlot = {}, aftBySlot = {};
+    for (const p of before.starters) (befBySlot[p.slot] = befBySlot[p.slot] || []).push(p);
+    for (const p of after.starters)  (aftBySlot[p.slot]  = aftBySlot[p.slot]  || []).push(p);
+
+    const seen = {};
+    return starterSlots.map(slot => {
+      const idx = seen[slot] = (seen[slot] || 0);
+      seen[slot]++;
+      const bef = (befBySlot[slot] || [])[idx] || null;
+      const aft = (aftBySlot[slot]  || [])[idx] || null;
+      const changed = bef?.pid !== aft?.pid;
+
+      const badgeCls = slotCls(slot, aft?.pos || bef?.pos);
+      const lbl = slotLabel(slot);
+
+      let content;
+      if (!changed) {
+        content = `<span class="ta-full-player">${esc(aft?.name || '—')}</span>`;
+      } else if (bef && aft) {
+        content = `<span class="ta-full-out">${esc(bef.name)}</span><span class="ta-full-arr">→</span><span class="ta-full-in">${esc(aft.name)}</span>`;
+      } else if (!bef && aft) {
+        content = `<span class="ta-full-none">—</span><span class="ta-full-arr">→</span><span class="ta-full-in">${esc(aft.name)}</span>`;
+      } else if (bef && !aft) {
+        content = `<span class="ta-full-out">${esc(bef.name)}</span><span class="ta-full-arr">→</span><span class="ta-full-none">bench</span>`;
+      } else {
+        content = `<span class="ta-full-none">—</span>`;
+      }
+
+      return `<div class="ta-full-row${changed ? ' changed' : ''}">
+        <div class="ta-full-slot"><span class="rs-pos ${badgeCls}" style="font-size:0.36rem;">${lbl}</span></div>
+        <div class="ta-full-content">${content}</div>
+      </div>`;
+    }).join('');
+  }
+
+  // ── Results section ─────────────────────────────────────────────────────────
 
   function buildResultsHtml(res) {
     const { beforeRanks, afterRanks, beforeOddsA, afterOddsA, beforeOddsB, afterOddsB,
             lineupBeforeA, lineupAfterA, lineupBeforeB, lineupAfterB, numTeams } = res;
     const { hasIDP, teams } = _rawData;
     const { futureWeeks } = _simData;
-
     const tA = teams.find(t => t.rosterId === _teamAId);
     const tB = teams.find(t => t.rosterId === _teamBId);
     const nA = esc(displayName(tA)), nB = esc(displayName(tB));
@@ -1135,46 +1193,6 @@
       </div>`;
     }
 
-    function lineupChangesHtml(before, after, teamColor) {
-      const beforeSet = new Set(before.starters.map(p => p.pid));
-      const afterSet  = new Set(after.starters.map(p => p.pid));
-      const added   = after.starters.filter(p => !beforeSet.has(p.pid));
-      const removed = before.starters.filter(p => !afterSet.has(p.pid));
-
-      if (!added.length && !removed.length) {
-        return `<div class="ta-lineup-empty">No lineup changes — same players start</div>`;
-      }
-
-      // Pair by position where possible
-      const addByPos = {}, remByPos = {};
-      for (const p of added)   (addByPos[p.pos]   = addByPos[p.pos]   || []).push(p);
-      for (const p of removed) (remByPos[p.pos]   = remByPos[p.pos]   || []).push(p);
-      const allPos = new Set([...Object.keys(addByPos), ...Object.keys(remByPos)]);
-
-      const changes = [];
-      for (const pos of allPos) {
-        const adds = addByPos[pos] || [], rems = remByPos[pos] || [];
-        for (let i = 0; i < Math.max(adds.length, rems.length); i++) {
-          changes.push({ pos, inn: adds[i] || null, out: rems[i] || null });
-        }
-      }
-
-      return changes.map(c => {
-        const outHtml = c.out
-          ? `<span class="ta-lineup-out">${esc(c.out.name)}</span>`
-          : `<span class="ta-lineup-none">none</span>`;
-        const inHtml  = c.inn
-          ? `<span class="ta-lineup-in">${esc(c.inn.name)}</span>`
-          : `<span class="ta-lineup-none">bench</span>`;
-        return `<div class="ta-lineup-change">
-          <span class="rs-pos ${POS_CLS[c.pos]||''}" style="font-size:0.38rem;flex-shrink:0;">${c.pos}</span>
-          ${outHtml}
-          <span style="color:var(--gold);margin:0 4px;">→</span>
-          ${inHtml}
-        </div>`;
-      }).join('');
-    }
-
     return `
       <hr class="ta-divider">
       <div class="ta-results-hdr">Trade Analysis</div>
@@ -1195,24 +1213,29 @@
         ${oddsCard(tB, beforeOddsB, afterOddsB, 'Team B', '#8eb8e5')}
       </div>
 
-      <div class="ta-step-hdr">Lineup Changes</div>
+      <div class="ta-step-hdr">Starting Lineups — After Trade</div>
       <div class="ta-lineup-grid">
         <div class="ta-lineup-card">
           <div class="ta-lineup-lbl" style="color:#7ed07e;">${nA}</div>
-          ${lineupChangesHtml(lineupBeforeA, lineupAfterA, '#7ed07e')}
+          ${fullLineupHtml(lineupBeforeA, lineupAfterA)}
         </div>
         <div class="ta-lineup-card">
           <div class="ta-lineup-lbl" style="color:#8eb8e5;">${nB}</div>
-          ${lineupChangesHtml(lineupBeforeB, lineupAfterB, '#8eb8e5')}
+          ${fullLineupHtml(lineupBeforeB, lineupAfterB)}
         </div>
       </div>
+      <hr class="ta-divider">
     `;
   }
 
-  // ── Init ──────────────────────────────────────────────────────────────────
+  // ── Init ───────────────────────────────────────────────────────────────────
 
   async function init() {
-    SharedAuth.init({ onLogin: () => {}, onLogout: () => {} });
+    // Await auth so getUser() is populated before we render anything auth-dependent
+    await SharedAuth.init({
+      onLogin:  () => { if (!lgId) loadPickerLeagues(); },
+      onLogout: () => {},
+    });
 
     if (isEspn) {
       document.getElementById('content').innerHTML = `<div class="err-state">Trade Analyzer only supports Sleeper leagues. ESPN league trading is not available.</div>`;
@@ -1224,9 +1247,9 @@
       return;
     }
 
-    document.getElementById('back-link').href    = `/analyzer?league=${encodeURIComponent(lgId)}`;
+    document.getElementById('back-link').href        = `/analyzer?league=${encodeURIComponent(lgId)}`;
     document.getElementById('back-link').textContent = '← League Analyzer';
-    document.getElementById('content').innerHTML = loading('Loading league data…');
+    document.getElementById('content').innerHTML     = loading('Loading league data…');
 
     try {
       await loadLeagueData();
