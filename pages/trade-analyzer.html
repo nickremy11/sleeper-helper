@@ -1,0 +1,1258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trade Analyzer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Rye&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/shared-styles.css">
+  <style>
+    .ta-wrap { max-width: 1060px; margin: 0 auto; padding: 24px 16px 60px; }
+
+    /* ── Format flags (reused from analyzer.html) ── */
+    .az-flags { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 20px; align-items: center; }
+    .az-flag {
+      font-family: 'Rye', serif; font-size: 0.57rem; letter-spacing: 0.12em;
+      text-transform: uppercase; padding: 6px 14px; border: 1.5px solid var(--brown-mid);
+      border-radius: 2px; color: var(--brown-light); background: rgba(0,0,0,0.22);
+    }
+    .az-flag-hi { border-color: var(--gold); color: var(--gold); background: rgba(201,150,42,0.08); }
+    .az-badge { font-family: 'Rye', serif; font-size: 0.55rem; letter-spacing: 0.12em; text-transform: uppercase; padding: 5px 12px; border-radius: 2px; }
+    .az-badge-dynasty  { background: rgba(201,150,42,0.2); color: var(--gold-light); border: 1px solid rgba(201,150,42,0.4); }
+    .az-badge-bestball { background: rgba(91,155,213,0.2); color: #8eb8e5; border: 1px solid rgba(91,155,213,0.4); }
+    .az-badge-redraft  { background: rgba(92,184,92,0.15); color: #7ed07e; border: 1px solid rgba(92,184,92,0.3); }
+    .az-league-title { font-family: 'Playfair Display', serif; font-weight: 700; font-size: clamp(1rem,2.5vw,1.4rem); color: var(--cream); margin-top: 6px; line-height: 1.2; }
+
+    /* ── Position pill ── */
+    .rs-pos { display: inline-block; font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.1em; padding: 3px 7px; border-radius: 2px; text-transform: uppercase; }
+    .rs-pos-QB { background: rgba(139,26,26,0.5);  color: #ff9999; border: 1px solid rgba(139,26,26,0.7); }
+    .rs-pos-RB { background: rgba(45,74,30,0.5);   color: #a8e08a; border: 1px solid rgba(45,74,30,0.7); }
+    .rs-pos-WR { background: rgba(30,50,100,0.5);  color: #80aaee; border: 1px solid rgba(30,50,100,0.7); }
+    .rs-pos-TE { background: rgba(100,60,10,0.5);  color: #e0aa60; border: 1px solid rgba(100,60,10,0.7); }
+    .rs-pos-DL { background: rgba(80,30,100,0.5);  color: #c890ee; border: 1px solid rgba(80,30,100,0.7); }
+    .rs-pos-LB { background: rgba(80,30,100,0.5);  color: #c890ee; border: 1px solid rgba(80,30,100,0.7); }
+    .rs-pos-DB { background: rgba(80,30,100,0.5);  color: #c890ee; border: 1px solid rgba(80,30,100,0.7); }
+    .rs-pos-PICK { background: rgba(50,50,50,0.5); color: var(--parchment); border: 1px solid rgba(255,255,255,0.15); }
+
+    /* ── Step header ── */
+    .ta-step-hdr {
+      font-family: 'Rye', serif; font-size: 0.55rem; letter-spacing: 0.22em;
+      text-transform: uppercase; color: var(--brown-light); margin-bottom: 14px;
+    }
+
+    /* ── Team picker ── */
+    .ta-team-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-bottom: 20px; }
+    .ta-team-card {
+      background: var(--brown-dark); border: 1.5px solid var(--brown-mid);
+      border-radius: 3px; padding: 12px 14px; cursor: pointer;
+      transition: border-color 0.15s, background 0.15s; user-select: none;
+      text-decoration: none; display: block;
+    }
+    .ta-team-card:hover { border-color: var(--gold); background: rgba(201,150,42,0.06); }
+    .ta-team-card.selected-a { border-color: #5cb85c; background: rgba(92,184,92,0.1); }
+    .ta-team-card.selected-b { border-color: #5b9bd5; background: rgba(91,155,213,0.1); }
+    .ta-team-badge {
+      display: inline-block; font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.1em;
+      padding: 3px 8px; border-radius: 2px; margin-bottom: 6px; text-transform: uppercase;
+    }
+    .ta-team-badge-a { background: rgba(92,184,92,0.2); color: #7ed07e; border: 1px solid rgba(92,184,92,0.4); }
+    .ta-team-badge-b { background: rgba(91,155,213,0.2); color: #8eb8e5; border: 1px solid rgba(91,155,213,0.4); }
+    .ta-team-name   { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 0.9rem; color: var(--cream); }
+    .ta-team-owner  { font-family: 'Crimson Text', serif; font-size: 0.78rem; color: var(--brown-light); margin-top: 2px; }
+    .ta-team-record { font-family: 'Crimson Text', serif; font-size: 0.78rem; color: var(--parchment); margin-top: 4px; }
+
+    /* ── Buttons ── */
+    .ta-btn {
+      font-family: 'Rye', serif; font-size: 0.58rem; letter-spacing: 0.2em;
+      text-transform: uppercase; padding: 11px 26px; border: 1.5px solid var(--gold);
+      border-radius: 2px; background: rgba(201,150,42,0.12); color: var(--gold);
+      cursor: pointer; transition: all 0.15s; white-space: nowrap;
+    }
+    .ta-btn:hover:not(:disabled) { background: rgba(201,150,42,0.25); color: var(--gold-light); border-color: var(--gold-light); }
+    .ta-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .ta-btn-secondary {
+      font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.15em;
+      text-transform: uppercase; padding: 8px 16px; border: 1.5px solid var(--brown-mid);
+      border-radius: 2px; background: transparent; color: var(--brown-light);
+      cursor: pointer; transition: all 0.15s; white-space: nowrap;
+    }
+    .ta-btn-secondary:hover { border-color: var(--gold); color: var(--gold); background: rgba(201,150,42,0.06); }
+    .ta-btn-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 24px; }
+    .ta-btn-note { font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--brown-light); font-style: italic; }
+
+    /* ── Trade builder panels ── */
+    .ta-builder { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+    @media (max-width: 620px) { .ta-builder { grid-template-columns: 1fr; } }
+
+    .ta-panel { background: var(--brown-dark); border: 1.5px solid var(--brown-mid); border-radius: 3px; overflow: hidden; }
+    .ta-panel-hdr {
+      padding: 10px 14px; border-bottom: 1px solid var(--brown-mid);
+      display: flex; align-items: flex-start; gap: 10px;
+    }
+    .ta-panel-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+    .ta-panel-dot-a { background: #5cb85c; }
+    .ta-panel-dot-b { background: #5b9bd5; }
+    .ta-panel-hdr-info { flex: 1; min-width: 0; }
+    .ta-panel-title { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 0.9rem; color: var(--cream); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ta-panel-sub { font-family: 'Crimson Text', serif; font-size: 0.75rem; color: var(--brown-light); margin-top: 2px; }
+    .ta-panel-total { font-family: 'Crimson Text', serif; font-size: 0.8rem; color: var(--gold-light); margin-left: auto; white-space: nowrap; align-self: center; }
+
+    .ta-asset-section { border-bottom: 1px dashed rgba(255,255,255,0.06); }
+    .ta-asset-section:last-child { border-bottom: none; }
+    .ta-asset-pos-hdr { font-family: 'Rye', serif; font-size: 0.4rem; letter-spacing: 0.14em; text-transform: uppercase; padding: 7px 14px 4px; }
+    .ta-asset-row {
+      display: flex; align-items: center; gap: 8px; padding: 5px 14px;
+      cursor: pointer; transition: background 0.1s;
+    }
+    .ta-asset-row:hover { background: rgba(255,255,255,0.04); }
+    .ta-asset-row.selected { background: rgba(201,150,42,0.09); }
+    .ta-check {
+      width: 15px; height: 15px; border: 1.5px solid var(--brown-mid);
+      border-radius: 2px; flex-shrink: 0; position: relative; transition: all 0.1s;
+    }
+    .ta-asset-row.selected .ta-check { background: var(--gold); border-color: var(--gold); }
+    .ta-check::after { content: '✓'; font-size: 9px; color: var(--ink); position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; opacity: 0; }
+    .ta-asset-row.selected .ta-check::after { opacity: 1; }
+    .ta-asset-name { font-family: 'Crimson Text', serif; font-size: 0.88rem; color: var(--parchment); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ta-asset-via  { font-style: italic; font-size: 0.72rem; color: var(--brown-light); }
+    .ta-asset-val  { font-family: 'Crimson Text', serif; font-size: 0.78rem; color: var(--brown-light); white-space: nowrap; flex-shrink: 0; }
+
+    /* ── Results section ── */
+    .ta-divider { border: none; border-top: 2px solid var(--brown-mid); margin: 8px 0 24px; }
+    .ta-results-hdr {
+      font-family: 'Rye', serif; font-size: 0.62rem; letter-spacing: 0.25em;
+      text-transform: uppercase; color: var(--gold); margin-bottom: 20px;
+    }
+
+    /* ── Rankings comparison table ── */
+    .ta-rank-wrap { overflow-x: auto; margin-bottom: 24px; }
+    .ta-rank-table { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 520px; }
+    .ta-rank-table th {
+      font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.15em;
+      text-transform: uppercase; padding: 8px 12px;
+      background: #1e0e05; border-bottom: 1px solid var(--brown-mid); white-space: nowrap;
+    }
+    .ta-rank-table th.ta-th-metric { text-align: left; color: var(--brown-light); }
+    .ta-rank-table th.ta-th-a { text-align: center; color: #7ed07e; }
+    .ta-rank-table th.ta-th-b { text-align: center; color: #8eb8e5; }
+    .ta-rank-table td { padding: 7px 12px; border-bottom: 1px dashed rgba(255,255,255,0.05); vertical-align: middle; }
+    .ta-rank-table tr:last-child td { border-bottom: none; }
+    .ta-rank-table tr:hover td { background: rgba(255,255,255,0.02); }
+    .ta-metric-lbl { font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brown-light); white-space: nowrap; }
+    .ta-rank-cell { text-align: center; white-space: nowrap; }
+    .ta-rbadge { display: inline-block; font-family: 'Crimson Text', serif; font-weight: 600; font-size: 0.82rem; padding: 2px 7px; border-radius: 2px; min-width: 26px; text-align: center; color: var(--cream); }
+    .ta-rank-arrow { color: var(--brown-light); margin: 0 3px; font-size: 0.8rem; }
+    .ta-delta { font-family: 'Crimson Text', serif; font-size: 0.73rem; margin-left: 3px; }
+    .ta-delta-up { color: #5cb85c; }
+    .ta-delta-dn { color: #e05252; }
+    .ta-delta-flat { color: var(--brown-light); }
+
+    /* ── Playoff odds ── */
+    .ta-odds-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+    .ta-odds-card { flex: 1; min-width: 210px; background: var(--brown-dark); border: 1px solid var(--brown-mid); border-radius: 3px; padding: 14px 16px; }
+    .ta-odds-lbl  { font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brown-light); margin-bottom: 8px; }
+    .ta-odds-team { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 0.88rem; margin-bottom: 6px; }
+    .ta-odds-before { font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--parchment); margin-bottom: 3px; }
+    .ta-odds-after  { font-family: 'Crimson Text', serif; font-size: 1.05rem; font-weight: 600; margin-bottom: 8px; }
+    .ta-odds-bar-wrap { height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; position: relative; }
+    .ta-odds-bar-behind { height: 100%; position: absolute; left: 0; border-radius: 3px; opacity: 0.35; }
+    .ta-odds-bar-front  { height: 100%; position: absolute; left: 0; border-radius: 3px; opacity: 0.85; }
+    .ta-delta-up-txt { color: #5cb85c; }
+    .ta-delta-dn-txt { color: #e05252; }
+    .ta-delta-flat-txt { color: var(--brown-light); }
+
+    /* ── Lineup changes ── */
+    .ta-lineup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+    @media (max-width: 620px) { .ta-lineup-grid { grid-template-columns: 1fr; } }
+    .ta-lineup-card { background: var(--brown-dark); border: 1px solid var(--brown-mid); border-radius: 3px; padding: 14px; }
+    .ta-lineup-lbl  { font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brown-light); margin-bottom: 10px; }
+    .ta-lineup-change {
+      display: flex; align-items: center; gap: 8px; padding: 6px 0;
+      border-bottom: 1px dashed rgba(255,255,255,0.06);
+      font-family: 'Crimson Text', serif;
+    }
+    .ta-lineup-change:last-child { border-bottom: none; }
+    .ta-lineup-out { color: var(--brown-light); font-size: 0.88rem; text-decoration: line-through; }
+    .ta-lineup-in  { color: var(--cream); font-size: 0.88rem; font-weight: 600; }
+    .ta-lineup-none { color: var(--brown-light); font-size: 0.82rem; font-style: italic; }
+    .ta-lineup-empty { font-family: 'Crimson Text', serif; font-style: italic; font-size: 0.85rem; color: var(--brown-light); padding: 4px 0; }
+
+    /* ── League picker (no lgId) ── */
+    .ta-picker-wrap { max-width: 400px; }
+    .ta-picker-input {
+      width: 100%; padding: 10px 14px; background: var(--brown-dark);
+      border: 1.5px solid var(--brown-mid); border-radius: 3px;
+      color: var(--cream); font-family: 'Crimson Text', serif; font-size: 0.95rem;
+      outline: none; margin-bottom: 12px; transition: border-color 0.15s;
+    }
+    .ta-picker-input:focus { border-color: var(--gold); }
+    .ta-picker-input::placeholder { color: var(--brown-light); }
+  </style>
+</head>
+<body>
+  <div class="page-wrap">
+    <div class="banner">
+      <div style="position:relative;z-index:1;padding:18px 20px;display:flex;justify-content:space-between;align-items:flex-start;">
+        <div class="banner-text">
+          <a id="back-link" href="/?tab=leagues" class="banner-back">← League Summaries</a>
+          <h1>Trade <span>Analyzer</span></h1>
+          <div class="az-league-title" id="league-title">Select a League</div>
+          <div class="banner-divider"></div>
+        </div>
+        <div id="auth-chip"></div>
+      </div>
+    </div>
+
+    <div class="ta-wrap">
+      <div id="content"></div>
+    </div>
+  </div>
+
+  <script src="/shared-utils.js"></script>
+  <script src="/shared-auth.js"></script>
+  <script>
+  'use strict';
+
+  const API = window.location.hostname === 'ffhistorian.com'
+    ? 'https://helper.ffhistorian.com/api'
+    : '/api';
+
+  const lgId   = new URLSearchParams(window.location.search).get('league') || '';
+  const isEspn = lgId.startsWith('espn_');
+
+  // ── State ─────────────────────────────────────────────────────────────────────
+
+  let _rawData  = null;   // all loaded league data
+  let _simData  = null;   // simulation inputs
+  let _teamAId  = null;
+  let _teamBId  = null;
+  let _selectedA = new Set();  // asset keys being sent from Team A
+  let _selectedB = new Set();  // asset keys being sent from Team B
+  let _analysis  = null;       // last analysis result
+
+  // ── Helpers ───────────────────────────────────────────────────────────────────
+
+  function normPos(raw) {
+    if (!raw) return null;
+    const p = raw.toUpperCase();
+    if (['QB','RB','WR','TE'].includes(p))            return p;
+    if (['DE','DT','NT','IDL','DL'].includes(p))      return 'DL';
+    if (['LB','ILB','OLB','MLB'].includes(p))         return 'LB';
+    if (['CB','S','SS','FS','SAF','DB'].includes(p))  return 'DB';
+    return null;
+  }
+
+  function rankColor(rank, total) {
+    const hue = Math.round(120 * (1 - (rank - 1) / Math.max(total - 1, 1)));
+    return `hsl(${hue}, 62%, 38%)`;
+  }
+
+  function fmtOdds(p) {
+    if (p == null)   return { label: '—',   color: 'var(--brown-light)', weight: '400' };
+    if (p >= 0.995)  return { label: 'Lock', color: '#5cb85c',            weight: '700' };
+    if (p <= 0.005)  return { label: 'Out',  color: '#e05252',            weight: '700' };
+    const pct = Math.round(p * 100);
+    return {
+      label:  pct + '%',
+      color:  p >= 0.70 ? '#5cb85c' : p >= 0.30 ? 'var(--gold-light)' : '#e05252',
+      weight: (p >= 0.70 || p < 0.30) ? '700' : '400',
+    };
+  }
+
+  function displayName(t) {
+    return t.teamName || t.ownerName || ('Team ' + t.rosterId);
+  }
+
+  function pickKey(pick) {
+    return `k:${pick.season}_${pick.round}_${pick.originalRosterId}`;
+  }
+
+  function playerKey(pl) {
+    return `p:${pl.pid}`;
+  }
+
+  // ── Pick computation (verbatim from analyzer.html) ─────────────────────────
+
+  function computePicksForRoster(myRosterId, allRosters, tradedPicks, nflSeason, numRounds) {
+    const curYear = parseInt(nflSeason);
+    const rounds  = Array.from({ length: numRounds }, (_, i) => i + 1);
+    const seasons = new Set();
+    for (let y = curYear; y <= curYear + 3; y++) seasons.add(String(y));
+    for (const tp of (tradedPicks || [])) {
+      if (parseInt(tp.season) >= curYear) seasons.add(String(tp.season));
+    }
+    const ownership = {};
+    for (const r of allRosters) {
+      for (const season of seasons) {
+        for (const round of rounds) {
+          ownership[`${season}_${round}_${r.roster_id}`] = r.roster_id;
+        }
+      }
+    }
+    for (const tp of (tradedPicks || [])) {
+      if (tp.round > numRounds) continue;
+      if (parseInt(tp.season) < curYear) continue;
+      ownership[`${tp.season}_${tp.round}_${tp.roster_id}`] = tp.owner_id;
+    }
+    const picks = [];
+    for (const [key, ownerId] of Object.entries(ownership)) {
+      if (String(ownerId) !== String(myRosterId)) continue;
+      const [season, round, origRid] = key.split('_');
+      if (parseInt(season) === curYear) continue;
+      picks.push({ season, round: parseInt(round), originalRosterId: parseInt(origRid) });
+    }
+    return picks;
+  }
+
+  function buildPickValueMap(fcRes) {
+    const map = {};
+    const isPickItem = item => {
+      const pos = (item.player?.position || '').toUpperCase();
+      if (pos === 'PI' || pos === 'PICK') return true;
+      const sid = item.player?.sleeperId || item.player?.maybeSleeperID;
+      return !sid || String(sid) === '0';
+    };
+    for (const item of (fcRes || [])) {
+      if (!isPickItem(item)) continue;
+      const name = (item.player?.name || '').toLowerCase();
+      if (!name) continue;
+      const yearM = name.match(/20(\d\d)/);
+      if (!yearM) continue;
+      const year = '20' + yearM[1];
+      let round = 0;
+      if      (/\b1(st)?\b/.test(name) || /first/.test(name))  round = 1;
+      else if (/\b2(nd)?\b/.test(name) || /second/.test(name)) round = 2;
+      else if (/\b3(rd)?\b/.test(name) || /third/.test(name))  round = 3;
+      else if (/\b4(th)?\b/.test(name) || /fourth/.test(name)) round = 4;
+      else if (/\b5(th)?\b/.test(name) || /fifth/.test(name))  round = 5;
+      else if (/\b6(th)?\b/.test(name) || /sixth/.test(name))  round = 6;
+      if (!round) continue;
+      let q = 'mid';
+      if (/early/.test(name)) q = 'early';
+      else if (/late/.test(name)) q = 'late';
+      map[`${year}_${round}_${q}`] = item.value;
+      if (!map[`${year}_${round}`] || item.value > map[`${year}_${round}`]) {
+        map[`${year}_${round}`] = item.value;
+      }
+    }
+    return map;
+  }
+
+  function getPickValue(season, round, origRosterId, ridToSlot, numTeams, fcPickMap) {
+    if (round > 4) return 0;
+    const slot = ridToSlot?.[String(origRosterId)];
+    let q = 'mid';
+    if (slot && numTeams > 0) {
+      const third = Math.ceil(numTeams / 3);
+      if (slot <= third) q = 'early';
+      else if (slot > numTeams - third) q = 'late';
+    }
+    return fcPickMap[`${season}_${round}_${q}`]
+        || fcPickMap[`${season}_${round}_mid`]
+        || fcPickMap[`${season}_${round}_early`]
+        || fcPickMap[`${season}_${round}`]
+        || 0;
+  }
+
+  function buildFcMap(fcRes) {
+    const map = {};
+    for (const item of (fcRes || [])) {
+      const sid = item.player?.sleeperId || item.player?.maybeSleeperID;
+      if (sid) map[String(sid)] = item.value;
+    }
+    return map;
+  }
+
+  function buildPlayerMap(playersRes) {
+    const KEEP = new Set(['QB','RB','WR','TE','DEF','DL','LB','DB','S','CB','DE','DT','FS','SS','IDL','OLB','ILB','MLB','SAF','NT']);
+    const players = {}, byName = {};
+    for (const [pid, p] of Object.entries(playersRes || {})) {
+      if (!KEEP.has(p.position)) continue;
+      players[pid] = p;
+      if (p.full_name) byName[p.full_name.toLowerCase()] = pid;
+    }
+    return { players, byName };
+  }
+
+  function buildFormatFlags(lg) {
+    const sc = lg.scoring_settings || {}, rp = lg.roster_positions || [];
+    const flags = [];
+    const starters = rp.filter(p => !['BN','IR','TAXI'].includes(p)).length;
+    if (starters) flags.push({ label: starters + ' Starters', hi: false });
+    flags.push(rp.includes('SUPER_FLEX') ? { label: 'SF', hi: false } : { label: '1QB', hi: false });
+    const rec = sc.rec ?? 1;
+    if (rec === 0)    flags.push({ label: 'Std',       hi: false });
+    else if (rec < 1) flags.push({ label: rec + 'PPR', hi: true  });
+    else              flags.push({ label: 'PPR',        hi: true  });
+    if ((sc.bonus_rec_te ?? 0) > 0) flags.push({ label: '+' + sc.bonus_rec_te + 'TEP', hi: true });
+    if ((sc.bonus_rec_wr ?? 0) > 0) flags.push({ label: '+' + sc.bonus_rec_wr + 'WRP', hi: true });
+    if ((sc.pass_td ?? 4) !== 4)    flags.push({ label: (sc.pass_td ?? 4) + 'ptTD',    hi: true });
+    return flags;
+  }
+
+  // ── Playoff simulation (verbatim from analyzer.html) ──────────────────────
+
+  const POS_CV = { QB: 0.43, RB: 0.50, WR: 0.52, TE: 0.58, DL: 0.55, LB: 0.55, DB: 0.55 };
+
+  function computeProjPts(stats, scoringSettings) {
+    let pts = 0;
+    for (const [k, v] of Object.entries(stats || {})) {
+      if (typeof v === 'number' && scoringSettings[k]) pts += v * scoringSettings[k];
+    }
+    return pts;
+  }
+
+  function optimalLineupAndSigma(playerIds, projMap, scoringSettings, rp, players) {
+    const starterSlots  = rp.filter(p => !['BN','IR','TAXI'].includes(p));
+    const specificSlots = starterSlots.filter(s => !['FLEX','SUPER_FLEX','IDP_FLEX'].includes(s));
+    const flexSlots     = starterSlots.filter(s =>  ['FLEX','SUPER_FLEX','IDP_FLEX'].includes(s));
+    const pool = playerIds.map(pid => {
+      const p = players[pid]; if (!p) return null;
+      const pos = normPos(p.position); if (!pos) return null;
+      return { pid, pos, pts: computeProjPts(projMap?.[pid], scoringSettings) };
+    }).filter(Boolean);
+    const used = new Set(); let mu = 0, sigSq = 0;
+    const slotCounts = {};
+    for (const s of specificSlots) slotCounts[s] = (slotCounts[s] || 0) + 1;
+    for (const [pos, count] of Object.entries(slotCounts)) {
+      const elig = pool.filter(p => p.pos === pos && !used.has(p.pid)).sort((a,b) => b.pts - a.pts);
+      for (let i = 0; i < Math.min(count, elig.length); i++) {
+        const pl = elig[i]; used.add(pl.pid); mu += pl.pts;
+        sigSq += ((POS_CV[pl.pos] ?? 0.5) * pl.pts) ** 2;
+      }
+    }
+    for (const slot of flexSlots) {
+      const ep = slot === 'FLEX' ? ['RB','WR','TE'] : slot === 'SUPER_FLEX' ? ['QB','RB','WR','TE'] : ['DL','LB','DB'];
+      const elig = pool.filter(p => ep.includes(p.pos) && !used.has(p.pid)).sort((a,b) => b.pts - a.pts);
+      if (elig.length) { const pl = elig[0]; used.add(pl.pid); mu += pl.pts; sigSq += ((POS_CV[pl.pos] ?? 0.5) * pl.pts) ** 2; }
+    }
+    return { mu, sigma: Math.max(10, Math.sqrt(sigSq)) };
+  }
+
+  // Returns starters list and bench in addition to mu/sigma
+  function buildOptimalLineup(playerIds, fcMap, projMap, useFc, scoringSettings, rp, players) {
+    const starterSlots  = rp.filter(p => !['BN','IR','TAXI'].includes(p));
+    const specificSlots = starterSlots.filter(s => !['FLEX','SUPER_FLEX','IDP_FLEX'].includes(s));
+    const flexSlots     = starterSlots.filter(s =>  ['FLEX','SUPER_FLEX','IDP_FLEX'].includes(s));
+    const pool = playerIds.map(pid => {
+      const p = players[pid]; if (!p) return null;
+      const pos = normPos(p.position); if (!pos) return null;
+      const pts = useFc
+        ? ((fcMap[pid] ?? 0) / 100)
+        : computeProjPts(projMap?.[pid], scoringSettings);
+      return { pid, pos, name: p.full_name || pid, pts };
+    }).filter(Boolean);
+    const starters = [], used = new Set();
+    const slotCounts = {};
+    for (const s of specificSlots) slotCounts[s] = (slotCounts[s] || 0) + 1;
+    for (const [pos, count] of Object.entries(slotCounts)) {
+      const elig = pool.filter(p => p.pos === pos && !used.has(p.pid)).sort((a,b) => b.pts - a.pts);
+      for (let i = 0; i < Math.min(count, elig.length); i++) {
+        const pl = elig[i]; used.add(pl.pid); starters.push({ ...pl, slot: pos });
+      }
+    }
+    for (const slot of flexSlots) {
+      const ep = slot === 'FLEX' ? ['RB','WR','TE'] : slot === 'SUPER_FLEX' ? ['QB','RB','WR','TE'] : ['DL','LB','DB'];
+      const elig = pool.filter(p => ep.includes(p.pos) && !used.has(p.pid)).sort((a,b) => b.pts - a.pts);
+      if (elig.length) { const pl = elig[0]; used.add(pl.pid); starters.push({ ...pl, slot }); }
+    }
+    return { starters, bench: pool.filter(p => !used.has(p.pid)) };
+  }
+
+  function gaussianRandom(mu, sigma) {
+    let u, v;
+    do { u = Math.random(); } while (!u);
+    do { v = Math.random(); } while (!v);
+    return Math.max(0, mu + sigma * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v));
+  }
+
+  function runSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams, N = 5000) {
+    const count = {}; for (const t of teams) count[t.rosterId] = 0;
+    for (let sim = 0; sim < N; sim++) {
+      const wins = {}, pts = {};
+      for (const t of teams) { wins[t.rosterId] = t.wins; pts[t.rosterId] = t.fpts; }
+      for (const week of futureWeeks) {
+        const groups = {};
+        for (const m of (matchupsByWeek[week] || [])) {
+          if (!m.matchup_id) continue;
+          (groups[m.matchup_id] = groups[m.matchup_id] || []).push(m);
+        }
+        for (const pair of Object.values(groups)) {
+          if (pair.length !== 2) continue;
+          const [a, b] = pair;
+          const sA = gaussianRandom(muMap[a.roster_id]?.[week] ?? 100, sigmaMap[a.roster_id]?.[week] ?? 20);
+          const sB = gaussianRandom(muMap[b.roster_id]?.[week] ?? 100, sigmaMap[b.roster_id]?.[week] ?? 20);
+          pts[a.roster_id] = (pts[a.roster_id] || 0) + sA;
+          pts[b.roster_id] = (pts[b.roster_id] || 0) + sB;
+          if      (sA > sB) wins[a.roster_id] = (wins[a.roster_id] || 0) + 1;
+          else if (sB > sA) wins[b.roster_id] = (wins[b.roster_id] || 0) + 1;
+        }
+      }
+      const ranked = teams.slice().sort((a, b) => {
+        const wd = (wins[b.rosterId] || 0) - (wins[a.rosterId] || 0);
+        return wd !== 0 ? wd : (pts[b.rosterId] || 0) - (pts[a.rosterId] || 0);
+      });
+      for (let i = 0; i < Math.min(playoffTeams, ranked.length); i++) count[ranked[i].rosterId]++;
+    }
+    const odds = {};
+    for (const t of teams) odds[t.rosterId] = count[t.rosterId] / N;
+    return odds;
+  }
+
+  function computeRanks(teams) {
+    const rankBy = getter => {
+      const sorted = [...teams].sort((a, b) => getter(b) - getter(a));
+      const map = {}; sorted.forEach((t, i) => { map[t.rosterId] = i + 1; });
+      return map;
+    };
+    return {
+      overall:   rankBy(t => t.overall),
+      contender: rankBy(t => t.contender),
+      QB:        rankBy(t => t.posValues.QB),
+      RB:        rankBy(t => t.posValues.RB),
+      WR:        rankBy(t => t.posValues.WR),
+      TE:        rankBy(t => t.posValues.TE),
+      DL:        rankBy(t => t.posValues.DL),
+      draft:     rankBy(t => t.draft),
+    };
+  }
+
+  // ── Data loading ───────────────────────────────────────────────────────────
+
+  async function loadLeagueData() {
+    if (_rawData) return;
+
+    const [leagueRes, rostersRes, usersRes, nflRes, playersRes, fcRes, draftsRaw, tradedRaw] = await Promise.all([
+      fetch(`${API}/sleeper/league/${lgId}`).then(r => r.json()),
+      fetch(`${API}/sleeper/league/${lgId}/rosters`).then(r => r.json()),
+      fetch(`${API}/sleeper/league/${lgId}/users`).then(r => r.json()),
+      fetch(`${API}/sleeper/state/nfl`).then(r => r.json()),
+      fetch(`${API}/players`).then(r => r.json()),
+      fetch(`${API}/fantasycalc`).then(r => r.json()),
+      fetch(`${API}/sleeper/league/${lgId}/drafts`).then(r => r.ok ? r.json() : []).catch(() => []),
+      fetch(`${API}/sleeper/league/${lgId}/traded_picks`).then(r => r.ok ? r.json() : []).catch(() => []),
+    ]);
+
+    const nflSeason  = nflRes?.season || String(new Date().getFullYear());
+    const fcMap      = buildFcMap(fcRes);
+    const fcPickMap  = buildPickValueMap(fcRes);
+    const { players } = buildPlayerMap(playersRes);
+
+    const userMap = {};
+    for (const u of (usersRes || [])) {
+      userMap[u.user_id] = { displayName: u.display_name || u.user_id, teamName: u.metadata?.team_name || null };
+    }
+
+    const allDrafts   = Array.isArray(draftsRaw) ? draftsRaw : [];
+    const tradedPicks = Array.isArray(tradedRaw) ? tradedRaw : [];
+    const curDraft    = allDrafts.find(d => d.season === nflSeason);
+    const rawSlots    = curDraft?.slot_to_roster_id;
+    let ridToSlot = null;
+    if (rawSlots && Object.keys(rawSlots).length) {
+      ridToSlot = {};
+      for (const [slot, rid] of Object.entries(rawSlots)) ridToSlot[String(rid)] = parseInt(slot);
+    }
+    const maxTradedRound = tradedPicks.reduce((m, tp) => Math.max(m, tp.round || 0), 0);
+    const numRounds    = curDraft?.settings?.rounds || maxTradedRound || 4;
+    const allRosters   = rostersRes || [];
+    const numTeams     = allRosters.length;
+    const rp           = leagueRes?.roster_positions || [];
+    const te2Mult      = rp.filter(p => p === 'TE').length >= 2 ? 1.4 : 1.0;
+    const IDP_SLOTS    = new Set(['DL','LB','DB','DE','DT','IDP_FLEX','CB','S']);
+    const hasIDP       = rp.some(p => IDP_SLOTS.has(p));
+    const lgType       = leagueRes?.settings?.type ?? 0;
+    const isBB         = leagueRes?.settings?.best_ball === 1;
+    const category     = isBB ? 'bestball' : lgType === 2 ? 'dynasty' : 'redraft';
+    const lgName       = leagueRes?.name || lgId;
+    const playoffTeams = leagueRes?.settings?.playoff_teams ?? Math.floor(numTeams / 2);
+    const scoringSettings   = leagueRes?.scoring_settings || {};
+    const playoffWeekStart  = leagueRes?.settings?.playoff_week_start ?? 15;
+    const regularSeasonWeeks = playoffWeekStart - 1;
+
+    const rosterNames = {};
+    for (const r of allRosters) {
+      const info = userMap[r.owner_id];
+      rosterNames[r.roster_id] = info?.teamName || info?.displayName || ('Team ' + r.roster_id);
+    }
+
+    const SKILL = new Set(['QB','RB','WR','TE']);
+    const DEF_P = new Set(['DL','LB','DB']);
+
+    const teams = allRosters.map(roster => {
+      const info   = userMap[roster.owner_id] || { displayName: 'Unknown', teamName: null };
+      const wins   = roster.settings?.wins   ?? 0;
+      const losses = roster.settings?.losses ?? 0;
+      const fpts   = (roster.settings?.fpts ?? 0) + (roster.settings?.fpts_decimal ?? 0) / 100;
+      const starterSet = new Set(roster.starters || []);
+
+      let overall = 0, contenderBase = 0;
+      const posValues = { QB: 0, RB: 0, WR: 0, TE: 0, DL: 0 };
+      const playerList = [];
+
+      for (const pid of (roster.players || [])) {
+        const p = players[pid]; if (!p) continue;
+        const pos = normPos(p.position); if (!pos) continue;
+        const val = (fcMap[pid] ?? 0) * (pos === 'TE' ? te2Mult : 1.0);
+        overall += val;
+        const bucket = DEF_P.has(pos) ? 'DL' : pos;
+        if (bucket in posValues) posValues[bucket] += val;
+        if (SKILL.has(pos) && (p.years_exp ?? 0) >= 3 && val > 0) contenderBase += val;
+        playerList.push({ pid, name: p.full_name || pid, pos, val, yearsExp: p.years_exp ?? 0, isStarter: starterSet.has(pid) });
+      }
+      playerList.sort((a, b) => {
+        const ORDER = ['QB','RB','WR','TE','DL','LB','DB'];
+        return ORDER.indexOf(a.pos) !== ORDER.indexOf(b.pos)
+          ? ORDER.indexOf(a.pos) - ORDER.indexOf(b.pos)
+          : b.val - a.val;
+      });
+
+      const rawPicks = computePicksForRoster(roster.roster_id, allRosters, tradedPicks, nflSeason, numRounds);
+      let draftValue = 0;
+      const pickList = rawPicks.map(pick => {
+        const pv = getPickValue(pick.season, pick.round, pick.originalRosterId, ridToSlot, numTeams, fcPickMap);
+        draftValue += pv;
+        const roundStr = ['1st','2nd','3rd'][pick.round - 1] || pick.round + 'th';
+        let label;
+        if (ridToSlot) {
+          const slot = ridToSlot[String(pick.originalRosterId)];
+          label = slot ? `${pick.season} ${pick.round}.${String(slot).padStart(2,'0')}` : `${pick.season} ${roundStr}`;
+        } else {
+          label = `${pick.season} ${roundStr}`;
+        }
+        const isTraded = pick.originalRosterId !== roster.roster_id;
+        return { label, val: pv, viaName: isTraded ? (rosterNames[pick.originalRosterId] || null) : null, season: pick.season, round: pick.round, originalRosterId: pick.originalRosterId };
+      }).sort((a, b) => a.season !== b.season ? a.season.localeCompare(b.season) : a.round - b.round);
+
+      return {
+        rosterId: roster.roster_id, teamName: info.teamName, ownerName: info.displayName,
+        wins, losses, fpts,
+        overall: Math.round(overall), contender: Math.round(contenderBase + wins * 50),
+        posValues: { QB: Math.round(posValues.QB), RB: Math.round(posValues.RB), WR: Math.round(posValues.WR), TE: Math.round(posValues.TE), DL: Math.round(posValues.DL) },
+        draft: Math.round(draftValue),
+        playerList, pickList, standing: 0, playoffOdds: null,
+      };
+    });
+
+    const byStand = [...teams].sort((a, b) => b.wins !== a.wins ? b.wins - a.wins : b.fpts - a.fpts);
+    byStand.forEach((t, i) => { t.standing = i + 1; });
+
+    // Matchups + future weeks
+    const matchupWeeks = await Promise.all(
+      Array.from({ length: regularSeasonWeeks }, (_, i) => i + 1).map(w =>
+        fetch(`${API}/sleeper/league/${lgId}/matchups/${w}`)
+          .then(r => r.ok ? r.json() : []).catch(() => [])
+      )
+    );
+    const matchupsByWeek = {};
+    const futureWeeks = [];
+    matchupWeeks.forEach((matchups, idx) => {
+      const week = idx + 1;
+      matchupsByWeek[week] = matchups || [];
+      if (!(matchups || []).some(m => (m.points ?? 0) > 0)) futureWeeks.push(week);
+    });
+
+    // Playoff simulation
+    let playoffOdds = {};
+    let projectionsByWeek = {};
+    let muMap = {}, sigmaMap = {};
+    let useFc = true;
+
+    const simTeams = teams.filter(t => t.overall > 0 || t.wins > 0 || t.losses > 0);
+
+    if (futureWeeks.length === 0) {
+      byStand.forEach((t, i) => { playoffOdds[t.rosterId] = i < playoffTeams ? 1.0 : 0.0; });
+    } else {
+      const projResults = await Promise.all(
+        futureWeeks.map(w =>
+          fetch(`${API}/sleeper/projections/nfl/regular/${nflSeason}/${w}`)
+            .then(r => r.ok ? r.json() : {}).catch(() => ({}))
+        )
+      );
+      futureWeeks.forEach((w, idx) => { projectionsByWeek[w] = projResults[idx] || {}; });
+
+      for (const roster of allRosters) {
+        const rid = roster.roster_id;
+        muMap[rid] = {}; sigmaMap[rid] = {};
+        for (const week of futureWeeks) {
+          const { mu, sigma } = optimalLineupAndSigma(roster.players || [], projectionsByWeek[week], scoringSettings, rp, players);
+          muMap[rid][week] = mu; sigmaMap[rid][week] = sigma;
+        }
+      }
+
+      const avgMu = simTeams.reduce((s, t) =>
+        s + futureWeeks.reduce((ws, w) => ws + (muMap[t.rosterId]?.[w] ?? 0), 0), 0
+      ) / Math.max(1, simTeams.length * futureWeeks.length);
+
+      useFc = avgMu < 20;
+      if (useFc) {
+        const meanOverall = simTeams.reduce((s, t) => s + t.overall, 0) / Math.max(1, simTeams.length);
+        for (const roster of allRosters) {
+          const t = teams.find(tm => tm.rosterId === roster.roster_id); if (!t) continue;
+          const clampedMu = Math.max(60, Math.min(160, meanOverall > 0 ? 110 * (t.overall / meanOverall) : 110));
+          for (const week of futureWeeks) {
+            muMap[roster.roster_id][week]    = clampedMu;
+            sigmaMap[roster.roster_id][week] = Math.max(12, clampedMu * 0.20);
+          }
+        }
+      }
+
+      playoffOdds = runSimulation(simTeams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams);
+    }
+
+    // Assign odds + adjust next-year pick values by playoff odds
+    const nextSeason = String(parseInt(nflSeason) + 1);
+    for (const t of teams) {
+      t.playoffOdds = playoffOdds[t.rosterId] ?? null;
+      let adj = 0;
+      for (const pick of t.pickList) {
+        if (pick.season === nextSeason && pick.originalRosterId != null) {
+          const origOdds = playoffOdds[pick.originalRosterId];
+          if (origOdds != null) {
+            pick.val = Math.round(pick.val * (origOdds >= 0.70 ? 1.0 : origOdds >= 0.30 ? 1.4 : 2.0));
+          }
+        }
+        adj += pick.val;
+      }
+      t.draft = Math.round(adj);
+    }
+
+    _rawData = {
+      teams: simTeams,
+      lgName, category, season: nflSeason,
+      formatFlags: buildFormatFlags(leagueRes || {}),
+      numTeams, playoffTeams, hasIDP,
+      allRosters, tradedPicks, players, fcMap, fcPickMap, ridToSlot, numRounds,
+      rp, scoringSettings, rosterNames,
+    };
+
+    _simData = { matchupsByWeek, futureWeeks, projectionsByWeek, muMap, sigmaMap, useFc };
+  }
+
+  // ── Trade analysis ──────────────────────────────────────────────────────────
+
+  function recomputeTeamValues(t, SKILL, DEF_P) {
+    let overall = 0, contenderBase = 0;
+    const pv = { QB: 0, RB: 0, WR: 0, TE: 0, DL: 0 };
+    for (const pl of t.playerList) {
+      overall += pl.val;
+      const bucket = DEF_P.has(pl.pos) ? 'DL' : pl.pos;
+      if (bucket in pv) pv[bucket] += pl.val;
+      if (SKILL.has(pl.pos) && pl.yearsExp >= 3 && pl.val > 0) contenderBase += pl.val;
+    }
+    let draftValue = 0;
+    for (const pick of t.pickList) draftValue += pick.val;
+    t.overall   = Math.round(overall);
+    t.contender = Math.round(contenderBase + t.wins * 50);
+    t.posValues = { QB: Math.round(pv.QB), RB: Math.round(pv.RB), WR: Math.round(pv.WR), TE: Math.round(pv.TE), DL: Math.round(pv.DL) };
+    t.draft     = Math.round(draftValue);
+  }
+
+  function executeTradeAnalysis() {
+    const { teams, players, rp, scoringSettings, numTeams, fcMap } = _rawData;
+    const { matchupsByWeek, futureWeeks, projectionsByWeek, muMap, sigmaMap, useFc } = _simData;
+
+    // Deep-clone all teams
+    const cloned = teams.map(t => ({ ...t, playerList: t.playerList.map(p => ({...p})), pickList: t.pickList.map(p => ({...p})) }));
+    const cA = cloned.find(t => t.rosterId === _teamAId);
+    const cB = cloned.find(t => t.rosterId === _teamBId);
+
+    // Collect assets leaving each team
+    const aToB_p = cA.playerList.filter(p => _selectedA.has(playerKey(p)));
+    const aToB_k = cA.pickList.filter(k => _selectedA.has(pickKey(k)));
+    const bToA_p = cB.playerList.filter(p => _selectedB.has(playerKey(p)));
+    const bToA_k = cB.pickList.filter(k => _selectedB.has(pickKey(k)));
+
+    // Move players A → B
+    for (const p of aToB_p) { cA.playerList.splice(cA.playerList.indexOf(p), 1); cB.playerList.push({...p}); }
+    for (const k of aToB_k) { cA.pickList.splice(cA.pickList.indexOf(k), 1);   cB.pickList.push({...k}); }
+    // Move players B → A
+    for (const p of bToA_p) { cB.playerList.splice(cB.playerList.indexOf(p), 1); cA.playerList.push({...p}); }
+    for (const k of bToA_k) { cB.pickList.splice(cB.pickList.indexOf(k), 1);   cA.pickList.push({...k}); }
+
+    const SKILL = new Set(['QB','RB','WR','TE']);
+    const DEF_P = new Set(['DL','LB','DB']);
+    recomputeTeamValues(cA, SKILL, DEF_P);
+    recomputeTeamValues(cB, SKILL, DEF_P);
+
+    const beforeRanks = computeRanks(teams);
+    const afterRanks  = computeRanks(cloned);
+
+    const beforeOddsA = teams.find(t => t.rosterId === _teamAId)?.playoffOdds ?? null;
+    const beforeOddsB = teams.find(t => t.rosterId === _teamBId)?.playoffOdds ?? null;
+
+    let afterOddsA = null, afterOddsB = null;
+
+    if (futureWeeks.length > 0) {
+      const newMu    = Object.fromEntries(Object.entries(muMap).map(([k,v]) => [k, {...v}]));
+      const newSigma = Object.fromEntries(Object.entries(sigmaMap).map(([k,v]) => [k, {...v}]));
+
+      for (const cTeam of [cA, cB]) {
+        const pids = cTeam.playerList.map(p => p.pid);
+        newMu[cTeam.rosterId] = {}; newSigma[cTeam.rosterId] = {};
+        for (const week of futureWeeks) {
+          const { mu, sigma } = optimalLineupAndSigma(pids, projectionsByWeek[week] || {}, scoringSettings, rp, players);
+          newMu[cTeam.rosterId][week] = mu; newSigma[cTeam.rosterId][week] = sigma;
+        }
+        // Reapply FC fallback if needed
+        if (useFc) {
+          const meanOverall = teams.reduce((s, t) => s + t.overall, 0) / Math.max(1, teams.length);
+          const clampedMu = Math.max(60, Math.min(160, meanOverall > 0 ? 110 * (cTeam.overall / meanOverall) : 110));
+          for (const week of futureWeeks) {
+            newMu[cTeam.rosterId][week]    = clampedMu;
+            newSigma[cTeam.rosterId][week] = Math.max(12, clampedMu * 0.20);
+          }
+        }
+      }
+
+      const simTeams = cloned.filter(t => t.overall > 0 || t.wins > 0 || t.losses > 0);
+      const after = runSimulation(simTeams, matchupsByWeek, newMu, newSigma, futureWeeks, _rawData.playoffTeams);
+      afterOddsA = after[_teamAId] ?? null;
+      afterOddsB = after[_teamBId] ?? null;
+    }
+
+    // Lineup analysis — use first future week's projections, fall back to FC values
+    const projMap = futureWeeks.length > 0 ? (projectionsByWeek[futureWeeks[0]] || {}) : {};
+    const useLineupFc = useFc || futureWeeks.length === 0;
+
+    const origA = teams.find(t => t.rosterId === _teamAId);
+    const origB = teams.find(t => t.rosterId === _teamBId);
+
+    const lineupBeforeA = buildOptimalLineup(origA.playerList.map(p => p.pid), fcMap, projMap, useLineupFc, scoringSettings, rp, players);
+    const lineupAfterA  = buildOptimalLineup(cA.playerList.map(p => p.pid),    fcMap, projMap, useLineupFc, scoringSettings, rp, players);
+    const lineupBeforeB = buildOptimalLineup(origB.playerList.map(p => p.pid), fcMap, projMap, useLineupFc, scoringSettings, rp, players);
+    const lineupAfterB  = buildOptimalLineup(cB.playerList.map(p => p.pid),    fcMap, projMap, useLineupFc, scoringSettings, rp, players);
+
+    return {
+      beforeRanks, afterRanks,
+      beforeOddsA, afterOddsA,
+      beforeOddsB, afterOddsB,
+      lineupBeforeA, lineupAfterA,
+      lineupBeforeB, lineupAfterB,
+      numTeams,
+    };
+  }
+
+  // ── Render: format flags ───────────────────────────────────────────────────
+
+  function renderFlags() {
+    if (!_rawData) return '';
+    const { formatFlags, category, numTeams } = _rawData;
+    const badgeCls = category === 'dynasty' ? 'az-badge-dynasty' : category === 'bestball' ? 'az-badge-bestball' : 'az-badge-redraft';
+    const badgeLbl = category === 'dynasty' ? 'Dynasty'         : category === 'bestball' ? 'Best Ball'         : 'Redraft';
+    return `<div class="az-flags">
+      <span class="az-badge ${badgeCls}">${badgeLbl}</span>
+      <span class="az-flag">${numTeams} Teams</span>
+      ${(formatFlags || []).map(f => `<span class="az-flag${f.hi ? ' az-flag-hi' : ''}">${f.label}</span>`).join('')}
+    </div>`;
+  }
+
+  // ── Render: league picker (no lgId) ─────────────────────────────────────
+
+  function renderLeaguePicker() {
+    document.getElementById('content').innerHTML = `
+      <div class="ta-step-hdr">Select a League</div>
+      <div id="picker-list" class="ta-team-grid">
+        <div style="color:var(--brown-light);font-family:'Crimson Text',serif;font-style:italic;">Loading your leagues…</div>
+      </div>
+    `;
+    loadPickerLeagues();
+  }
+
+  async function loadPickerLeagues() {
+    const el = document.getElementById('picker-list');
+    const user = SharedAuth.getUser?.();
+    if (!user?.sleeper_username) {
+      el.innerHTML = `<div style="color:var(--brown-light);font-family:'Crimson Text',serif;font-style:italic;">Sign in and set your Sleeper username to load leagues.</div>`;
+      return;
+    }
+    try {
+      const [nflRes, sleeperUser] = await Promise.all([
+        fetch(`${API}/sleeper/state/nfl`).then(r => r.json()),
+        fetch(`${API}/sleeper/user/${encodeURIComponent(user.sleeper_username)}`).then(r => r.json()),
+      ]);
+      const season  = nflRes?.season || String(new Date().getFullYear());
+      const leagues = await fetch(`${API}/sleeper/user/${sleeperUser.user_id}/leagues/nfl/${season}`).then(r => r.json());
+      el.innerHTML = (leagues || []).map(lg =>
+        `<a class="ta-team-card" href="/trade-analyzer?league=${encodeURIComponent(lg.league_id)}" style="text-decoration:none;">
+          <div class="ta-team-name">${esc(lg.name || lg.league_id)}</div>
+        </a>`
+      ).join('');
+    } catch(e) {
+      el.innerHTML = `<div class="err-state">${esc(e.message)}</div>`;
+    }
+  }
+
+  // ── Render: team selection ───────────────────────────────────────────────
+
+  function renderTeamSelect() {
+    const { teams, numTeams } = _rawData;
+    const ranks = computeRanks(teams);
+
+    const cards = teams.map(t => {
+      const rid = t.rosterId;
+      const isA = rid === _teamAId, isB = rid === _teamBId;
+      const cls = isA ? ' selected-a' : isB ? ' selected-b' : '';
+      const badge = isA
+        ? `<div class="ta-team-badge ta-team-badge-a">Team A</div>`
+        : isB ? `<div class="ta-team-badge ta-team-badge-b">Team B</div>` : '';
+      const ovrR = ranks.overall[rid] || 0;
+      return `<div class="ta-team-card${cls}" onclick="selectTeam(${rid})">
+        ${badge}
+        <div class="ta-team-name">${esc(displayName(t))}</div>
+        ${t.teamName && t.ownerName ? `<div class="ta-team-owner">${esc(t.ownerName)}</div>` : ''}
+        <div class="ta-team-record">${t.wins}-${t.losses} · #${ovrR} Overall</div>
+      </div>`;
+    }).join('');
+
+    const tA = _teamAId ? teams.find(t => t.rosterId === _teamAId) : null;
+    const tB = _teamBId ? teams.find(t => t.rosterId === _teamBId) : null;
+    const canBuild = tA && tB;
+    const note = canBuild
+      ? `<span class="ta-btn-note">${esc(displayName(tA))} ↔ ${esc(displayName(tB))}</span>`
+      : `<span class="ta-btn-note">Click two teams to select trade partners</span>`;
+
+    document.getElementById('content').innerHTML = `
+      ${renderFlags()}
+      <div class="ta-step-hdr">Select two teams for this trade</div>
+      <div class="ta-team-grid">${cards}</div>
+      <div class="ta-btn-row">
+        <button class="ta-btn" onclick="proceedToBuilder()" ${canBuild ? '' : 'disabled'}>Build Trade →</button>
+        ${note}
+      </div>
+    `;
+  }
+
+  function selectTeam(rid) {
+    if (_teamAId === rid)      { _teamAId = null; _selectedA.clear(); }
+    else if (_teamBId === rid) { _teamBId = null; _selectedB.clear(); }
+    else if (!_teamAId)        { _teamAId = rid;  _selectedA.clear(); }
+    else if (!_teamBId)        { _teamBId = rid;  _selectedB.clear(); }
+    else                       { _teamBId = rid;  _selectedB.clear(); }
+    _analysis = null;
+    renderTeamSelect();
+  }
+
+  function proceedToBuilder() {
+    if (!_teamAId || !_teamBId) return;
+    renderTradeBuilder();
+  }
+
+  // ── Render: trade builder ──────────────────────────────────────────────
+
+  const POS_CLS = { QB: 'rs-pos-QB', RB: 'rs-pos-RB', WR: 'rs-pos-WR', TE: 'rs-pos-TE', DL: 'rs-pos-DL', LB: 'rs-pos-LB', DB: 'rs-pos-DB' };
+
+  function renderPanel(team, selSet, side) {
+    const dotCls = side === 'A' ? 'ta-panel-dot-a' : 'ta-panel-dot-b';
+
+    const selVal = [...team.playerList, ...team.pickList]
+      .filter(a => selSet.has(a.pid ? playerKey(a) : pickKey(a)))
+      .reduce((s, a) => s + (a.val || 0), 0);
+
+    // Group players by position
+    const POS_ORDER = ['QB','RB','WR','TE','DL','LB','DB'];
+    const byPos = {};
+    for (const pl of team.playerList) (byPos[pl.pos] = byPos[pl.pos] || []).push(pl);
+
+    const playerSections = POS_ORDER.filter(p => byPos[p]?.length).map(pos => {
+      const rows = byPos[pos].map(pl => {
+        const key = playerKey(pl); const sel = selSet.has(key);
+        return `<div class="ta-asset-row${sel ? ' selected' : ''}" onclick="toggleAsset('${side}','${key}')">
+          <div class="ta-check"></div>
+          <span class="ta-asset-name">${esc(pl.name)}</span>
+          <span class="ta-asset-val">${pl.val > 0 ? Number(Math.round(pl.val)).toLocaleString() : '—'}</span>
+        </div>`;
+      }).join('');
+      return `<div class="ta-asset-section">
+        <div class="ta-asset-pos-hdr"><span class="rs-pos ${POS_CLS[pos]||''}">${pos}</span></div>
+        ${rows}
+      </div>`;
+    }).join('');
+
+    const pickSection = team.pickList.length ? (() => {
+      const rows = team.pickList.map(k => {
+        const key = pickKey(k); const sel = selSet.has(key);
+        return `<div class="ta-asset-row${sel ? ' selected' : ''}" onclick="toggleAsset('${side}','${key}')">
+          <div class="ta-check"></div>
+          <span class="ta-asset-name">${esc(k.label)}${k.viaName ? `<span class="ta-asset-via"> via ${esc(k.viaName)}</span>` : ''}</span>
+          <span class="ta-asset-val">${k.val > 0 ? Number(Math.round(k.val)).toLocaleString() : '—'}</span>
+        </div>`;
+      }).join('');
+      return `<div class="ta-asset-section">
+        <div class="ta-asset-pos-hdr"><span class="rs-pos rs-pos-PICK">Picks</span></div>
+        ${rows}
+      </div>`;
+    })() : '';
+
+    return `<div class="ta-panel">
+      <div class="ta-panel-hdr">
+        <div class="ta-panel-dot ${dotCls}"></div>
+        <div class="ta-panel-hdr-info">
+          <div class="ta-panel-title">${esc(displayName(team))}</div>
+          <div class="ta-panel-sub">${team.wins}-${team.losses} · Sends ${selSet.size} asset${selSet.size !== 1 ? 's' : ''}</div>
+        </div>
+        ${selVal > 0 ? `<div class="ta-panel-total">~${Number(Math.round(selVal)).toLocaleString()}</div>` : ''}
+      </div>
+      ${playerSections}${pickSection}
+    </div>`;
+  }
+
+  function renderTradeBuilder() {
+    const { teams } = _rawData;
+    const tA = teams.find(t => t.rosterId === _teamAId);
+    const tB = teams.find(t => t.rosterId === _teamBId);
+
+    const selA = [...tA.playerList, ...tA.pickList].filter(a => _selectedA.has(a.pid ? playerKey(a) : pickKey(a)));
+    const selB = [...tB.playerList, ...tB.pickList].filter(a => _selectedB.has(a.pid ? playerKey(a) : pickKey(a)));
+    const hasAssets = selA.length + selB.length > 0;
+
+    const valA = selA.reduce((s, a) => s + (a.val || 0), 0);
+    const valB = selB.reduce((s, a) => s + (a.val || 0), 0);
+    const noteHtml = hasAssets
+      ? `<span class="ta-btn-note">
+          ${esc(displayName(tA))} gives ~${Number(Math.round(valA)).toLocaleString()}
+          &nbsp;↔&nbsp;
+          ${esc(displayName(tB))} gives ~${Number(Math.round(valB)).toLocaleString()}
+        </span>`
+      : `<span class="ta-btn-note">Check players and picks to build the trade</span>`;
+
+    const resultsHtml = _analysis ? buildResultsHtml(_analysis) : '';
+
+    document.getElementById('content').innerHTML = `
+      ${renderFlags()}
+      <div style="margin-bottom:14px;">
+        <button class="ta-btn-secondary" onclick="backToTeamSelect()">← Change Teams</button>
+      </div>
+      <div class="ta-builder">
+        ${renderPanel(tA, _selectedA, 'A')}
+        ${renderPanel(tB, _selectedB, 'B')}
+      </div>
+      <div class="ta-btn-row">
+        <button class="ta-btn" onclick="analyzeClick()" ${hasAssets ? '' : 'disabled'}>Analyze Trade</button>
+        <button class="ta-btn-secondary" onclick="clearTrade()">Clear</button>
+        ${noteHtml}
+      </div>
+      ${resultsHtml}
+    `;
+  }
+
+  function toggleAsset(side, key) {
+    const sel = side === 'A' ? _selectedA : _selectedB;
+    if (sel.has(key)) sel.delete(key); else sel.add(key);
+    renderTradeBuilder();
+  }
+
+  function clearTrade() {
+    _selectedA.clear(); _selectedB.clear(); _analysis = null;
+    renderTradeBuilder();
+  }
+
+  function backToTeamSelect() {
+    renderTeamSelect();
+  }
+
+  function analyzeClick() {
+    const prevContent = document.getElementById('content').innerHTML;
+    document.getElementById('content').innerHTML = loading('Running trade simulation…');
+    setTimeout(() => {
+      try {
+        _analysis = executeTradeAnalysis();
+        renderTradeBuilder();
+      } catch(e) {
+        document.getElementById('content').innerHTML = errHtml(e) + `<div style="margin-top:12px;"><button class="ta-btn-secondary" onclick="document.getElementById('content').innerHTML=prevContent">← Back</button></div>`;
+      }
+    }, 20);
+  }
+
+  // ── Render: analysis results ─────────────────────────────────────────────
+
+  function buildResultsHtml(res) {
+    const { beforeRanks, afterRanks, beforeOddsA, afterOddsA, beforeOddsB, afterOddsB,
+            lineupBeforeA, lineupAfterA, lineupBeforeB, lineupAfterB, numTeams } = res;
+    const { hasIDP, teams } = _rawData;
+    const { futureWeeks } = _simData;
+
+    const tA = teams.find(t => t.rosterId === _teamAId);
+    const tB = teams.find(t => t.rosterId === _teamBId);
+    const nA = esc(displayName(tA)), nB = esc(displayName(tB));
+
+    const METRICS = [
+      { key: 'overall',   label: 'Overall'   },
+      { key: 'contender', label: 'Contender' },
+      { key: 'QB',        label: 'QB'        },
+      { key: 'RB',        label: 'RB'        },
+      { key: 'WR',        label: 'WR'        },
+      { key: 'TE',        label: 'TE'        },
+      ...(hasIDP ? [{ key: 'DL', label: 'DL/LB' }] : []),
+      { key: 'draft',     label: 'Picks'     },
+    ];
+
+    function rankCell(bR, aR) {
+      if (!bR) return `<td class="ta-rank-cell">—</td>`;
+      const delta = bR - aR;
+      const bBg = rankColor(bR, numTeams), aBg = rankColor(aR, numTeams);
+      const d = delta > 0 ? `<span class="ta-delta ta-delta-up">▲${delta}</span>`
+              : delta < 0 ? `<span class="ta-delta ta-delta-dn">▼${Math.abs(delta)}</span>`
+              : `<span class="ta-delta ta-delta-flat">—</span>`;
+      return `<td class="ta-rank-cell">
+        <span class="ta-rbadge" style="background:${bBg};">${bR}</span>
+        <span class="ta-rank-arrow">→</span>
+        <span class="ta-rbadge" style="background:${aBg};">${aR}</span>
+        ${d}
+      </td>`;
+    }
+
+    const tableRows = METRICS.map(m => `<tr>
+      <td><span class="ta-metric-lbl">${esc(m.label)}</span></td>
+      ${rankCell((beforeRanks[m.key]||{})[_teamAId], (afterRanks[m.key]||{})[_teamAId])}
+      ${rankCell((beforeRanks[m.key]||{})[_teamBId], (afterRanks[m.key]||{})[_teamBId])}
+    </tr>`).join('');
+
+    function oddsCard(team, before, after, label, teamColor) {
+      const name = esc(displayName(team));
+      if (!futureWeeks.length) {
+        return `<div class="ta-odds-card">
+          <div class="ta-odds-lbl">${label} — Playoff Odds</div>
+          <div class="ta-odds-team" style="color:${teamColor};">${name}</div>
+          <div style="font-family:'Crimson Text',serif;font-size:0.85rem;color:var(--brown-light);font-style:italic;">Season complete — standings are locked</div>
+        </div>`;
+      }
+      if (before == null) return '';
+      const bF = fmtOdds(before), aF = fmtOdds(after ?? before);
+      const bPct = Math.round(before * 100), aPct = Math.round((after ?? before) * 100);
+      const delta = aPct - bPct;
+      const dCls = delta > 0 ? 'ta-delta-up-txt' : delta < 0 ? 'ta-delta-dn-txt' : 'ta-delta-flat-txt';
+      const dStr = delta > 0 ? `+${delta}pp` : delta < 0 ? `${delta}pp` : '±0pp';
+      return `<div class="ta-odds-card">
+        <div class="ta-odds-lbl">${label} — Playoff Odds</div>
+        <div class="ta-odds-team" style="color:${teamColor};">${name}</div>
+        <div class="ta-odds-before">Before: <span style="color:${bF.color};font-weight:${bF.weight};">${bF.label}</span></div>
+        <div class="ta-odds-after" style="color:${aF.color};font-weight:${aF.weight};">${aF.label} <span class="${dCls}" style="font-size:0.75rem;">${dStr}</span></div>
+        <div class="ta-odds-bar-wrap">
+          <div class="ta-odds-bar-behind" style="width:${bPct}%;background:${bF.color};"></div>
+          <div class="ta-odds-bar-front"  style="width:${aPct}%;background:${aF.color};"></div>
+        </div>
+      </div>`;
+    }
+
+    function lineupChangesHtml(before, after, teamColor) {
+      const beforeSet = new Set(before.starters.map(p => p.pid));
+      const afterSet  = new Set(after.starters.map(p => p.pid));
+      const added   = after.starters.filter(p => !beforeSet.has(p.pid));
+      const removed = before.starters.filter(p => !afterSet.has(p.pid));
+
+      if (!added.length && !removed.length) {
+        return `<div class="ta-lineup-empty">No lineup changes — same players start</div>`;
+      }
+
+      // Pair by position where possible
+      const addByPos = {}, remByPos = {};
+      for (const p of added)   (addByPos[p.pos]   = addByPos[p.pos]   || []).push(p);
+      for (const p of removed) (remByPos[p.pos]   = remByPos[p.pos]   || []).push(p);
+      const allPos = new Set([...Object.keys(addByPos), ...Object.keys(remByPos)]);
+
+      const changes = [];
+      for (const pos of allPos) {
+        const adds = addByPos[pos] || [], rems = remByPos[pos] || [];
+        for (let i = 0; i < Math.max(adds.length, rems.length); i++) {
+          changes.push({ pos, inn: adds[i] || null, out: rems[i] || null });
+        }
+      }
+
+      return changes.map(c => {
+        const outHtml = c.out
+          ? `<span class="ta-lineup-out">${esc(c.out.name)}</span>`
+          : `<span class="ta-lineup-none">none</span>`;
+        const inHtml  = c.inn
+          ? `<span class="ta-lineup-in">${esc(c.inn.name)}</span>`
+          : `<span class="ta-lineup-none">bench</span>`;
+        return `<div class="ta-lineup-change">
+          <span class="rs-pos ${POS_CLS[c.pos]||''}" style="font-size:0.38rem;flex-shrink:0;">${c.pos}</span>
+          ${outHtml}
+          <span style="color:var(--gold);margin:0 4px;">→</span>
+          ${inHtml}
+        </div>`;
+      }).join('');
+    }
+
+    return `
+      <hr class="ta-divider">
+      <div class="ta-results-hdr">Trade Analysis</div>
+
+      <div class="ta-rank-wrap">
+        <table class="ta-rank-table">
+          <thead><tr>
+            <th class="ta-th-metric">Metric</th>
+            <th class="ta-th-a">${nA}</th>
+            <th class="ta-th-b">${nB}</th>
+          </tr></thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+      </div>
+
+      <div class="ta-odds-row">
+        ${oddsCard(tA, beforeOddsA, afterOddsA, 'Team A', '#7ed07e')}
+        ${oddsCard(tB, beforeOddsB, afterOddsB, 'Team B', '#8eb8e5')}
+      </div>
+
+      <div class="ta-step-hdr">Lineup Changes</div>
+      <div class="ta-lineup-grid">
+        <div class="ta-lineup-card">
+          <div class="ta-lineup-lbl" style="color:#7ed07e;">${nA}</div>
+          ${lineupChangesHtml(lineupBeforeA, lineupAfterA, '#7ed07e')}
+        </div>
+        <div class="ta-lineup-card">
+          <div class="ta-lineup-lbl" style="color:#8eb8e5;">${nB}</div>
+          ${lineupChangesHtml(lineupBeforeB, lineupAfterB, '#8eb8e5')}
+        </div>
+      </div>
+    `;
+  }
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+
+  async function init() {
+    SharedAuth.init({ onLogin: () => {}, onLogout: () => {} });
+
+    if (isEspn) {
+      document.getElementById('content').innerHTML = `<div class="err-state">Trade Analyzer only supports Sleeper leagues. ESPN league trading is not available.</div>`;
+      return;
+    }
+
+    if (!lgId) {
+      renderLeaguePicker();
+      return;
+    }
+
+    document.getElementById('back-link').href    = `/analyzer?league=${encodeURIComponent(lgId)}`;
+    document.getElementById('back-link').textContent = '← League Analyzer';
+    document.getElementById('content').innerHTML = loading('Loading league data…');
+
+    try {
+      await loadLeagueData();
+      document.getElementById('league-title').textContent = _rawData.lgName + ' · ' + _rawData.season;
+      document.title = 'Trade Analyzer — ' + _rawData.lgName;
+
+      // Auto-detect user's team as Team A
+      const user = SharedAuth.getUser?.();
+      if (user?.sleeper_username && !_teamAId) {
+        try {
+          const su = await fetch(`${API}/sleeper/user/${encodeURIComponent(user.sleeper_username)}`).then(r => r.json());
+          const myRoster = _rawData.allRosters.find(r => r.owner_id === su.user_id);
+          if (myRoster) {
+            const myTeam = _rawData.teams.find(t => t.rosterId === myRoster.roster_id);
+            if (myTeam) _teamAId = myTeam.rosterId;
+          }
+        } catch {}
+      }
+
+      renderTeamSelect();
+    } catch(e) {
+      document.getElementById('content').innerHTML = errHtml(e);
+    }
+  }
+
+  init();
+  </script>
+</body>
+</html>
