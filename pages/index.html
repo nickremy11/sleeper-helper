@@ -460,7 +460,24 @@ const WV = {
   sortCol:            'adjVal',
   sortDir:            -1,
   skippedCount:       0,
+  projPpg:            {},  // {nameLower: ppg} — from projections.ffhistorian.com (logged-in users)
 };
+
+// Fetch the user's saved projections (name → PPG). No-op if not logged in.
+async function wvLoadProjections() {
+  if (!S.auth) { WV.projPpg = {}; return; }
+  try {
+    const r = await fetch('/api/projections/ppg?season=2026', { credentials: 'include' });
+    if (!r.ok) { WV.projPpg = {}; return; }
+    const map = await r.json();
+    const lc = {};
+    for (const [name, ppg] of Object.entries(map || {})) lc[name.toLowerCase()] = ppg;
+    WV.projPpg = lc;
+    // Refresh the table if it's already rendered (fetch may resolve after build)
+    const wrap = document.getElementById('wv-table-wrap');
+    if (wrap && WV.loaded) wrap.innerHTML = wvRenderTable();
+  } catch { WV.projPpg = {}; }
+}
 
 function rsNormPos(raw) {
   if (!raw) return null;
@@ -1214,6 +1231,9 @@ async function loadWaiverData() {
     if (statEl) statEl.textContent = 'Loading players…';
     await loadPlayers();
 
+    // Projected PPG (logged-in users) — runs in parallel, never blocks waivers
+    wvLoadProjections();
+
     // FC values — reuse RS.fcMap if Rostership already fetched it
     if (Object.keys(RS.fcMap).length > 0) {
       WV.fcMap = RS.fcMap;
@@ -1369,9 +1389,18 @@ function wvRenderTable() {
   }
 
   const isDyn = WV.mode === 'dynasty';
+  // Attach projected PPG (name-keyed) so it's sortable and renderable
+  const hasProj = Object.keys(WV.projPpg).length > 0;
+  for (const row of WV.rows) row.projPpg = WV.projPpg[(row.name || '').toLowerCase()] ?? null;
+
   const cols = isDyn
     ? [{ key:'name', label:'Player' }, { key:'pos', label:'Pos' }, { key:'adjVal', label:'FC Value' }, { key:'availCount', label:'# Available' }]
     : [{ key:'rank', label:'Rank' }, { key:'name', label:'Player' }, { key:'pos', label:'Pos' }, { key:'availCount', label:'# Available' }];
+  if (hasProj) cols.push({ key:'projPpg', label:'Proj PPG' });
+
+  const projCell = row => hasProj
+    ? `<td style="font-family:'Playfair Display',serif;color:var(--cream);">${row.projPpg != null ? row.projPpg.toFixed(1) : '<span style="color:var(--brown-light);">—</span>'}</td>`
+    : '';
 
   const mkTh = c => {
     const sorted = WV.sortCol === c.key;
@@ -1396,8 +1425,8 @@ function wvRenderTable() {
       : `<td style="font-family:'Playfair Display',serif;color:var(--cream);">#${row.rank}</td>`;
 
     const mainRow = isDyn
-      ? `<tr><td>${nameCell}</td><td>${posHtml}</td>${valCell}<td style="font-family:'Playfair Display',serif;color:var(--cream);">${row.availCount}</td></tr>`
-      : `<tr><td style="font-family:'Playfair Display',serif;color:var(--cream);">#${row.rank}</td><td>${nameCell}</td><td>${posHtml}</td><td style="font-family:'Playfair Display',serif;color:var(--cream);">${row.availCount}</td></tr>`;
+      ? `<tr><td>${nameCell}</td><td>${posHtml}</td>${valCell}<td style="font-family:'Playfair Display',serif;color:var(--cream);">${row.availCount}</td>${projCell(row)}</tr>`
+      : `<tr><td style="font-family:'Playfair Display',serif;color:var(--cream);">#${row.rank}</td><td>${nameCell}</td><td>${posHtml}</td><td style="font-family:'Playfair Display',serif;color:var(--cream);">${row.availCount}</td>${projCell(row)}</tr>`;
 
     const colSpan = cols.length;
     const expandRow = isExp ? `<tr class="rs-expand-row"><td colspan="${colSpan}">

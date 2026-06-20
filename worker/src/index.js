@@ -40,7 +40,9 @@ const ROOM_TTL_MS   = 7 * 24 * 60 * 60 * 1000; // 7 days
 const ALLOWED_ORIGINS = new Set([
   'https://ffhistorian.com',
   'https://helper.ffhistorian.com',
+  'https://projections.ffhistorian.com',
 ]);
+const PROJ_SEASON_DEFAULT = 2026;
 
 function getCors(request) {
   const origin = (request && request.headers.get('Origin')) || '';
@@ -108,6 +110,10 @@ export default {
 
     if (url.pathname === '/api/rootforme/prefs') {
       return handleRootformePrefs(request, env);
+    }
+
+    if (url.pathname.startsWith('/api/projections')) {
+      return handleProjections(request, env, url);
     }
 
     if (url.pathname.startsWith('/api/dispersal')) {
@@ -279,6 +285,187 @@ async function handleRootformePrefs(request, env) {
   }
 
   return new Response('Method not allowed', { status: 405, headers: CORS });
+}
+
+// ── Projections (projections.ffhistorian.com) ─────────────────────────────────
+
+async function handleProjections(request, env, url) {
+  const cors = getCors(request);
+  const sub  = url.pathname.replace('/api/projections', '').replace(/^\//, ''); // players | teams | ppg | sync-sheets
+
+  // Sheets sync needs no DB/auth coupling beyond an authenticated user.
+  if (sub === 'sync-sheets' && request.method === 'POST') {
+    return handleProjSyncSheets(request, env, cors);
+  }
+
+  const user = await getAuthUser(request, env);
+  if (!user) {
+    return new Response(JSON.stringify({ error: 'Not authenticated' }), {
+      status: 401, headers: { ...cors, 'Content-Type': 'application/json;charset=UTF-8' },
+    });
+  }
+
+  const season = Number(url.searchParams.get('season')) || PROJ_SEASON_DEFAULT;
+
+  if (sub === 'players')  return handleProjPlayers(request, env, cors, user, season);
+  if (sub === 'teams')    return handleProjTeams(request, env, cors, user, season);
+  if (sub === 'ppg')      return handleProjPpg(request, env, cors, user, season);
+
+  return new Response('Not found', { status: 404, headers: cors });
+}
+
+function projJson(body, cors, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status, headers: { ...cors, 'Content-Type': 'application/json;charset=UTF-8' },
+  });
+}
+
+async function handleProjPlayers(request, env, cors, user, season) {
+  if (request.method === 'GET') {
+    const rows = await env.DB.prepare(
+      `SELECT player_name, nfl_team, position, inputs, calc_ppg, calc_pts, rank_2025
+       FROM player_projections WHERE user_id = ? AND season = ?`
+    ).bind(user.user_id, season).all();
+
+    const players = (rows.results || []).map(r => ({
+      player_name: r.player_name,
+      nfl_team:    r.nfl_team,
+      position:    r.position,
+      inputs:      safeParse(r.inputs, {}),
+      calc_ppg:    r.calc_ppg,
+      calc_pts:    r.calc_pts,
+      rank_2025:   r.rank_2025,
+    }));
+    return projJson({ players, season }, cors);
+  }
+
+  if (request.method === 'POST') {
+    let body;
+    try { body = await request.json(); } catch { return new Response('Invalid JSON', { status: 400, headers: cors }); }
+    const players = Array.isArray(body.players) ? body.players : [];
+    const now = Date.now();
+
+    // Optional scoped replace: when `replaceTeam` is set, clear that team's roster
+    // first so removed players don't linger.
+    const stmts = [];
+    if (body.replaceTeam) {
+      stmts.push(env.DB.prepare(
+        'DELETE FROM player_projections WHERE user_id = ? AND season = ? AND nfl_team = ?'
+      ).bind(user.user_id, season, body.replaceTeam));
+    }
+
+    for (const p of players) {
+      if (!p.player_name || !p.position) continue;
+      stmts.push(env.DB.prepare(
+        `INSERT INTO player_projections
+           (user_id, player_name, nfl_team, position, season, inputs, calc_ppg, calc_pts, rank_2025, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(user_id, player_name, season) DO UPDATE SET
+           nfl_team=excluded.nfl_team, position=excluded.position, inputs=excluded.inputs,
+           calc_ppg=excluded.calc_ppg, calc_pts=excluded.calc_pts, rank_2025=excluded.rank_2025,
+           updated_at=excluded.updated_at`
+      ).bind(
+        user.user_id, p.player_name, p.nfl_team || '', p.position, season,
+        JSON.stringify(p.inputs || {}),
+        p.calc_ppg ?? null, p.calc_pts ?? null, p.rank_2025 ?? null, now
+      ));
+    }
+
+    // Chunk batches to stay well under D1 limits.
+    for (let i = 0; i < stmts.length; i += 50) {
+      await env.DB.batch(stmts.slice(i, i + 50));
+    }
+    return projJson({ ok: true, saved: players.length }, cors);
+  }
+
+  if (request.method === 'DELETE') {
+    let body;
+    try { body = await request.json(); } catch { return new Response('Invalid JSON', { status: 400, headers: cors }); }
+    if (!body.player_name) return new Response('player_name required', { status: 400, headers: cors });
+    await env.DB.prepare(
+      'DELETE FROM player_projections WHERE user_id = ? AND season = ? AND player_name = ?'
+    ).bind(user.user_id, season, body.player_name).run();
+    return projJson({ ok: true }, cors);
+  }
+
+  return new Response('Method not allowed', { status: 405, headers: cors });
+}
+
+async function handleProjTeams(request, env, cors, user, season) {
+  if (request.method === 'GET') {
+    const rows = await env.DB.prepare(
+      'SELECT nfl_team, inputs FROM team_projections WHERE user_id = ? AND season = ?'
+    ).bind(user.user_id, season).all();
+
+    const teams = {};
+    for (const r of (rows.results || [])) teams[r.nfl_team] = safeParse(r.inputs, {});
+    return projJson({ teams, season }, cors);
+  }
+
+  if (request.method === 'POST') {
+    let body;
+    try { body = await request.json(); } catch { return new Response('Invalid JSON', { status: 400, headers: cors }); }
+    const teams = body.teams || {};
+    const now = Date.now();
+    const stmts = Object.entries(teams).map(([team, inputs]) =>
+      env.DB.prepare(
+        `INSERT INTO team_projections (user_id, nfl_team, season, inputs, updated_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(user_id, nfl_team, season) DO UPDATE
+         SET inputs=excluded.inputs, updated_at=excluded.updated_at`
+      ).bind(user.user_id, team, season, JSON.stringify(inputs || {}), now)
+    );
+    if (stmts.length) await env.DB.batch(stmts);
+    return projJson({ ok: true }, cors);
+  }
+
+  return new Response('Method not allowed', { status: 405, headers: cors });
+}
+
+async function handleProjPpg(request, env, cors, user, season) {
+  const rows = await env.DB.prepare(
+    'SELECT player_name, calc_ppg FROM player_projections WHERE user_id = ? AND season = ?'
+  ).bind(user.user_id, season).all();
+  const map = {};
+  for (const r of (rows.results || [])) {
+    if (r.calc_ppg != null) map[r.player_name] = r.calc_ppg;
+  }
+  return projJson(map, cors);
+}
+
+/**
+ * Fetches a public Google Sheets tab as CSV and returns the raw text.
+ * The browser can't fetch the export URL directly (cross-origin redirect to
+ * googleusercontent), so the worker proxies it.
+ */
+async function handleProjSyncSheets(request, env, cors) {
+  const user = await getAuthUser(request, env);
+  if (!user) {
+    return new Response(JSON.stringify({ error: 'Not authenticated' }), {
+      status: 401, headers: { ...cors, 'Content-Type': 'application/json;charset=UTF-8' },
+    });
+  }
+
+  let body;
+  try { body = await request.json(); } catch { return new Response('Invalid JSON', { status: 400, headers: cors }); }
+  if (!body.sheetId) return new Response('sheetId required', { status: 400, headers: cors });
+
+  const gid = body.gid != null ? String(body.gid) : '0';
+  const exportUrl = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(body.sheetId)}/export?format=csv&gid=${encodeURIComponent(gid)}`;
+
+  const upstream = await fetch(exportUrl, {
+    headers: { 'User-Agent': 'sleeper-helper/1.0' },
+    redirect: 'follow',
+  });
+  if (!upstream.ok) {
+    return projJson({ error: 'Sheet fetch failed', status: upstream.status }, cors, 502);
+  }
+  const csv = await upstream.text();
+  return projJson({ ok: true, csv }, cors);
+}
+
+function safeParse(s, fallback) {
+  try { return JSON.parse(s); } catch { return fallback; }
 }
 
 // ── Dispersal ─────────────────────────────────────────────────────────────────

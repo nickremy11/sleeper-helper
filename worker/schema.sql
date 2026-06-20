@@ -103,3 +103,35 @@ CREATE TABLE IF NOT EXISTS espn_settings (
   swid       TEXT,
   updated_at INTEGER
 );
+
+-- ── Projections (projections.ffhistorian.com) ─────────────────────────────────
+
+-- Per-player projection inputs + pre-computed outputs.
+-- `inputs` is a JSON blob of the rate fields entered on the Edit tab.
+CREATE TABLE IF NOT EXISTS player_projections (
+  user_id     TEXT    NOT NULL,
+  player_name TEXT    NOT NULL,
+  nfl_team    TEXT    NOT NULL,
+  position    TEXT    NOT NULL,  -- QB | RB | WR | TE
+  season      INTEGER NOT NULL,
+  inputs      TEXT    NOT NULL,  -- JSON: all rate/input fields for this position
+  calc_ppg    REAL,             -- pre-computed PPG in the configured scoring
+  calc_pts    REAL,             -- season total (PPG × games_played)
+  rank_2025   INTEGER,          -- 2025 positional rank, imported for comparison
+  updated_at  INTEGER NOT NULL,
+  PRIMARY KEY (user_id, player_name, season)
+);
+
+CREATE INDEX IF NOT EXISTS idx_player_proj_user ON player_projections(user_id, season);
+
+-- Per-team allocation inputs (plays/game, pass %, rush %, target %).
+CREATE TABLE IF NOT EXISTS team_projections (
+  user_id    TEXT    NOT NULL,
+  nfl_team   TEXT    NOT NULL,
+  season     INTEGER NOT NULL,
+  inputs     TEXT    NOT NULL,  -- JSON: plays_per_game, pass_pct, rush_pct, target_pct
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, nfl_team, season)
+);
+
+CREATE INDEX IF NOT EXISTS idx_team_proj_user ON team_projections(user_id, season);
