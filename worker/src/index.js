@@ -438,6 +438,28 @@ async function handleProjPpg(request, env, cors, user, season) {
  * The browser can't fetch the export URL directly (cross-origin redirect to
  * googleusercontent), so the worker proxies it.
  */
+const PROJ_NFL_FULL_NAMES = {
+  ARI:'Arizona Cardinals', ATL:'Atlanta Falcons', BAL:'Baltimore Ravens', BUF:'Buffalo Bills',
+  CAR:'Carolina Panthers', CHI:'Chicago Bears', CIN:'Cincinnati Bengals', CLE:'Cleveland Browns',
+  DAL:'Dallas Cowboys', DEN:'Denver Broncos', DET:'Detroit Lions', GB:'Green Bay Packers',
+  HOU:'Houston Texans', IND:'Indianapolis Colts', JAX:'Jacksonville Jaguars', KC:'Kansas City Chiefs',
+  LV:'Las Vegas Raiders', LAC:'Los Angeles Chargers', LAR:'Los Angeles Rams', MIA:'Miami Dolphins',
+  MIN:'Minnesota Vikings', NE:'New England Patriots', NO:'New Orleans Saints', NYG:'New York Giants',
+  NYJ:'New York Jets', PHI:'Philadelphia Eagles', PIT:'Pittsburgh Steelers', SF:'San Francisco 49ers',
+  SEA:'Seattle Seahawks', TB:'Tampa Bay Buccaneers', TEN:'Tennessee Titans', WAS:'Washington Commanders',
+};
+
+async function projFetchSheetTab(sheetId, tabName) {
+  const url = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(sheetId)}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}`;
+  try {
+    const r = await fetch(url, { headers: { 'User-Agent': 'sleeper-helper/1.0' }, redirect: 'follow' });
+    if (!r.ok) return null;
+    const text = await r.text();
+    if (!text || text.length < 50 || text.includes('<!DOCTYPE') || text.includes('google.visualization') || text.includes('Table has no columns')) return null;
+    return text;
+  } catch { return null; }
+}
+
 async function handleProjSyncSheets(request, env, cors) {
   const user = await getAuthUser(request, env);
   if (!user) {
@@ -450,17 +472,29 @@ async function handleProjSyncSheets(request, env, cors) {
   try { body = await request.json(); } catch { return new Response('Invalid JSON', { status: 400, headers: cors }); }
   if (!body.sheetId) return new Response('sheetId required', { status: 400, headers: cors });
 
-  const gid = body.gid != null ? String(body.gid) : '0';
-  const exportUrl = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(body.sheetId)}/export?format=csv&gid=${encodeURIComponent(gid)}`;
-
-  const upstream = await fetch(exportUrl, {
-    headers: { 'User-Agent': 'sleeper-helper/1.0' },
-    redirect: 'follow',
-  });
-  if (!upstream.ok) {
-    return projJson({ error: 'Sheet fetch failed', status: upstream.status }, cors, 502);
+  // Bulk fetch all 32 team tabs
+  if (body.action === 'fetch-all') {
+    const nameMap = body.teamNames || PROJ_NFL_FULL_NAMES;
+    const results = {};
+    await Promise.all(Object.entries(nameMap).map(async ([abbr, name]) => {
+      const csv = await projFetchSheetTab(body.sheetId, name);
+      results[abbr] = csv || null;
+    }));
+    return projJson({ ok: true, teams: results }, cors);
   }
-  const csv = await upstream.text();
+
+  // Single tab fetch: prefer sheetName (by tab name), fall back to gid
+  let csv;
+  if (body.sheetName) {
+    csv = await projFetchSheetTab(body.sheetId, body.sheetName);
+    if (!csv) return projJson({ error: `Tab "${body.sheetName}" not found or empty` }, cors, 404);
+  } else {
+    const gid = body.gid != null ? String(body.gid) : '0';
+    const exportUrl = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(body.sheetId)}/export?format=csv&gid=${encodeURIComponent(gid)}`;
+    const upstream = await fetch(exportUrl, { headers: { 'User-Agent': 'sleeper-helper/1.0' }, redirect: 'follow' });
+    if (!upstream.ok) return projJson({ error: 'Sheet fetch failed', status: upstream.status }, cors, 502);
+    csv = await upstream.text();
+  }
   return projJson({ ok: true, csv }, cors);
 }
 
