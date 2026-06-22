@@ -1644,11 +1644,13 @@ function lsSlotElig(slot) {
   return pos ? [pos] : null;   // null → unhandled slot (K, DEF, unknown)
 }
 
-// Optimal lineup with minimal churn. Two phases:
-//  1) greedy pick the best SET of starters (specific slots first, then flex);
-//  2) assign that set back to slots, KEEPING each current starter in place when
-//     they remain a starter and are slot-eligible — so identical-slot reshuffles
-//     (e.g. two FLEX players swapping slots) never show as spurious changes.
+// Optimal lineup in two phases:
+//  1) greedy fill EVERY slot with the best eligible player (specific slots, then
+//     flex) — a valid, optimal-value assignment that never leaves a fillable slot
+//     empty;
+//  2) churn reduction — eligibility-preserving, value-neutral swaps that move
+//     players back toward their current slot, so cosmetic reshuffles (two FLEX
+//     players trading slots) don't show as changes.
 // Slots we can't project (K/DEF) and starters we lack data for stay untouched.
 function lsBuildOptimalStarters(fix) {
   const slots = fix.rosterPositions;       // BN/IR/TAXI already removed, in order
@@ -1675,43 +1677,41 @@ function lsBuildOptimalStarters(fix) {
     if (!LU_FLEX_ELIG[slot] && !rsNormPos(slot)) locked[i] = true;               // K/DEF → lock
   });
 
-  // Phase 1 — greedy best set (specific slots, then flex)
-  const pick = (i, eligPos) => {
+  // Phase 1 — greedy assignment, every slot filled (specific slots first, then flex)
+  const assign = fix.starters.map(String);   // locked slots keep their current player
+  const pick = (eligPos) => {
     const cand = pool.filter(p => eligPos.includes(p.pos) && !used.has(p.pid)).sort((a, b) => b.pts - a.pts);
     if (cand.length) { used.add(cand[0].pid); return cand[0].pid; }
-    return null;
+    return '0';
   };
-  const chosen = new Set();
-  slots.forEach((slot, i) => { if (!locked[i] && !LU_FLEX_ELIG[slot]) { const p = pick(i, lsSlotElig(slot)); if (p) chosen.add(p); } });
-  slots.forEach((slot, i) => { if (!locked[i] &&  LU_FLEX_ELIG[slot]) { const p = pick(i, LU_FLEX_ELIG[slot]); if (p) chosen.add(p); } });
+  slots.forEach((slot, i) => { if (!locked[i] && !LU_FLEX_ELIG[slot]) assign[i] = pick(lsSlotElig(slot)); });
+  slots.forEach((slot, i) => { if (!locked[i] &&  LU_FLEX_ELIG[slot]) assign[i] = pick(LU_FLEX_ELIG[slot]); });
 
-  // Phase 2 — assign chosen set to slots, keeping current starters in place
-  const out    = new Array(slots.length).fill('0');
-  const placed = new Set();
-  slots.forEach((slot, i) => {
-    if (locked[i]) { out[i] = String(fix.starters[i] || '0'); placed.add(out[i]); return; }
-    const cur = String(fix.starters[i] || '0');
-    const elig = lsSlotElig(slot);
-    if (cur !== '0' && chosen.has(cur) && !placed.has(cur) && elig && byId[cur] && elig.includes(byId[cur].pos)) {
-      out[i] = cur; placed.add(cur);
+  // Phase 2 — value-neutral swaps to match the current lineup where eligibility allows
+  const cur = fix.starters.map(String);
+  for (let guard = 0, improved = true; improved && guard < 50; guard++) {
+    improved = false;
+    for (let i = 0; i < slots.length; i++) {
+      if (locked[i]) continue;
+      const ei = lsSlotElig(slots[i]); if (!ei) continue;
+      for (let j = i + 1; j < slots.length; j++) {
+        if (locked[j]) continue;
+        const ej = lsSlotElig(slots[j]); if (!ej) continue;
+        const pi = byId[assign[i]], pj = byId[assign[j]];
+        const iIntoJ = assign[i] === '0' || (pi && ej.includes(pi.pos));   // stays eligible after swap
+        const jIntoI = assign[j] === '0' || (pj && ei.includes(pj.pos));
+        if (!iIntoJ || !jIntoI) continue;
+        const before = (assign[i] === cur[i]) + (assign[j] === cur[j]);
+        const after  = (assign[j] === cur[i]) + (assign[i] === cur[j]);
+        if (after > before) { const t = assign[i]; assign[i] = assign[j]; assign[j] = t; improved = true; }
+      }
     }
-  });
-  slots.forEach((slot, i) => {
-    if (locked[i] || out[i] !== '0') return;
-    const elig = lsSlotElig(slot); if (!elig) return;
-    let best = null;
-    chosen.forEach(pid => {
-      if (placed.has(pid)) return;
-      const p = byId[pid]; if (!p || !elig.includes(p.pos)) return;
-      if (!best || p.pts > best.pts) best = p;
-    });
-    if (best) { out[i] = best.pid; placed.add(best.pid); }
-  });
+  }
 
-  // Score-neutral second pass: order interchangeable slots by kickoff.
-  if (LU.byGameTime && Object.keys(LU.kick).length) lsOrderByGameTime(out, slots);
+  // Score-neutral final pass: order interchangeable slots by kickoff.
+  if (LU.byGameTime && Object.keys(LU.kick).length) lsOrderByGameTime(assign, slots);
 
-  return { proposed: out };
+  return { proposed: assign };
 }
 
 function lsPlayerName(pid) {
