@@ -1514,7 +1514,14 @@ async function wvUploadRankings(input) {
 // ── 4. Lineup Check ──────────────────────────────────────────────────────────
 
 // Lineups tab state — populated by renderLineupCheck, read by testSetLineup
-const LU = { lineups: [], week: 1, proj: {} };
+const LU = {
+  lineups: [], week: 1,
+  proj: {},                 // {pid: stats} — Sleeper weekly projections
+  kick: {},                 // {nflTeam: kickoffISO} — ESPN scoreboard
+  valueMode: 'projections', // 'projections' | 'rankings'
+  rankings: {},             // {pid: rank} — uploaded weekly ranks (lower = better)
+  byGameTime: true,         // order interchangeable slots so flex never locks earlier than a position slot
+};
 
 // Step-1 proof: re-write a league's CURRENT starters back (a no-op set).
 // Confirms the write pipe (proxy + token + mutation shape) works end-to-end
@@ -1552,6 +1559,83 @@ function lsPlayerPts(pid, scoringSettings) {
   return lsComputeProjPts(LU.proj[pid], scoringSettings || {});
 }
 
+// The metric the optimizer ranks players by — pluggable: projections or uploaded
+// rankings. Projections use league scoring; rankings use 1/rank (lower rank wins),
+// with unranked players sorted below every ranked one.
+function lsPlayerVal(pid, scoringSettings) {
+  if (LU.valueMode === 'rankings') {
+    const r = LU.rankings[String(pid)];
+    return r != null ? (1e6 - r) : -1;
+  }
+  return lsPlayerPts(pid, scoringSettings);
+}
+
+function lsHaveRankings() { return Object.keys(LU.rankings).length > 0; }
+function lsCanOptimize()  { return lsHaveProj() || (LU.valueMode === 'rankings' && lsHaveRankings()); }
+
+// Kickoff time (ms) for a player's NFL game this week; Infinity if unknown.
+function lsGameTime(pid) {
+  const team = S.players[pid]?.team;
+  const iso  = team && LU.kick[team];
+  return iso ? new Date(iso).getTime() : Infinity;
+}
+
+// Within each position, ensure no flex-slot player kicks off earlier than a
+// same-position player in a dedicated slot — so the earliest games lock into
+// their natural slot and the flex stays open longest. Score-neutral; strict
+// game-time ties are left as-is.
+function lsOrderByGameTime(out, slots) {
+  ['QB', 'RB', 'WR', 'TE', 'DL', 'LB', 'DB'].forEach(P => {
+    const dedI = [], flexI = [];
+    slots.forEach((slot, i) => {
+      const pid = String(out[i] || '0');
+      if (pid === '0' || rsNormPos(S.players[pid]?.position) !== P) return;
+      if (LU_FLEX_ELIG[slot]) flexI.push(i);
+      else if (rsNormPos(slot) === P) dedI.push(i);
+    });
+    if (!dedI.length || !flexI.length) return;
+    for (let guard = 0; guard < 20; guard++) {
+      const fi = flexI.reduce((a, b) => lsGameTime(out[b]) < lsGameTime(out[a]) ? b : a);  // earliest flex
+      const di = dedI.reduce((a, b) => lsGameTime(out[b]) > lsGameTime(out[a]) ? b : a);    // latest dedicated
+      if (lsGameTime(out[fi]) < lsGameTime(out[di])) { const t = out[fi]; out[fi] = out[di]; out[di] = t; }
+      else break;
+    }
+  });
+  return out;
+}
+
+// ── Weekly rankings upload (framework for optimize-by-rankings) ────────────────
+// Flexible parser: one player per line in rank order, or an explicit "N. Name".
+function lsParseRankings(text) {
+  const map = {};
+  let auto = 0;
+  for (const raw of (text || '').split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const m = line.match(/^(\d+)[.):,\s]+(.*)$/);   // optional leading rank
+    let rank, name;
+    if (m) { rank = parseInt(m[1], 10); name = m[2]; }
+    else   { rank = auto + 1; name = line; }
+    auto = rank;
+    name = name.replace(/\s*\([^)]*\)\s*$/, '').replace(/[,|].*$/, '').trim();   // strip trailing (TEAM POS) / ", TEAM"
+    const pid = S._playersByName[name.toLowerCase()];
+    if (pid) map[pid] = rank;
+  }
+  return map;
+}
+
+function lsSaveRankings(week) {
+  try { localStorage.setItem('lu_rankings', JSON.stringify({ week, map: LU.rankings })); } catch(_) {}
+}
+function lsLoadRankings(week) {
+  LU.rankings = {};
+  try {
+    const saved = JSON.parse(localStorage.getItem('lu_rankings') || 'null');
+    if (saved && saved.week === week && saved.map) LU.rankings = saved.map;
+  } catch(_) {}
+  if (!lsHaveRankings() && LU.valueMode === 'rankings') LU.valueMode = 'projections';
+}
+
 function lsHaveProj() { return !!(LU.proj && Object.keys(LU.proj).length); }
 
 function lsSlotElig(slot) {
@@ -1571,13 +1655,14 @@ function lsBuildOptimalStarters(fix) {
   const ss    = fix.scoringSettings || {};
 
   const excluded = fix.excluded || new Set();
+  const startSet = new Set(fix.starters.map(String));
   const pool = (fix.players || []).map(pid => {
     const p = S.players[pid];
     if (!p) return null;
-    if (excluded.has(String(pid)) && !fix.starters.map(String).includes(String(pid))) return null;  // skip IR/taxi (unless already starting)
+    if (excluded.has(String(pid)) && !startSet.has(String(pid))) return null;  // skip IR/taxi (unless already starting)
     const pos = rsNormPos(p.position);
     if (!pos) return null;
-    return { pid: String(pid), pos, pts: lsPlayerPts(pid, ss) };
+    return { pid: String(pid), pos, pts: lsPlayerVal(pid, ss) };
   }).filter(Boolean);
   const byId    = {}; pool.forEach(p => { byId[p.pid] = p; });
   const poolIds = new Set(pool.map(p => p.pid));
@@ -1623,6 +1708,9 @@ function lsBuildOptimalStarters(fix) {
     if (best) { out[i] = best.pid; placed.add(best.pid); }
   });
 
+  // Score-neutral second pass: order interchangeable slots by kickoff.
+  if (LU.byGameTime && Object.keys(LU.kick).length) lsOrderByGameTime(out, slots);
+
   return { proposed: out };
 }
 
@@ -1638,19 +1726,26 @@ const LS_BAD_INJ = { Out: 1, IR: 1, Sus: 1, NA: 1, PUP: 1, DNR: 1, COV: 1, DNP: 
 function lsLineupStatus(fix) {
   const ss   = fix.scoringSettings || {};
   const have = lsHaveProj();
+  const prop = fix._proposed || fix.starters;
   const cur  = have ? fix.starters.reduce((s, p) => s + lsPlayerPts(p, ss), 0) : null;
-  const opt  = have ? (fix._proposed || fix.starters).reduce((s, p) => s + lsPlayerPts(p, ss), 0) : null;
+  const opt  = have ? prop.reduce((s, p) => s + lsPlayerPts(p, ss), 0) : null;
   const gain = have ? opt - cur : 0;
 
   const empty   = fix.starters.filter(p => !p || p === '0').length;
   const injured = fix.starters.filter(p => LS_BAD_INJ[S.players[p]?.injury_status])
                               .map(p => lsPlayerName(p));
 
+  const curSet  = new Set(fix.starters.map(String));
+  const propSet = new Set(prop.map(String));
+  const sameSet = curSet.size === propSet.size && [...curSet].every(p => propSet.has(p));
+  const arrDiff = prop.some((p, i) => String(p) !== String(fix.starters[i]));
+
   let level = 'na', label = '—', detail = '';
-  if (empty)              { level = 'bad';  label = 'Action needed'; detail = empty + ' empty slot' + (empty > 1 ? 's' : ''); }
-  else if (injured.length){ level = 'bad';  label = 'Action needed'; detail = 'Out: ' + injured.join(', '); }
-  else if (have && gain > 0.05) { level = 'warn'; label = 'Suboptimal'; detail = '+' + gain.toFixed(1) + ' pts available'; }
-  else if (have)          { level = 'ok';   label = 'Optimal'; }
+  if (empty)               { level = 'bad';  label = 'Action needed'; detail = empty + ' empty slot' + (empty > 1 ? 's' : ''); }
+  else if (injured.length) { level = 'bad';  label = 'Action needed'; detail = 'Out: ' + injured.join(', '); }
+  else if (!sameSet)       { level = 'warn'; label = 'Suboptimal';    detail = gain > 0.05 ? '+' + gain.toFixed(1) + ' pts available' : 'better players available'; }
+  else if (arrDiff)        { level = 'warn'; label = 'Reorder';       detail = 'kickoff order'; }
+  else if (lsCanOptimize()){ level = 'ok';   label = 'Optimal'; }
   return { level, label, detail, cur, opt, gain };
 }
 
@@ -1787,6 +1882,65 @@ async function applyAll() {
   setS(fail ? '#d08a30' : '#5fae5f', `Applied ${done} lineup${done !== 1 ? 's' : ''}${fail ? `, ${fail} failed` : ''}`);
 }
 
+function toggleCollapseAll() {
+  const cards = [...document.querySelectorAll('.lineup-card')];
+  const anyOpen = cards.some(c => c.open);
+  cards.forEach(c => { c.open = !anyOpen; });
+  const btn = document.getElementById('lu-collapse-btn');
+  if (btn) btn.textContent = anyOpen ? 'Expand all' : 'Collapse all';
+}
+
+// Switch the optimizer's ranking metric (projections vs uploaded rankings).
+function setValueMode(mode) {
+  if (mode === 'rankings' && !lsHaveRankings()) return;
+  if (mode === LU.valueMode) return;
+  LU.valueMode = mode;
+  renderLineupCheck();   // recompute proposals under the new metric
+}
+
+function openRankingsUpload() {
+  document.getElementById('lu-rk-modal')?.remove();
+  const ov = document.createElement('div');
+  ov.id = 'lu-rk-modal';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML = `
+    <div style="background:var(--brown-dark);border:1px solid var(--gold);border-radius:4px;max-width:480px;width:100%;padding:20px;">
+      <div style="font-family:'Playfair Display',serif;font-size:1.1rem;color:var(--cream);margin-bottom:8px;">Upload Weekly Rankings — Week ${LU.week}</div>
+      <div style="font-size:0.7rem;color:var(--brown-light);margin-bottom:10px;">One player per line, best first. An optional leading rank ("1. Josh Allen") is honored. Names are matched to your league players; unmatched lines are ignored.</div>
+      <textarea id="lu-rk-text" style="width:100%;height:200px;background:var(--brown-mid);color:var(--parchment);border:1px solid var(--brown-light);border-radius:2px;padding:8px;font-family:monospace;font-size:0.8rem;box-sizing:border-box;" placeholder="Josh Allen\nLamar Jackson\nJa'Marr Chase\n..."></textarea>
+      <div id="lu-rk-status" style="font-size:0.7rem;margin:8px 0;color:var(--brown-light);min-height:1em;"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        ${lsHaveRankings() ? `<button class="ghost-btn" style="font-size:0.5rem;margin-right:auto;" onclick="clearRankings()">Clear saved</button>` : ''}
+        <button class="ghost-btn" style="font-size:0.5rem;" onclick="document.getElementById('lu-rk-modal').remove()">Cancel</button>
+        <button class="setup-btn" onclick="saveRankingsUpload()">Save &amp; use</button>
+      </div>
+    </div>`;
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+  document.body.appendChild(ov);
+}
+
+function saveRankingsUpload() {
+  const ta = document.getElementById('lu-rk-text');
+  const st = document.getElementById('lu-rk-status');
+  if (!ta) return;
+  const map = lsParseRankings(ta.value);
+  const n   = Object.keys(map).length;
+  if (!n) { if (st) { st.style.color = '#c0504d'; st.textContent = 'No players matched — check spelling.'; } return; }
+  LU.rankings  = map;
+  LU.valueMode = 'rankings';
+  lsSaveRankings(LU.week);
+  document.getElementById('lu-rk-modal')?.remove();
+  renderLineupCheck();
+}
+
+function clearRankings() {
+  LU.rankings = {};
+  LU.valueMode = 'projections';
+  try { localStorage.removeItem('lu_rankings'); } catch(_) {}
+  document.getElementById('lu-rk-modal')?.remove();
+  renderLineupCheck();
+}
+
 async function renderLineupCheck() {
   setC(loading('Loading lineups'));
   try {
@@ -1807,13 +1961,15 @@ async function renderLineupCheck() {
         const mine    = (rosters || []).find(r => r.owner_id === S.userId);
         if (!mine) continue;
 
+        // The week's matchup is the source of truth for what update_matchup_leg writes.
+        // mine.starters (from /rosters) is the generic roster lineup and can lag a
+        // week-specific change — so prefer the matchup starters for week w.
         let starters = mine.starters || [];
-        if (starters.length !== rosterPositions.length) {
-          try {
-            const matchups = await api('/league/' + lg.league_id + '/matchups/' + w);
-            starters = matchups?.find(m => m.roster_id === mine.roster_id)?.starters || starters;
-          } catch(_) {}
-        }
+        try {
+          const matchups = await api('/league/' + lg.league_id + '/matchups/' + w + '?_=' + Date.now());
+          const mm = matchups?.find(m => m.roster_id === mine.roster_id);
+          if (mm?.starters?.length === rosterPositions.length) starters = mm.starters;
+        } catch(_) {}
         if (!starters.length || starters.length !== rosterPositions.length) continue;
 
         lineups.push({
@@ -1839,27 +1995,36 @@ async function renderLineupCheck() {
       if (pr && typeof pr === 'object') LU.proj = pr;
     } catch(_) {}
 
+    // Kickoff times per NFL team (for game-time ordering).
+    LU.kick = {};
+    try {
+      const kr = await fetch('/api/espn/scoreboard?week=' + w + '&season=' + (nflState.season), { credentials: 'include' })
+        .then(r => r.ok ? r.json() : {});
+      if (kr && typeof kr === 'object') LU.kick = kr;
+    } catch(_) {}
+
+    // Restore any uploaded rankings for this week.
+    lsLoadRankings(w);
+
     LU.lineups = lineups;
     LU.week    = w;
     const canWrite = !!(S.token || S.auth?.has_token);
-    const haveProj = lsHaveProj();
+    const canOpt   = lsCanOptimize();
 
     // Precompute each league's optimal lineup so the collapsed card can show status.
-    if (haveProj) lineups.forEach(fix => { fix._proposed = lsBuildOptimalStarters(fix).proposed; });
+    if (canOpt) lineups.forEach(fix => { fix._proposed = lsBuildOptimalStarters(fix).proposed; });
 
     const cardsHtml = lineups.map((fix, idx) => {
-      const open = '';   // all cards collapsed by default; badge signals status
-
       const actions = canWrite
         ? `<div style="margin:4px 0;padding:0 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-             <button class="setup-btn" ${haveProj ? '' : 'disabled title="No projections for this week"'} onclick="event.preventDefault();optimizeLineup(${idx})">⚡ Optimize</button>
+             <button class="setup-btn" ${canOpt ? '' : 'disabled title="No projections or rankings for this week"'} onclick="event.preventDefault();optimizeLineup(${idx})">⚡ Optimize</button>
              <button class="ghost-btn" style="font-size:0.5rem;" onclick="event.preventDefault();testSetLineup(${idx})">↻ Re-set current (test)</button>
              <span id="lc-result-test-${idx}" style="font-size:0.55rem;color:var(--brown-light);"></span>
            </div>
            <div id="lc-opt-${idx}"></div>`
         : '';
 
-      return `<details class="lineup-card" id="lc-${idx}"${open}>
+      return `<details class="lineup-card" id="lc-${idx}">
         <summary>
           <span style="font-family:'Playfair Display',serif;font-weight:700;font-size:0.95rem;color:var(--cream);flex-shrink:0;margin-right:12px;">${esc(fix.leagueName)}</span>
           ${lsSummaryMeta(fix, idx)}
@@ -1869,16 +2034,26 @@ async function renderLineupCheck() {
       </details>`;
     }).join('');
 
-    const toolbar = canWrite && haveProj
-      ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-           <button class="setup-btn" onclick="optimizeAll()">⚡ Optimize all</button>
-           <button class="setup-btn" onclick="applyAll()">✓ Apply all</button>
-           <span id="lu-allstatus" style="font-size:0.6rem;color:var(--brown-light);"></span>
+    const rkActive = LU.valueMode === 'rankings';
+    const srcPill  = (mode, label, on) =>
+      `<button class="ghost-btn" style="font-size:0.5rem;${LU.valueMode === mode ? 'border-color:var(--gold);color:var(--gold-light);' : ''}" ${on ? '' : 'disabled'} onclick="setValueMode('${mode}')">${label}</button>`;
+
+    const toolbar = canWrite
+      ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+           <button class="setup-btn" ${canOpt ? '' : 'disabled'} onclick="optimizeAll()">⚡ Optimize all</button>
+           <button class="setup-btn" ${canOpt ? '' : 'disabled'} onclick="applyAll()">✓ Apply all</button>
+           <button class="ghost-btn" id="lu-collapse-btn" style="font-size:0.5rem;" onclick="toggleCollapseAll()">Expand all</button>
+           <span style="width:1px;height:18px;background:var(--brown-mid);"></span>
+           <span style="font-size:0.55rem;color:var(--brown-light);">Rank by:</span>
+           ${srcPill('projections', 'Projections', lsHaveProj())}
+           ${srcPill('rankings', 'Rankings' + (lsHaveRankings() ? '' : ' (none)'), lsHaveRankings())}
+           <button class="ghost-btn" style="font-size:0.5rem;" onclick="openRankingsUpload()">⬆ Upload rankings</button>
+           <span id="lu-allstatus" style="font-size:0.6rem;color:var(--brown-light);width:100%;text-align:right;"></span>
          </div>`
       : '';
 
     setC(`<div>
-      <div class="tab-header" style="margin-bottom:16px;align-items:center;">
+      <div class="tab-header" style="margin-bottom:16px;align-items:flex-start;">
         <div class="section-head" style="margin-bottom:0;flex:1;"><h2>Lineup Check — Week ${w}</h2><div class="section-head-line"></div></div>
         ${toolbar}
       </div>
