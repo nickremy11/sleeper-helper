@@ -1514,14 +1514,14 @@ async function wvUploadRankings(input) {
 // ── 4. Lineup Check ──────────────────────────────────────────────────────────
 
 // Lineups tab state — populated by renderLineupCheck, read by testSetLineup
-const LU = { lineups: [], week: 1 };
+const LU = { lineups: [], week: 1, proj: {} };
 
 // Step-1 proof: re-write a league's CURRENT starters back (a no-op set).
 // Confirms the write pipe (proxy + token + mutation shape) works end-to-end
 // before we let it pick optimal lineups.
 async function testSetLineup(idx) {
   const fix = LU.lineups[idx];
-  const out = document.getElementById('lc-result-' + idx);
+  const out = document.getElementById('lc-result-test-' + idx);
   if (!fix || !out) return;
   out.style.color = 'var(--brown-light)';
   out.textContent = 'setting…';
@@ -1533,6 +1533,144 @@ async function testSetLineup(idx) {
     out.style.color = match ? '#5fae5f' : '#d08a30';
     out.textContent = match ? '✓ saved — starters echoed back unchanged'
                             : '⚠ saved but starters differ: ' + JSON.stringify(echoed);
+  } catch (e) {
+    out.style.color = '#c0504d';
+    out.textContent = '✗ ' + (e.message || 'failed');
+  }
+}
+
+// Slot eligibility for flex-type roster positions.
+const LU_FLEX_ELIG = {
+  FLEX:       ['RB', 'WR', 'TE'],
+  WRRB_FLEX:  ['RB', 'WR'],
+  REC_FLEX:   ['WR', 'TE'],
+  SUPER_FLEX: ['QB', 'RB', 'WR', 'TE'],
+  IDP_FLEX:   ['DL', 'LB', 'DB'],
+};
+
+function lsPlayerPts(pid, scoringSettings) {
+  return lsComputeProjPts(LU.proj[pid], scoringSettings || {});
+}
+
+// Greedy optimal lineup: fill specific slots best-first, then flex slots.
+// Returns { proposed } — an ordered starters array matching fix.rosterPositions.
+// Slots we can't project (K, DEF, unknown) and current starters we lack data
+// for are LEFT UNCHANGED — we never bench a player we can't evaluate.
+function lsBuildOptimalStarters(fix) {
+  const slots = fix.rosterPositions;       // BN/IR/TAXI already removed, in order
+  const ss    = fix.scoringSettings || {};
+
+  const pool = (fix.players || []).map(pid => {
+    const p = S.players[pid];
+    if (!p) return null;
+    const pos = rsNormPos(p.position);
+    if (!pos) return null;
+    return { pid: String(pid), pos, pts: lsPlayerPts(pid, ss) };
+  }).filter(Boolean);
+  const poolIds = new Set(pool.map(p => p.pid));
+
+  const result = fix.starters.map(String);  // start from current — preserves unhandled slots
+  const used   = new Set();
+  const locked = new Array(slots.length).fill(false);
+
+  // Lock any current starter we have no data for (don't risk benching them)
+  slots.forEach((slot, i) => {
+    const cur = String(fix.starters[i] || '0');
+    if (cur !== '0' && !poolIds.has(cur)) { used.add(cur); locked[i] = true; }
+  });
+
+  // Pass 1: specific (non-flex) slots, best player at that position
+  slots.forEach((slot, i) => {
+    if (locked[i] || LU_FLEX_ELIG[slot]) return;
+    const pos = rsNormPos(slot);
+    if (!pos) return;  // K, DEF, unknown — leave current starter
+    const elig = pool.filter(p => p.pos === pos && !used.has(p.pid)).sort((a, b) => b.pts - a.pts);
+    result[i] = elig.length ? elig[0].pid : '0';
+    if (elig.length) used.add(elig[0].pid);
+  });
+
+  // Pass 2: flex slots, best remaining eligible player
+  slots.forEach((slot, i) => {
+    if (locked[i]) return;
+    const eligPos = LU_FLEX_ELIG[slot];
+    if (!eligPos) return;
+    const elig = pool.filter(p => eligPos.includes(p.pos) && !used.has(p.pid)).sort((a, b) => b.pts - a.pts);
+    result[i] = elig.length ? elig[0].pid : '0';
+    if (elig.length) used.add(elig[0].pid);
+  });
+
+  return { proposed: result };
+}
+
+function lsPlayerName(pid) {
+  const p = S.players[pid];
+  return p?.full_name || (pid && pid !== '0' ? 'Player ' + pid : 'Empty');
+}
+
+// Compute the optimal lineup and render a current→proposed diff with an Apply button.
+function optimizeLineup(idx) {
+  const fix = LU.lineups[idx];
+  const box = document.getElementById('lc-opt-' + idx);
+  if (!fix || !box) return;
+  if (!LU.proj || !Object.keys(LU.proj).length) {
+    box.innerHTML = '<div style="font-size:0.6rem;color:#c0504d;">No projection data for week ' + LU.week + ' yet.</div>';
+    return;
+  }
+
+  const { proposed } = lsBuildOptimalStarters(fix);
+  fix._proposed = proposed;
+  const ss = fix.scoringSettings || {};
+
+  const curPts = fix.starters.reduce((s, pid) => s + lsPlayerPts(pid, ss), 0);
+  const newPts = proposed.reduce((s, pid) => s + lsPlayerPts(pid, ss), 0);
+  const changed = proposed.some((pid, i) => String(pid) !== String(fix.starters[i]));
+
+  if (!changed) {
+    box.innerHTML = '<div style="font-size:0.6rem;color:#5fae5f;">✓ Already optimal for week ' + LU.week +
+      ' (' + curPts.toFixed(1) + ' proj pts)</div>';
+    return;
+  }
+
+  const rows = fix.rosterPositions.map((slot, i) => {
+    const cur = String(fix.starters[i] || '0'), prop = String(proposed[i] || '0');
+    if (cur === prop) {
+      return `<div class="diff-row"><span class="diff-slot">${esc(slot)}</span>
+        <span style="color:var(--parchment);">${esc(lsPlayerName(cur))}</span></div>`;
+    }
+    return `<div class="diff-row" style="background:rgba(95,174,95,0.07);">
+      <span class="diff-slot">${esc(slot)}</span>
+      <span style="color:var(--parchment);">
+        <span style="color:#c0504d;text-decoration:line-through;">${esc(lsPlayerName(cur))}</span>
+        <span style="color:var(--brown-light);"> → </span>
+        <span style="color:#5fae5f;">${esc(lsPlayerName(prop))}</span>
+      </span></div>`;
+  }).join('');
+
+  const gain = (newPts - curPts).toFixed(1);
+  box.innerHTML = `<div style="margin-top:8px;border-top:1px solid var(--brown-mid);padding-top:8px;">
+    <div style="font-size:0.6rem;color:var(--gold-light);margin-bottom:6px;">
+      Proposed — ${newPts.toFixed(1)} proj pts (<span style="color:#5fae5f;">+${gain}</span> vs current ${curPts.toFixed(1)})</div>
+    ${rows}
+    <button class="setup-btn" style="margin-top:8px;" onclick="applyLineup(${idx})">Apply this lineup</button>
+    <span id="lc-result-${idx}" style="font-size:0.55rem;margin-left:8px;color:var(--brown-light);"></span>
+  </div>`;
+}
+
+// Write the proposed lineup to Sleeper.
+async function applyLineup(idx) {
+  const fix = LU.lineups[idx];
+  const out = document.getElementById('lc-result-' + idx);
+  if (!fix?._proposed || !out) return;
+  out.style.color = 'var(--brown-light)';
+  out.textContent = 'applying…';
+  try {
+    const res    = await setLineup(fix.leagueId, fix.rosterId, LU.week, fix._proposed);
+    const echoed = (res?.starters || []).map(String);
+    const ok     = echoed.length === fix._proposed.length &&
+                   echoed.every((p, i) => p === String(fix._proposed[i]));
+    fix.starters = echoed.length ? echoed : fix._proposed;  // reflect the new live lineup
+    out.style.color = ok ? '#5fae5f' : '#d08a30';
+    out.textContent = ok ? '✓ lineup set' : '⚠ saved but Sleeper returned a different lineup';
   } catch (e) {
     out.style.color = '#c0504d';
     out.textContent = '✗ ' + (e.message || 'failed');
@@ -1568,7 +1706,12 @@ async function renderLineupCheck() {
         }
         if (!starters.length || starters.length !== rosterPositions.length) continue;
 
-        lineups.push({ leagueName: lg.name, leagueId: lg.league_id, rosterId: mine.roster_id, starters, rosterPositions });
+        lineups.push({
+          leagueName: lg.name, leagueId: lg.league_id, rosterId: mine.roster_id,
+          starters, rosterPositions,
+          players: mine.players || [],
+          scoringSettings: detail?.scoring_settings || {},
+        });
       } catch(_) {}
     }
 
@@ -1577,9 +1720,18 @@ async function renderLineupCheck() {
       return;
     }
 
+    // Week projections for the optimizer (pid → stats); league scoring applied per-team.
+    LU.proj = {};
+    try {
+      const season = nflState.league_create_season || nflState.season;
+      const pr = await api('/projections/nfl/regular/' + season + '/' + w);
+      if (pr && typeof pr === 'object') LU.proj = pr;
+    } catch(_) {}
+
     LU.lineups = lineups;
     LU.week    = w;
-    const canWrite = !!(S.token || S.auth?.has_token);
+    const canWrite   = !!(S.token || S.auth?.has_token);
+    const haveProj   = Object.keys(LU.proj).length > 0;
 
     const cardsHtml = lineups.map((fix, idx) => {
       const slotRows = fix.starters.map((pid, i) => {
@@ -1593,9 +1745,13 @@ async function renderLineupCheck() {
         </div>`;
       }).join('');
 
-      const testBtn = canWrite
-        ? `<button class="ghost-btn" style="font-size:0.5rem;margin:8px 0 4px;" onclick="event.preventDefault();testSetLineup(${idx})">↻ Re-set current lineup (test)</button>
-           <span id="lc-result-${idx}" style="font-size:0.55rem;margin-left:8px;color:var(--brown-light);"></span>`
+      const actions = canWrite
+        ? `<div style="margin:8px 0 4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+             <button class="setup-btn" ${haveProj ? '' : 'disabled title="No projections for this week"'} onclick="event.preventDefault();optimizeLineup(${idx})">⚡ Optimize lineup</button>
+             <button class="ghost-btn" style="font-size:0.5rem;" onclick="event.preventDefault();testSetLineup(${idx})">↻ Re-set current (test)</button>
+             <span id="lc-result-test-${idx}" style="font-size:0.55rem;color:var(--brown-light);"></span>
+           </div>
+           <div id="lc-opt-${idx}"></div>`
         : '';
 
       return `<details class="lineup-card" id="lc-${idx}" open>
@@ -1604,7 +1760,7 @@ async function renderLineupCheck() {
           <span style="font-family:'Rye',serif;font-size:0.45rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--brown-light);">Week ${w}</span>
         </summary>
         <div id="lc-body-${idx}">${slotRows}</div>
-        ${testBtn}
+        ${actions}
       </details>`;
     }).join('');
 
