@@ -298,6 +298,12 @@ async function handleProjections(request, env, url) {
     return handleProjSyncSheets(request, env, cors);
   }
 
+  // External projection sets (Mike Clay etc.) are shared reference data, KV-cached,
+  // no auth required — same posture as /api/fantasycalc.
+  if (sub === 'external' && request.method === 'GET') {
+    return handleProjExternal(request, env, cors, url);
+  }
+
   const user = await getAuthUser(request, env);
   if (!user) {
     return new Response(JSON.stringify({ error: 'Not authenticated' }), {
@@ -431,6 +437,185 @@ async function handleProjPpg(request, env, cors, user, season) {
     if (r.calc_ppg != null) map[r.player_name] = r.calc_ppg;
   }
   return projJson(map, cors);
+}
+
+// ── External projection sets (PDF scrapers) ───────────────────────────────────
+
+const PROJ_EXTERNAL_SOURCES = {
+  clay: {
+    name: 'Mike Clay (ESPN)',
+    kind: 'espn-pdf',
+    url:  'https://g.espncdn.com/s/ffldraftkit/26/NFLDK2026_CS_ClayProjections2026.pdf',
+  },
+};
+
+// ESPN draft-kit team-projection pages are alphabetical by location. The PDF has
+// no team name in the page text (logos are images), so team identity comes purely
+// from page order. Index here = order of the 32 team pages in the PDF.
+const PROJ_TEAM_ORDER = [
+  'ARI','ATL','BAL','BUF','CAR','CHI','CIN','CLE','DAL','DEN','DET','GB',
+  'HOU','IND','JAX','KC','LV','LAC','LAR','MIA','MIN','NE','NO','NYG',
+  'NYJ','PHI','PIT','SF','SEA','TB','TEN','WAS',
+];
+
+const PROJ_EXT_TTL = 60 * 60 * 24; // 24 hours
+
+async function handleProjExternal(request, env, cors, url) {
+  const source = (url.searchParams.get('source') || 'clay').toLowerCase();
+  const season = Number(url.searchParams.get('season')) || PROJ_SEASON_DEFAULT;
+  const refresh = url.searchParams.get('refresh') === '1';
+
+  const src = PROJ_EXTERNAL_SOURCES[source];
+  if (!src) return projJson({ error: `Unknown source "${source}"` }, cors, 400);
+
+  const key = `proj_ext_${source}_${season}`;
+  if (!refresh) {
+    const cached = await env.SLEEPER_KV.get(key, 'text');
+    if (cached) {
+      return new Response(cached, {
+        status: 200,
+        headers: { ...cors, 'Content-Type': 'application/json;charset=UTF-8', 'X-Cache': 'HIT' },
+      });
+    }
+  }
+
+  let players;
+  try {
+    const upstream = await fetch(src.url, { headers: { 'User-Agent': 'sleeper-helper/1.0' } });
+    if (!upstream.ok) return projJson({ error: 'Upstream fetch failed', status: upstream.status }, cors, 502);
+    const buf = await upstream.arrayBuffer();
+    players = await parseClayPdf(buf);
+  } catch (e) {
+    return projJson({ error: 'Parse failed: ' + (e && e.message || e) }, cors, 502);
+  }
+
+  if (!players || !players.length) {
+    return projJson({ error: 'No players parsed from source' }, cors, 502);
+  }
+
+  const body = JSON.stringify({ source, name: src.name, season, updated: Date.now(), players });
+  await env.SLEEPER_KV.put(key, body, { expirationTtl: PROJ_EXT_TTL });
+  return new Response(body, {
+    status: 200,
+    headers: { ...cors, 'Content-Type': 'application/json;charset=UTF-8', 'X-Cache': 'MISS' },
+  });
+}
+
+// Inflate a zlib (RFC1950 / FlateDecode) stream using the platform DecompressionStream.
+// The caller must pass exactly the compressed bytes (sliced via the stream's /Length);
+// a spec-compliant DecompressionStream errors on any trailing bytes, and workerd
+// discards buffered output when that happens.
+async function inflateDeflate(bytes) {
+  const s = new Response(bytes).body.pipeThrough(new DecompressionStream('deflate'));
+  return new Uint8Array(await new Response(s).arrayBuffer());
+}
+
+// Extract pipe-delimited text cells from a decoded PDF content stream.
+// Handles both `(...) Tj` and `[ (...) ... ] TJ` text-showing operators, then
+// splits each shown string on '|' into individual table cells.
+function pdfFlatTokens(text) {
+  const out = [];
+  // [ ... ] TJ  — concatenate the inner (...) string parts
+  const tjArr = /\[((?:[^\[\]]|\\.)*)\]\s*TJ/g;
+  let m;
+  while ((m = tjArr.exec(text)) !== null) {
+    const parts = m[1].match(/\((?:[^()\\]|\\.)*\)/g) || [];
+    out.push(parts.map(p => p.slice(1, -1)).join(''));
+  }
+  // (...) Tj
+  const tjOne = /\(((?:[^()\\]|\\.)*)\)\s*Tj/g;
+  while ((m = tjOne.exec(text)) !== null) out.push(m[1]);
+
+  const flat = [];
+  for (const t of out) {
+    for (const cell of t.split('|')) {
+      const c = cell.trim();
+      if (c) flat.push(c);
+    }
+  }
+  return flat;
+}
+
+// Parse the 32 team-projection pages of the ESPN/Clay PDF into offensive players.
+// Each team page is detected by the presence of a "QB Total" token. Within a page,
+// an offensive player block is `<QB|RB|WR|TE> <name> <16 numeric cells>`:
+//   Gm, PassAtt, Comp, PassYds, PassTD, INT, Sk, RushAtt, RushYds, RushTD,
+//   Tgt, Rec, RecYds, RecTD, Pts, Rk
+// A strict numeric guard (all 16 cells numeric, Gm in 1..18) prevents the walker
+// from spilling into the page's special-teams/returns/IDP block.
+async function parseClayPdf(arrayBuffer) {
+  const bytes = new Uint8Array(arrayBuffer);
+  // Decode raw bytes as latin-1 so byte offsets line up for stream extraction.
+  let raw = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    raw += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  }
+
+  // Find each `stream\r?\n … endstream` block and inflate it. The latin-1 decode keeps
+  // char offsets == byte offsets, so regex indices slice `bytes` directly. Each stream's
+  // exact compressed length is the `/Length N` in the object dictionary immediately
+  // preceding it — slicing to that avoids trailing bytes that break DecompressionStream.
+  // Skip the "stream" inside "endstream" (preceded by "end").
+  const teamPages = [];
+  const re = /stream\r?\n/g;
+  const lenRe = /\/Length\s+(\d+)/g;
+  let sm;
+  while ((sm = re.exec(raw)) !== null) {
+    if (raw.slice(sm.index - 3, sm.index) === 'end') continue;
+    const start = sm.index + sm[0].length;
+    // Only flate-decode content streams; skip image/other filters quickly.
+    const pre = raw.slice(Math.max(0, sm.index - 280), sm.index);
+    if (pre.indexOf('FlateDecode') < 0) continue;
+    // Take the /Length nearest the stream keyword (last match in the dict).
+    let len = -1, lm;
+    lenRe.lastIndex = 0;
+    while ((lm = lenRe.exec(pre)) !== null) len = +lm[1];
+    if (len <= 0) continue;
+    const slice = bytes.subarray(start, start + len);
+    let dec;
+    try { dec = await inflateDeflate(slice); }
+    catch { continue; }
+    if (!dec.length) continue;
+    // decode inflated content as latin-1
+    let txt = '';
+    for (let i = 0; i < dec.length; i += 0x8000) {
+      txt += String.fromCharCode.apply(null, dec.subarray(i, i + 0x8000));
+    }
+    if (txt.indexOf('BT') < 0) continue;
+    const flat = pdfFlatTokens(txt);
+    if (flat.includes('QB Total')) teamPages.push(flat);
+  }
+
+  const COLS = ['gm','pass_att','comp','pass_yds','pass_td','int','sk','rush_att','rush_yds',
+                'rush_td','tgt','rec','rec_yds','rec_td','clay_pts','clay_rk'];
+  const OFF = new Set(['QB','RB','WR','TE']);
+  const NUM = /^-?\d+(\.\d+)?$/;
+  const players = [];
+
+  const nTeams = Math.min(teamPages.length, PROJ_TEAM_ORDER.length);
+  for (let t = 0; t < nTeams; t++) {
+    const team = PROJ_TEAM_ORDER[t];
+    const flat = teamPages[t];
+    let i = 0;
+    while (i < flat.length) {
+      if (OFF.has(flat[i]) && i + 1 < flat.length && !OFF.has(flat[i + 1])) {
+        const name = flat[i + 1];
+        const nums = flat.slice(i + 2, i + 2 + 16);
+        const ok = nums.length === 16 && nums.every(x => NUM.test(x))
+          && +nums[0] >= 1 && +nums[0] <= 18;
+        if (ok) {
+          const p = { player_name: name, nfl_team: team, position: flat[i] };
+          COLS.forEach((c, ci) => { p[c] = +nums[ci]; });
+          delete p.sk; // sacks unused by fantasy scoring
+          players.push(p);
+          i += 18;
+          continue;
+        }
+      }
+      i += 1;
+    }
+  }
+  return players;
 }
 
 /**
