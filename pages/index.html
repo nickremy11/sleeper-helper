@@ -550,6 +550,21 @@ async function gql(op, query) {
   if (json.errors?.length) throw new Error(json.errors[0].message);
   return json.data;
 }
+// Set a Sleeper starting lineup via GraphQL. Values are inlined into the query
+// string (matching Sleeper's own client); starters is an ordered array of
+// player_id strings matching roster_positions (BN/IR/TAXI removed). leg+round
+// both = the week for the regular season. Returns the updated matchup leg.
+async function setLineup(leagueId, rosterId, week, starters) {
+  const sArr  = JSON.stringify(starters.map(String));
+  const query = `mutation update_matchup_leg($starters_games: Map) {
+    update_matchup_leg(league_id: "${leagueId}", roster_id: ${rosterId}, leg: ${week}, round: ${week}, starters: ${sArr}, starters_games: $starters_games){
+      league_id leg roster_id round starters
+    }
+  }`;
+  const data = await gql('update_matchup_leg', query);
+  return data?.update_matchup_leg;
+}
+
 function timeAgo(ts) {
   const h = Math.floor((Date.now() - ts) / 36e5);
   return h < 1 ? 'just now' : h < 24 ? h + 'h ago' : Math.floor(h / 24) + 'd ago';
@@ -1498,6 +1513,32 @@ async function wvUploadRankings(input) {
 
 // ── 4. Lineup Check ──────────────────────────────────────────────────────────
 
+// Lineups tab state — populated by renderLineupCheck, read by testSetLineup
+const LU = { lineups: [], week: 1 };
+
+// Step-1 proof: re-write a league's CURRENT starters back (a no-op set).
+// Confirms the write pipe (proxy + token + mutation shape) works end-to-end
+// before we let it pick optimal lineups.
+async function testSetLineup(idx) {
+  const fix = LU.lineups[idx];
+  const out = document.getElementById('lc-result-' + idx);
+  if (!fix || !out) return;
+  out.style.color = 'var(--brown-light)';
+  out.textContent = 'setting…';
+  try {
+    const res = await setLineup(fix.leagueId, fix.rosterId, LU.week, fix.starters);
+    const echoed = res?.starters || [];
+    const match  = echoed.length === fix.starters.length &&
+                   echoed.every((p, i) => String(p) === String(fix.starters[i]));
+    out.style.color = match ? '#5fae5f' : '#d08a30';
+    out.textContent = match ? '✓ saved — starters echoed back unchanged'
+                            : '⚠ saved but starters differ: ' + JSON.stringify(echoed);
+  } catch (e) {
+    out.style.color = '#c0504d';
+    out.textContent = '✗ ' + (e.message || 'failed');
+  }
+}
+
 async function renderLineupCheck() {
   setC(loading('Loading lineups'));
   try {
@@ -1536,6 +1577,10 @@ async function renderLineupCheck() {
       return;
     }
 
+    LU.lineups = lineups;
+    LU.week    = w;
+    const canWrite = !!(S.token || S.auth?.has_token);
+
     const cardsHtml = lineups.map((fix, idx) => {
       const slotRows = fix.starters.map((pid, i) => {
         const slot   = fix.rosterPositions[i] || '?';
@@ -1548,12 +1593,18 @@ async function renderLineupCheck() {
         </div>`;
       }).join('');
 
+      const testBtn = canWrite
+        ? `<button class="ghost-btn" style="font-size:0.5rem;margin:8px 0 4px;" onclick="event.preventDefault();testSetLineup(${idx})">↻ Re-set current lineup (test)</button>
+           <span id="lc-result-${idx}" style="font-size:0.55rem;margin-left:8px;color:var(--brown-light);"></span>`
+        : '';
+
       return `<details class="lineup-card" id="lc-${idx}" open>
         <summary>
           <span style="font-family:'Playfair Display',serif;font-weight:700;font-size:0.95rem;color:var(--cream);">${esc(fix.leagueName)}</span>
           <span style="font-family:'Rye',serif;font-size:0.45rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--brown-light);">Week ${w}</span>
         </summary>
         <div id="lc-body-${idx}">${slotRows}</div>
+        ${testBtn}
       </details>`;
     }).join('');
 
