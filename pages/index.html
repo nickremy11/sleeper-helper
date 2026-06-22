@@ -1570,9 +1570,11 @@ function lsBuildOptimalStarters(fix) {
   const slots = fix.rosterPositions;       // BN/IR/TAXI already removed, in order
   const ss    = fix.scoringSettings || {};
 
+  const excluded = fix.excluded || new Set();
   const pool = (fix.players || []).map(pid => {
     const p = S.players[pid];
     if (!p) return null;
+    if (excluded.has(String(pid)) && !fix.starters.map(String).includes(String(pid))) return null;  // skip IR/taxi (unless already starting)
     const pos = rsNormPos(p.position);
     if (!pos) return null;
     return { pid: String(pid), pos, pts: lsPlayerPts(pid, ss) };
@@ -1660,12 +1662,12 @@ function lsSummaryMeta(fix, idx) {
   const color = LS_LEVEL_COLOR[st.level];
   const pts = st.cur == null ? ''
     : st.gain > 0.05
-      ? `<span style="font-size:0.8rem;color:var(--brown-light);white-space:nowrap;">${st.cur.toFixed(1)} <span style="color:#5fae5f;">→ ${st.opt.toFixed(1)}</span></span>`
-      : `<span style="font-size:0.8rem;color:var(--brown-light);white-space:nowrap;">${st.cur.toFixed(1)} pts</span>`;
+      ? `<span style="font-size:0.95rem;color:var(--brown-light);white-space:nowrap;">${st.cur.toFixed(1)} <span style="color:#5fae5f;">→ ${st.opt.toFixed(1)}</span></span>`
+      : `<span style="font-size:0.95rem;color:var(--brown-light);white-space:nowrap;">${st.cur.toFixed(1)} pts</span>`;
   const reason = st.detail
-    ? `<span style="font-size:0.7rem;color:${color};">${esc(st.detail)}</span>` : '';
+    ? `<span style="font-size:0.85rem;color:${color};">${esc(st.detail)}</span>` : '';
   const icon  = st.level === 'bad' ? '⚠ ' : st.level === 'ok' ? '✓ ' : '';
-  const badge = `<span style="font-family:'Rye',serif;font-size:0.45rem;letter-spacing:0.1em;text-transform:uppercase;color:${color};border:1px solid ${color};border-radius:2px;padding:2px 6px;white-space:nowrap;">${icon}${esc(st.label)}</span>`;
+  const badge = `<span style="font-family:'Rye',serif;font-size:0.52rem;letter-spacing:0.1em;text-transform:uppercase;color:${color};border:1px solid ${color};border-radius:2px;padding:2px 6px;white-space:nowrap;">${icon}${esc(st.label)}</span>`;
   return `<span id="lc-meta-${idx}" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">${reason}${pts}${badge}</span>`;
 }
 
@@ -1818,6 +1820,7 @@ async function renderLineupCheck() {
           leagueName: lg.name, leagueId: lg.league_id, rosterId: mine.roster_id,
           starters, rosterPositions,
           players: mine.players || [],
+          excluded: new Set([...(mine.reserve || []), ...(mine.taxi || [])].map(String)),  // IR + taxi — never auto-start
           scoringSettings: detail?.scoring_settings || {},
         });
       } catch(_) {}
@@ -1845,8 +1848,7 @@ async function renderLineupCheck() {
     if (haveProj) lineups.forEach(fix => { fix._proposed = lsBuildOptimalStarters(fix).proposed; });
 
     const cardsHtml = lineups.map((fix, idx) => {
-      const st   = lsLineupStatus(fix);
-      const open = (st.level === 'bad' || st.level === 'warn') ? ' open' : '';   // surface problems, collapse the rest
+      const open = '';   // all cards collapsed by default; badge signals status
 
       const actions = canWrite
         ? `<div style="margin:4px 0;padding:0 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
