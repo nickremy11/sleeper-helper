@@ -1552,10 +1552,20 @@ function lsPlayerPts(pid, scoringSettings) {
   return lsComputeProjPts(LU.proj[pid], scoringSettings || {});
 }
 
-// Greedy optimal lineup: fill specific slots best-first, then flex slots.
-// Returns { proposed } — an ordered starters array matching fix.rosterPositions.
-// Slots we can't project (K, DEF, unknown) and current starters we lack data
-// for are LEFT UNCHANGED — we never bench a player we can't evaluate.
+function lsHaveProj() { return !!(LU.proj && Object.keys(LU.proj).length); }
+
+function lsSlotElig(slot) {
+  if (LU_FLEX_ELIG[slot]) return LU_FLEX_ELIG[slot];
+  const pos = rsNormPos(slot);
+  return pos ? [pos] : null;   // null → unhandled slot (K, DEF, unknown)
+}
+
+// Optimal lineup with minimal churn. Two phases:
+//  1) greedy pick the best SET of starters (specific slots first, then flex);
+//  2) assign that set back to slots, KEEPING each current starter in place when
+//     they remain a starter and are slot-eligible — so identical-slot reshuffles
+//     (e.g. two FLEX players swapping slots) never show as spurious changes.
+// Slots we can't project (K/DEF) and starters we lack data for stay untouched.
 function lsBuildOptimalStarters(fix) {
   const slots = fix.rosterPositions;       // BN/IR/TAXI already removed, in order
   const ss    = fix.scoringSettings || {};
@@ -1567,39 +1577,51 @@ function lsBuildOptimalStarters(fix) {
     if (!pos) return null;
     return { pid: String(pid), pos, pts: lsPlayerPts(pid, ss) };
   }).filter(Boolean);
+  const byId    = {}; pool.forEach(p => { byId[p.pid] = p; });
   const poolIds = new Set(pool.map(p => p.pid));
 
-  const result = fix.starters.map(String);  // start from current — preserves unhandled slots
-  const used   = new Set();
   const locked = new Array(slots.length).fill(false);
-
-  // Lock any current starter we have no data for (don't risk benching them)
+  const used   = new Set();
   slots.forEach((slot, i) => {
     const cur = String(fix.starters[i] || '0');
-    if (cur !== '0' && !poolIds.has(cur)) { used.add(cur); locked[i] = true; }
+    if (cur !== '0' && !poolIds.has(cur)) { used.add(cur); locked[i] = true; }   // no data → lock
+    if (!LU_FLEX_ELIG[slot] && !rsNormPos(slot)) locked[i] = true;               // K/DEF → lock
   });
 
-  // Pass 1: specific (non-flex) slots, best player at that position
+  // Phase 1 — greedy best set (specific slots, then flex)
+  const pick = (i, eligPos) => {
+    const cand = pool.filter(p => eligPos.includes(p.pos) && !used.has(p.pid)).sort((a, b) => b.pts - a.pts);
+    if (cand.length) { used.add(cand[0].pid); return cand[0].pid; }
+    return null;
+  };
+  const chosen = new Set();
+  slots.forEach((slot, i) => { if (!locked[i] && !LU_FLEX_ELIG[slot]) { const p = pick(i, lsSlotElig(slot)); if (p) chosen.add(p); } });
+  slots.forEach((slot, i) => { if (!locked[i] &&  LU_FLEX_ELIG[slot]) { const p = pick(i, LU_FLEX_ELIG[slot]); if (p) chosen.add(p); } });
+
+  // Phase 2 — assign chosen set to slots, keeping current starters in place
+  const out    = new Array(slots.length).fill('0');
+  const placed = new Set();
   slots.forEach((slot, i) => {
-    if (locked[i] || LU_FLEX_ELIG[slot]) return;
-    const pos = rsNormPos(slot);
-    if (!pos) return;  // K, DEF, unknown — leave current starter
-    const elig = pool.filter(p => p.pos === pos && !used.has(p.pid)).sort((a, b) => b.pts - a.pts);
-    result[i] = elig.length ? elig[0].pid : '0';
-    if (elig.length) used.add(elig[0].pid);
+    if (locked[i]) { out[i] = String(fix.starters[i] || '0'); placed.add(out[i]); return; }
+    const cur = String(fix.starters[i] || '0');
+    const elig = lsSlotElig(slot);
+    if (cur !== '0' && chosen.has(cur) && !placed.has(cur) && elig && byId[cur] && elig.includes(byId[cur].pos)) {
+      out[i] = cur; placed.add(cur);
+    }
   });
-
-  // Pass 2: flex slots, best remaining eligible player
   slots.forEach((slot, i) => {
-    if (locked[i]) return;
-    const eligPos = LU_FLEX_ELIG[slot];
-    if (!eligPos) return;
-    const elig = pool.filter(p => eligPos.includes(p.pos) && !used.has(p.pid)).sort((a, b) => b.pts - a.pts);
-    result[i] = elig.length ? elig[0].pid : '0';
-    if (elig.length) used.add(elig[0].pid);
+    if (locked[i] || out[i] !== '0') return;
+    const elig = lsSlotElig(slot); if (!elig) return;
+    let best = null;
+    chosen.forEach(pid => {
+      if (placed.has(pid)) return;
+      const p = byId[pid]; if (!p || !elig.includes(p.pos)) return;
+      if (!best || p.pts > best.pts) best = p;
+    });
+    if (best) { out[i] = best.pid; placed.add(best.pid); }
   });
 
-  return { proposed: result };
+  return { proposed: out };
 }
 
 function lsPlayerName(pid) {
@@ -1607,74 +1629,160 @@ function lsPlayerName(pid) {
   return p?.full_name || (pid && pid !== '0' ? 'Player ' + pid : 'Empty');
 }
 
-// Compute the optimal lineup and render a current→proposed diff with an Apply button.
-function optimizeLineup(idx) {
-  const fix = LU.lineups[idx];
-  const box = document.getElementById('lc-opt-' + idx);
-  if (!fix || !box) return;
-  if (!LU.proj || !Object.keys(LU.proj).length) {
-    box.innerHTML = '<div style="font-size:0.6rem;color:#c0504d;">No projection data for week ' + LU.week + ' yet.</div>';
-    return;
-  }
+// Injury statuses that mean a starter won't play — flagged on the card.
+const LS_BAD_INJ = { Out: 1, IR: 1, Sus: 1, NA: 1, PUP: 1, DNR: 1, COV: 1, DNP: 1 };
 
-  const { proposed } = lsBuildOptimalStarters(fix);
-  fix._proposed = proposed;
-  const ss = fix.scoringSettings || {};
+// Per-league lineup health, used for the collapsed summary badge.
+function lsLineupStatus(fix) {
+  const ss   = fix.scoringSettings || {};
+  const have = lsHaveProj();
+  const cur  = have ? fix.starters.reduce((s, p) => s + lsPlayerPts(p, ss), 0) : null;
+  const opt  = have ? (fix._proposed || fix.starters).reduce((s, p) => s + lsPlayerPts(p, ss), 0) : null;
+  const gain = have ? opt - cur : 0;
 
-  const curPts = fix.starters.reduce((s, pid) => s + lsPlayerPts(pid, ss), 0);
-  const newPts = proposed.reduce((s, pid) => s + lsPlayerPts(pid, ss), 0);
-  const changed = proposed.some((pid, i) => String(pid) !== String(fix.starters[i]));
+  const empty   = fix.starters.filter(p => !p || p === '0').length;
+  const injured = fix.starters.filter(p => LS_BAD_INJ[S.players[p]?.injury_status])
+                              .map(p => lsPlayerName(p));
 
-  if (!changed) {
-    box.innerHTML = '<div style="font-size:0.6rem;color:#5fae5f;">✓ Already optimal for week ' + LU.week +
-      ' (' + curPts.toFixed(1) + ' proj pts)</div>';
-    return;
-  }
+  let level = 'na', label = '—', detail = '';
+  if (empty)              { level = 'bad';  label = 'Action needed'; detail = empty + ' empty slot' + (empty > 1 ? 's' : ''); }
+  else if (injured.length){ level = 'bad';  label = 'Action needed'; detail = 'Out: ' + injured.join(', '); }
+  else if (have && gain > 0.05) { level = 'warn'; label = 'Suboptimal'; detail = '+' + gain.toFixed(1) + ' pts available'; }
+  else if (have)          { level = 'ok';   label = 'Optimal'; }
+  return { level, label, detail, cur, opt, gain };
+}
 
-  const rows = fix.rosterPositions.map((slot, i) => {
-    const cur = String(fix.starters[i] || '0'), prop = String(proposed[i] || '0');
-    if (cur === prop) {
-      return `<div class="diff-row"><span class="diff-slot">${esc(slot)}</span>
-        <span style="color:var(--parchment);">${esc(lsPlayerName(cur))}</span></div>`;
+const LS_LEVEL_COLOR = { bad: '#c0504d', warn: '#d08a30', ok: '#5fae5f', na: 'var(--brown-light)' };
+
+// Right-hand side of the card summary: reason + points + status badge.
+function lsSummaryMeta(fix, idx) {
+  const st    = lsLineupStatus(fix);
+  const color = LS_LEVEL_COLOR[st.level];
+  const pts = st.cur == null ? ''
+    : st.gain > 0.05
+      ? `<span style="font-size:0.8rem;color:var(--brown-light);white-space:nowrap;">${st.cur.toFixed(1)} <span style="color:#5fae5f;">→ ${st.opt.toFixed(1)}</span></span>`
+      : `<span style="font-size:0.8rem;color:var(--brown-light);white-space:nowrap;">${st.cur.toFixed(1)} pts</span>`;
+  const reason = st.detail
+    ? `<span style="font-size:0.7rem;color:${color};">${esc(st.detail)}</span>` : '';
+  const icon  = st.level === 'bad' ? '⚠ ' : st.level === 'ok' ? '✓ ' : '';
+  const badge = `<span style="font-family:'Rye',serif;font-size:0.45rem;letter-spacing:0.1em;text-transform:uppercase;color:${color};border:1px solid ${color};border-radius:2px;padding:2px 6px;white-space:nowrap;">${icon}${esc(st.label)}</span>`;
+  return `<span id="lc-meta-${idx}" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">${reason}${pts}${badge}</span>`;
+}
+
+// Render the slot rows for a card. mode 'current' shows live starters with proj
+// points; mode 'diff' shows each change inline (strikethrough → replacement).
+function lsBodyRows(fix, mode) {
+  const ss   = fix.scoringSettings || {};
+  const prop = fix._proposed || fix.starters;
+  const have = lsHaveProj();
+  const ptsCell = pid => `<span style="color:var(--brown-light);font-size:0.8rem;min-width:36px;text-align:right;flex-shrink:0;">${have ? lsPlayerPts(pid, ss).toFixed(1) : '–'}</span>`;
+
+  return fix.rosterPositions.map((slot, i) => {
+    const cur = String(fix.starters[i] || '0');
+    const pr  = String(prop[i] || '0');
+    if (mode === 'diff' && cur !== pr) {
+      return `<div class="diff-row" style="background:rgba(95,174,95,0.07);">
+        <span class="diff-slot">${esc(slot)}</span>
+        <span style="color:var(--parchment);flex:1;">
+          <span style="color:#c0504d;text-decoration:line-through;">${esc(lsPlayerName(cur))}</span>
+          <span style="color:var(--brown-light);"> → </span>
+          <span style="color:#5fae5f;">${esc(lsPlayerName(pr))}</span>
+        </span>
+        <span style="color:var(--brown-light);font-size:0.8rem;white-space:nowrap;flex-shrink:0;">${have ? lsPlayerPts(cur, ss).toFixed(1) : '–'} <span style="color:#5fae5f;">→ ${have ? lsPlayerPts(pr, ss).toFixed(1) : '–'}</span></span>
+      </div>`;
     }
-    return `<div class="diff-row" style="background:rgba(95,174,95,0.07);">
+    const pid = mode === 'diff' ? pr : cur;
+    const inj = injuryBadge(S.players[pid]?.injury_status);
+    return `<div class="diff-row">
       <span class="diff-slot">${esc(slot)}</span>
-      <span style="color:var(--parchment);">
-        <span style="color:#c0504d;text-decoration:line-through;">${esc(lsPlayerName(cur))}</span>
-        <span style="color:var(--brown-light);"> → </span>
-        <span style="color:#5fae5f;">${esc(lsPlayerName(prop))}</span>
-      </span></div>`;
+      <span style="color:var(--parchment);flex:1;">${esc(lsPlayerName(pid))}${inj ? ' ' + inj : ''}</span>
+      ${ptsCell(pid)}
+    </div>`;
   }).join('');
+}
 
-  const gain = (newPts - curPts).toFixed(1);
-  box.innerHTML = `<div style="margin-top:8px;border-top:1px solid var(--brown-mid);padding-top:8px;">
-    <div style="font-size:0.6rem;color:var(--gold-light);margin-bottom:6px;">
-      Proposed — ${newPts.toFixed(1)} proj pts (<span style="color:#5fae5f;">+${gain}</span> vs current ${curPts.toFixed(1)})</div>
-    ${rows}
-    <button class="setup-btn" style="margin-top:8px;" onclick="applyLineup(${idx})">Apply this lineup</button>
-    <span id="lc-result-${idx}" style="font-size:0.55rem;margin-left:8px;color:var(--brown-light);"></span>
+// Show the optimal lineup as an in-place diff inside the card, plus Apply/Cancel.
+function optimizeLineup(idx) {
+  const fix  = LU.lineups[idx];
+  const body = document.getElementById('lc-body-' + idx);
+  const box  = document.getElementById('lc-opt-' + idx);
+  if (!fix || !body || !box) return;
+  if (!lsHaveProj()) { box.innerHTML = '<div style="padding:6px 16px;font-size:0.65rem;color:#c0504d;">No projections for week ' + LU.week + ' yet.</div>'; return; }
+
+  if (!fix._proposed) fix._proposed = lsBuildOptimalStarters(fix).proposed;
+  const ss      = fix.scoringSettings || {};
+  const cur     = fix.starters.reduce((s, p) => s + lsPlayerPts(p, ss), 0);
+  const opt     = fix._proposed.reduce((s, p) => s + lsPlayerPts(p, ss), 0);
+  const changed = fix._proposed.some((p, i) => String(p) !== String(fix.starters[i]));
+
+  body.innerHTML = lsBodyRows(fix, 'diff');
+  if (!changed) {
+    box.innerHTML = `<div style="padding:6px 16px;font-size:0.7rem;color:#5fae5f;">✓ Already optimal — ${cur.toFixed(1)} proj pts</div>`;
+    return;
+  }
+  box.innerHTML = `<div style="padding:6px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--brown-mid);">
+    <span style="font-size:0.72rem;color:var(--gold-light);">${cur.toFixed(1)} → <span style="color:#5fae5f;">${opt.toFixed(1)}</span> pts (<span style="color:#5fae5f;">+${(opt - cur).toFixed(1)}</span>)</span>
+    <button class="setup-btn" onclick="applyLineup(${idx})">Apply this lineup</button>
+    <button class="ghost-btn" style="font-size:0.5rem;" onclick="revertLineupView(${idx})">Cancel</button>
   </div>`;
 }
 
-// Write the proposed lineup to Sleeper.
+function revertLineupView(idx) {
+  const fix  = LU.lineups[idx];
+  const body = document.getElementById('lc-body-' + idx);
+  const box  = document.getElementById('lc-opt-' + idx);
+  if (body) body.innerHTML = lsBodyRows(fix, 'current');
+  if (box)  box.innerHTML  = '';
+}
+
+// Write the proposed lineup to Sleeper. Returns true on confirmed success.
 async function applyLineup(idx) {
   const fix = LU.lineups[idx];
-  const out = document.getElementById('lc-result-' + idx);
-  if (!fix?._proposed || !out) return;
-  out.style.color = 'var(--brown-light)';
-  out.textContent = 'applying…';
+  if (!fix) return false;
+  if (!fix._proposed) fix._proposed = lsBuildOptimalStarters(fix).proposed;
+  const box   = document.getElementById('lc-opt-' + idx);
+  const setMsg = (c, t) => { if (box) box.innerHTML = `<div style="padding:6px 16px;font-size:0.65rem;color:${c};">${t}</div>`; };
+  setMsg('var(--brown-light)', 'applying…');
   try {
     const res    = await setLineup(fix.leagueId, fix.rosterId, LU.week, fix._proposed);
     const echoed = (res?.starters || []).map(String);
-    const ok     = echoed.length === fix._proposed.length &&
-                   echoed.every((p, i) => p === String(fix._proposed[i]));
-    fix.starters = echoed.length ? echoed : fix._proposed;  // reflect the new live lineup
-    out.style.color = ok ? '#5fae5f' : '#d08a30';
-    out.textContent = ok ? '✓ lineup set' : '⚠ saved but Sleeper returned a different lineup';
+    const ok     = echoed.length === fix._proposed.length && echoed.every((p, i) => p === String(fix._proposed[i]));
+    fix.starters  = echoed.length ? echoed : fix._proposed.map(String);   // reflect live lineup
+    fix._proposed = lsHaveProj() ? lsBuildOptimalStarters(fix).proposed : undefined;
+    const body = document.getElementById('lc-body-' + idx); if (body) body.innerHTML = lsBodyRows(fix, 'current');
+    const meta = document.getElementById('lc-meta-' + idx); if (meta) meta.outerHTML = lsSummaryMeta(fix, idx);
+    setMsg(ok ? '#5fae5f' : '#d08a30', ok ? '✓ lineup set' : '⚠ saved but Sleeper returned a different lineup');
+    return ok;
   } catch (e) {
-    out.style.color = '#c0504d';
-    out.textContent = '✗ ' + (e.message || 'failed');
+    setMsg('#c0504d', '✗ ' + (e.message || 'failed'));
+    return false;
   }
+}
+
+// Preview optimal lineups for every league at once.
+function optimizeAll() {
+  LU.lineups.forEach((_, idx) => {
+    const d = document.getElementById('lc-' + idx); if (d) d.open = true;
+    optimizeLineup(idx);
+  });
+}
+
+// Apply optimal lineups to every league that has an improvement, sequentially.
+async function applyAll() {
+  const status = document.getElementById('lu-allstatus');
+  const setS = (c, t) => { if (status) { status.style.color = c; status.textContent = t; } };
+  const targets = LU.lineups.map((fix, idx) => ({ fix, idx })).filter(({ fix }) => {
+    if (!fix._proposed) fix._proposed = lsBuildOptimalStarters(fix).proposed;
+    return fix._proposed.some((p, i) => String(p) !== String(fix.starters[i]));
+  });
+  if (!targets.length) { setS('#5fae5f', 'All lineups already optimal'); return; }
+  let done = 0, fail = 0;
+  for (const { idx } of targets) {
+    setS('var(--brown-light)', `Applying ${done + fail + 1}/${targets.length}…`);
+    const ok = await applyLineup(idx);
+    if (ok) done++; else fail++;
+  }
+  setS(fail ? '#d08a30' : '#5fae5f', `Applied ${done} lineup${done !== 1 ? 's' : ''}${fail ? `, ${fail} failed` : ''}`);
 }
 
 async function renderLineupCheck() {
@@ -1730,43 +1838,47 @@ async function renderLineupCheck() {
 
     LU.lineups = lineups;
     LU.week    = w;
-    const canWrite   = !!(S.token || S.auth?.has_token);
-    const haveProj   = Object.keys(LU.proj).length > 0;
+    const canWrite = !!(S.token || S.auth?.has_token);
+    const haveProj = lsHaveProj();
+
+    // Precompute each league's optimal lineup so the collapsed card can show status.
+    if (haveProj) lineups.forEach(fix => { fix._proposed = lsBuildOptimalStarters(fix).proposed; });
 
     const cardsHtml = lineups.map((fix, idx) => {
-      const slotRows = fix.starters.map((pid, i) => {
-        const slot   = fix.rosterPositions[i] || '?';
-        const player = S.players[pid];
-        const name   = player?.full_name || (pid && pid !== '0' ? 'Player ' + pid : 'Empty');
-        const inj    = injuryBadge(player?.injury_status);
-        return `<div class="diff-row">
-          <span class="diff-slot">${esc(slot)}</span>
-          <span style="color:var(--parchment);">${esc(name)}${inj ? ' ' + inj : ''}</span>
-        </div>`;
-      }).join('');
+      const st   = lsLineupStatus(fix);
+      const open = (st.level === 'bad' || st.level === 'warn') ? ' open' : '';   // surface problems, collapse the rest
 
       const actions = canWrite
-        ? `<div style="margin:8px 0 4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-             <button class="setup-btn" ${haveProj ? '' : 'disabled title="No projections for this week"'} onclick="event.preventDefault();optimizeLineup(${idx})">⚡ Optimize lineup</button>
+        ? `<div style="margin:4px 0;padding:0 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+             <button class="setup-btn" ${haveProj ? '' : 'disabled title="No projections for this week"'} onclick="event.preventDefault();optimizeLineup(${idx})">⚡ Optimize</button>
              <button class="ghost-btn" style="font-size:0.5rem;" onclick="event.preventDefault();testSetLineup(${idx})">↻ Re-set current (test)</button>
              <span id="lc-result-test-${idx}" style="font-size:0.55rem;color:var(--brown-light);"></span>
            </div>
            <div id="lc-opt-${idx}"></div>`
         : '';
 
-      return `<details class="lineup-card" id="lc-${idx}" open>
+      return `<details class="lineup-card" id="lc-${idx}"${open}>
         <summary>
-          <span style="font-family:'Playfair Display',serif;font-weight:700;font-size:0.95rem;color:var(--cream);">${esc(fix.leagueName)}</span>
-          <span style="font-family:'Rye',serif;font-size:0.45rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--brown-light);">Week ${w}</span>
+          <span style="font-family:'Playfair Display',serif;font-weight:700;font-size:0.95rem;color:var(--cream);flex-shrink:0;margin-right:12px;">${esc(fix.leagueName)}</span>
+          ${lsSummaryMeta(fix, idx)}
         </summary>
-        <div id="lc-body-${idx}">${slotRows}</div>
+        <div id="lc-body-${idx}">${lsBodyRows(fix, 'current')}</div>
         ${actions}
       </details>`;
     }).join('');
 
+    const toolbar = canWrite && haveProj
+      ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+           <button class="setup-btn" onclick="optimizeAll()">⚡ Optimize all</button>
+           <button class="setup-btn" onclick="applyAll()">✓ Apply all</button>
+           <span id="lu-allstatus" style="font-size:0.6rem;color:var(--brown-light);"></span>
+         </div>`
+      : '';
+
     setC(`<div>
-      <div class="tab-header" style="margin-bottom:16px;">
-        <div class="section-head" style="margin-bottom:0;flex:1;"><h2>Lineup Check</h2><div class="section-head-line"></div></div>
+      <div class="tab-header" style="margin-bottom:16px;align-items:center;">
+        <div class="section-head" style="margin-bottom:0;flex:1;"><h2>Lineup Check — Week ${w}</h2><div class="section-head-line"></div></div>
+        ${toolbar}
       </div>
       <div style="border:1px solid var(--brown-mid);border-radius:2px;overflow:hidden;background:var(--brown-dark);">${cardsHtml}</div>
     </div>`);
