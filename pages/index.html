@@ -532,8 +532,16 @@ async function loadPlayers() {
   const keep = new Set(['QB','RB','WR','TE','DEF','DL','LB','DB','S','CB','DE','DT','FS','SS']);
   S.players = Object.fromEntries(Object.entries(all).filter(([,p]) => keep.has(p.position)));
   S._playersByName = {};
+  const rankOf = p => (p.search_rank != null && p.search_rank < 9999999) ? p.search_rank : Infinity;
   for (const [id, p] of Object.entries(S.players)) {
-    if (p.full_name) S._playersByName[p.full_name.toLowerCase()] = id;
+    if (!p.full_name) continue;
+    const key = p.full_name.toLowerCase();
+    // On name collisions (e.g. QB Lamar Jackson vs DB Lamar Jackson) keep the
+    // more fantasy-relevant player so ranking IDs match real draft picks.
+    const existing = S._playersByName[key];
+    if (existing == null || rankOf(p) < rankOf(S.players[existing])) {
+      S._playersByName[key] = id;
+    }
   }
 }
 async function getNflState() {
