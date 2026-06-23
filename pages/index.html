@@ -524,6 +524,7 @@ async function api(path) {
   if (!r.ok) throw new Error('HTTP ' + r.status);
   return r.json();
 }
+// normName() (cross-source name normalization) is defined in shared-utils.js.
 async function loadPlayers() {
   if (Object.keys(S.players).length) return;
   const r = await fetch(PLAYERS_URL);
@@ -535,7 +536,7 @@ async function loadPlayers() {
   const rankOf = p => (p.search_rank != null && p.search_rank < 9999999) ? p.search_rank : Infinity;
   for (const [id, p] of Object.entries(S.players)) {
     if (!p.full_name) continue;
-    const key = p.full_name.toLowerCase();
+    const key = normName(p.full_name);
     // On name collisions (e.g. QB Lamar Jackson vs DB Lamar Jackson) keep the
     // more fantasy-relevant player so ranking IDs match real draft picks.
     const existing = S._playersByName[key];
@@ -1345,7 +1346,7 @@ async function wvLoadLeagueRosters(lg) {
           const pData = entry.playerPoolEntry?.playerPoolEntry?.player;
           if (!pData) continue;
           const fullName = pData.fullName || `${pData.firstName||''} ${pData.lastName||''}`.trim();
-          const pid = S._playersByName[fullName.toLowerCase()];
+          const pid = S._playersByName[normName(fullName)];
           if (pid) rostered.add(pid);
         }
       }
@@ -1525,7 +1526,7 @@ async function wvUploadRankings(input) {
     const pos   = parts[1] || '';
     const rankOverride = parts[2] ? parseInt(parts[2]) : null;
     if (!name) continue;
-    const pid = S._playersByName[name.toLowerCase()];
+    const pid = S._playersByName[normName(name)];
     rankings.push({ name, pos, rank: rankOverride ?? autoRank, pid: pid || null });
     autoRank++;
   }
@@ -1642,7 +1643,7 @@ function lsParseRankings(text) {
     else   { rank = auto + 1; name = line; }
     auto = rank;
     name = name.replace(/\s*\([^)]*\)\s*$/, '').replace(/[,|].*$/, '').trim();   // strip trailing (TEAM POS) / ", TEAM"
-    const pid = S._playersByName[name.toLowerCase()];
+    const pid = S._playersByName[normName(name)];
     if (pid) map[pid] = rank;
   }
   return map;
@@ -2674,7 +2675,7 @@ function combineRankingLists(lists) {
     name: p.player_name,
     pos:  (p.position || '').toUpperCase(),
     team: p.team || '',
-    sleeper_id: S._playersByName?.[key] || '',
+    sleeper_id: S._playersByName?.[normName(p.player_name)] || '',
     adp:  '',
     tier: singleList ? String(p.tier ?? '') : '',
   }));
@@ -3012,7 +3013,7 @@ function rsBuildRows() {
         const pos = rsNormPos(espnPos);
         if (!pos) continue;
 
-        const sleeperPid = S._playersByName[fullName.toLowerCase()];
+        const sleeperPid = S._playersByName[normName(fullName)];
         const sleeperP   = sleeperPid ? S.players[sleeperPid] : null;
         const rowKey     = sleeperPid || `espn_name_${fullName}`;
         const teamAbbr   = sleeperP?.team || ESPN_TEAM_MAP[pData.proTeamId] || 'FA';

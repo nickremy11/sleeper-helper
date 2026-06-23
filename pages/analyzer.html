@@ -462,10 +462,14 @@
   function buildPlayerMap(playersRes) {
     const KEEP = new Set(['QB','RB','WR','TE','DEF','DL','LB','DB','S','CB','DE','DT','FS','SS','IDL','OLB','ILB','MLB','SAF','NT']);
     const players = {}, byName = {};
+    const rankOf = p => (p.search_rank != null && p.search_rank < 9999999) ? p.search_rank : Infinity;
     for (const [pid, p] of Object.entries(playersRes || {})) {
       if (!KEEP.has(p.position)) continue;
       players[pid] = p;
-      if (p.full_name) byName[p.full_name.toLowerCase()] = pid;
+      if (!p.full_name) continue;
+      // Normalize names + on collisions keep the more fantasy-relevant player.
+      const key = normName(p.full_name);
+      if (byName[key] == null || rankOf(p) < rankOf(players[byName[key]])) byName[key] = pid;
     }
     return { players, byName };
   }
@@ -853,7 +857,7 @@
       for (const entry of (team.roster?.entries || [])) {
         const pl = entry.playerPoolEntry?.playerPoolEntry?.player || entry.playerPoolEntry?.player;
         if (!pl) continue;
-        const pid       = byName[(pl.fullName || '').toLowerCase()];
+        const pid       = byName[normName(pl.fullName)];
         const sleeperP  = pid ? players[pid] : null;
         const espnPos   = ESPN_POS_MAP[pl.defaultPositionId];
         const pos       = sleeperP ? normPos(sleeperP.position) : (espnPos ? normPos(espnPos) : null);

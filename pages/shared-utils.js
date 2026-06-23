@@ -1,6 +1,17 @@
 function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
+// Normalize a player name for matching across sources. Collapses punctuation/spacing
+// differences so "Amon-Ra St Brown"/"Amon-Ra St. Brown", "CJ"/"C.J.", "AJ"/"A.J." match.
+// Both the name→id index and every lookup against it MUST go through this.
+function normName(s) {
+  return (s || '')
+    .toLowerCase()
+    .replace(/[.,]/g, '')   // drop periods/commas: "st." → "st", "c.j." → "cj"
+    .replace(/\s+/g, ' ')   // collapse whitespace
+    .trim();
+}
 function errHtml(e) { return `<div class="err-state">Error: ${esc(e.message)}</div>`; }
 function loading(msg = 'Loading…') { return `<div class="loading-state"><div class="spinner"></div>${esc(msg)}</div>`; }
 
@@ -153,7 +164,7 @@ async function crLoadProjectionData(opts) {
 
   if (clayRes?.players) {
     for (const p of clayRes.players) {
-      const pid = byName[(p.player_name || '').toLowerCase()];
+      const pid = byName[normName(p.player_name)];
       if (pid) clayMap[pid] = { stats: p };
     }
   }
@@ -164,7 +175,7 @@ async function crLoadProjectionData(opts) {
   }
   if (userRes && typeof userRes === 'object') {
     for (const [name, ppg] of Object.entries(userRes)) {
-      const pid = byName[name.toLowerCase()];
+      const pid = byName[normName(name)];
       if (pid) userProjMap[pid] = { ppg };
     }
   }

@@ -671,8 +671,12 @@ async function fetchEspnLeagueMatchup(league) {
 
     // Build name → sleeperId lookup from already-loaded S.playerMap
     const byName = {};
+    const rankOf = p => (p.search_rank != null && p.search_rank < 9999999) ? p.search_rank : Infinity;
     for (const [pid, p] of Object.entries(S.playerMap || {})) {
-      if (p.full_name) byName[p.full_name.toLowerCase()] = pid;
+      if (!p.full_name) continue;
+      // Normalize names + on collisions keep the more fantasy-relevant player.
+      const key = normName(p.full_name);
+      if (byName[key] == null || rankOf(p) < rankOf(S.playerMap[byName[key]])) byName[key] = pid;
     }
 
     const parseRoster = (team) => {
@@ -687,7 +691,7 @@ async function fetchEspnLeagueMatchup(league) {
         const fullName = pData.fullName
           || `${pData.firstName || ''} ${pData.lastName || ''}`.trim();
         if (!fullName) continue;
-        const pid = byName[fullName.toLowerCase()];
+        const pid = byName[normName(fullName)];
         if (!pid) continue;
         starters.push(pid);
         players_points[pid] = entry.playerPoolEntry?.appliedStatTotal ?? 0;
