@@ -2145,9 +2145,21 @@ async function renderDraftQueue(isRefresh = false) {
   }
 }
 
+// Direction of a draft round, honoring Sleeper's reversal_round (3 = third-round reversal).
+// Normal snake: even rounds reverse. With a reversal at round R, rounds < R snake normally,
+// round R repeats round R-1's order, then snaking continues from there.
+function isReversedRound(round, type, reversalRound) {
+  if (type !== 'snake') return false;
+  const R = reversalRound || 0;
+  if (!R || round < R) return round % 2 === 0;
+  const baseRev = (R - 1) % 2 === 0;                       // reversed state of round R-1
+  return ((round - R) % 2 === 0) ? baseRev : !baseRev;
+}
+
 function picksUntilMyTurn(info, completedPicks, tradedPicks, myRosterId) {
   const teams = info?.settings?.teams ?? 12, rounds = info?.settings?.rounds ?? 5;
   const done = completedPicks.length, type = info?.type;
+  const reversalRound = info?.settings?.reversal_round ?? 0;
   const slotToRoster = info?.slot_to_roster_id ?? {};
   const tradeMap = {};
   for (const tp of tradedPicks) tradeMap[`${tp.round}.${tp.roster_id}`] = tp.owner_id;
@@ -2156,7 +2168,7 @@ function picksUntilMyTurn(info, completedPicks, tradedPicks, myRosterId) {
     if (overall >= teams * rounds) break;
     const round = Math.floor(overall / teams) + 1;
     const pos   = overall % teams;
-    const slot  = (type === 'snake' && round % 2 === 0) ? teams - pos : pos + 1;
+    const slot  = isReversedRound(round, type, reversalRound) ? teams - pos : pos + 1;
     const orig  = slotToRoster[slot] ?? slot;
     const owner = tradeMap[`${round}.${orig}`] ?? orig;
     if (owner === myRosterId) return offset;
@@ -2204,6 +2216,10 @@ const T = {
   posFilter: 'ALL',   // position filter
   pollTimer: null,
   myRanksSets: null,  // cached {primary, sets, sharedSets} from myranks API
+  pickCount: 0,       // total picks made in the active draft
+  tradedPicks: [],    // traded_picks for the active draft
+  myRosterId: null,   // this user's roster_id in the active draft's league
+  reversalRound: 0,   // effective reversal round (0 = normal snake, 3 = 3RR) — toggleable
 };
 
 function renderDraftTracker() {
@@ -2356,6 +2372,10 @@ async function selectDraft(draftId) {
   st.textContent = 'Loading picks…'; st.className = 'setup-status';
   try {
     T.draft = await api('/draft/' + draftId);
+    T.reversalRound = T.draft?.settings?.reversal_round ?? 0;
+    T.tradedPicks = await api('/draft/' + draftId + '/traded_picks').catch(() => []) || [];
+    const mySlot = T.draft?.draft_order?.[S.userId];
+    T.myRosterId = (mySlot != null) ? (T.draft?.slot_to_roster_id?.[mySlot] ?? null) : null;
     await syncPicks(draftId);
     st.textContent = '✦ Synced — auto-refreshing every 15s';
     st.className = 'setup-status ok';
@@ -2368,6 +2388,7 @@ async function selectDraft(draftId) {
 async function syncPicks(draftId) {
   try {
     const picks = await api('/draft/' + draftId + '/picks');
+    T.pickCount = (picks || []).length;
     T.picked.clear();
     for (const pick of (picks || [])) {
       if (pick.player_id) T.picked.add(String(pick.player_id));
@@ -2405,9 +2426,20 @@ function renderTrackerBody() {
     ${positions.map(pos => `<button class="pos-pill ${T.posFilter===pos?'active':''}" onclick="setTrackerPos('${pos}')">${pos}</button>`).join('')}
   </div>`;
 
-  const statsHtml = `<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;">
+  const pu = trackerPicksUntilTurn();
+  let puHtml = '';
+  if (pu === 0)      puHtml = `<span class="card-meta" style="color:var(--gold);font-weight:600;">⏱ You're on the clock</span>`;
+  else if (pu > 0)   puHtml = `<span class="card-meta" style="color:var(--gold);">⏱ ${pu} pick${pu===1?'':'s'} until your turn</span>`;
+
+  const rrToggle = (T.draft && type === 'snake') ? `<label class="card-meta" style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+    <input type="checkbox" ${T.reversalRound ? 'checked' : ''} onchange="toggleReversal(this.checked)" style="accent-color:var(--gold);cursor:pointer;" />3rd Rd Reversal
+  </label>` : '';
+
+  const statsHtml = `<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
     <span class="card-meta">${pickedCount} picked · ${available} available</span>
     ${T.draft ? `<span class="card-meta">Round ${Math.floor(pickedCount/teams)+1} · Pick ${(pickedCount%teams)+1} of ${teams}</span>` : ''}
+    ${puHtml}
+    ${rrToggle}
   </div>`;
 
   const playerTile = (p) => {
@@ -2437,7 +2469,7 @@ function renderTrackerBody() {
     gridHtml = `<div class="tracker-snake" style="grid-template-columns:repeat(${teams},1fr);">`;
     rows.forEach((rowPlayers, roundIdx) => {
       const round = roundIdx + 1;
-      const isReversed = type === 'snake' && round % 2 === 0;
+      const isReversed = isReversedRound(round, type, T.reversalRound);
       const arrow = type !== 'snake' ? '→' : (isReversed ? '←' : '→');
       const orderedRow = isReversed ? [...rowPlayers].reverse() : rowPlayers;
       gridHtml += `<div class="tracker-round-label" style="grid-column:1/-1;">
@@ -2459,6 +2491,34 @@ function renderTrackerBody() {
 function setTrackerPos(pos) {
   T.posFilter = pos;
   renderTrackerBody();
+}
+
+function toggleReversal(on) {
+  T.reversalRound = on ? 3 : 0;
+  renderTrackerBody();
+}
+
+// Picks remaining until this user's next turn in the active draft.
+// 0 = on the clock, -1 = no more picks / unknown roster, null = not applicable.
+function trackerPicksUntilTurn() {
+  const d = T.draft;
+  if (!d || T.myRosterId == null) return null;
+  const teams = d.settings?.teams ?? 12, rounds = d.settings?.rounds ?? 5;
+  const slotToRoster = d.slot_to_roster_id ?? {};
+  const tradeMap = {};
+  for (const tp of (T.tradedPicks || [])) tradeMap[`${tp.round}.${tp.roster_id}`] = tp.owner_id;
+  const done = T.pickCount || 0;
+  for (let offset = 0; offset < teams * rounds; offset++) {
+    const overall = done + offset;
+    if (overall >= teams * rounds) break;
+    const round = Math.floor(overall / teams) + 1;
+    const pos   = overall % teams;
+    const slot  = isReversedRound(round, d.type, T.reversalRound) ? teams - pos : pos + 1;
+    const orig  = slotToRoster[slot] ?? slot;
+    const owner = tradeMap[`${round}.${orig}`] ?? orig;
+    if (owner === T.myRosterId) return offset;
+  }
+  return -1;
 }
 
 const MYRANKS_API = 'https://myranks.ffhistorian.com';
