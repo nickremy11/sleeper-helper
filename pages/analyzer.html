@@ -18,13 +18,25 @@
     }
 
     /* ── Format flags strip ── */
-    .az-flags { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 20px; align-items: center; }
+    .az-flags { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
     .az-flag {
       font-family: 'Rye', serif; font-size: 0.57rem; letter-spacing: 0.12em;
       text-transform: uppercase; padding: 6px 14px; border: 1.5px solid var(--brown-mid);
       border-radius: 2px; color: var(--brown-light); background: rgba(0,0,0,0.22);
     }
     .az-flag-hi { border-color: var(--gold); color: var(--gold); background: rgba(201,150,42,0.08); }
+
+    /* ── Controls row (format flags + contender mode toggle) ── */
+    .az-controls-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+    .az-mode-bar { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+    .az-mode-label { font-family: 'Rye', serif; font-size: 0.46rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold); margin-right: 2px; }
+    .az-mode-pill {
+      background: transparent; border: 1px solid var(--brown-mid); color: var(--brown-light);
+      padding: 4px 13px; border-radius: 13px; font-size: 0.82rem; cursor: pointer; transition: all 0.15s;
+    }
+    .az-mode-pill:hover { color: var(--gold); border-color: var(--gold); }
+    .az-mode-pill.active { border-color: var(--gold); color: var(--gold); background: rgba(201,150,42,0.10); }
+    .az-th-sub { font-family: 'Crimson Text', serif; font-size: 0.62rem; font-weight: 400; letter-spacing: 0; text-transform: none; opacity: 0.7; }
 
     /* ── Scrollable table wrapper ── */
     .az-table-wrap { overflow-x: auto; }
@@ -254,6 +266,13 @@
   let sortKey = 'overall';
   let sortDir = 1; // -1 = desc (highest value first), 1 = asc
   let hasIDP  = false;
+
+  // Contender rank: shares the formula + localStorage cache with League
+  // Summaries (cr* helpers in shared-utils.js). Default mode 'adp'.
+  let crMode = 'adp';
+  const crData = { clayMap: {}, sleeperProjMap: {}, userProjMap: {}, loaded: false, loading: false };
+  // Fallback starting lineup for ESPN leagues (no Sleeper roster_positions).
+  const CR_ESPN_LINEUP = ['QB','RB','RB','WR','WR','WR','TE','FLEX','FLEX'];
 
   // Column layout — same grid template applied to header and every card row.
   // Rebuilt after hasIDP is known. Includes: team | overall | contender | QB | RB | WR | TE | [DL] | draft | playoff | chevron
@@ -578,7 +597,7 @@
     const curYear    = parseInt(nflSeason);
     const fcMap      = buildFcMap(fcRes);
     const fcPickMap  = buildPickValueMap(fcRes);
-    const { players } = buildPlayerMap(playersRes);
+    const { players, byName } = buildPlayerMap(playersRes);
 
     const userMap = {};
     for (const u of (usersRes || [])) {
@@ -621,7 +640,6 @@
     const playoffTeams = leagueRes?.settings?.playoff_teams ?? Math.floor(numTeams / 2);
     const formatFlags  = buildFormatFlags(leagueRes || {});
 
-    const SKILL = new Set(['QB','RB','WR','TE']);
     const DEF_P = new Set(['DL','LB','DB']);
 
     const teams = allRosters.map(roster => {
@@ -631,7 +649,7 @@
       const fpts    = (roster.settings?.fpts ?? 0) + (roster.settings?.fpts_decimal ?? 0) / 100;
       const starterSet = new Set(roster.starters || []);
 
-      let overall = 0, contenderBase = 0;
+      let overall = 0;
       const posValues = { QB: 0, RB: 0, WR: 0, TE: 0, DL: 0 };
       const playerList = [];
 
@@ -644,7 +662,6 @@
         overall += val;
         const bucket = DEF_P.has(pos) ? 'DL' : pos;
         if (bucket in posValues) posValues[bucket] += val;
-        if (SKILL.has(pos) && (p.years_exp ?? 0) >= 3 && val > 0) contenderBase += val;
         playerList.push({ pid, name: p.full_name || pid, pos, val, isStarter: starterSet.has(pid) });
       }
       playerList.sort((a, b) => {
@@ -675,7 +692,7 @@
         rosterId: roster.roster_id, teamName: info.teamName, ownerName: info.displayName,
         wins, losses, fpts,
         overall: Math.round(overall),
-        contender: Math.round(contenderBase + wins * 50),
+        contender: 0, // computed by azApplyContender (shared cr* formula)
         posValues: { QB: Math.round(posValues.QB), RB: Math.round(posValues.RB), WR: Math.round(posValues.WR), TE: Math.round(posValues.TE), DL: Math.round(posValues.DL) },
         draft: Math.round(draftValue),
         playerList, pickList, standing: 0,
@@ -797,7 +814,11 @@
       t.draft = Math.round(_adj);
     }
 
-    return { teams: teams.filter(t => t.overall > 0 || t.wins > 0 || t.losses > 0), lgName, category, season: nflSeason, formatFlags, numTeams };
+    return {
+      teams: teams.filter(t => t.overall > 0 || t.wins > 0 || t.losses > 0),
+      lgName, category, season: nflSeason, formatFlags, numTeams,
+      crCtx: { players, byName, rosterPositions: rp, scoring: scoringSettings, season: nflSeason },
+    };
   }
 
   // ── ESPN load ─────────────────────────────────────────────────────────────────
@@ -825,7 +846,7 @@
       const wins   = team.record?.overall?.wins   ?? 0;
       const losses = team.record?.overall?.losses ?? 0;
       const fpts   = team.record?.overall?.pointsFor ?? 0;
-      let overall = 0, contenderBase = 0;
+      let overall = 0;
       const posValues = { QB: 0, RB: 0, WR: 0, TE: 0, DL: 0 };
       const playerList = [];
 
@@ -842,7 +863,6 @@
         const bucket = ['DL','LB','DB'].includes(pos) ? 'DL' : pos;
         if (bucket in posValues) posValues[bucket] += val;
         const isStarter = entry.lineupSlotId !== 20 && entry.lineupSlotId !== 21;
-        if (['QB','RB','WR','TE'].includes(pos) && (sleeperP?.years_exp ?? 0) >= 3 && val > 0) contenderBase += val;
         playerList.push({ pid: pid || pl.fullName, name: sleeperP?.full_name || pl.fullName || '', pos, val, isStarter });
       }
       playerList.sort((a, b) => {
@@ -854,7 +874,7 @@
       return {
         rosterId: team.id, teamName: team.name || null, ownerName: null,
         wins, losses, fpts,
-        overall: Math.round(overall), contender: Math.round(contenderBase + wins * 50),
+        overall: Math.round(overall), contender: 0, // computed by azApplyContender
         posValues: { QB: Math.round(posValues.QB), RB: Math.round(posValues.RB), WR: Math.round(posValues.WR), TE: Math.round(posValues.TE), DL: Math.round(posValues.DL) },
         draft: 0, playerList, pickList: [], standing: 0,
         playoffChances: { label: '—', cls: 'az-chances-nervy' },
@@ -865,7 +885,10 @@
     byStand.forEach((t, i) => { t.standing = i + 1; });
     for (const t of teams) t.playoffChances = playoffLabel(t.standing, playoffTeams, numTeams);
 
-    return { teams, lgName, category: 'redraft', season: nflSeason, formatFlags: [], numTeams };
+    return {
+      teams, lgName, category: 'redraft', season: nflSeason, formatFlags: [], numTeams,
+      crCtx: { players, byName, rosterPositions: CR_ESPN_LINEUP, scoring: {}, season: nflSeason },
+    };
   }
 
   // ── Ranking ───────────────────────────────────────────────────────────────────
@@ -900,7 +923,7 @@
 
   async function loadAndRender() {
     const result = isEspn ? await loadEspn() : await loadSleeper();
-    const { teams, lgName, category, season, formatFlags, numTeams } = result;
+    const { teams, lgName, category, season, formatFlags, numTeams, crCtx } = result;
 
     document.getElementById('league-title').textContent = lgName + ' · ' + season;
     document.title = 'Analyzer — ' + lgName;
@@ -910,10 +933,51 @@
     }
 
     window._azTeams      = teams;
-    window._azRanks      = computeRanks(teams);
+    window._azCtx        = crCtx;
     window._azMeta       = { category, numTeams, formatFlags };
 
+    await azApplyContender(); // sets team.contender + window._azRanks, then renders
+  }
+
+  // Populate each team's contender score for the active mode, preferring the
+  // value League Summaries already cached. computes via the shared cr* formula
+  // only on a cache miss (e.g. direct navigation to the analyzer).
+  async function azApplyContender() {
+    const teams = window._azTeams || [];
+    const ctx   = window._azCtx   || {};
+
+    let scores = crReadCachedScores(lgId, crMode);
+
+    if (!scores) {
+      // Projections mode needs the three source maps loaded once.
+      if (crMode === 'projections' && !crData.loaded) {
+        crData.loading = true;
+        renderAll(); // reflect "…" in the toggle while fetching
+        const d = await crLoadProjectionData({
+          apiBase: API, season: ctx.season, authed: !!SharedAuth.getUser?.(), byName: ctx.byName || {},
+        });
+        crData.clayMap = d.clayMap; crData.sleeperProjMap = d.sleeperProjMap; crData.userProjMap = d.userProjMap;
+        crData.loaded = true; crData.loading = false;
+      }
+      const scoreCtx = {
+        mode: crMode, players: ctx.players || {},
+        clayMap: crData.clayMap, sleeperProjMap: crData.sleeperProjMap, userProjMap: crData.userProjMap,
+        scoring: ctx.scoring || {}, rosterPositions: ctx.rosterPositions || [],
+      };
+      scores = {};
+      for (const t of teams) scores[t.rosterId] = crScoreRoster(t.playerList.map(p => p.pid), scoreCtx);
+      if (!isEspn) crCacheScores(lgId, crMode, scores); // share back to Summaries
+    }
+
+    for (const t of teams) t.contender = Math.round(scores[t.rosterId] ?? 0);
+    window._azRanks = computeRanks(teams);
     renderAll();
+  }
+
+  function azSetContenderMode(mode) {
+    if (crMode === mode) return;
+    crMode = mode;
+    azApplyContender();
   }
 
   // ── Render ────────────────────────────────────────────────────────────────────
@@ -950,12 +1014,20 @@
       ${(formatFlags || []).map(f => `<span class="az-flag${f.hi ? ' az-flag-hi' : ''}">${f.label}</span>`).join('')}
     </div>`;
 
+    // Contender "Starter Value" mode toggle (ADP / Projections)
+    const modeBar = `<div class="az-mode-bar">
+      <span class="az-mode-label">Starter Value</span>
+      <button class="az-mode-pill${crMode==='adp'?' active':''}" onclick="azSetContenderMode('adp')">ADP</button>
+      <button class="az-mode-pill${crMode==='projections'?' active':''}" onclick="azSetContenderMode('projections')">Projections</button>
+    </div>`;
+
     // Column definitions (header + rank cells must match exactly)
     const posCols = ['QB','RB','WR','TE'];
     if (hasIDP) posCols.push('DL');
+    const crModeLbl = crMode === 'adp' ? 'ADP' : crData.loading ? '…' : 'Proj';
     const rankCols = [
       { key: 'overall',   label: 'Overall'   },
-      { key: 'contender', label: 'Contender' },
+      { key: 'contender', label: 'Contender<br><span class="az-th-sub">' + crModeLbl + '</span>' },
       ...posCols.map(p => ({ key: p, label: p === 'DL' ? 'DL/LB/DB' : p })),
       { key: 'draft',     label: 'Draft'     },
       { key: 'chances',   label: 'Playoff'   },
@@ -1079,7 +1151,7 @@
     }).join('');
 
     document.getElementById('content').innerHTML = `
-      ${flagsHtml}
+      <div class="az-controls-row">${flagsHtml}${modeBar}</div>
       <div class="az-table-wrap">
         ${headerHtml}
         <div class="az-cards">${cards}</div>

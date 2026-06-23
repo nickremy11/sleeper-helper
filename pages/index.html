@@ -3753,123 +3753,34 @@ function lsPlayoffChancesLabel(standing, numTeams) {
 }
 
 // ── Contender Rank helpers ────────────────────────────────────────────────────
+// Scoring logic lives in shared-utils.js (cr* functions) so the analyzer can
+// reuse the exact same formula. Here we just build the ctx and cache results.
 
-function lsCrScoreClay(clay, scoring) {
-  if (!clay || !clay.gm) return null;
-  const pts =
-    (clay.pass_yds || 0) * (scoring.pass_yd  || 0.04) +
-    (clay.pass_td  || 0) * (scoring.pass_td  || 4)    +
-    (clay.int      || 0) * (scoring.pass_int || -2)   +
-    (clay.rush_yds || 0) * (scoring.rush_yd  || 0.1)  +
-    (clay.rush_td  || 0) * (scoring.rush_td  || 6)    +
-    (clay.rec      || 0) * (scoring.rec      || 1)    +
-    (clay.rec_yds  || 0) * (scoring.rec_yd   || 0.1)  +
-    (clay.rec_td   || 0) * (scoring.rec_td   || 6);
-  return pts / clay.gm;
-}
-
-function lsCrScoreSleeper(proj, scoring) {
-  if (!proj) return null;
-  const pts =
-    (proj.pass_yd  || 0) * (scoring.pass_yd  || 0.04) +
-    (proj.pass_td  || 0) * (scoring.pass_td  || 4)    +
-    (proj.pass_int || 0) * (scoring.pass_int || -2)   +
-    (proj.rush_yd  || 0) * (scoring.rush_yd  || 0.1)  +
-    (proj.rush_td  || 0) * (scoring.rush_td  || 6)    +
-    (proj.rec      || 0) * (scoring.rec      || 1)    +
-    (proj.rec_yd   || 0) * (scoring.rec_yd   || 0.1)  +
-    (proj.rec_td   || 0) * (scoring.rec_td   || 6)    +
-    (proj.bonus_rec_te || 0) * (scoring.bonus_rec_te || 0);
-  const gp = proj.gp || 1; // weekly projections have no gp; treat stats as per-game
-  return pts / gp;
-}
-
-function lsCrPlayerPpg(pid, scoring) {
+function lsCrCtx(league) {
   const cd = LS.contenderData;
-  const vals = [];
-  // ADP mode
-  if (cd.mode === 'adp') {
-    const rank = S.players[pid]?.search_rank;
-    return rank ? 1000 / Math.sqrt(rank) : 0;
-  }
-  // Projections mode — average available sources
-  const clay = cd.clayMap[pid];
-  if (clay) { const v = lsCrScoreClay(clay.stats, scoring); if (v !== null) vals.push(v); }
-  const slp = cd.sleeperProjMap[pid];
-  if (slp) { const v = lsCrScoreSleeper(slp, scoring); if (v !== null) vals.push(v); }
-  const usr = cd.userProjMap[pid];
-  if (usr?.ppg != null) vals.push(usr.ppg);  // pre-computed PPR; approximate
-  return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
-}
-
-// Returns a contender score for a single roster's player list
-function lsCrScoreRoster(playerIds, league) {
-  const scoring = league.scoring_settings || {};
-  const rp = (league.roster_positions || []);
-  const starterSlots = rp.filter(p => !['BN','IR','TAXI'].includes(p));
-  const starterCount = starterSlots.length;
-
-  const isSF = starterSlots.includes('SUPER_FLEX');
-  const qbTarget = isSF ? 2 : 1;
-  const rbSlots = starterSlots.filter(s => s === 'RB').length;
-  const wrSlots = starterSlots.filter(s => s === 'WR').length;
-  const teSlots = starterSlots.filter(s => s === 'TE').length;
-  const rbTarget = rbSlots + 1;
-  const wrTarget = wrSlots + 1;
-  const teTarget = teSlots + 1;
-  const fixedCount = qbTarget + rbTarget + wrTarget + teTarget;
-  const flexTarget = Math.max(0, (starterCount + 3) - fixedCount);
-
-  // Score every player on the roster
-  const scored = playerIds.map(pid => {
-    const pos = rsNormPos(S.players[pid]?.position);
-    if (!['QB','RB','WR','TE'].includes(pos)) return null;
-    return { pid, pos, ppg: lsCrPlayerPpg(pid, scoring) };
-  }).filter(Boolean);
-
-  const byPos = { QB: [], RB: [], WR: [], TE: [] };
-  for (const p of scored) byPos[p.pos].push(p);
-  for (const pos of ['QB','RB','WR','TE']) byPos[pos].sort((a, b) => b.ppg - a.ppg);
-
-  const used = new Set();
-  let total = 0;
-
-  const take = (pos, n) => {
-    let taken = 0;
-    for (const p of byPos[pos]) {
-      if (taken >= n) break;
-      if (used.has(p.pid)) continue;
-      used.add(p.pid); total += p.ppg; taken++;
-    }
+  return {
+    mode:            cd.mode,
+    players:         S.players,
+    clayMap:         cd.clayMap,
+    sleeperProjMap:  cd.sleeperProjMap,
+    userProjMap:     cd.userProjMap,
+    scoring:         league.scoring_settings || {},
+    rosterPositions: league.roster_positions || [],
   };
-
-  take('QB', qbTarget);
-  take('RB', rbTarget);
-  take('WR', wrTarget);
-  take('TE', teTarget);
-
-  // Fill flex buffer with best remaining RB/WR/TE
-  if (flexTarget > 0) {
-    const remaining = scored
-      .filter(p => !used.has(p.pid) && ['RB','WR','TE'].includes(p.pos))
-      .sort((a, b) => b.ppg - a.ppg);
-    for (let i = 0; i < Math.min(flexTarget, remaining.length); i++) {
-      used.add(remaining[i].pid); total += remaining[i].ppg;
-    }
-  }
-
-  return total;
 }
 
-// Returns {rosterId: score} for all rosters in a league
+// Returns {rosterId: score} for all rosters in a league, and caches it so the
+// analyzer can reference the same value without recomputing.
 function lsCrComputeLeague(lgId) {
   const d = LS.leagueData[lgId];
   if (!d) return {};
   const league = S.leagueDetails[lgId] || {};
+  const ctx = lsCrCtx(league);
   const scores = {};
   for (const [rid, pids] of Object.entries(d.rosterPlayers)) {
-    scores[rid] = lsCrScoreRoster(pids, league);
+    scores[rid] = crScoreRoster(pids, ctx);
   }
+  crCacheScores(lgId, LS.contenderData.mode, scores);
   return scores;
 }
 
@@ -3892,39 +3803,12 @@ async function lsLoadContenderData() {
   await loadPlayers(); // ensure S.players and S._playersByName are ready
 
   const season = S.nflState?.season || new Date().getFullYear();
-  const fetches = [
-    fetch(`/api/projections/external?source=clay&season=${season}`).then(r => r.ok ? r.json() : null).catch(() => null),
-    fetch(`/api/sleeper/projections/nfl/${season}/1`).then(r => r.ok ? r.json() : null).catch(() => null),
-  ];
-  if (S.auth) fetches.push(
-    fetch(`/api/projections/ppg?season=${season}`, { credentials: 'include' }).then(r => r.ok ? r.json() : null).catch(() => null)
-  );
-
-  const [clayRes, sleeperRes, userRes] = await Promise.all(fetches);
-
-  // Build Clay map: player_name → sleeperId, store stats
-  if (clayRes?.players) {
-    for (const p of clayRes.players) {
-      const pid = S._playersByName[(p.player_name || '').toLowerCase()];
-      if (pid) cd.clayMap[pid] = { stats: p };
-    }
-  }
-
-  // Build Sleeper map: player_id → projected stats
-  if (sleeperRes && typeof sleeperRes === 'object') {
-    for (const [pid, proj] of Object.entries(sleeperRes)) {
-      if (!proj || typeof proj !== 'object') continue;
-      cd.sleeperProjMap[pid] = proj;
-    }
-  }
-
-  // Build user map: player_name → sleeperId, store ppg
-  if (userRes && typeof userRes === 'object') {
-    for (const [name, ppg] of Object.entries(userRes)) {
-      const pid = S._playersByName[name.toLowerCase()];
-      if (pid) cd.userProjMap[pid] = { ppg };
-    }
-  }
+  const { clayMap, sleeperProjMap, userProjMap } = await crLoadProjectionData({
+    apiBase: '/api', season, authed: !!S.auth, byName: S._playersByName,
+  });
+  cd.clayMap = clayMap;
+  cd.sleeperProjMap = sleeperProjMap;
+  cd.userProjMap = userProjMap;
 
   cd.loaded  = true;
   cd.loading = false;
