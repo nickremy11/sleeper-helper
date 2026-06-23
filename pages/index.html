@@ -259,6 +259,14 @@ a.row-link.ls-contender-name { color: var(--gold-light); font-weight: 700; }
 .ls-chance-lg    { color: var(--gold-light); }
 .ls-chance-nervy { color: var(--parchment); font-style: italic; }
 .ls-chance-blny  { color: var(--brown-light); font-style: italic; }
+/* Contender rank badge */
+.ls-cr-badge { display: inline-block; min-width: 26px; text-align: center; padding: 2px 7px; border-radius: 3px; font-weight: 700; font-size: 0.88rem; color: #fff; }
+.ls-cr-sub   { font-size: 0.7rem; color: var(--brown-light); margin-left: 2px; }
+/* Starter value mode toggle */
+.ls-mode-bar { display: flex; align-items: center; gap: 6px; }
+.ls-mode-label { font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); margin-right: 2px; }
+.ls-mode-pill { background: transparent; border: 1px solid var(--brown-mid); color: var(--brown-light); padding: 3px 11px; border-radius: 12px; font-size: 0.8rem; cursor: pointer; transition: all 0.15s; }
+.ls-mode-pill.active { border-color: var(--gold); color: var(--gold); background: rgba(194,154,83,0.10); }
 
 /* ── WAIVERS TAB ── */
 .wv-mode-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
@@ -437,6 +445,14 @@ const LS = {
   oddsLoaded:  false,
   oddsLoading: false,
   oddsError:   null,
+  contenderData: {
+    mode:           'adp',  // 'adp' | 'projections'
+    clayMap:        {},     // sleeperId → { ppg }
+    sleeperProjMap: {},     // sleeperId → { ppg }
+    userProjMap:    {},     // sleeperId → { ppg }
+    loaded:         false,
+    loading:        false,
+  },
 };
 
 // ── Player Finder state ───────────────────────────────────────────────────────
@@ -3389,7 +3405,7 @@ async function renderLeagueSummaries() {
   }
   setC(loading('Loading league standings…'));
   try {
-    await lsLoadData();
+    await Promise.all([lsLoadData(), loadPlayers()]);
     LS.loaded = true;
     lsRestoreOddsCache();
   } catch(e) {
@@ -3736,6 +3752,197 @@ function lsPlayoffChancesLabel(standing, numTeams) {
   return               { label: 'Better Luck Next Year',     cls: 'ls-chance-blny'  };
 }
 
+// ── Contender Rank helpers ────────────────────────────────────────────────────
+
+function lsCrScoreClay(clay, scoring) {
+  if (!clay || !clay.gm) return null;
+  const pts =
+    (clay.pass_yds || 0) * (scoring.pass_yd  || 0.04) +
+    (clay.pass_td  || 0) * (scoring.pass_td  || 4)    +
+    (clay.int      || 0) * (scoring.pass_int || -2)   +
+    (clay.rush_yds || 0) * (scoring.rush_yd  || 0.1)  +
+    (clay.rush_td  || 0) * (scoring.rush_td  || 6)    +
+    (clay.rec      || 0) * (scoring.rec      || 1)    +
+    (clay.rec_yds  || 0) * (scoring.rec_yd   || 0.1)  +
+    (clay.rec_td   || 0) * (scoring.rec_td   || 6);
+  return pts / clay.gm;
+}
+
+function lsCrScoreSleeper(proj, scoring) {
+  if (!proj) return null;
+  const pts =
+    (proj.pass_yd  || 0) * (scoring.pass_yd  || 0.04) +
+    (proj.pass_td  || 0) * (scoring.pass_td  || 4)    +
+    (proj.pass_int || 0) * (scoring.pass_int || -2)   +
+    (proj.rush_yd  || 0) * (scoring.rush_yd  || 0.1)  +
+    (proj.rush_td  || 0) * (scoring.rush_td  || 6)    +
+    (proj.rec      || 0) * (scoring.rec      || 1)    +
+    (proj.rec_yd   || 0) * (scoring.rec_yd   || 0.1)  +
+    (proj.rec_td   || 0) * (scoring.rec_td   || 6)    +
+    (proj.bonus_rec_te || 0) * (scoring.bonus_rec_te || 0);
+  const gp = proj.gp || 1; // weekly projections have no gp; treat stats as per-game
+  return pts / gp;
+}
+
+function lsCrPlayerPpg(pid, scoring) {
+  const cd = LS.contenderData;
+  const vals = [];
+  // ADP mode
+  if (cd.mode === 'adp') {
+    const rank = S.players[pid]?.search_rank;
+    return rank ? 1000 / Math.sqrt(rank) : 0;
+  }
+  // Projections mode — average available sources
+  const clay = cd.clayMap[pid];
+  if (clay) { const v = lsCrScoreClay(clay.stats, scoring); if (v !== null) vals.push(v); }
+  const slp = cd.sleeperProjMap[pid];
+  if (slp) { const v = lsCrScoreSleeper(slp, scoring); if (v !== null) vals.push(v); }
+  const usr = cd.userProjMap[pid];
+  if (usr?.ppg != null) vals.push(usr.ppg);  // pre-computed PPR; approximate
+  return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+}
+
+// Returns a contender score for a single roster's player list
+function lsCrScoreRoster(playerIds, league) {
+  const scoring = league.scoring_settings || {};
+  const rp = (league.roster_positions || []);
+  const starterSlots = rp.filter(p => !['BN','IR','TAXI'].includes(p));
+  const starterCount = starterSlots.length;
+
+  const isSF = starterSlots.includes('SUPER_FLEX');
+  const qbTarget = isSF ? 2 : 1;
+  const rbSlots = starterSlots.filter(s => s === 'RB').length;
+  const wrSlots = starterSlots.filter(s => s === 'WR').length;
+  const teSlots = starterSlots.filter(s => s === 'TE').length;
+  const rbTarget = rbSlots + 1;
+  const wrTarget = wrSlots + 1;
+  const teTarget = teSlots + 1;
+  const fixedCount = qbTarget + rbTarget + wrTarget + teTarget;
+  const flexTarget = Math.max(0, (starterCount + 3) - fixedCount);
+
+  // Score every player on the roster
+  const scored = playerIds.map(pid => {
+    const pos = rsNormPos(S.players[pid]?.position);
+    if (!['QB','RB','WR','TE'].includes(pos)) return null;
+    return { pid, pos, ppg: lsCrPlayerPpg(pid, scoring) };
+  }).filter(Boolean);
+
+  const byPos = { QB: [], RB: [], WR: [], TE: [] };
+  for (const p of scored) byPos[p.pos].push(p);
+  for (const pos of ['QB','RB','WR','TE']) byPos[pos].sort((a, b) => b.ppg - a.ppg);
+
+  const used = new Set();
+  let total = 0;
+
+  const take = (pos, n) => {
+    let taken = 0;
+    for (const p of byPos[pos]) {
+      if (taken >= n) break;
+      if (used.has(p.pid)) continue;
+      used.add(p.pid); total += p.ppg; taken++;
+    }
+  };
+
+  take('QB', qbTarget);
+  take('RB', rbTarget);
+  take('WR', wrTarget);
+  take('TE', teTarget);
+
+  // Fill flex buffer with best remaining RB/WR/TE
+  if (flexTarget > 0) {
+    const remaining = scored
+      .filter(p => !used.has(p.pid) && ['RB','WR','TE'].includes(p.pos))
+      .sort((a, b) => b.ppg - a.ppg);
+    for (let i = 0; i < Math.min(flexTarget, remaining.length); i++) {
+      used.add(remaining[i].pid); total += remaining[i].ppg;
+    }
+  }
+
+  return total;
+}
+
+// Returns {rosterId: score} for all rosters in a league
+function lsCrComputeLeague(lgId) {
+  const d = LS.leagueData[lgId];
+  if (!d) return {};
+  const league = S.leagueDetails[lgId] || {};
+  const scores = {};
+  for (const [rid, pids] of Object.entries(d.rosterPlayers)) {
+    scores[rid] = lsCrScoreRoster(pids, league);
+  }
+  return scores;
+}
+
+// Badge color based on score percentile within the league (green=best, red=worst)
+function lsCrBadgeColor(myScore, allScores) {
+  const min = Math.min(...allScores);
+  const max = Math.max(...allScores);
+  const t = max > min ? (myScore - min) / (max - min) : 0.5;
+  const hue = Math.round(t * 120); // 0=red, 120=green
+  return `hsl(${hue},70%,40%)`;
+}
+
+async function lsLoadContenderData() {
+  const cd = LS.contenderData;
+  if (cd.loaded || cd.loading) return;
+  cd.loading = true;
+  cd.clayMap = {}; cd.sleeperProjMap = {}; cd.userProjMap = {};
+  lsDrawTable(); // show spinner cells
+
+  await loadPlayers(); // ensure S.players and S._playersByName are ready
+
+  const season = S.nflState?.season || new Date().getFullYear();
+  const fetches = [
+    fetch(`/api/projections/external?source=clay&season=${season}`).then(r => r.ok ? r.json() : null).catch(() => null),
+    fetch(`/api/sleeper/projections/nfl/${season}/1`).then(r => r.ok ? r.json() : null).catch(() => null),
+  ];
+  if (S.auth) fetches.push(
+    fetch(`/api/projections/ppg?season=${season}`, { credentials: 'include' }).then(r => r.ok ? r.json() : null).catch(() => null)
+  );
+
+  const [clayRes, sleeperRes, userRes] = await Promise.all(fetches);
+
+  // Build Clay map: player_name → sleeperId, store stats
+  if (clayRes?.players) {
+    for (const p of clayRes.players) {
+      const pid = S._playersByName[(p.player_name || '').toLowerCase()];
+      if (pid) cd.clayMap[pid] = { stats: p };
+    }
+  }
+
+  // Build Sleeper map: player_id → projected stats
+  if (sleeperRes && typeof sleeperRes === 'object') {
+    for (const [pid, proj] of Object.entries(sleeperRes)) {
+      if (!proj || typeof proj !== 'object') continue;
+      cd.sleeperProjMap[pid] = proj;
+    }
+  }
+
+  // Build user map: player_name → sleeperId, store ppg
+  if (userRes && typeof userRes === 'object') {
+    for (const [name, ppg] of Object.entries(userRes)) {
+      const pid = S._playersByName[name.toLowerCase()];
+      if (pid) cd.userProjMap[pid] = { ppg };
+    }
+  }
+
+  cd.loaded  = true;
+  cd.loading = false;
+  lsDrawTable();
+}
+
+function lsSetContenderMode(mode) {
+  const cd = LS.contenderData;
+  if (cd.mode === mode) return;
+  cd.mode = mode;
+  if (mode === 'projections' && !cd.loaded && !cd.loading) {
+    lsLoadContenderData(); // async: sets loading=true → spinner → fetches → redraws
+  } else {
+    lsDrawTable(); // ADP always instant; projections already cached
+  }
+}
+
+
 function lsSortRows(rows) {
   return [...rows].sort((a, b) => {
     let v = 0;
@@ -3756,6 +3963,8 @@ function lsSortRows(rows) {
       } else {
         v = a.standing - b.standing;
       }
+    } else if (LS.sortCol === 'contender') {
+      v = (b.crScore ?? -1) - (a.crScore ?? -1);
     }
     if (v !== 0) return v * LS.sortDir;
     // secondary: alphabetical
@@ -3776,11 +3985,31 @@ function lsSort(col) {
 
 function lsDrawTable() {
   const hasPrefs = S.leagues.some(lg => RS.prefs[lg.league_id] !== null);
+  const cd = LS.contenderData;
+  const crLoading = cd.mode === 'projections' && cd.loading;
+
+  // Compute contender scores per league (keyed roster_id → score)
+  const crScoresPerLeague = {};
+  for (const lg of S.leagues) {
+    if (!LS.leagueData[lg.league_id]) continue;
+    crScoresPerLeague[lg.league_id] = lsCrComputeLeague(lg.league_id);
+  }
 
   // Build rows
   let rows = S.leagues.map(lg => {
     const d    = LS.leagueData[lg.league_id];
     const pref = RS.prefs[lg.league_id];
+    const isEspn = lg.source === 'espn';
+    const crScores = !isEspn ? (crScoresPerLeague[lg.league_id] || {}) : {};
+    const myRid = d?.myRosterId;
+    const crScore = !isEspn && myRid != null ? (crScores[myRid] ?? null) : null;
+    const allCrScores = Object.values(crScores);
+    // Rank = how many teams have a higher score + 1
+    const crRank = crScore != null && allCrScores.length > 0
+      ? allCrScores.filter(s => s > crScore).length + 1
+      : null;
+    const crColor = crScore != null && allCrScores.length > 1
+      ? lsCrBadgeColor(crScore, allCrScores) : null;
     return {
       lgId:       lg.league_id,
       name:       lg.name || 'Unnamed',
@@ -3796,6 +4025,7 @@ function lsDrawTable() {
       apLosses:        d?.apLosses,
       playoffOdds:     d?.playoffOdds,
       playoffOddsError: d?.playoffOddsError,
+      crScore, crRank, crColor,
     };
   });
 
@@ -3811,12 +4041,14 @@ function lsDrawTable() {
   };
   const thCls = (col) => LS.sortCol === col ? 'ls-sorted' : '';
 
+  const crModeLbl = cd.mode === 'adp' ? 'ADP' : 'Proj';
   const cols = [
-    { key: 'name',     lbl: 'League'         },
-    { key: 'standing', lbl: 'Standing'       },
-    { key: 'record',   lbl: 'Record'         },
-    { key: 'allplay',  lbl: 'All-Play'       },
-    { key: 'chances',  lbl: 'Playoff Chances'},
+    { key: 'name',      lbl: 'League'         },
+    { key: 'contender', lbl: `Contender<br><span style="font-family:'Crimson Text',serif;font-size:0.68rem;font-weight:400;letter-spacing:0;text-transform:none;opacity:0.7;">${crModeLbl}</span>` },
+    { key: 'standing',  lbl: 'Standing'       },
+    { key: 'record',    lbl: 'Record'         },
+    { key: 'allplay',   lbl: 'All-Play'       },
+    { key: 'chances',   lbl: 'Playoff Chances'},
   ];
 
   const thead = `<thead><tr>${cols.map(c =>
@@ -3869,7 +4101,20 @@ function lsDrawTable() {
       chancesCell = `<td><span class="${cls}">${label}</span></td>`;
     }
 
-    return `<tr>${nameCell}${standingCell}${recordCell}${apCell}${chancesCell}</tr>`;
+    // Contender rank cell
+    let crCell;
+    if (!row.hasData) {
+      crCell = '<td>—</td>';
+    } else if (crLoading) {
+      crCell = '<td><span style="color:var(--brown-light);font-size:0.8rem;">…</span></td>';
+    } else if (row.crRank != null) {
+      const bg = row.crColor || '#555';
+      crCell = `<td><span class="ls-cr-badge" style="background:${bg}">${row.crRank}</span><span class="ls-cr-sub">of ${row.numTeams}</span></td>`;
+    } else {
+      crCell = '<td><span style="color:var(--brown-light);font-size:0.8rem;">—</span></td>';
+    }
+
+    return `<tr>${nameCell}${crCell}${standingCell}${recordCell}${apCell}${chancesCell}</tr>`;
   }).join('')}</tbody>`;
 
   const filterBtns = `
@@ -3894,11 +4139,21 @@ function lsDrawTable() {
     ? `<div style="color:#c0392b;font-size:0.82rem;margin:8px 0 4px;">${esc(LS.oddsError)}</div>`
     : '';
 
+  const modeBar = `
+    <div class="ls-mode-bar">
+      <span class="ls-mode-label">Starter Value</span>
+      <button class="ls-mode-pill${cd.mode==='adp'?' active':''}" onclick="lsSetContenderMode('adp')">ADP</button>
+      <button class="ls-mode-pill${cd.mode==='projections'?' active':''}" onclick="lsSetContenderMode('projections')">Projections</button>
+    </div>`;
+
   setC(`
     <div class="section-head"><h2>League Summaries</h2><div class="section-head-line"></div></div>
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
       ${filterBtns}
-      ${oddsBtn}
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        ${modeBar}
+        ${oddsBtn}
+      </div>
     </div>
     ${oddsErr}
     <div style="overflow-x:auto;">
