@@ -2299,25 +2299,39 @@ async function populateDraftSelector() {
     // Pull all of the user's drafts for the season in one call — independent of
     // S.leagueDetails (which loads asynchronously after the leagues list).
     const season = S.nflState?.league_create_season || S.nflState?.season || new Date().getFullYear().toString();
-    const all = await api('/user/' + S.userId + '/drafts/nfl/' + season).catch(() => []) || [];
-    // Show drafts that are live OR scheduled (pre_draft) — exclude completed.
-    const drafts = all.filter(d => d?.status === 'drafting' || d?.status === 'pre_draft');
+    const userDrafts = await api('/user/' + S.userId + '/drafts/nfl/' + season).catch(() => []) || [];
+    const byId = new Map();
+    for (const d of userDrafts) if (d?.draft_id) byId.set(String(d.draft_id), d);
+    // The user-drafts feed can miss an in-progress draft, so also pull each
+    // league's own draft_id and fetch any we don't already have.
+    const missing = new Set();
+    for (const lg of S.leagues) {
+      const did = lg.draft_id || S.leagueDetails[lg.league_id]?.draft_id;
+      if (did && !byId.has(String(did))) missing.add(String(did));
+    }
+    const fetched = await Promise.all([...missing].map(id => api('/draft/' + id).catch(() => null)));
+    for (const d of fetched) if (d?.draft_id) byId.set(String(d.draft_id), d);
+
+    // A live draft can report 'drafting' or (for slow drafts in a pause window)
+    // 'paused'. Show everything that isn't completed.
+    const isLive = d => d.status === 'drafting' || d.status === 'paused';
+    const drafts = [...byId.values()].filter(d => d.status && d.status !== 'complete');
     if (!drafts.length) { sel.innerHTML = '<option value="">— no active or upcoming drafts —</option>'; return; }
     // Live drafts first, then scheduled by start time.
     drafts.sort((a, b) => {
-      if ((a.status === 'drafting') !== (b.status === 'drafting')) return a.status === 'drafting' ? -1 : 1;
+      if (isLive(a) !== isLive(b)) return isLive(a) ? -1 : 1;
       return (a.start_time || 0) - (b.start_time || 0);
     });
     const lgName = lid => S.leagues.find(l => l.league_id === lid)?.name;
     const label = d => {
       const base = d.metadata?.name || lgName(d.league_id) || d.draft_id;
-      const tag  = d.status === 'drafting' ? 'LIVE' : 'scheduled';
+      const tag  = isLive(d) ? 'LIVE' : 'scheduled';
       return `${base} — ${tag}`;
     };
     sel.innerHTML = '<option value="">— select a draft —</option>' +
       drafts.map(d => `<option value="${esc(d.draft_id)}">${esc(label(d))}</option>`).join('');
     // Auto-select only when there's exactly one live draft.
-    const live = drafts.filter(d => d.status === 'drafting');
+    const live = drafts.filter(isLive);
     if (live.length === 1) { sel.value = live[0].draft_id; selectDraft(live[0].draft_id); }
   } catch(e) {}
 }
