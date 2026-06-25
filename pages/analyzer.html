@@ -1360,12 +1360,14 @@
 
   // ── Trade Targets ────────────────────────────────────────────────────────────
 
-  // Build per-position rank arrays using the active mode (ADP or avg projections).
-  // Each entry: { pid, score, age, name } sorted desc by score (higher = better).
-  // Falls back to ADP if projections data isn't loaded yet.
+  // Build per-position rank arrays sorted best-first (index 0 = best player).
+  // Projections mode: average PPG across Clay, Sleeper, and user projections scored
+  // with this league's settings — same formula crPlayerPpg uses.
+  // ADP fallback: negate search_rank so descending sort = ascending rank.
   function buildGlobalPosRanks() {
     const players = (window._azCtx || {}).players || {};
-    const useProj = crData.loaded; // always prefer projections for trade targets; ADP is fallback only
+    const scoring = (window._azCtx || {}).scoring || {};
+    const useProj = crData.loaded;
     const posMap = { QB: [], RB: [], WR: [], TE: [] };
 
     for (const [pid, p] of Object.entries(players)) {
@@ -1374,19 +1376,22 @@
 
       let score;
       if (useProj) {
-        const clay = crData.clayMap?.[pid] ?? null;
-        const user = crData.userProjMap?.[pid] ?? null;
-        if (clay != null && user != null) score = (clay + user) / 2;
-        else if (clay != null) score = clay;
-        else if (user != null) score = user;
-        else score = null;
+        // Mirror crPlayerPpg logic from shared-utils.js
+        const vals = [];
+        const clay = crData.clayMap?.[pid];
+        if (clay) { const v = crScoreClay(clay.stats, scoring); if (v != null && v > 0) vals.push(v); }
+        const slp = crData.sleeperProjMap?.[pid];
+        if (slp) { const v = crScoreSleeper(slp, scoring); if (v != null && v > 0) vals.push(v); }
+        const usr = crData.userProjMap?.[pid];
+        if (usr?.ppg != null && usr.ppg > 0) vals.push(usr.ppg);
+        score = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+        if (!score || score <= 0) continue;
       } else {
-        // ADP: negate search_rank so sort descending by score = ascending by rank
         const sr = p.search_rank;
-        score = (sr != null && sr > 0) ? -sr : null;
+        if (!sr || sr <= 0) continue;
+        score = -sr; // negate so descending sort = ascending rank; score is always negative
       }
 
-      if (score == null || score <= 0) continue;
       posMap[pos].push({ pid, score, age: p.age ?? null, name: p.full_name || pid });
     }
 
@@ -1480,22 +1485,28 @@
     return needs;
   }
 
-  // Returns excess position objects for a given team
+  // Returns excess position objects for a given team.
+  // players array is sorted by global rank ascending so slice(-2) gives the most marginal qualifiers.
   function computeExcess(team, posRanks) {
     if (!posRanks) return [];
     const excess = [];
-    const byPos = pos => (team.playerList || []).filter(p => p.pos === pos).sort((a, b) => b.val - a.val);
-    const inTopN = (pid, pos, n) => {
+    const byPos = pos => (team.playerList || []).filter(p => p.pos === pos);
+    const rankOf = (pid, pos) => {
       const idx = (posRanks[pos] || []).findIndex(p => p.pid === pid);
-      return idx !== -1 && idx < n;
+      return idx === -1 ? null : idx + 1;
     };
-    const qbTop24 = byPos('QB').filter(p => inTopN(p.pid, 'QB', 24));
+    const topN = (pos, n) => byPos(pos)
+      .map(p => ({ ...p, rank: rankOf(p.pid, pos) }))
+      .filter(p => p.rank != null && p.rank <= n)
+      .sort((a, b) => a.rank - b.rank); // rank ascending → last entries are most marginal
+
+    const qbTop24 = topN('QB', 24);
     if (qbTop24.length >= 4) excess.push({ pos: 'QB', label: `${qbTop24.length} top-24 QBs`, players: qbTop24 });
-    const rbTop36 = byPos('RB').filter(p => inTopN(p.pid, 'RB', 36));
+    const rbTop36 = topN('RB', 36);
     if (rbTop36.length >= 5) excess.push({ pos: 'RB', label: `${rbTop36.length} top-36 RBs`, players: rbTop36 });
-    const wrTop48 = byPos('WR').filter(p => inTopN(p.pid, 'WR', 48));
+    const wrTop48 = topN('WR', 48);
     if (wrTop48.length >= 6) excess.push({ pos: 'WR', label: `${wrTop48.length} top-48 WRs`, players: wrTop48 });
-    const teTop18 = byPos('TE').filter(p => inTopN(p.pid, 'TE', 18));
+    const teTop18 = topN('TE', 18);
     if (teTop18.length >= 2) excess.push({ pos: 'TE', label: `${teTop18.length} top-18 TEs`, players: teTop18 });
     return excess;
   }
@@ -1630,8 +1641,11 @@
             if (r.type === 'aging') {
               return `<div class="az-tgt-reason">${posBadge} <span>${esc(r.player.name)}</span> <span class="az-tgt-reason-sub">age ${r.age} · #${r.rank} ${r.pos}</span></div>`;
             } else {
-              const top2 = (r.players || []).slice(0, 2).map(p => esc(p.name)).join(', ');
-              return `<div class="az-tgt-reason">${posBadge} <span>${r.label}</span> <span class="az-tgt-reason-sub">${top2}</span></div>`;
+              const last2 = (r.players || []).slice(-2);
+              const inclHtml = last2.length
+                ? `<span class="az-tgt-reason-sub">${last2.map(p => `#${p.rank} ${esc(p.name)}`).join(', ')}</span>`
+                : '';
+              return `<div class="az-tgt-reason">${posBadge} <span>${r.label}</span> ${inclHtml}</div>`;
             }
           }).join('');
 
