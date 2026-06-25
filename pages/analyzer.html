@@ -213,6 +213,92 @@
     .az-switcher-item:hover { background: rgba(255,255,255,0.06); color: var(--cream); }
     .az-switcher-item.current { color: var(--gold-light); font-weight: 600; background: rgba(201,150,42,0.07); pointer-events: none; }
     .az-switcher-empty { padding: 12px 14px; font-family: 'Crimson Text', serif; font-size: 0.86rem; color: var(--brown-light); font-style: italic; }
+
+    /* ── Trade Targets button + panel ── */
+    .az-targets-wrap { position: relative; }
+    .az-targets-btn {
+      font-family: 'Rye', serif; font-size: 0.44rem; letter-spacing: 0.14em;
+      text-transform: uppercase; padding: 7px 13px; border: 1.5px solid var(--brown-mid);
+      border-radius: 2px; background: transparent; color: var(--brown-mid);
+      cursor: pointer; transition: all 0.15s; white-space: nowrap;
+    }
+    .az-targets-btn:hover { border-color: var(--gold); color: var(--gold); background: rgba(201,150,42,0.06); }
+    .az-targets-panel {
+      position: absolute; right: 0; top: calc(100% + 6px); width: 340px;
+      background: var(--brown-dark); border: 1px solid var(--brown-mid);
+      border-radius: 3px; box-shadow: 0 4px 24px rgba(0,0,0,0.5); z-index: 300;
+      max-height: 480px; overflow-y: auto;
+    }
+    .az-tgt-hdr {
+      padding: 9px 13px; border-bottom: 1px solid var(--brown-mid);
+      font-family: 'Rye', serif; font-size: 0.4rem; letter-spacing: 0.16em;
+      text-transform: uppercase; color: var(--brown-light); display: flex; justify-content: space-between; align-items: center;
+    }
+    .az-tgt-myrow {
+      padding: 8px 13px; border-bottom: 1px solid var(--brown-mid);
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    }
+    .az-tgt-myname {
+      font-family: 'Playfair Display', serif; font-size: 0.9rem; font-weight: 700; color: var(--cream);
+    }
+    .az-tgt-arch {
+      font-family: 'Crimson Text', serif; font-size: 0.75rem; font-weight: 700; padding: 2px 8px;
+      border-radius: 2px; text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .az-tgt-arch-c { background: rgba(92,184,92,0.18); color: #5cb85c; }
+    .az-tgt-arch-r { background: rgba(91,192,222,0.18); color: #5bc0de; }
+    .az-tgt-arch-u { background: rgba(210,205,195,0.14); color: #d8d5ce; }
+    .az-tgt-needs {
+      padding: 6px 13px 8px; border-bottom: 1px solid var(--brown-mid);
+      display: flex; gap: 5px; flex-wrap: wrap; align-items: center;
+    }
+    .az-tgt-needs-lbl {
+      font-family: 'Rye', serif; font-size: 0.38rem; letter-spacing: 0.14em; text-transform: uppercase;
+      color: var(--brown-light); flex-shrink: 0; margin-right: 2px;
+    }
+    .az-tgt-need-chip {
+      font-family: 'Crimson Text', serif; font-size: 0.76rem; font-weight: 700;
+      padding: 2px 7px; border-radius: 2px;
+    }
+    .az-tgt-need-full  { background: rgba(224,82,82,0.22); color: #e05252; }
+    .az-tgt-need-light { background: rgba(232,195,100,0.18); color: #e8c364; }
+    .az-tgt-item {
+      display: block; padding: 9px 13px; border-bottom: 1px dashed rgba(255,255,255,0.05);
+      text-decoration: none; transition: background 0.1s; cursor: pointer;
+    }
+    .az-tgt-item:last-child { border-bottom: none; }
+    .az-tgt-item:hover { background: rgba(255,255,255,0.05); }
+    .az-tgt-item-top {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px;
+    }
+    .az-tgt-tname {
+      font-family: 'Playfair Display', serif; font-size: 0.88rem; font-weight: 700; color: var(--cream);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .az-tgt-analyze {
+      font-family: 'Rye', serif; font-size: 0.38rem; letter-spacing: 0.1em; text-transform: uppercase;
+      padding: 3px 8px; border: 1px solid var(--brown-mid); border-radius: 2px;
+      color: var(--brown-light); background: transparent; white-space: nowrap; flex-shrink: 0;
+      text-decoration: none; transition: all 0.12s;
+    }
+    .az-tgt-analyze:hover { border-color: var(--gold); color: var(--gold); }
+    .az-tgt-reasons { display: flex; flex-direction: column; gap: 3px; }
+    .az-tgt-reason {
+      font-family: 'Crimson Text', serif; font-size: 0.82rem; color: var(--parchment);
+      display: flex; align-items: baseline; gap: 5px;
+    }
+    .az-tgt-reason-sub { font-size: 0.73rem; color: var(--brown-light); }
+    .az-tgt-oddsline {
+      font-family: 'Crimson Text', serif; font-size: 0.73rem; color: var(--brown-light); margin-top: 3px;
+    }
+    .az-tgt-empty {
+      padding: 14px 13px; font-family: 'Crimson Text', serif; font-size: 0.88rem;
+      color: var(--brown-light); font-style: italic;
+    }
+    .az-tgt-nopref {
+      padding: 8px 13px; background: rgba(201,150,42,0.06); border-bottom: 1px solid var(--brown-mid);
+      font-family: 'Crimson Text', serif; font-size: 0.8rem; color: var(--gold); font-style: italic;
+    }
   </style>
 </head>
 <body>
@@ -236,6 +322,12 @@
           <div id="az-trade-panel" class="az-trade-panel" style="display:none;">
             <div class="az-trade-panel-hdr">Select Trade Partner</div>
             <div id="az-trade-list"></div>
+          </div>
+        </div>
+        <div class="az-targets-wrap">
+          <button id="az-targets-btn" class="az-targets-btn" onclick="toggleTradeTargets(event)" style="display:none;">◎ Trade Targets</button>
+          <div id="az-targets-panel" class="az-targets-panel" style="display:none;">
+            <div id="az-targets-content"></div>
           </div>
         </div>
         <div class="az-switcher-wrap">
@@ -818,9 +910,26 @@
       t.draft = Math.round(_adj);
     }
 
+    // Build global position rank arrays (all players by FC value) for trade target logic
+    const globalPosRanks = { QB: [], RB: [], WR: [], TE: [] };
+    for (const [pid, p] of Object.entries(players)) {
+      const pos = normPos(p.position);
+      if (!pos || !['QB','RB','WR','TE'].includes(pos)) continue;
+      const val = fcMap[pid] ?? 0;
+      if (val > 0) globalPosRanks[pos].push({ pid, val, age: p.age ?? null, name: p.full_name || pid });
+    }
+    for (const pos of ['QB','RB','WR','TE']) globalPosRanks[pos].sort((a, b) => b.val - a.val);
+    const globalFlexRank = [...globalPosRanks.RB, ...globalPosRanks.WR, ...globalPosRanks.TE]
+      .sort((a, b) => b.val - a.val);
+    const numStartersPerTeam = rp.filter(p => !['BN','IR','TAXI'].includes(p)).length;
+    const is2TE = te2Mult > 1;
+    const nextSeason = _nextSeason; // already computed above
+
     return {
       teams: teams.filter(t => t.overall > 0 || t.wins > 0 || t.losses > 0),
+      allRosters,
       lgName, category, season: nflSeason, formatFlags, numTeams,
+      globalPosRanks, globalFlexRank, numStartersPerTeam, is2TE, nextSeason,
       crCtx: { players, byName, rosterPositions: rp, scoring: scoringSettings, season: nflSeason },
     };
   }
@@ -927,7 +1036,8 @@
 
   async function loadAndRender() {
     const result = isEspn ? await loadEspn() : await loadSleeper();
-    const { teams, lgName, category, season, formatFlags, numTeams, crCtx } = result;
+    const { teams, lgName, category, season, formatFlags, numTeams, crCtx,
+            globalPosRanks, globalFlexRank, numStartersPerTeam, is2TE, nextSeason, allRosters } = result;
 
     document.getElementById('league-title').textContent = lgName + ' · ' + season;
     document.title = 'Analyzer — ' + lgName;
@@ -936,11 +1046,52 @@
       _tradeBtn.style.display = 'inline-block';
     }
 
-    window._azTeams      = teams;
-    window._azCtx        = crCtx;
-    window._azMeta       = { category, numTeams, formatFlags };
+    window._azTeams = teams;
+    window._azCtx   = crCtx;
+    window._azMeta  = {
+      category, numTeams, formatFlags,
+      globalPosRanks:      globalPosRanks      || {},
+      globalFlexRank:      globalFlexRank       || [],
+      numStartersPerTeam:  numStartersPerTeam   || 0,
+      is2TE:               is2TE               || false,
+      nextSeason:          nextSeason           || String(new Date().getFullYear() + 1),
+    };
+    window._azMyRosterId = window._azMyRosterId ?? null;
+    window._azMyPref     = window._azMyPref     ?? null;
+
+    // Fire identity + pref loading in parallel (non-blocking — button shows when done)
+    if (!isEspn) {
+      Promise.all([
+        azLoadIdentity(allRosters || []),
+        azLoadPref(),
+      ]).then(() => renderTradeTargetsBtn());
+    }
 
     await azApplyContender(); // sets team.contender + window._azRanks, then renders
+  }
+
+  async function azLoadIdentity(allRosters) {
+    const user = SharedAuth.getUser?.();
+    if (!user?.sleeper_username) return;
+    try {
+      const su = await fetch(`${API}/sleeper/user/${encodeURIComponent(user.sleeper_username)}`).then(r => r.json());
+      const mine = allRosters.find(r => r.owner_id === su.user_id);
+      window._azMyRosterId = mine?.roster_id ?? null;
+    } catch {}
+  }
+
+  async function azLoadPref() {
+    const user = SharedAuth.getUser?.();
+    let p = null;
+    if (user) {
+      try {
+        const r = await fetch(`${API}/rootforme/prefs`, { credentials: 'include' });
+        if (r.ok) p = ((await r.json()).prefs || {})[lgId] ?? null;
+      } catch {}
+    } else {
+      try { p = (JSON.parse(localStorage.getItem('rfm_prefs') || '{}'))[lgId] ?? null; } catch {}
+    }
+    window._azMyPref = p ? (p.contender ? 'contender' : 'rebuilder') : null;
   }
 
   // Populate each team's contender score for the active mode, preferring the
@@ -976,6 +1127,8 @@
     for (const t of teams) t.contender = Math.round(scores[t.rosterId] ?? 0);
     window._azRanks = computeRanks(teams);
     renderAll();
+    // Refresh trade targets with finalized playoff odds (if identity resolved)
+    if (window._azMyRosterId) renderTradeTargetsBtn();
   }
 
   function azSetContenderMode(mode) {
@@ -1201,6 +1354,10 @@
     if (tPanel && !tPanel.contains(e.target) && !e.target.closest('.az-trade-wrap')) {
       tPanel.style.display = 'none';
     }
+    const tgtPanel = document.getElementById('az-targets-panel');
+    if (tgtPanel && !tgtPanel.contains(e.target) && !e.target.closest('.az-targets-wrap')) {
+      tgtPanel.style.display = 'none';
+    }
   });
 
   document.addEventListener('keydown', e => {
@@ -1209,8 +1366,288 @@
       if (panel) panel.style.display = 'none';
       const tPanel = document.getElementById('az-trade-panel');
       if (tPanel) tPanel.style.display = 'none';
+      const tgtPanel = document.getElementById('az-targets-panel');
+      if (tgtPanel) tgtPanel.style.display = 'none';
     }
   });
+
+  // ── Trade Targets ────────────────────────────────────────────────────────────
+
+  // Classify another team as contender (>40% odds OR traded away own 1st next year)
+  function isContenderTeam(team) {
+    if ((team.playoffOdds ?? 0) > 0.40) return true;
+    const nextSeason = (window._azMeta || {}).nextSeason;
+    if (!nextSeason) return false;
+    // If they no longer own their own 1st-round pick next year → win-now mode
+    const hasOwnFirst = (team.pickList || []).some(
+      p => p.season === nextSeason && p.round === 1 && p.originalRosterId === team.rosterId
+    );
+    return !hasOwnFirst;
+  }
+
+  // Returns { QB, RB, WR, TE, flex } each: 'need' | 'light' | null
+  function computeMyNeeds(myTeam) {
+    const { globalPosRanks, globalFlexRank, numStartersPerTeam, numTeams, is2TE } = window._azMeta || {};
+    const myPref = window._azMyPref;
+    const needs = { QB: null, RB: null, WR: null, TE: null, flex: false };
+    if (!globalPosRanks || !myPref) return needs;
+
+    const byPos = pos => (myTeam.playerList || []).filter(p => p.pos === pos).sort((a, b) => b.val - a.val);
+    const inTopN = (pid, pos, n) => {
+      const idx = (globalPosRanks[pos] || []).findIndex(p => p.pid === pid);
+      return idx !== -1 && idx < n;
+    };
+
+    if (myPref === 'contender') {
+      // QB: 3rd QB not a starter on my team → light need
+      const qbs = byPos('QB');
+      if (qbs[2] && !qbs[2].isStarter) needs.QB = 'light';
+
+      // RB: < 2 top-36 → need; ≤ 3 top-48 → light need
+      const rbs = byPos('RB');
+      const rb36 = rbs.filter(p => inTopN(p.pid, 'RB', 36)).length;
+      const rb48 = rbs.filter(p => inTopN(p.pid, 'RB', 48)).length;
+      if (rb36 < 2) needs.RB = 'need';
+      else if (rb48 <= 3) needs.RB = 'light';
+
+      // WR: < 3 top-48 → need; ≤ 4 top-60 → light need
+      const wrs = byPos('WR');
+      const wr48 = wrs.filter(p => inTopN(p.pid, 'WR', 48)).length;
+      const wr60 = wrs.filter(p => inTopN(p.pid, 'WR', 60)).length;
+      if (wr48 < 3) needs.WR = 'need';
+      else if (wr60 <= 4) needs.WR = 'light';
+
+      // TE (1TE: need if TE1 not top-12, light if TE2 not top-24)
+      // (2TE: need if TE2 not top-24, or TE3 not top-30)
+      const tes = byPos('TE');
+      if (is2TE) {
+        if (!tes[1] || !inTopN(tes[1].pid, 'TE', 24)) needs.TE = 'need';
+        else if (!tes[2] || !inTopN(tes[2].pid, 'TE', 30)) needs.TE = 'need';
+      } else {
+        if (!tes[0] || !inTopN(tes[0].pid, 'TE', 12)) needs.TE = 'need';
+        else if (!tes[1] || !inTopN(tes[1].pid, 'TE', 24)) needs.TE = 'light';
+      }
+
+      // Flex depth (only if no RB/WR need flagged)
+      if (!needs.RB && !needs.WR && numStartersPerTeam && numTeams && globalFlexRank?.length) {
+        const X = Math.round(numTeams * numStartersPerTeam * 0.6);
+        const benchFlex = (myTeam.playerList || [])
+          .filter(p => ['RB','WR','TE'].includes(p.pos) && !p.isStarter)
+          .sort((a, b) => b.val - a.val).slice(0, 3);
+        const flexIdxMap = {};
+        globalFlexRank.forEach((p, i) => { flexIdxMap[p.pid] = i; });
+        if (benchFlex.some(p => (flexIdxMap[p.pid] ?? 9999) >= X)) needs.flex = true;
+      }
+
+    } else if (myPref === 'rebuilder') {
+      // QB: < 2 QBs in global top-24
+      const qb24 = byPos('QB').filter(p => inTopN(p.pid, 'QB', 24)).length;
+      if (qb24 < 2) needs.QB = 'need';
+      // RB: never a need for rebuilders
+      // WR: not enough top-60 WRs to fill WR starting slots
+      const wrSlots = ((window._azCtx || {}).rosterPositions || []).filter(p => p === 'WR').length;
+      const wr60 = byPos('WR').filter(p => inTopN(p.pid, 'WR', 60)).length;
+      if (wr60 < wrSlots) needs.WR = 'need';
+      // TE: no top-30 TE
+      const tes = byPos('TE');
+      if (!tes[0] || !inTopN(tes[0].pid, 'TE', 30)) needs.TE = 'need';
+    }
+
+    return needs;
+  }
+
+  // Returns excess position objects for a given team
+  function computeExcess(team) {
+    const { globalPosRanks } = window._azMeta || {};
+    if (!globalPosRanks) return [];
+    const excess = [];
+    const byPos = pos => (team.playerList || []).filter(p => p.pos === pos).sort((a, b) => b.val - a.val);
+    const inTopN = (pid, pos, n) => {
+      const idx = (globalPosRanks[pos] || []).findIndex(p => p.pid === pid);
+      return idx !== -1 && idx < n;
+    };
+    const qbTop24 = byPos('QB').filter(p => inTopN(p.pid, 'QB', 24));
+    if (qbTop24.length >= 4) excess.push({ pos: 'QB', label: `${qbTop24.length} top-24 QBs`, players: qbTop24 });
+    const rbTop36 = byPos('RB').filter(p => inTopN(p.pid, 'RB', 36));
+    if (rbTop36.length >= 5) excess.push({ pos: 'RB', label: `${rbTop36.length} top-36 RBs`, players: rbTop36 });
+    const wrTop48 = byPos('WR').filter(p => inTopN(p.pid, 'WR', 48));
+    if (wrTop48.length >= 6) excess.push({ pos: 'WR', label: `${wrTop48.length} top-48 WRs`, players: wrTop48 });
+    const teTop18 = byPos('TE').filter(p => inTopN(p.pid, 'TE', 18));
+    if (teTop18.length >= 2) excess.push({ pos: 'TE', label: `${teTop18.length} top-18 TEs`, players: teTop18 });
+    return excess;
+  }
+
+  // Aging assets on a rebuilder that a contender would want
+  function computeAgingAssets(team) {
+    const { globalPosRanks } = window._azMeta || {};
+    if (!globalPosRanks) return [];
+    const assets = [];
+    const byPos = pos => (team.playerList || []).filter(p => p.pos === pos).sort((a, b) => b.val - a.val);
+    const posRankOf = (pid, pos) => {
+      const idx = (globalPosRanks[pos] || []).findIndex(p => p.pid === pid);
+      return idx === -1 ? null : idx + 1;
+    };
+    const ageOf = pid => {
+      for (const pos of ['QB','RB','WR','TE']) {
+        const found = (globalPosRanks[pos] || []).find(p => p.pid === pid);
+        if (found) return found.age;
+      }
+      return null;
+    };
+    for (const qb of byPos('QB')) {
+      const rk = posRankOf(qb.pid, 'QB'), age = ageOf(qb.pid);
+      if (rk && rk <= 24 && age != null && age >= 30) assets.push({ pos: 'QB', player: qb, age, rank: rk });
+    }
+    for (const rb of byPos('RB')) {
+      const rk = posRankOf(rb.pid, 'RB'), age = ageOf(rb.pid);
+      if (rk && rk <= 36 && age != null && age >= 24) assets.push({ pos: 'RB', player: rb, age, rank: rk });
+    }
+    for (const wr of byPos('WR')) {
+      const rk = posRankOf(wr.pid, 'WR'), age = ageOf(wr.pid);
+      if (rk && rk <= 48 && age != null && age >= 27) assets.push({ pos: 'WR', player: wr, age, rank: rk });
+    }
+    for (const te of byPos('TE')) {
+      const rk = posRankOf(te.pid, 'TE'), age = ageOf(te.pid);
+      if (rk && rk <= 24 && age != null && age >= 28) assets.push({ pos: 'TE', player: te, age, rank: rk });
+    }
+    return assets;
+  }
+
+  function computeTradeTargets() {
+    const myRid  = window._azMyRosterId;
+    const myPref = window._azMyPref;
+    const teams  = window._azTeams || [];
+    if (!myRid) return null;
+    const myTeam = teams.find(t => t.rosterId === myRid);
+    if (!myTeam) return null;
+
+    const needs = computeMyNeeds(myTeam);
+    const activeNeeds = Object.entries(needs).filter(([k, v]) => v && k !== 'flex').map(([k]) => k);
+
+    const targets = [];
+    for (const t of teams) {
+      if (t.rosterId === myRid) continue;
+      const theirArch = isContenderTeam(t) ? 'contender' : 'rebuilder';
+      const reasons = [];
+
+      if (myPref === 'contender') {
+        if (theirArch === 'rebuilder') {
+          // Aging win-now assets from rebuilders — filter to my active needs (or all positions if no needs)
+          const aging = computeAgingAssets(t).filter(a => !activeNeeds.length || activeNeeds.includes(a.pos));
+          for (const a of aging) reasons.push({ type: 'aging', ...a });
+        }
+        // Excess at positions I need (or any excess if no needs flagged)
+        const exc = computeExcess(t).filter(e => !activeNeeds.length || activeNeeds.includes(e.pos));
+        for (const e of exc) reasons.push({ type: 'excess', ...e });
+      } else if (myPref === 'rebuilder') {
+        // Show excess at positions I need (picks/youth focus; rebuilder target logic can expand later)
+        const exc = computeExcess(t).filter(e => !activeNeeds.length || activeNeeds.includes(e.pos));
+        for (const e of exc) reasons.push({ type: 'excess', ...e });
+      }
+
+      if (reasons.length) targets.push({ team: t, archetype: theirArch, reasons });
+    }
+
+    targets.sort((a, b) => b.reasons.length - a.reasons.length);
+    return { myTeam, myPref, needs, targets };
+  }
+
+  function renderTradeTargetsBtn() {
+    const btn = document.getElementById('az-targets-btn');
+    if (!btn) return;
+    const rid = window._azMyRosterId;
+    if (!rid) { btn.style.display = 'none'; return; }
+    btn.style.display = 'inline-block';
+    // Pre-populate content so panel is ready when opened
+    const contentEl = document.getElementById('az-targets-content');
+    if (contentEl) contentEl.innerHTML = buildTradeTargetsHtml();
+  }
+
+  function buildTradeTargetsHtml() {
+    const result = computeTradeTargets();
+    if (!result) return `<div class="az-tgt-empty">Sign in and set your Sleeper username to see trade targets.</div>`;
+
+    const { myTeam, myPref, needs, targets } = result;
+    const myDisplay = myTeam.teamName || myTeam.ownerName || ('Team ' + myTeam.rosterId);
+
+    // Pref chip
+    const archHtml = myPref === 'contender'
+      ? `<span class="az-tgt-arch az-tgt-arch-c">Contender</span>`
+      : myPref === 'rebuilder'
+      ? `<span class="az-tgt-arch az-tgt-arch-r">Rebuilder</span>`
+      : `<span class="az-tgt-arch az-tgt-arch-u">No pref set</span>`;
+
+    // Needs chips
+    const POS_LABELS = { QB: 'QB', RB: 'RB', WR: 'WR', TE: 'TE' };
+    const needChips = Object.entries(needs)
+      .filter(([k, v]) => v && k !== 'flex')
+      .map(([k, v]) => `<span class="az-tgt-need-chip ${v === 'need' ? 'az-tgt-need-full' : 'az-tgt-need-light'}">${POS_LABELS[k] || k}${v === 'light' ? '?' : ''}</span>`)
+      .join('');
+    const flexChip = needs.flex ? `<span class="az-tgt-need-chip az-tgt-need-light">Flex depth?</span>` : '';
+    const noNeeds = !needChips && !flexChip;
+
+    const POS_CLS = { QB: 'rs-pos-QB', RB: 'rs-pos-RB', WR: 'rs-pos-WR', TE: 'rs-pos-TE' };
+
+    const noPrefNote = myPref ? '' : `<div class="az-tgt-nopref">Set your contender/rebuilder preference in <a href="/rootforme.html" style="color:var(--gold);">Root For Me</a> for tailored results.</div>`;
+
+    const targetsHtml = targets.length === 0
+      ? `<div class="az-tgt-empty">No clear trade targets found for this league.</div>`
+      : targets.map(({ team, archetype, reasons }) => {
+          const tDisplay = team.teamName || team.ownerName || ('Team ' + team.rosterId);
+          const tArchHtml = archetype === 'contender'
+            ? `<span class="az-tgt-arch az-tgt-arch-c" style="font-size:0.68rem;">Contender</span>`
+            : `<span class="az-tgt-arch az-tgt-arch-r" style="font-size:0.68rem;">Rebuilder</span>`;
+          const oddsLine = team.playoffOdds != null
+            ? `<div class="az-tgt-oddsline">${Math.round(team.playoffOdds * 100)}% playoff odds</div>` : '';
+
+          const reasonsHtml = reasons.map(r => {
+            const posCls = POS_CLS[r.pos] || '';
+            const posBadge = `<span class="rs-pos ${posCls}" style="font-size:0.7rem;padding:1px 5px;">${r.pos}</span>`;
+            if (r.type === 'aging') {
+              return `<div class="az-tgt-reason">${posBadge} <span>${esc(r.player.name)}</span> <span class="az-tgt-reason-sub">age ${r.age} · #${r.rank} ${r.pos}</span></div>`;
+            } else {
+              const top2 = (r.players || []).slice(0, 2).map(p => esc(p.name)).join(', ');
+              return `<div class="az-tgt-reason">${posBadge} <span>${r.label}</span> <span class="az-tgt-reason-sub">${top2}</span></div>`;
+            }
+          }).join('');
+
+          return `<div class="az-tgt-item">
+            <div class="az-tgt-item-top">
+              <span class="az-tgt-tname">${esc(tDisplay)}</span>
+              <a class="az-tgt-analyze" href="/trade-analyzer?league=${encodeURIComponent(lgId)}&b=${team.rosterId}">Analyze ⇄</a>
+            </div>
+            <div class="az-tgt-reasons">${reasonsHtml}</div>
+            <div class="az-tgt-oddsline" style="margin-top:4px;">${tArchHtml}${team.playoffOdds != null ? ` · ${Math.round(team.playoffOdds * 100)}% playoff odds` : ''}</div>
+          </div>`;
+        }).join('');
+
+    return `
+      <div class="az-tgt-hdr"><span>Trade Targets</span></div>
+      <div class="az-tgt-myrow">
+        <span class="az-tgt-myname">${esc(myDisplay)}</span>
+        ${archHtml}
+      </div>
+      ${myPref ? `<div class="az-tgt-needs">
+        <span class="az-tgt-needs-lbl">Needs</span>
+        ${needChips}${flexChip}
+        ${noNeeds ? '<span style="font-family:\'Crimson Text\',serif;font-size:0.8rem;color:var(--brown-light);font-style:italic;">None detected</span>' : ''}
+      </div>` : ''}
+      ${noPrefNote}
+      ${targetsHtml}
+    `;
+  }
+
+  function toggleTradeTargets(e) {
+    e.stopPropagation();
+    const panel = document.getElementById('az-targets-panel');
+    if (!panel) return;
+    const open = panel.style.display !== 'none';
+    if (open) { panel.style.display = 'none'; return; }
+    // Refresh content in case playoff odds just resolved
+    const contentEl = document.getElementById('az-targets-content');
+    if (contentEl) contentEl.innerHTML = buildTradeTargetsHtml();
+    panel.style.display = 'block';
+  }
 
   // ── Trade picker ─────────────────────────────────────────────────────────────
 
