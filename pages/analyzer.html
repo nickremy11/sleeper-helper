@@ -1365,7 +1365,7 @@
   // Falls back to ADP if projections data isn't loaded yet.
   function buildGlobalPosRanks() {
     const players = (window._azCtx || {}).players || {};
-    const useProj = crMode === 'projections' && crData.loaded;
+    const useProj = crData.loaded; // always prefer projections for trade targets; ADP is fallback only
     const posMap = { QB: [], RB: [], WR: [], TE: [] };
 
     for (const [pid, p] of Object.entries(players)) {
@@ -1646,7 +1646,7 @@
         }).join('');
 
     return `
-      <div class="az-tgt-hdr"><span>Trade Targets</span><span style="font-family:'Crimson Text',serif;font-size:0.72rem;font-weight:400;letter-spacing:0;text-transform:none;color:var(--brown-light);font-style:italic;">${crMode === 'projections' && crData.loaded ? 'Proj' : 'ADP'}</span></div>
+      <div class="az-tgt-hdr"><span>Trade Targets</span><span style="font-family:'Crimson Text',serif;font-size:0.72rem;font-weight:400;letter-spacing:0;text-transform:none;color:var(--brown-light);font-style:italic;">${crData.loaded ? 'Projections' : 'ADP'}</span></div>
       <div class="az-tgt-myrow">
         <span class="az-tgt-myname">${esc(myDisplay)}</span>
         ${archHtml}
@@ -1661,16 +1661,27 @@
     `;
   }
 
-  function toggleTradeTargets(e) {
+  async function toggleTradeTargets(e) {
     e.stopPropagation();
     const panel = document.getElementById('az-targets-panel');
     if (!panel) return;
     const open = panel.style.display !== 'none';
     if (open) { panel.style.display = 'none'; return; }
-    // Refresh content in case playoff odds just resolved
-    const contentEl = document.getElementById('az-targets-content');
-    if (contentEl) contentEl.innerHTML = buildTradeTargetsHtml();
     panel.style.display = 'block';
+    const contentEl = document.getElementById('az-targets-content');
+    // Load projections on first open — they're more accurate than generic ADP for trade targets
+    if (!crData.loaded) {
+      if (contentEl) contentEl.innerHTML = '<div class="az-tgt-empty">Loading projections…</div>';
+      try {
+        const ctx = window._azCtx || {};
+        const d = await crLoadProjectionData({
+          apiBase: API, season: ctx.season, authed: !!SharedAuth.getUser?.(), byName: ctx.byName || {},
+        });
+        crData.clayMap = d.clayMap; crData.sleeperProjMap = d.sleeperProjMap; crData.userProjMap = d.userProjMap;
+        crData.loaded = true; crData.loading = false;
+      } catch {}
+    }
+    if (contentEl) contentEl.innerHTML = buildTradeTargetsHtml();
   }
 
   // ── Trade picker ─────────────────────────────────────────────────────────────
