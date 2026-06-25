@@ -910,17 +910,6 @@
       t.draft = Math.round(_adj);
     }
 
-    // Build global position rank arrays (all players by FC value) for trade target logic
-    const globalPosRanks = { QB: [], RB: [], WR: [], TE: [] };
-    for (const [pid, p] of Object.entries(players)) {
-      const pos = normPos(p.position);
-      if (!pos || !['QB','RB','WR','TE'].includes(pos)) continue;
-      const val = fcMap[pid] ?? 0;
-      if (val > 0) globalPosRanks[pos].push({ pid, val, age: p.age ?? null, name: p.full_name || pid });
-    }
-    for (const pos of ['QB','RB','WR','TE']) globalPosRanks[pos].sort((a, b) => b.val - a.val);
-    const globalFlexRank = [...globalPosRanks.RB, ...globalPosRanks.WR, ...globalPosRanks.TE]
-      .sort((a, b) => b.val - a.val);
     const numStartersPerTeam = rp.filter(p => !['BN','IR','TAXI'].includes(p)).length;
     const is2TE = te2Mult > 1;
     const nextSeason = _nextSeason; // already computed above
@@ -929,7 +918,7 @@
       teams: teams.filter(t => t.overall > 0 || t.wins > 0 || t.losses > 0),
       allRosters,
       lgName, category, season: nflSeason, formatFlags, numTeams,
-      globalPosRanks, globalFlexRank, numStartersPerTeam, is2TE, nextSeason,
+      numStartersPerTeam, is2TE, nextSeason,
       crCtx: { players, byName, rosterPositions: rp, scoring: scoringSettings, season: nflSeason },
     };
   }
@@ -1037,7 +1026,7 @@
   async function loadAndRender() {
     const result = isEspn ? await loadEspn() : await loadSleeper();
     const { teams, lgName, category, season, formatFlags, numTeams, crCtx,
-            globalPosRanks, globalFlexRank, numStartersPerTeam, is2TE, nextSeason, allRosters } = result;
+            numStartersPerTeam, is2TE, nextSeason, allRosters } = result;
 
     document.getElementById('league-title').textContent = lgName + ' · ' + season;
     document.title = 'Analyzer — ' + lgName;
@@ -1050,11 +1039,9 @@
     window._azCtx   = crCtx;
     window._azMeta  = {
       category, numTeams, formatFlags,
-      globalPosRanks:      globalPosRanks      || {},
-      globalFlexRank:      globalFlexRank       || [],
-      numStartersPerTeam:  numStartersPerTeam   || 0,
-      is2TE:               is2TE               || false,
-      nextSeason:          nextSeason           || String(new Date().getFullYear() + 1),
+      numStartersPerTeam: numStartersPerTeam || 0,
+      is2TE:              is2TE              || false,
+      nextSeason:         nextSeason         || String(new Date().getFullYear() + 1),
     };
     window._azMyRosterId = window._azMyRosterId ?? null;
     window._azMyPref     = window._azMyPref     ?? null;
@@ -1373,6 +1360,41 @@
 
   // ── Trade Targets ────────────────────────────────────────────────────────────
 
+  // Build per-position rank arrays using the active mode (ADP or avg projections).
+  // Each entry: { pid, score, age, name } sorted desc by score (higher = better).
+  // Falls back to ADP if projections data isn't loaded yet.
+  function buildGlobalPosRanks() {
+    const players = (window._azCtx || {}).players || {};
+    const useProj = crMode === 'projections' && crData.loaded;
+    const posMap = { QB: [], RB: [], WR: [], TE: [] };
+
+    for (const [pid, p] of Object.entries(players)) {
+      const pos = normPos(p.position);
+      if (!pos || !['QB','RB','WR','TE'].includes(pos)) continue;
+
+      let score;
+      if (useProj) {
+        const clay = crData.clayMap?.[pid] ?? null;
+        const user = crData.userProjMap?.[pid] ?? null;
+        if (clay != null && user != null) score = (clay + user) / 2;
+        else if (clay != null) score = clay;
+        else if (user != null) score = user;
+        else score = null;
+      } else {
+        // ADP: negate search_rank so sort descending by score = ascending by rank
+        const sr = p.search_rank;
+        score = (sr != null && sr > 0) ? -sr : null;
+      }
+
+      if (score == null || score <= 0) continue;
+      posMap[pos].push({ pid, score, age: p.age ?? null, name: p.full_name || pid });
+    }
+
+    const result = { QB: [], RB: [], WR: [], TE: [] };
+    for (const pos of ['QB','RB','WR','TE']) result[pos] = posMap[pos].sort((a, b) => b.score - a.score);
+    return result;
+  }
+
   // Classify another team as contender (>40% odds OR traded away own 1st next year)
   function isContenderTeam(team) {
     if ((team.playoffOdds ?? 0) > 0.40) return true;
@@ -1386,15 +1408,15 @@
   }
 
   // Returns { QB, RB, WR, TE, flex } each: 'need' | 'light' | null
-  function computeMyNeeds(myTeam) {
-    const { globalPosRanks, globalFlexRank, numStartersPerTeam, numTeams, is2TE } = window._azMeta || {};
+  function computeMyNeeds(myTeam, posRanks) {
+    const { numStartersPerTeam, numTeams, is2TE } = window._azMeta || {};
     const myPref = window._azMyPref;
     const needs = { QB: null, RB: null, WR: null, TE: null, flex: false };
-    if (!globalPosRanks || !myPref) return needs;
+    if (!posRanks || !myPref) return needs;
 
     const byPos = pos => (myTeam.playerList || []).filter(p => p.pos === pos).sort((a, b) => b.val - a.val);
     const inTopN = (pid, pos, n) => {
-      const idx = (globalPosRanks[pos] || []).findIndex(p => p.pid === pid);
+      const idx = (posRanks[pos] || []).findIndex(p => p.pid === pid);
       return idx !== -1 && idx < n;
     };
 
@@ -1429,13 +1451,15 @@
       }
 
       // Flex depth (only if no RB/WR need flagged)
-      if (!needs.RB && !needs.WR && numStartersPerTeam && numTeams && globalFlexRank?.length) {
+      if (!needs.RB && !needs.WR && numStartersPerTeam && numTeams) {
         const X = Math.round(numTeams * numStartersPerTeam * 0.6);
+        const flexRank = [...(posRanks.RB || []), ...(posRanks.WR || []), ...(posRanks.TE || [])]
+          .sort((a, b) => b.score - a.score);
         const benchFlex = (myTeam.playerList || [])
           .filter(p => ['RB','WR','TE'].includes(p.pos) && !p.isStarter)
           .sort((a, b) => b.val - a.val).slice(0, 3);
         const flexIdxMap = {};
-        globalFlexRank.forEach((p, i) => { flexIdxMap[p.pid] = i; });
+        flexRank.forEach((p, i) => { flexIdxMap[p.pid] = i; });
         if (benchFlex.some(p => (flexIdxMap[p.pid] ?? 9999) >= X)) needs.flex = true;
       }
 
@@ -1457,13 +1481,12 @@
   }
 
   // Returns excess position objects for a given team
-  function computeExcess(team) {
-    const { globalPosRanks } = window._azMeta || {};
-    if (!globalPosRanks) return [];
+  function computeExcess(team, posRanks) {
+    if (!posRanks) return [];
     const excess = [];
     const byPos = pos => (team.playerList || []).filter(p => p.pos === pos).sort((a, b) => b.val - a.val);
     const inTopN = (pid, pos, n) => {
-      const idx = (globalPosRanks[pos] || []).findIndex(p => p.pid === pid);
+      const idx = (posRanks[pos] || []).findIndex(p => p.pid === pid);
       return idx !== -1 && idx < n;
     };
     const qbTop24 = byPos('QB').filter(p => inTopN(p.pid, 'QB', 24));
@@ -1478,18 +1501,17 @@
   }
 
   // Aging assets on a rebuilder that a contender would want
-  function computeAgingAssets(team) {
-    const { globalPosRanks } = window._azMeta || {};
-    if (!globalPosRanks) return [];
+  function computeAgingAssets(team, posRanks) {
+    if (!posRanks) return [];
     const assets = [];
     const byPos = pos => (team.playerList || []).filter(p => p.pos === pos).sort((a, b) => b.val - a.val);
     const posRankOf = (pid, pos) => {
-      const idx = (globalPosRanks[pos] || []).findIndex(p => p.pid === pid);
+      const idx = (posRanks[pos] || []).findIndex(p => p.pid === pid);
       return idx === -1 ? null : idx + 1;
     };
     const ageOf = pid => {
       for (const pos of ['QB','RB','WR','TE']) {
-        const found = (globalPosRanks[pos] || []).find(p => p.pid === pid);
+        const found = (posRanks[pos] || []).find(p => p.pid === pid);
         if (found) return found.age;
       }
       return null;
@@ -1521,7 +1543,10 @@
     const myTeam = teams.find(t => t.rosterId === myRid);
     if (!myTeam) return null;
 
-    const needs = computeMyNeeds(myTeam);
+    // Build ranking arrays once for this call (respects active ADP/Projections mode)
+    const posRanks = buildGlobalPosRanks();
+
+    const needs = computeMyNeeds(myTeam, posRanks);
     const activeNeeds = Object.entries(needs).filter(([k, v]) => v && k !== 'flex').map(([k]) => k);
 
     const targets = [];
@@ -1533,15 +1558,14 @@
       if (myPref === 'contender') {
         if (theirArch === 'rebuilder') {
           // Aging win-now assets from rebuilders — filter to my active needs (or all positions if no needs)
-          const aging = computeAgingAssets(t).filter(a => !activeNeeds.length || activeNeeds.includes(a.pos));
+          const aging = computeAgingAssets(t, posRanks).filter(a => !activeNeeds.length || activeNeeds.includes(a.pos));
           for (const a of aging) reasons.push({ type: 'aging', ...a });
         }
         // Excess at positions I need (or any excess if no needs flagged)
-        const exc = computeExcess(t).filter(e => !activeNeeds.length || activeNeeds.includes(e.pos));
+        const exc = computeExcess(t, posRanks).filter(e => !activeNeeds.length || activeNeeds.includes(e.pos));
         for (const e of exc) reasons.push({ type: 'excess', ...e });
       } else if (myPref === 'rebuilder') {
-        // Show excess at positions I need (picks/youth focus; rebuilder target logic can expand later)
-        const exc = computeExcess(t).filter(e => !activeNeeds.length || activeNeeds.includes(e.pos));
+        const exc = computeExcess(t, posRanks).filter(e => !activeNeeds.length || activeNeeds.includes(e.pos));
         for (const e of exc) reasons.push({ type: 'excess', ...e });
       }
 
@@ -1622,7 +1646,7 @@
         }).join('');
 
     return `
-      <div class="az-tgt-hdr"><span>Trade Targets</span></div>
+      <div class="az-tgt-hdr"><span>Trade Targets</span><span style="font-family:'Crimson Text',serif;font-size:0.72rem;font-weight:400;letter-spacing:0;text-transform:none;color:var(--brown-light);font-style:italic;">${crMode === 'projections' && crData.loaded ? 'Proj' : 'ADP'}</span></div>
       <div class="az-tgt-myrow">
         <span class="az-tgt-myname">${esc(myDisplay)}</span>
         ${archHtml}
