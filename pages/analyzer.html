@@ -1192,8 +1192,8 @@
     const cards = sorted.map((team, i) => {
       const rank    = i + 1;
       const rankCls = rank <= 3 ? ` az-rank-${rank}` : '';
-      const display = team.teamName || team.ownerName || ('Team ' + team.rosterId);
-      const ownerLn = team.teamName && team.ownerName ? `<div class="az-owner-name">${esc(team.ownerName)}</div>` : '';
+      const display = team.ownerName || team.teamName || ('Team ' + team.rosterId);
+      const ownerLn = team.teamName && team.ownerName ? `<div class="az-owner-name">${esc(team.teamName)}</div>` : '';
 
       const rankCellsHtml = rankCols.map(col => {
         if (col.key === 'chances') {
