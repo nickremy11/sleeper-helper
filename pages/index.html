@@ -495,6 +495,16 @@ async function wvLoadProjections() {
   } catch { WV.projPpg = {}; }
 }
 
+// Alternate NFL team abbreviations (other sites/CSVs) → Sleeper's canonical form.
+const TEAM_ABBR_ALIASES = {
+  JAC:'JAX', WSH:'WAS', ARZ:'ARI', GNB:'GB', KAN:'KC', NWE:'NE', NOR:'NO',
+  SFO:'SF', TAM:'TB', LA:'LAR', SD:'LAC', OAK:'LV', STL:'LAR', SDG:'LAC',
+};
+function normTeamAbbr(raw) {
+  if (!raw) return raw;
+  const t = String(raw).trim().toUpperCase();
+  return TEAM_ABBR_ALIASES[t] || t;
+}
 function rsNormPos(raw) {
   if (!raw) return null;
   const p = raw.toUpperCase();
@@ -2385,13 +2395,13 @@ function loadCSV(event) {
       for (let i = 1; i < lines.length; i++) {
         const cols = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g,''));
         if (!cols[iName]) continue;
+        const team = normTeamAbbr(cols[iTeam]);
         let sleeperId = iId >= 0 ? cols[iId] : '';
         // Fuzzy match by name+team if no ID
         if (!sleeperId) {
           const name = cols[iName].toLowerCase();
-          const team = cols[iTeam]?.toLowerCase();
           const match = Object.entries(S.players).find(([, p]) =>
-            p.full_name?.toLowerCase() === name && (!team || p.team?.toLowerCase() === team)
+            p.full_name?.toLowerCase() === name && (!team || normTeamAbbr(p.team) === team)
           );
           sleeperId = match ? match[0] : '';
         }
@@ -2399,7 +2409,7 @@ function loadCSV(event) {
           rank: parseInt(cols[iRank]) || i,
           name: cols[iName],
           pos:  (cols[iPos] || '').toUpperCase(),
-          team: cols[iTeam] || '',
+          team: team || '',
           sleeper_id: sleeperId,
           adp:  iAdp >= 0 ? cols[iAdp] : '',
           tier: iTier >= 0 ? cols[iTier] : '',
@@ -2910,7 +2920,7 @@ async function loadRostershipData() {
 // ── ESPN position + team ID lookup tables ────────────────────────────────────
 const ESPN_POS_MAP = { 1:'QB', 2:'RB', 3:'WR', 4:'TE', 6:'DL', 7:'LB', 8:'DB', 9:'DL', 10:'DL', 12:'LB', 13:'LB', 14:'DB', 15:'DB', 16:'DB' };
 // ESPN proTeamId → NFL abbreviation (Sleeper-compatible)
-const ESPN_TEAM_MAP = {1:'ATL',2:'BUF',3:'CHI',4:'CIN',5:'CLE',6:'DAL',7:'DEN',8:'DET',9:'GB',10:'TEN',11:'IND',12:'KC',13:'OAK',14:'LAR',15:'MIA',16:'MIN',17:'NE',18:'NO',19:'NYG',20:'NYJ',21:'PHI',22:'ARI',23:'PIT',24:'LAC',25:'SF',26:'SEA',27:'TB',28:'WAS',29:'CAR',30:'JAX',33:'BAL',34:'HOU'};
+const ESPN_TEAM_MAP = {1:'ATL',2:'BUF',3:'CHI',4:'CIN',5:'CLE',6:'DAL',7:'DEN',8:'DET',9:'GB',10:'TEN',11:'IND',12:'KC',13:'LV',14:'LAR',15:'MIA',16:'MIN',17:'NE',18:'NO',19:'NYG',20:'NYJ',21:'PHI',22:'ARI',23:'PIT',24:'LAC',25:'SF',26:'SEA',27:'TB',28:'WAS',29:'CAR',30:'JAX',33:'BAL',34:'HOU'};
 
 async function rsLoadEspnLeague(lg) {
   const leagueId = S.leagueDetails[lg.league_id]?._espnId;
