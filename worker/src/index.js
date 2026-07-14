@@ -30,9 +30,9 @@
  * KV binding:      SLEEPER_KV
  * D1 binding:      DB
  * DO binding:      DISPERSAL_ROOM
- * Email binding:   EMAIL  (Cloudflare Email Service — verification/reset OTPs, admin alerts)
  * Secret:          TOKEN_ENCRYPTION_KEY  (base64 AES-256 key)
  * Secret:          ADMIN_SECRET  (shared secret for /api/auth/admin/delete-user)
+ * Secret:          RESEND_API_KEY  (Resend — verification/reset OTPs, admin alerts)
  */
 
 export { DispersalRoom } from './dispersal.js';

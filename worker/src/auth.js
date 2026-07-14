@@ -5,8 +5,8 @@
  * Token enc:  AES-256-GCM with TOKEN_ENCRYPTION_KEY Worker secret (base64 32 bytes).
  * Sessions:   random 64-char hex token stored in D1, set as HttpOnly cookie sh_session.
  * Email:      6-digit OTP for signup verification + password reset, sent via the
- *             Workers `EMAIL` (Cloudflare Email Service) binding. Admin gets notified
- *             on every account created/deleted.
+ *             Resend REST API (RESEND_API_KEY secret). Admin gets notified on
+ *             every account created/deleted.
  */
 
 const SESSION_TTL    = 30 * 24 * 60 * 60;      // seconds
@@ -75,27 +75,27 @@ export async function decryptStoredToken(encB64, ivB64, secret) {
   return new TextDecoder().decode(dec);
 }
 
-// ── Email sending ─────────────────────────────────────────────────────────────
+// ── Email sending (Resend) ────────────────────────────────────────────────────
+
+async function resendSend(env, { to, from, subject, html, text }) {
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ to, from, subject, html, text }),
+  });
+  if (!res.ok) throw new Error(`Resend send failed: ${res.status} ${await res.text()}`);
+}
 
 async function sendMail(env, { to, subject, html, text }) {
-  await env.EMAIL.send({
-    to,
-    from: { email: 'noreply@ffhistorian.com', name: 'Sleeper Helper' },
-    subject,
-    html,
-    text,
-  });
+  await resendSend(env, { to, from: 'Sleeper Helper <noreply@ffhistorian.com>', subject, html, text });
 }
 
 async function notifyAdmin(env, subject, text) {
   try {
-    await env.EMAIL.send({
-      to: ADMIN_EMAIL,
-      from: { email: 'alerts@ffhistorian.com', name: 'Sleeper Helper' },
-      subject,
-      text,
-      html: `<p>${text}</p>`,
-    });
+    await resendSend(env, { to: ADMIN_EMAIL, from: 'Sleeper Helper <alerts@ffhistorian.com>', subject, text, html: `<p>${text}</p>` });
   } catch (e) {
     console.error('notifyAdmin failed:', e);
   }

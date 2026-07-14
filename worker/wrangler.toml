@@ -30,12 +30,6 @@ binding    = "SLEEPER_KV"
 id         = "4644440791c644cb9a6af30fa00fbd25"
 preview_id = "182d9454412f4bfc9c9e396dbe53c468"
 
-# ── Email Sending ─────────────────────────────────────────────────────────────
-# Requires: `npx wrangler email sending enable ffhistorian.com` (one-time, needs
-# an API token with the email:sending scope).
-[[send_email]]
-name = "EMAIL"
-
 # ── Durable Objects ───────────────────────────────────────────────────────────
 [[durable_objects.bindings]]
 name       = "DISPERSAL_ROOM"
