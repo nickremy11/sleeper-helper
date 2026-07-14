@@ -273,10 +273,6 @@ async function register(request, env) {
     return errRes('Could not send the verification email — try again shortly', 502);
   }
 
-  if (!existing) {
-    await notifyAdmin(env, 'New account registered', `New sleeper-helper account registered: ${normalizedEmail}`);
-  }
-
   return jsonRes({ ok: true, needsVerification: true, email: normalizedEmail });
 }
 
@@ -319,6 +315,7 @@ async function verifyEmail(request, env) {
   if (err) return errRes(err);
 
   await env.DB.prepare('UPDATE users SET email_verified = 1 WHERE id = ?').bind(user.id).run();
+  await notifyAdmin(env, 'New account registered', `New sleeper-helper account registered: ${user.email}`);
   const cookie = await createSession(user.id, env);
   return jsonRes({ ok: true, user: { email: user.email, name: user.name || null, sleeper_username: user.sleeper_username } }, 200, { 'Set-Cookie': cookie });
 }
