@@ -16,7 +16,7 @@ const OTP_TTL_MS       = 15 * 60 * 1000;  // code validity window
 const OTP_RESEND_MS    = 45 * 1000;       // min gap between sends
 const OTP_MAX_ATTEMPTS = 5;
 
-const ADMIN_EMAIL = 'nickremy11@gmail.com';
+const ADMIN_EMAIL = 'remdogmillionaire22@gmail.com';
 
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
@@ -205,7 +205,7 @@ export async function getAuthUser(request, env) {
   const sessionId = getSessionId(request);
   if (!sessionId) return null;
   const row = await env.DB.prepare(
-    `SELECT s.user_id, s.expires_at, u.email, u.name, u.sleeper_username, u.token_enc, u.token_iv
+    `SELECT s.user_id, s.expires_at, u.email, u.name, u.sleeper_username, u.token_enc, u.token_iv, u.is_admin
      FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.id = ?`
   ).bind(sessionId).first();
   if (!row) return null;
@@ -298,7 +298,7 @@ async function login(request, env) {
   }
 
   const cookie = await createSession(user.id, env);
-  return jsonRes({ ok: true, user: { email: user.email, name: user.name || null, sleeper_username: user.sleeper_username } }, 200, { 'Set-Cookie': cookie });
+  return jsonRes({ ok: true, user: { email: user.email, name: user.name || null, sleeper_username: user.sleeper_username, is_admin: !!user.is_admin } }, 200, { 'Set-Cookie': cookie });
 }
 
 async function verifyEmail(request, env) {
@@ -317,7 +317,7 @@ async function verifyEmail(request, env) {
   await env.DB.prepare('UPDATE users SET email_verified = 1 WHERE id = ?').bind(user.id).run();
   await notifyAdmin(env, 'New account registered', `New sleeper-helper account registered: ${user.email}`);
   const cookie = await createSession(user.id, env);
-  return jsonRes({ ok: true, user: { email: user.email, name: user.name || null, sleeper_username: user.sleeper_username } }, 200, { 'Set-Cookie': cookie });
+  return jsonRes({ ok: true, user: { email: user.email, name: user.name || null, sleeper_username: user.sleeper_username, is_admin: !!user.is_admin } }, 200, { 'Set-Cookie': cookie });
 }
 
 async function resendCode(request, env) {
@@ -377,7 +377,7 @@ async function resetPassword(request, env) {
     env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(user.id),
   ]);
   const cookie = await createSession(user.id, env);
-  return jsonRes({ ok: true, user: { email: user.email, name: user.name || null, sleeper_username: user.sleeper_username } }, 200, { 'Set-Cookie': cookie });
+  return jsonRes({ ok: true, user: { email: user.email, name: user.name || null, sleeper_username: user.sleeper_username, is_admin: !!user.is_admin } }, 200, { 'Set-Cookie': cookie });
 }
 
 async function deleteAccount(request, env) {
@@ -399,9 +399,25 @@ async function deleteAccount(request, env) {
   return jsonRes({ ok: true }, 200, { 'Set-Cookie': clear });
 }
 
-async function adminDeleteUser(request, env) {
+// Authorized either by the shared X-Admin-Secret header (scripts/curl) or by a
+// logged-in session belonging to an is_admin user (the Site Lead dashboard).
+async function requireAdmin(request, env) {
   const secret = request.headers.get('X-Admin-Secret');
-  if (!secret || secret !== env.ADMIN_SECRET) return errRes('Not authorized', 401);
+  if (secret && secret === env.ADMIN_SECRET) return true;
+  const user = await getAuthUser(request, env);
+  return !!(user && user.is_admin);
+}
+
+async function adminListUsers(request, env) {
+  if (!(await requireAdmin(request, env))) return errRes('Not authorized', 401);
+  const { results } = await env.DB.prepare(
+    'SELECT id, email, name, sleeper_username, email_verified, is_admin, created_at FROM users ORDER BY created_at DESC'
+  ).all();
+  return jsonRes({ users: results });
+}
+
+async function adminDeleteUser(request, env) {
+  if (!(await requireAdmin(request, env))) return errRes('Not authorized', 401);
 
   let body;
   try { body = await request.json(); } catch { return errRes('Invalid JSON'); }
@@ -426,6 +442,7 @@ async function me(request, env) {
       name:             user.name || null,
       sleeper_username: user.sleeper_username,
       has_token:        !!user.token_enc,
+      is_admin:         !!user.is_admin,
     },
   });
 }
@@ -509,6 +526,7 @@ export async function handleAuth(request, env, url) {
   if (p === '/api/auth/forgot-password'   && request.method === 'POST') return forgotPassword(request, env);
   if (p === '/api/auth/reset-password'    && request.method === 'POST') return resetPassword(request, env);
   if (p === '/api/auth/delete-account'    && request.method === 'POST') return deleteAccount(request, env);
+  if (p === '/api/auth/admin/users'       && request.method === 'GET')  return adminListUsers(request, env);
   if (p === '/api/auth/admin/delete-user' && request.method === 'POST') return adminDeleteUser(request, env);
   if (p === '/api/auth/me'       && request.method === 'GET')   return me(request, env);
   if (p === '/api/auth/me'       && request.method === 'PATCH') return updateMe(request, env);

@@ -1,6 +1,8 @@
--- NOTE: `users.email_verified` is added via a one-time migration, run once by hand
--- (ALTER TABLE ADD COLUMN isn't safely re-runnable like CREATE TABLE IF NOT EXISTS):
+-- NOTE: `users.email_verified` and `users.is_admin` are added via one-time migrations,
+-- run once by hand (ALTER TABLE ADD COLUMN isn't safely re-runnable like CREATE TABLE
+-- IF NOT EXISTS):
 --   ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 1;
+--   ALTER TABLE users ADD COLUMN is_admin       INTEGER NOT NULL DEFAULT 0;
 -- New registrations explicitly insert email_verified = 0 until the OTP is confirmed.
 CREATE TABLE IF NOT EXISTS users (
   id            TEXT PRIMARY KEY,

@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Site Lead — FF Historian</title>
+<link href="https://fonts.googleapis.com/css2?family=Rye&family=Playfair+Display:ital,wght@0,700;1,400&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/shared-styles.css" />
+<style>
+
+.banner-inner {
+  position: relative; z-index: 1;
+  max-width: 900px; margin: 0 auto;
+  padding: 24px 32px 20px;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+}
+
+.main { max-width: 900px; margin: 0 auto; padding: 32px 32px 80px; }
+
+.section-head { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
+.section-head h2 { font-family: 'Rye', serif; font-size: 1rem; color: var(--brown-dark); white-space: nowrap; }
+.section-head-line { flex: 1; height: 1px; background: linear-gradient(to right, var(--gold), transparent); }
+
+.admin-card {
+  background: var(--brown-dark); border: 2px solid var(--brown-mid); border-radius: 2px;
+  padding: 20px 24px; box-shadow: 4px 4px 0 var(--brown-mid);
+}
+
+table.accounts { width: 100%; border-collapse: collapse; font-family: 'Crimson Text', serif; }
+table.accounts th {
+  font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.15em; text-transform: uppercase;
+  color: var(--gold); text-align: left; padding: 0 10px 10px; border-bottom: 1px solid var(--brown-mid);
+}
+table.accounts td { padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.06); color: var(--cream); font-size: 0.92rem; vertical-align: middle; }
+table.accounts tr:last-child td { border-bottom: none; }
+.badge { font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 8px; border-radius: 2px; white-space: nowrap; }
+.badge.ok    { background: var(--green); color: var(--gold-light); }
+.badge.pend  { background: var(--brown-mid); color: var(--brown-light); }
+.badge.admin { background: var(--gold); color: var(--brown-dark); }
+.admin-del-btn {
+  background: var(--red); border: 1px solid var(--red); color: var(--cream);
+  font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.12em;
+  text-transform: uppercase; padding: 5px 10px; cursor: pointer; border-radius: 2px;
+  transition: opacity 0.2s; white-space: nowrap;
+}
+.admin-del-btn:hover { opacity: 0.85; }
+.admin-del-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.admin-empty, .admin-loading, .admin-err {
+  font-family: 'Crimson Text', serif; font-style: italic; color: var(--brown-light); padding: 20px 0; text-align: center;
+}
+.admin-err { color: var(--red); }
+.admin-count { font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--brown-light); font-style: italic; margin-bottom: 14px; }
+
+.guest-card, .denied-card {
+  background: var(--brown-dark); border: 2px solid var(--gold); border-radius: 2px;
+  padding: 32px; text-align: center; margin-top: 48px;
+}
+.guest-card p, .denied-card p {
+  font-family: 'Playfair Display', serif; font-style: italic;
+  font-size: 1.1rem; color: var(--parchment); margin-bottom: 20px;
+}
+.guest-signin-btn {
+  background: var(--green); border: 2px solid var(--gold); color: var(--gold-light);
+  font-family: 'Rye', serif; font-size: 0.58rem; letter-spacing: 0.18em;
+  text-transform: uppercase; padding: 12px 28px; cursor: pointer; border-radius: 2px;
+  transition: background 0.2s, color 0.2s;
+}
+.guest-signin-btn:hover { background: var(--gold); color: var(--brown-dark); }
+
+footer {
+  text-align: center; padding: 32px 0 20px;
+  font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--brown-light); opacity: 0.7;
+}
+footer a { color: var(--brown-light); text-decoration: none; }
+footer a:hover { color: var(--gold-light); }
+</style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <header class="banner">
+    <div class="banner-inner">
+      <div class="banner-text">
+        <a href="https://helper.ffhistorian.com" class="banner-back">← Sleeper Helper</a>
+        <h1>Site <span>Lead</span></h1>
+        <div class="banner-sub">All registered accounts</div>
+        <div class="banner-divider"></div>
+      </div>
+      <div id="auth-chip" style="flex-shrink:0;"></div>
+    </div>
+  </header>
+
+  <div class="main">
+
+    <div id="guest-view" style="display:none;">
+      <div class="guest-card">
+        <p>Sign in to view the Site Lead dashboard.</p>
+        <button class="guest-signin-btn" onclick="SharedAuth.openModal()">Sign In</button>
+      </div>
+    </div>
+
+    <div id="denied-view" style="display:none;">
+      <div class="denied-card">
+        <p>You don't have access to this page.</p>
+      </div>
+    </div>
+
+    <div id="admin-view" style="display:none;">
+      <div class="section-head">
+        <h2>Accounts</h2>
+        <div class="section-head-line"></div>
+      </div>
+      <div class="admin-card">
+        <div id="admin-count" class="admin-count"></div>
+        <div id="admin-body"></div>
+      </div>
+    </div>
+
+    <footer>
+      <a href="https://ffhistorian.com">ffhistorian.com</a>
+    </footer>
+  </div>
+</div>
+
+<script src="/shared-auth.js"></script>
+<script>
+const API_BASE = location.hostname === 'ffhistorian.com' ? 'https://helper.ffhistorian.com/api' : '/api';
+
+function esc(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function showGuest() {
+  document.getElementById('guest-view').style.display = '';
+  document.getElementById('denied-view').style.display = 'none';
+  document.getElementById('admin-view').style.display  = 'none';
+}
+
+function showDenied() {
+  document.getElementById('guest-view').style.display  = 'none';
+  document.getElementById('denied-view').style.display = '';
+  document.getElementById('admin-view').style.display  = 'none';
+}
+
+function showAdmin() {
+  document.getElementById('guest-view').style.display  = 'none';
+  document.getElementById('denied-view').style.display = 'none';
+  document.getElementById('admin-view').style.display  = '';
+}
+
+async function loadAccounts() {
+  const body = document.getElementById('admin-body');
+  body.innerHTML = '<div class="admin-loading">Loading accounts…</div>';
+  try {
+    const r = await fetch(API_BASE + '/auth/admin/users', { credentials: 'include' });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    renderAccounts(d.users || []);
+  } catch (e) {
+    body.innerHTML = '<div class="admin-err">' + esc(e.message) + '</div>';
+  }
+}
+
+function renderAccounts(users) {
+  document.getElementById('admin-count').textContent =
+    users.length + (users.length === 1 ? ' account' : ' accounts');
+
+  const body = document.getElementById('admin-body');
+  if (!users.length) {
+    body.innerHTML = '<div class="admin-empty">No accounts yet.</div>';
+    return;
+  }
+
+  const rows = users.map(u => {
+    const verifiedBadge = u.email_verified
+      ? '<span class="badge ok">Verified</span>'
+      : '<span class="badge pend">Pending</span>';
+    const adminBadge = u.is_admin ? '<span class="badge admin">Site Lead</span>' : '';
+    const created = new Date(u.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    return '<tr>' +
+      '<td>' + esc(u.email) + '</td>' +
+      '<td>' + esc(u.name || '—') + '</td>' +
+      '<td>' + esc(u.sleeper_username || '—') + '</td>' +
+      '<td>' + verifiedBadge + ' ' + adminBadge + '</td>' +
+      '<td>' + created + '</td>' +
+      '<td><button class="admin-del-btn" onclick="deleteUser(' + JSON.stringify(u.email) + ', this)">Delete</button></td>' +
+    '</tr>';
+  }).join('');
+
+  body.innerHTML =
+    '<table class="accounts">' +
+      '<thead><tr><th>Email</th><th>Name</th><th>Sleeper</th><th>Status</th><th>Created</th><th></th></tr></thead>' +
+      '<tbody>' + rows + '</tbody>' +
+    '</table>';
+}
+
+async function deleteUser(email, btn) {
+  if (!confirm('Permanently delete ' + email + ' and all their data? This cannot be undone.')) return;
+  btn.disabled = true;
+  try {
+    const r = await fetch(API_BASE + '/auth/admin/delete-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email }),
+    });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    loadAccounts();
+  } catch (e) {
+    alert(e.message);
+    btn.disabled = false;
+  }
+}
+
+(async function init() {
+  const user = await SharedAuth.init({ chipContainerId: 'auth-chip' });
+  if (!user) { showGuest(); SharedAuth.openModal(); return; }
+  if (!user.is_admin) { showDenied(); return; }
+  showAdmin();
+  loadAccounts();
+})();
+</script>
+</body>
+</html>

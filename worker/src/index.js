@@ -9,7 +9,8 @@
  *   POST /api/auth/forgot-password→ email a password-reset OTP
  *   POST /api/auth/reset-password → confirm reset OTP + set new password, sets session cookie
  *   POST /api/auth/delete-account → self-delete (auth + password required)
- *   POST /api/auth/admin/delete-user → admin force-delete (X-Admin-Secret header)
+ *   GET  /api/auth/admin/users    → list all accounts (X-Admin-Secret header or is_admin session)
+ *   POST /api/auth/admin/delete-user → admin force-delete (X-Admin-Secret header or is_admin session)
  *   GET  /api/auth/me             → current user (session cookie)
  *   PATCH /api/auth/me            → update sleeper_username / stored token
  *   POST /api/auth/logout         → clear session
