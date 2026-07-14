@@ -52,6 +52,10 @@
       '.sh-modal-err{display:none;background:var(--red);border:1px solid #a02020;color:var(--cream);font-family:"Crimson Text",serif;font-style:italic;font-size:0.88rem;padding:8px 12px;border-radius:2px;margin-bottom:14px;}',
       '.sh-modal-submit{width:100%;height:40px;background:var(--green);border:2px solid var(--gold);color:var(--gold-light);font-family:"Rye",serif;font-size:0.58rem;letter-spacing:0.18em;text-transform:uppercase;cursor:pointer;border-radius:2px;transition:background 0.2s,color 0.2s;}',
       '.sh-modal-submit:hover{background:var(--gold);color:var(--brown-dark);}',
+      '.sh-modal-link{color:var(--gold-light);font-size:0.82rem;text-decoration:none;font-family:"Crimson Text",Georgia,serif;}',
+      '.sh-modal-link:hover{text-decoration:underline;}',
+      '.sh-modal-forgot-row{text-align:right;margin-top:-6px;margin-bottom:14px;}',
+      '.sh-modal-link-row{text-align:center;margin-top:10px;}',
     ].join('');
     document.head.appendChild(s);
   }
@@ -65,7 +69,7 @@
       '<div id="sh-auth-modal" class="sh-modal-overlay">' +
         '<div class="sh-modal-card">' +
           '<button class="sh-modal-close" onclick="SharedAuth._closeModal()" title="Close">&#x2715;</button>' +
-          '<div class="sh-modal-tabs">' +
+          '<div class="sh-modal-tabs" id="sh-modal-tabs-row">' +
             '<button id="sh-tab-login"    class="sh-modal-tab sh-active" onclick="SharedAuth._switchTab(\'login\')">Sign In</button>' +
             '<button id="sh-tab-register" class="sh-modal-tab"           onclick="SharedAuth._switchTab(\'register\')">Create Account</button>' +
           '</div>' +
@@ -74,6 +78,7 @@
             '<input type="email"    id="sh-email-l" class="sh-modal-field" placeholder="your@email.com" />' +
             '<label class="sh-modal-label">Password</label>' +
             '<input type="password" id="sh-pass-l"  class="sh-modal-field" placeholder="••••••••" />' +
+            '<div class="sh-modal-forgot-row"><a href="#" class="sh-modal-link" onclick="SharedAuth._showForgot();return false;">Forgot password?</a></div>' +
             '<div class="sh-modal-err" id="sh-err-l"></div>' +
             '<button class="sh-modal-submit" onclick="SharedAuth._submitLogin()">Sign In</button>' +
           '</div>' +
@@ -87,6 +92,34 @@
             '<input type="password" id="sh-pass-r2"  class="sh-modal-field" placeholder="••••••••" />' +
             '<div class="sh-modal-err" id="sh-err-r"></div>' +
             '<button class="sh-modal-submit" onclick="SharedAuth._submitRegister()">Create Account</button>' +
+          '</div>' +
+          '<div id="sh-verify-form" style="display:none;">' +
+            '<div class="sh-modal-hint" id="sh-verify-hint">Enter the 6-digit code we emailed you.</div>' +
+            '<label class="sh-modal-label">Verification Code</label>' +
+            '<input type="text" inputmode="numeric" maxlength="6" id="sh-verify-code" class="sh-modal-field" placeholder="123456" />' +
+            '<div class="sh-modal-err" id="sh-err-v"></div>' +
+            '<button class="sh-modal-submit" onclick="SharedAuth._submitVerify()">Verify</button>' +
+            '<div class="sh-modal-link-row"><a href="#" class="sh-modal-link" onclick="SharedAuth._resendCode();return false;">Resend code</a></div>' +
+          '</div>' +
+          '<div id="sh-forgot-form" style="display:none;">' +
+            '<label class="sh-modal-label">Email</label>' +
+            '<input type="email" id="sh-email-f" class="sh-modal-field" placeholder="your@email.com" />' +
+            '<div class="sh-modal-hint">We\'ll email you a 6-digit code to reset your password.</div>' +
+            '<div class="sh-modal-err" id="sh-err-f"></div>' +
+            '<button class="sh-modal-submit" onclick="SharedAuth._submitForgot()">Send Reset Code</button>' +
+            '<div class="sh-modal-link-row"><a href="#" class="sh-modal-link" onclick="SharedAuth._switchTab(\'login\');return false;">Back to sign in</a></div>' +
+          '</div>' +
+          '<div id="sh-reset-form" style="display:none;">' +
+            '<div class="sh-modal-hint">Enter the code we emailed you and choose a new password.</div>' +
+            '<label class="sh-modal-label">Reset Code</label>' +
+            '<input type="text" inputmode="numeric" maxlength="6" id="sh-reset-code" class="sh-modal-field" placeholder="123456" />' +
+            '<label class="sh-modal-label">New Password</label>' +
+            '<input type="password" id="sh-reset-pass"  class="sh-modal-field" placeholder="min 12 chars" />' +
+            '<label class="sh-modal-label">Confirm New Password</label>' +
+            '<input type="password" id="sh-reset-pass2" class="sh-modal-field" placeholder="••••••••" />' +
+            '<div class="sh-modal-err" id="sh-err-reset"></div>' +
+            '<button class="sh-modal-submit" onclick="SharedAuth._submitReset()">Reset Password</button>' +
+            '<div class="sh-modal-link-row"><a href="#" class="sh-modal-link" onclick="SharedAuth._resendResetCode();return false;">Resend code</a></div>' +
           '</div>' +
         '</div>' +
       '</div>';
@@ -102,6 +135,15 @@
     });
     document.getElementById('sh-pass-r2').addEventListener('keydown', function (e) {
       if (e.key === 'Enter') SharedAuth._submitRegister();
+    });
+    document.getElementById('sh-verify-code').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') SharedAuth._submitVerify();
+    });
+    document.getElementById('sh-email-f').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') SharedAuth._submitForgot();
+    });
+    document.getElementById('sh-reset-pass2').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') SharedAuth._submitReset();
     });
   }
 
@@ -126,16 +168,20 @@
 
   // ── Modal controls ────────────────────────────────────────────────────────────
 
+  var _pendingEmail = null; // email awaiting verification or password reset
+
   function _openModal() {
     var modal = document.getElementById('sh-auth-modal');
     if (!modal) return;
     modal.classList.add('sh-open');
-    _switchTab('login');
-    ['sh-email-l', 'sh-pass-l', 'sh-email-r', 'sh-pass-r', 'sh-pass-r2'].forEach(function (id) {
+    _showStep('login');
+    _pendingEmail = null;
+    ['sh-email-l', 'sh-pass-l', 'sh-email-r', 'sh-pass-r', 'sh-pass-r2',
+     'sh-verify-code', 'sh-email-f', 'sh-reset-code', 'sh-reset-pass', 'sh-reset-pass2'].forEach(function (id) {
       var el = document.getElementById(id);
       if (el) el.value = '';
     });
-    ['sh-err-l', 'sh-err-r'].forEach(function (id) {
+    ['sh-err-l', 'sh-err-r', 'sh-err-v', 'sh-err-f', 'sh-err-reset'].forEach(function (id) {
       var el = document.getElementById(id);
       if (el) { el.style.display = 'none'; el.textContent = ''; }
     });
@@ -149,11 +195,35 @@
     if (modal) modal.classList.remove('sh-open');
   }
 
+  // step: 'login' | 'register' | 'verify' | 'forgot' | 'reset'
+  function _showStep(step) {
+    var forms = { login: 'sh-login-form', register: 'sh-register-form', verify: 'sh-verify-form', forgot: 'sh-forgot-form', reset: 'sh-reset-form' };
+    Object.keys(forms).forEach(function (k) {
+      var el = document.getElementById(forms[k]);
+      if (el) el.style.display = (k === step) ? '' : 'none';
+    });
+    var tabsRow = document.getElementById('sh-modal-tabs-row');
+    if (tabsRow) tabsRow.style.display = (step === 'login' || step === 'register') ? '' : 'none';
+    document.getElementById('sh-tab-login').classList.toggle('sh-active',    step === 'login');
+    document.getElementById('sh-tab-register').classList.toggle('sh-active', step === 'register');
+  }
+
   function _switchTab(tab) {
-    document.getElementById('sh-login-form').style.display    = tab === 'login'    ? '' : 'none';
-    document.getElementById('sh-register-form').style.display = tab === 'register' ? '' : 'none';
-    document.getElementById('sh-tab-login').classList.toggle('sh-active',    tab === 'login');
-    document.getElementById('sh-tab-register').classList.toggle('sh-active', tab === 'register');
+    _showStep(tab);
+  }
+
+  function _goToVerify(email) {
+    _pendingEmail = email;
+    document.getElementById('sh-verify-code').value = '';
+    document.getElementById('sh-verify-hint').textContent = 'Enter the 6-digit code we emailed to ' + email + '.';
+    document.getElementById('sh-err-v').style.display = 'none';
+    _showStep('verify');
+  }
+
+  function _showForgot() {
+    document.getElementById('sh-email-f').value = document.getElementById('sh-email-l').value || '';
+    document.getElementById('sh-err-f').style.display = 'none';
+    _showStep('forgot');
   }
 
   // ── Network helpers ───────────────────────────────────────────────────────────
@@ -188,6 +258,7 @@
     err.style.display = 'none';
     try {
       var data = await _authPost(_apiBase + '/auth/login', { email: email, password: pass });
+      if (data && data.needsVerification) { _goToVerify(data.email || email); return; }
       _user = (data && data.user) || null;
       if (!_user) await _refreshUser();
       _renderChip();
@@ -205,6 +276,69 @@
     if (pass !== pass2) { err.textContent = 'Passwords do not match'; err.style.display = 'block'; return; }
     try {
       var data = await _authPost(_apiBase + '/auth/register', { email: email, password: pass });
+      if (data && data.needsVerification) { _goToVerify(data.email || email); return; }
+      _user = (data && data.user) || null;
+      if (!_user) await _refreshUser();
+      _renderChip();
+      _closeModal();
+      _loginCbs.forEach(function (cb) { cb(_user); });
+    } catch (e) { err.textContent = e.message; err.style.display = 'block'; }
+  }
+
+  async function _submitVerify() {
+    var code = document.getElementById('sh-verify-code').value.trim();
+    var err  = document.getElementById('sh-err-v');
+    err.style.display = 'none';
+    try {
+      var data = await _authPost(_apiBase + '/auth/verify-email', { email: _pendingEmail, code: code });
+      _user = (data && data.user) || null;
+      if (!_user) await _refreshUser();
+      _renderChip();
+      _closeModal();
+      _loginCbs.forEach(function (cb) { cb(_user); });
+    } catch (e) { err.textContent = e.message; err.style.display = 'block'; }
+  }
+
+  async function _resendCode() {
+    var err = document.getElementById('sh-err-v');
+    try {
+      await _authPost(_apiBase + '/auth/resend-code', { email: _pendingEmail });
+      err.textContent = 'Code resent.'; err.style.display = 'block';
+    } catch (e) { err.textContent = e.message; err.style.display = 'block'; }
+  }
+
+  async function _submitForgot() {
+    var email = document.getElementById('sh-email-f').value.trim();
+    var err   = document.getElementById('sh-err-f');
+    err.style.display = 'none';
+    try {
+      await _authPost(_apiBase + '/auth/forgot-password', { email: email });
+      _pendingEmail = email;
+      ['sh-reset-code', 'sh-reset-pass', 'sh-reset-pass2'].forEach(function (id) {
+        document.getElementById(id).value = '';
+      });
+      document.getElementById('sh-err-reset').style.display = 'none';
+      _showStep('reset');
+    } catch (e) { err.textContent = e.message; err.style.display = 'block'; }
+  }
+
+  async function _resendResetCode() {
+    var err = document.getElementById('sh-err-reset');
+    try {
+      await _authPost(_apiBase + '/auth/forgot-password', { email: _pendingEmail });
+      err.textContent = 'Code resent.'; err.style.display = 'block';
+    } catch (e) { err.textContent = e.message; err.style.display = 'block'; }
+  }
+
+  async function _submitReset() {
+    var code  = document.getElementById('sh-reset-code').value.trim();
+    var pass  = document.getElementById('sh-reset-pass').value;
+    var pass2 = document.getElementById('sh-reset-pass2').value;
+    var err   = document.getElementById('sh-err-reset');
+    err.style.display = 'none';
+    if (pass !== pass2) { err.textContent = 'Passwords do not match'; err.style.display = 'block'; return; }
+    try {
+      var data = await _authPost(_apiBase + '/auth/reset-password', { email: _pendingEmail, code: code, newPassword: pass });
       _user = (data && data.user) || null;
       if (!_user) await _refreshUser();
       _renderChip();
@@ -243,13 +377,19 @@
       return _user;
     },
 
-    getUser:          function () { return _user; },
-    openModal:        _openModal,
-    _closeModal:      _closeModal,
-    _switchTab:       _switchTab,
-    _submitLogin:     _submitLogin,
-    _submitRegister:  _submitRegister,
-    _logout:          _logout,
+    getUser:            function () { return _user; },
+    openModal:          _openModal,
+    _closeModal:        _closeModal,
+    _switchTab:         _switchTab,
+    _submitLogin:       _submitLogin,
+    _submitRegister:    _submitRegister,
+    _showForgot:        _showForgot,
+    _submitVerify:      _submitVerify,
+    _resendCode:        _resendCode,
+    _submitForgot:      _submitForgot,
+    _resendResetCode:   _resendResetCode,
+    _submitReset:       _submitReset,
+    _logout:            _logout,
   };
 
 })();

@@ -2,8 +2,14 @@
  * Sleeper Helper — Cloudflare Worker
  *
  * Routes:
- *   POST /api/auth/register       → create account
- *   POST /api/auth/login          → login, set session cookie
+ *   POST /api/auth/register       → create account (sends OTP, no session until verified)
+ *   POST /api/auth/login          → login, set session cookie (or re-issue OTP if unverified)
+ *   POST /api/auth/verify-email   → confirm OTP, sets session cookie
+ *   POST /api/auth/resend-code    → resend verification OTP (rate-limited)
+ *   POST /api/auth/forgot-password→ email a password-reset OTP
+ *   POST /api/auth/reset-password → confirm reset OTP + set new password, sets session cookie
+ *   POST /api/auth/delete-account → self-delete (auth + password required)
+ *   POST /api/auth/admin/delete-user → admin force-delete (X-Admin-Secret header)
  *   GET  /api/auth/me             → current user (session cookie)
  *   PATCH /api/auth/me            → update sleeper_username / stored token
  *   POST /api/auth/logout         → clear session
@@ -24,7 +30,9 @@
  * KV binding:      SLEEPER_KV
  * D1 binding:      DB
  * DO binding:      DISPERSAL_ROOM
+ * Email binding:   EMAIL  (Cloudflare Email Service — verification/reset OTPs, admin alerts)
  * Secret:          TOKEN_ENCRYPTION_KEY  (base64 AES-256 key)
+ * Secret:          ADMIN_SECRET  (shared secret for /api/auth/admin/delete-user)
  */
 
 export { DispersalRoom } from './dispersal.js';

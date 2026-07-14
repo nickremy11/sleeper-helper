@@ -1,3 +1,7 @@
+-- NOTE: `users.email_verified` is added via a one-time migration, run once by hand
+-- (ALTER TABLE ADD COLUMN isn't safely re-runnable like CREATE TABLE IF NOT EXISTS):
+--   ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 1;
+-- New registrations explicitly insert email_verified = 0 until the OTP is confirmed.
 CREATE TABLE IF NOT EXISTS users (
   id            TEXT PRIMARY KEY,
   email         TEXT UNIQUE NOT NULL,
@@ -18,6 +22,24 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 CREATE INDEX IF NOT EXISTS idx_sessions_user  ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_users_email    ON users(email);
+
+-- ── Email verification (registration) + password reset — both one-time-passcode ──
+
+CREATE TABLE IF NOT EXISTS email_verifications (
+  user_id    TEXT    PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  code_hash  TEXT    NOT NULL,
+  expires_at INTEGER NOT NULL,
+  attempts   INTEGER NOT NULL DEFAULT 0,
+  sent_at    INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS password_resets (
+  user_id    TEXT    PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  code_hash  TEXT    NOT NULL,
+  expires_at INTEGER NOT NULL,
+  attempts   INTEGER NOT NULL DEFAULT 0,
+  sent_at    INTEGER NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS league_preferences (
   user_id    TEXT    NOT NULL,

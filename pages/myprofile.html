@@ -69,6 +69,17 @@
 }
 .ghost-btn:hover { border-color: var(--gold); color: var(--gold-light); }
 
+/* ── DANGER ZONE ── */
+.danger-card { border-color: var(--red) !important; }
+.danger-btn {
+  background: var(--red); border: 2px solid var(--red); color: var(--cream);
+  font-family: 'Rye', serif; font-size: 0.55rem; letter-spacing: 0.18em;
+  text-transform: uppercase; padding: 0 16px; cursor: pointer; border-radius: 2px;
+  transition: opacity 0.2s; white-space: nowrap;
+}
+.danger-btn:hover { opacity: 0.85; }
+.danger-hint { font-family: 'Crimson Text', serif; font-size: 0.85rem; font-style: italic; color: var(--brown-light); margin-bottom: 14px; }
+
 /* ── GUEST STATE ── */
 .guest-card {
   background: var(--brown-dark); border: 2px solid var(--gold); border-radius: 2px;
@@ -210,6 +221,20 @@ footer a:hover { color: var(--gold-light); }
           <button class="field-btn" style="width:100%;" onclick="changePassword()">Change Password</button>
         </div>
         <div class="field-status" id="password-status"></div>
+      </div>
+
+      <div class="section-head">
+        <h2>Danger Zone</h2>
+        <div class="section-head-line"></div>
+      </div>
+      <div class="profile-card danger-card">
+        <div class="danger-hint">Permanently deletes your account and all saved data (ESPN credentials, league prefs, rankings). This cannot be undone.</div>
+        <label class="field-label">Confirm Password</label>
+        <div class="field-row" style="margin-bottom:0;">
+          <input type="password" id="field-delete-pass" class="field-input" placeholder="••••••••" />
+          <button class="danger-btn" onclick="deleteAccount()">Delete Account</button>
+        </div>
+        <div class="field-status" id="delete-status"></div>
       </div>
 
     </div><!-- /profile-view -->
@@ -354,6 +379,23 @@ async function changePassword() {
     document.getElementById('field-new-pass2').value = '';
     setStatus('password-status', 'Password changed successfully', true);
   } catch(e) { setStatus('password-status', e.message, false); }
+}
+
+async function deleteAccount() {
+  const pass = document.getElementById('field-delete-pass').value;
+  if (!pass) { setStatus('delete-status', 'Enter your password to confirm', false); return; }
+  if (!confirm('Permanently delete your account and all saved data? This cannot be undone.')) return;
+  try {
+    const r = await fetch(API_BASE + '/auth/delete-account', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ password: pass }),
+    });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    location.href = 'https://ffhistorian.com';
+  } catch(e) { setStatus('delete-status', e.message, false); }
 }
 
 (async function init() {
