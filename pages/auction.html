@@ -844,7 +844,8 @@
   function undoDraft(playerIdx, e) {
     e.stopPropagation();
     const p = A.players[playerIdx];
-    if (!p || !p.drafted || p.keeper) return;
+    if (!p || !p.drafted) return;
+    if (p.keeper && !confirm(`Undo ${p.name}'s keeper assignment? This will mark them as available again.`)) return;
     const team = findTeamById(p.teamId);
     if (team) {
       team.spent -= p.price;
@@ -852,6 +853,7 @@
       team.players = team.players.filter(tp => tp.name !== p.name || tp.price !== p.price);
     }
     p.drafted = false;
+    p.keeper = false;
     p.price = 0;
     p.teamId = null;
     persist();
@@ -1325,7 +1327,7 @@
       const draftedTeam = p.drafted ? findTeamById(p.teamId) : null;
       const statusHtml = p.drafted
         ? `<span class="drafted-tag">${p.keeper ? '🔒 ' : ''}$${p.price} — ${esc(draftedTeam?.name || p.teamId || '?')}</span>
-           ${!p.keeper ? `<button class="auc-undo-btn" onclick="undoDraft(${p._i}, event)" title="Undo">✕</button>` : ''}`
+           <button class="auc-undo-btn" onclick="undoDraft(${p._i}, event)" title="Undo">✕</button>`
         : '<span style="color:var(--green-light)">Available</span>';
 
       const tierCls = p.tier ? (p.tier % 2 === 1 ? 'tier-odd' : 'tier-even') : '';
