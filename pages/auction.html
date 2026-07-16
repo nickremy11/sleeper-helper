@@ -1194,7 +1194,7 @@
       .slice(0, 8);
     if (!matches.length) { el.innerHTML = `<div class="auc-note-suggest-empty">No matches</div>`; return; }
     el.innerHTML = matches.map(({ p, i }) => `
-      <div class="auc-note-suggest-item" onmousedown="addNote('${cat}', ${i})">
+      <div class="auc-note-suggest-item" onmousedown="event.preventDefault();addNote('${cat}', ${i})">
         ${esc(p.name)}<span class="auc-note-suggest-meta">${esc(p.pos)}${p.nflTeam ? ' · ' + esc(p.nflTeam) : ''}${p.note === cat ? ' · already ' + p.note : p.note ? ' · currently ' + p.note : ''}</span>
       </div>`).join('');
   }
