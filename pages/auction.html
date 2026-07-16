@@ -320,14 +320,20 @@
     .auc-tier-badge-even { background: rgba(91,192,222,0.15); color: #5bc0de; }
 
     /* ── Player notes (target / avoid / dart throw) ── */
-    .auc-notes-bar {
-      display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
-      margin-bottom: 16px;
+    .auc-note-btns { display: flex; gap: 6px; margin-left: auto; }
+    .auc-note-btn {
+      font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.1em;
+      text-transform: uppercase; padding: 6px 10px; border-radius: 3px;
+      border: 1.5px solid transparent; cursor: pointer; opacity: 0.75;
+      transition: opacity 0.12s;
     }
-    @media (max-width: 700px) { .auc-notes-bar { grid-template-columns: 1fr; } }
-    .auc-notes-col {
-      background: var(--brown-dark); border: 1px solid var(--brown-mid);
-      border-radius: 4px; padding: 10px 12px;
+    .auc-note-btn:hover, .auc-note-btn.active { opacity: 1; }
+    .auc-note-btn.active { border-color: var(--cream); }
+
+    .auc-note-popover {
+      margin-top: 10px; padding: 10px 12px;
+      background: rgba(0,0,0,0.2); border: 1px solid var(--brown-mid); border-radius: 4px;
+      position: relative;
     }
     .auc-notes-label {
       font-family: 'Rye', serif; font-size: 0.46rem; letter-spacing: 0.14em;
@@ -357,25 +363,9 @@
       padding: 6px 10px; font-family: 'Crimson Text', serif; font-size: 0.82rem;
       font-style: italic; color: var(--brown-light);
     }
-    .auc-note-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-    .auc-note-chips-empty {
-      font-family: 'Crimson Text', serif; font-size: 0.8rem; font-style: italic;
-      color: var(--brown-light); margin-top: 8px;
-    }
-    .auc-note-chip {
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 3px 6px 3px 10px; border-radius: 12px;
-      font-family: 'Crimson Text', serif; font-size: 0.84rem; font-weight: 600;
-    }
-    .auc-note-chip-x {
-      background: rgba(0,0,0,0.15); border: none; border-radius: 50%;
-      width: 16px; height: 16px; line-height: 1; cursor: pointer;
-      font-size: 0.8rem; color: inherit; opacity: 0.75;
-    }
-    .auc-note-chip-x:hover { opacity: 1; }
 
     /* Name highlight in the player pool table */
-    .auc-name-pill { padding: 2px 7px; border-radius: 3px; font-weight: 600; }
+    .auc-name-pill { padding: 2px 7px; border-radius: 3px; font-weight: 600; cursor: pointer; }
 
     .auc-note-target, .auc-note-target-label { background: var(--gold); color: var(--brown-dark); }
     .auc-note-avoid,  .auc-note-avoid-label  { background: var(--red);  color: var(--cream); }
@@ -484,6 +474,7 @@
     _modalPlayer: null,  // index into A.players
     _nameMap: null,      // Map<normalizedName, idx> for ESPN matching
     _espnValNote: null,  // status string for the one-shot ESPN $ auto-fill
+    _notePopoverOpen: null, // 'target' | 'avoid' | 'dart' | null — which note search box is open
   };
 
   // ─── Persistence ─────────────────────────────────────────────────────────────
@@ -1137,7 +1128,6 @@
 
     document.getElementById('app').innerHTML = `
       ${renderStatsBar(stats, inflation, inflPct, inflCls)}
-      ${renderNotesBar()}
       <div class="auc-main">
         ${renderPoolPanel(inflation)}
         ${renderTeamsPanel()}
@@ -1147,6 +1137,9 @@
   }
 
   // ─── Player notes (target / avoid / dart throw) ───────────────────────────────
+  // A._notePopoverOpen tracks which category's search box is currently expanded
+  // (null when closed). Tags live on p.note and are only ever surfaced as a
+  // highlight in the pool table — clicking a highlighted name removes the tag.
 
   const NOTE_CATS = [
     { key: 'target', label: 'Target',      placeholder: 'Add player to target…' },
@@ -1154,31 +1147,40 @@
     { key: 'dart',   label: 'Dart Throw',  placeholder: 'Add dart throw…' },
   ];
 
-  function renderNotesBar() {
-    return `<div class="auc-notes-bar">
-      ${NOTE_CATS.map(c => `
-        <div class="auc-notes-col">
-          <span class="auc-notes-label auc-note-${c.key}-label">${esc(c.label)}</span>
-          <div class="auc-notes-search-wrap">
-            <input type="text" class="auc-note-input" placeholder="${esc(c.placeholder)}"
-              oninput="noteSearch('${c.key}', this.value)"
-              onfocus="noteSearch('${c.key}', this.value)"
-              onblur="setTimeout(()=>hideNoteSuggest('${c.key}'), 150)">
-            <div class="auc-note-suggest" id="note-suggest-${c.key}"></div>
-          </div>
-          <div class="auc-note-chips">${noteChips(c.key)}</div>
-        </div>`).join('')}
+  function renderNoteButtons() {
+    return `<div class="auc-note-btns">
+      ${NOTE_CATS.map(c => `<button type="button"
+        class="auc-note-btn auc-note-${c.key}${A._notePopoverOpen === c.key ? ' active' : ''}"
+        onclick="toggleNotePopover('${c.key}')">${esc(c.label)}</button>`).join('')}
     </div>`;
   }
 
-  function noteChips(cat) {
-    const items = A.players.map((p, i) => ({ p, i })).filter(({ p }) => p.note === cat);
-    if (!items.length) return `<div class="auc-note-chips-empty">None yet</div>`;
-    return items.map(({ p, i }) => `
-      <span class="auc-note-chip auc-note-${cat}">
-        ${esc(p.name)}
-        <button class="auc-note-chip-x" onclick="removeNote(${i})" title="Remove">×</button>
-      </span>`).join('');
+  function renderNotePopover() {
+    const cat = A._notePopoverOpen;
+    if (!cat) return '';
+    const c = NOTE_CATS.find(x => x.key === cat);
+    return `<div class="auc-note-popover">
+      <span class="auc-notes-label auc-note-${cat}-label">${esc(c.label)}</span>
+      <div class="auc-notes-search-wrap">
+        <input type="text" id="note-input-${cat}" class="auc-note-input" placeholder="${esc(c.placeholder)}"
+          oninput="noteSearch('${cat}', this.value)"
+          onblur="setTimeout(()=>closeNotePopoverIfStill('${cat}'), 150)">
+        <div class="auc-note-suggest" id="note-suggest-${cat}"></div>
+      </div>
+    </div>`;
+  }
+
+  function toggleNotePopover(cat) {
+    A._notePopoverOpen = (A._notePopoverOpen === cat) ? null : cat;
+    renderMain();
+    if (A._notePopoverOpen) {
+      const inp = document.getElementById('note-input-' + A._notePopoverOpen);
+      if (inp) inp.focus();
+    }
+  }
+
+  function closeNotePopoverIfStill(cat) {
+    if (A._notePopoverOpen === cat) { A._notePopoverOpen = null; renderMain(); }
   }
 
   function noteSearch(cat, val) {
@@ -1197,17 +1199,15 @@
       </div>`).join('');
   }
 
-  function hideNoteSuggest(cat) {
-    const el = document.getElementById('note-suggest-' + cat);
-    if (el) el.innerHTML = '';
-  }
-
   function addNote(cat, idx) {
     const p = A.players[idx];
     if (!p) return;
     p.note = cat;
     persist();
     renderMain();
+    // Keep the popover open with a clean, focused input so another name can be typed right away.
+    const inp = document.getElementById('note-input-' + cat);
+    if (inp) inp.focus();
   }
 
   function removeNote(idx) {
@@ -1322,7 +1322,7 @@
         : '';
 
       return `<tr class="${[p.drafted ? 'drafted' : '', tierCls].filter(Boolean).join(' ')}" data-idx="${p._i}">
-        <td>${p.note ? `<span class="auc-name-pill auc-note-${p.note}">${esc(p.name)}</span>` : esc(p.name)}${tierBadge}</td>
+        <td>${p.note ? `<span class="auc-name-pill auc-note-${p.note}" onclick="event.stopPropagation();removeNote(${p._i})" title="Click to remove ${esc(p.note)} tag">${esc(p.name)}</span>` : esc(p.name)}${tierBadge}</td>
         <td>${posHtml(p.pos)}</td>
         <td>${esc(p.nflTeam || '—')}</td>
         <td class="num val-my">${fmtDollar(p.myVal)}</td>
@@ -1336,7 +1336,11 @@
     <div class="auc-pool">
       <div class="auc-pool-controls">
         <div class="auc-pills">${posPills}</div>
-        <div class="auc-pills">${sortPills}</div>
+        <div class="auc-pool-controls-row">
+          <div class="auc-pills">${sortPills}</div>
+          ${renderNoteButtons()}
+        </div>
+        ${renderNotePopover()}
         <div class="auc-pool-controls-row">
           <input class="auc-search" type="text" placeholder="Search player…" value="${esc(A.search)}"
             oninput="setSearch(this.value, this)">
@@ -1464,7 +1468,7 @@
     if (!confirm('Start a new draft? All current data will be cleared.')) return;
     clearSaved();
     if (A.pollTimer) { clearInterval(A.pollTimer); A.pollTimer = null; }
-    Object.assign(A, { leagueId: null, leagueName: '', teams: [], players: [], posFilter: 'ALL', teamFilter: '', sortBy: 'inflated', sortDir: -1, search: '', showDrafted: true, _modalPlayer: null, _nameMap: null, _espnValNote: null });
+    Object.assign(A, { leagueId: null, leagueName: '', teams: [], players: [], posFilter: 'ALL', teamFilter: '', sortBy: 'inflated', sortDir: -1, search: '', showDrafted: true, _modalPlayer: null, _nameMap: null, _espnValNote: null, _notePopoverOpen: null });
     init();
   }
 
@@ -1683,7 +1687,8 @@
   window.doResume      = doResume;
   window.dismissResume = dismissResume;
   window.noteSearch    = noteSearch;
-  window.hideNoteSuggest = hideNoteSuggest;
+  window.toggleNotePopover = toggleNotePopover;
+  window.closeNotePopoverIfStill = closeNotePopoverIfStill;
   window.addNote       = addNote;
   window.removeNote    = removeNote;
   </script>
