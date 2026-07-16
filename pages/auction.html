@@ -1155,6 +1155,12 @@
     </div>`;
   }
 
+  // A blur fired because we're about to re-render the popover ourselves (e.g. right
+  // after picking a suggestion) must not be allowed to schedule a close — only a
+  // blur caused by the user actually clicking/tabbing away should close it. We
+  // track the pending close timer so any in-flight render can cancel it.
+  let noteCloseTimer = null;
+
   function renderNotePopover() {
     const cat = A._notePopoverOpen;
     if (!cat) return '';
@@ -1164,15 +1170,20 @@
       <div class="auc-notes-search-wrap">
         <input type="text" id="note-input-${cat}" class="auc-note-input" placeholder="${esc(c.placeholder)}"
           oninput="noteSearch('${cat}', this.value)"
-          onblur="setTimeout(()=>closeNotePopoverIfStill('${cat}'), 150)">
+          onblur="noteCloseTimer = setTimeout(()=>closeNotePopoverIfStill('${cat}'), 150)">
         <div class="auc-note-suggest" id="note-suggest-${cat}"></div>
       </div>
     </div>`;
   }
 
+  function cancelPendingNoteClose() {
+    if (noteCloseTimer) { clearTimeout(noteCloseTimer); noteCloseTimer = null; }
+  }
+
   function toggleNotePopover(cat) {
     A._notePopoverOpen = (A._notePopoverOpen === cat) ? null : cat;
     renderMain();
+    cancelPendingNoteClose();
     if (A._notePopoverOpen) {
       const inp = document.getElementById('note-input-' + A._notePopoverOpen);
       if (inp) inp.focus();
@@ -1204,7 +1215,8 @@
     if (!p) return;
     p.note = cat;
     persist();
-    renderMain();
+    renderMain(); // replacing the old (focused) input fires a real blur — cancel the close it just queued
+    cancelPendingNoteClose();
     // Keep the popover open with a clean, focused input so another name can be typed right away.
     const inp = document.getElementById('note-input-' + cat);
     if (inp) inp.focus();
