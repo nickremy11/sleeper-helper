@@ -60,7 +60,7 @@ function getCors(request) {
     'Access-Control-Allow-Origin':      allow,
     'Access-Control-Allow-Credentials': allow !== '*' ? 'true' : 'false',
     'Access-Control-Allow-Methods':     'GET, POST, PATCH, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers':     'Content-Type, Authorization, X-Sleeper-Graphql-Op',
+    'Access-Control-Allow-Headers':     'Content-Type, Authorization, X-Sleeper-Graphql-Op, X-Fantasy-Filter',
   };
 }
 
@@ -940,10 +940,15 @@ async function handleEspnFantasy(request, env, url) {
   const leagueId = url.pathname.replace('/api/espn/fantasy/', '').split('/')[0];
   const espnUrl  = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${url.searchParams.get('seasonId') || new Date().getFullYear()}/segments/0/leagues/${leagueId}?${url.searchParams.toString()}`;
 
+  // ESPN's player-pool views (e.g. kona_player_info) only return a small
+  // default slice unless a client-provided filter header narrows/expands it.
+  const fantasyFilter = request.headers.get('X-Fantasy-Filter');
+
   const upstream = await fetch(espnUrl, {
     headers: {
       'Cookie':     `espn_s2=${row.espn_s2}; SWID=${row.swid}`,
       'User-Agent': 'sleeper-helper/1.0',
+      ...(fantasyFilter ? { 'x-fantasy-filter': fantasyFilter } : {}),
     },
   });
 

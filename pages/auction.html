@@ -251,7 +251,7 @@
       text-transform: uppercase; color: var(--gold);
       display: flex; align-items: center; justify-content: space-between;
     }
-    .auc-teams-list { overflow-y: auto; max-height: 680px; }
+    .auc-teams-list { overflow-y: visible; }
     .auc-team-card {
       border-bottom: 1px dashed rgba(255,255,255,0.06); padding: 10px 14px;
     }
@@ -421,6 +421,7 @@
     espnLeagues: [],     // [{id, name}] from settings
     _modalPlayer: null,  // index into A.players
     _nameMap: null,      // Map<normalizedName, idx> for ESPN matching
+    _espnValNote: null,  // status string for the one-shot ESPN $ auto-fill
   };
 
   // ─── Persistence ─────────────────────────────────────────────────────────────
@@ -526,6 +527,58 @@
     return null;
   }
 
+  // Fallback for when headers don't match any known alias: guess the Player
+  // and $ Value columns from the shape of the data itself, using a sample of
+  // rows. Only fills in columns not already claimed by a header match.
+  function detectColumnsFromContent(lines, col) {
+    const sample = lines.slice(1, 21).map(l => splitCSVLine(l));
+    const numCols = sample.reduce((m, r) => Math.max(m, r.length), 0);
+    const claimed = new Set(Object.values(col));
+
+    if (col.player === undefined) {
+      let best = -1, bestScore = 0;
+      for (let i = 0; i < numCols; i++) {
+        if (claimed.has(i)) continue;
+        let hits = 0, total = 0;
+        for (const r of sample) {
+          const v = (r[i] || '').trim();
+          if (!v) continue;
+          total++;
+          const isNumericLike = !isNaN(parseFloat(v.replace(/[$,\s]/g, ''))) && /^[\d$.,\s]+$/.test(v);
+          if (/[A-Za-z]/.test(v) && !isNumericLike) hits++;
+        }
+        const score = total ? hits / total : 0;
+        if (score > bestScore) { bestScore = score; best = i; }
+      }
+      if (best >= 0 && bestScore >= 0.6) { col.player = best; claimed.add(best); }
+    }
+
+    if (col.myVal === undefined) {
+      let best = -1, bestScore = -1;
+      for (let i = 0; i < numCols; i++) {
+        if (claimed.has(i)) continue;
+        let hits = 0, total = 0, dollarSigns = 0;
+        const vals = [];
+        for (const r of sample) {
+          const raw = (r[i] || '').trim();
+          if (!raw) continue;
+          total++;
+          if (raw.includes('$')) dollarSigns++;
+          const n = parseFloat(raw.replace(/[$,\s]/g, ''));
+          if (!isNaN(n) && isFinite(n)) { hits++; vals.push(n); }
+        }
+        if (!total || hits / total < 0.6) continue;
+        let score = hits / total;
+        if (dollarSigns > 0) score += 1; // explicit "$" is a near-certain signal
+        // Penalize columns that look like a plain 1..N rank/index rather than a value
+        const looksSequential = vals.length > 2 && vals.every((v, idx) => v === idx + 1);
+        if (looksSequential) score -= 0.5;
+        if (score > bestScore) { bestScore = score; best = i; }
+      }
+      if (best >= 0 && bestScore >= 0.5) { col.myVal = best; claimed.add(best); }
+    }
+  }
+
   // Strip $, commas, spaces before parsing — handles "$52", "52.00", "1,200"
   function parseNum(str) {
     const cleaned = String(str || '').replace(/[$,\s]/g, '');
@@ -555,9 +608,16 @@
       if (key && col[key] === undefined) col[key] = i;
     });
 
+    const headerCol = { ...col };
+    detectColumnsFromContent(lines, col);
+
     if (col.player === undefined) {
       const found = rawHeaders.map(h => `"${h}"`).join(', ');
-      throw new Error(`Could not find a "Player" column. Found headers: ${found}`);
+      throw new Error(`Could not find a "Player" column, even by guessing from the data. Found headers: ${found}`);
+    }
+    if (col.myVal === undefined) {
+      const found = rawHeaders.map(h => `"${h}"`).join(', ');
+      throw new Error(`Could not find a "$ Value" column, even by guessing from the data. Found headers: ${found}`);
     }
 
     const players = [];
@@ -581,7 +641,8 @@
         teamId:   isKeeper ? draftedTo : null,
       });
     }
-    return { players, detectedCols: col, rawHeaders };
+    const guessedCols = Object.keys(col).filter(k => headerCol[k] === undefined);
+    return { players, detectedCols: col, guessedCols, rawHeaders };
   }
 
   function splitCSVLine(line) {
@@ -809,7 +870,8 @@
               Drop CSV here or <span>browse</span>
             </div>
             <div class="auc-csv-hint">
-              Columns: Player, Position, Team, My $ Value, ESPN $ Value, $ Drafted For, Team Drafted To<br>
+              Only Player + a $ value are required — we'll guess those from the data if headers don't match.<br>
+              Also recognized: Position, Team, ESPN $ Value, Tier, $ Drafted For, Team Drafted To<br>
               For keepers: fill $ Drafted For + Team Drafted To using the shorthand from your ESPN team mapping above.
             </div>
           </div>
@@ -858,7 +920,7 @@
     reader.onload = ev => {
       const summaryEl = document.getElementById('csv-summary');
       try {
-        const { players, detectedCols, rawHeaders } = parseCSV(ev.target.result || '');
+        const { players, detectedCols, guessedCols, rawHeaders } = parseCSV(ev.target.result || '');
         if (players.length === 0) throw new Error('No player rows found.');
         window._pendingPlayers = players;
 
@@ -870,7 +932,7 @@
           myVal:'My $', espnVal:'ESPN $', draftedFor:'$ Drafted For', draftedTo:'Team Drafted To', tier:'Tier' };
         const colPills = Object.entries(COL_LABELS).map(([k, lbl]) =>
           detectedCols[k] !== undefined
-            ? `<span style="color:var(--green-light);margin-right:6px;">✓ ${lbl}</span>`
+            ? `<span style="color:var(--green-light);margin-right:6px;">✓ ${lbl}${guessedCols.includes(k) ? ' <em style="color:var(--gold);font-style:italic;">(guessed)</em>' : ''}</span>`
             : `<span style="color:var(--brown-light);margin-right:6px;">— ${lbl}</span>`
         ).join('');
 
@@ -1043,6 +1105,7 @@
         <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
           <span class="auc-poll-dot${A.pollTimer ? ' live' : ''}"></span>
           <span class="auc-poll-status">${A.pollTimer ? 'Live · ESPN' : 'Manual mode'}</span>
+          ${A._espnValNote ? `<span class="auc-poll-status">${esc(A._espnValNote)}</span>` : ''}
           <button class="auc-btn auc-btn-ghost" style="margin-top:0;padding:5px 14px;font-size:0.38rem;" onclick="goReset()">New Draft</button>
         </div>
       </div>
@@ -1141,7 +1204,7 @@
         <div class="auc-pills">${sortPills}</div>
         <div class="auc-pool-controls-row">
           <input class="auc-search" type="text" placeholder="Search player…" value="${esc(A.search)}"
-            oninput="setSearch(this.value)">
+            oninput="setSearch(this.value, this)">
           <select class="auc-team-filter" onchange="setTeamFilter(this.value)">${teamOpts}</select>
           <label class="auc-show-drafted">
             <input type="checkbox" ${A.showDrafted ? 'checked' : ''} onchange="setShowDrafted(this.checked)">
@@ -1229,7 +1292,14 @@
     else { A.sortBy = key; A.sortDir = -1; }
     renderMain();
   }
-  function setSearch(val) { A.search = val; renderMain(); }
+  function setSearch(val, inputEl) {
+    const start = inputEl?.selectionStart;
+    const end = inputEl?.selectionEnd;
+    A.search = val;
+    renderMain();
+    const el = document.querySelector('.auc-search');
+    if (el) { el.focus(); if (start != null) el.setSelectionRange(start, end); }
+  }
   function setTeamFilter(val) { A.teamFilter = val; renderMain(); }
   function setShowDrafted(v) { A.showDrafted = v; renderMain(); }
 
@@ -1259,7 +1329,7 @@
     if (!confirm('Start a new draft? All current data will be cleared.')) return;
     clearSaved();
     if (A.pollTimer) { clearInterval(A.pollTimer); A.pollTimer = null; }
-    Object.assign(A, { leagueId: null, leagueName: '', teams: [], players: [], posFilter: 'ALL', teamFilter: '', sortBy: 'inflated', sortDir: -1, search: '', showDrafted: true, _modalPlayer: null, _nameMap: null });
+    Object.assign(A, { leagueId: null, leagueName: '', teams: [], players: [], posFilter: 'ALL', teamFilter: '', sortBy: 'inflated', sortDir: -1, search: '', showDrafted: true, _modalPlayer: null, _nameMap: null, _espnValNote: null });
     init();
   }
 
@@ -1392,6 +1462,52 @@
     if (A.pollTimer) clearInterval(A.pollTimer);
     A.pollTimer = setInterval(pollEspnDraft, 10000);
     pollEspnDraft();
+    fetchEspnAuctionValues();
+  }
+
+  // One-shot pull of ESPN's own auction valuations (not part of the pick-polling
+  // loop — this is ESPN's player pool, not the draft feed). Only fills players
+  // whose CSV row didn't already provide an ESPN $ value.
+  async function fetchEspnAuctionValues() {
+    if (!A.leagueId) return;
+    A._espnValNote = 'Loading ESPN $…';
+    renderMain();
+    try {
+      const filter = JSON.stringify({
+        players: { limit: 4000, sortDraftRanks: { sortPriority: 100, sortAsc: true, value: 'STANDARD' } },
+      });
+      const r = await fetch(`${API}/espn/fantasy/${A.leagueId}?view=kona_player_info&scoringPeriodId=0`, {
+        credentials: 'include',
+        headers: { 'X-Fantasy-Filter': filter },
+      });
+      if (!r.ok) { A._espnValNote = 'ESPN $ fetch failed'; renderMain(); return; }
+      const d = await r.json();
+      const list = d.players || [];
+      if (!list.length) { A._espnValNote = 'ESPN $: no players returned'; renderMain(); return; }
+
+      let filled = 0;
+      list.forEach(entry => {
+        const pl = entry.player || entry;
+        const name = pl.fullName;
+        if (!name) return;
+        // ESPN has moved/renamed this field across seasons — check both known locations.
+        const val = pl.draftRanksByRankType?.STANDARD?.auctionValue
+          ?? pl.ownership?.auctionValueAverage
+          ?? null;
+        if (val == null) return;
+        const idx = A._nameMap?.get(normalizePlayerName(name));
+        if (idx == null || idx < 0) return;
+        const p = A.players[idx];
+        if (!p.espnVal) { p.espnVal = Math.round(val); filled++; }
+      });
+
+      A._espnValNote = filled ? `✓ ESPN $ filled for ${filled} players` : 'ESPN $: no matching values found';
+      if (filled) persist();
+      renderMain();
+    } catch (_) {
+      A._espnValNote = 'ESPN $ fetch error';
+      renderMain();
+    }
   }
 
   // ─── Init ─────────────────────────────────────────────────────────────────────
