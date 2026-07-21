@@ -2387,13 +2387,19 @@ function loadCSV(event) {
       const lines = e.target.result.split('\n').map(l => l.trim()).filter(Boolean);
       const header = lines[0].toLowerCase().split(',').map(h => h.trim().replace(/"/g,''));
       const idx = (name) => header.indexOf(name);
-      // Support flexible column names
-      // Fallback positional order: name, position, team, rank, sleeper_id, tier, adp
+      // Support flexible column names.
+      // Fallback positional order (name, position, team, rank, tier, adp) only
+      // applies to display fields — the ID column is never positionally guessed,
+      // see iId below.
       const iName = idx('name') >= 0 ? idx('name') : idx('player') >= 0 ? idx('player') : 0;
       const iPos  = idx('position') >= 0 ? idx('position') : idx('pos') >= 0 ? idx('pos') : 1;
       const iTeam = idx('team') >= 0 ? idx('team') : 2;
       const iRank = idx('rank') >= 0 ? idx('rank') : 3;
-      const iId   = idx('sleeper_id') >= 0 ? idx('sleeper_id') : idx('player_id') >= 0 ? idx('player_id') : 4;
+      // No positional fallback for the ID column — an absent sleeper_id/player_id
+      // header must fall through to name-based matching below, never guess a
+      // column index (a wrong guess silently produces bogus "IDs" that collide,
+      // e.g. grabbing the tier column and merging every player in a tier).
+      const iId   = idx('sleeper_id') >= 0 ? idx('sleeper_id') : idx('player_id') >= 0 ? idx('player_id') : -1;
       const iTier = idx('tier') >= 0 ? idx('tier') : 5;
       const iAdp  = idx('adp') >= 0 ? idx('adp') : 6;
       const iTarget = idx('target') >= 0 ? idx('target') : idx('targets') >= 0 ? idx('targets') : -1;
@@ -2404,7 +2410,9 @@ function loadCSV(event) {
         const cols = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g,''));
         if (!cols[iName]) continue;
         const team = normTeamAbbr(cols[iTeam]);
-        let sleeperId = iId >= 0 ? cols[iId] : '';
+        // Sleeper player IDs are always numeric strings — reject anything else
+        // (e.g. a mis-mapped column) so it falls through to name matching.
+        let sleeperId = (iId >= 0 && /^\d+$/.test(cols[iId] || '')) ? cols[iId] : '';
         // Fuzzy match by name+team if no ID
         if (!sleeperId) {
           const name = cols[iName].toLowerCase();
