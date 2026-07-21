@@ -2282,7 +2282,13 @@ const T = {
   reversalRound: 0,   // effective reversal round (0 = normal snake, 3 = 3RR) — toggleable
   view: 'board',      // 'board' | 'list'
   leagueAdp: null,    // {map: {sleeper_id: adp}, suffix, label, season} for the selected draft's own league format
+  hideDrafted: false, // list view only: hide picked players instead of just crossing them off
 };
+
+function toggleHideDrafted() {
+  T.hideDrafted = !T.hideDrafted;
+  renderTrackerBody();
+}
 
 // Sleeper's own player projections payload (season-long, no week segment) carries
 // per-format ADP fields keyed like "adp_std" / "adp_ppr" / "adp_dynasty_2qb" / etc.
@@ -2824,7 +2830,10 @@ function renderTrackerListHtml(visible, hasTiers, SKIP_POS) {
     [...withAdp].sort((a, b) => numAdp(a) - numAdp(b)).forEach((p, i) => { posAdpRankMap[rowKey(p)] = i + 1; });
   }
 
-  const rows = [...visible].sort((a, b) => (aggRank(a) ?? Infinity) - (aggRank(b) ?? Infinity)).map(p => {
+  const draftedCount = visible.filter(p => T.picked.has(String(p.sleeper_id))).length;
+  const rowsSource = T.hideDrafted ? visible.filter(p => !T.picked.has(String(p.sleeper_id))) : visible;
+
+  const rows = [...rowsSource].sort((a, b) => (aggRank(a) ?? Infinity) - (aggRank(b) ?? Infinity)).map(p => {
     const isPicked = T.picked.has(String(p.sleeper_id));
     const isTarget = p.sleeper_id && T.targets.has(String(p.sleeper_id));
     const tierNum  = parseInt(p.tier) || 0;
@@ -2836,11 +2845,12 @@ function renderTrackerListHtml(visible, hasTiers, SKIP_POS) {
     const adpNum = numAdp(p);
     const pr     = posRankMap[rowKey(p)];
     const par    = posAdpRankMap[rowKey(p)];
-    const d = (rk != null && adpNum != null) ? (adpNum - rk) : null;
+    // Rounded to the nearest tenth so it never shows more than 1 decimal place.
+    const d = (rk != null && adpNum != null) ? Math.round((adpNum - rk) * 10) / 10 : null;
     const diffHtml = d == null ? '<span class="tl-diff-even">—</span>'
       : d === 0 ? '<span class="tl-diff-even">even</span>'
-      : d > 0 ? `<span class="tl-diff-better">▲ +${d}</span>`
-      : `<span class="tl-diff-worse">▼ ${d}</span>`;
+      : d > 0 ? `<span class="tl-diff-better">▲ +${d.toFixed(1)}</span>`
+      : `<span class="tl-diff-worse">▼ ${d.toFixed(1)}</span>`;
     return `<tr class="${rowCls}" ${clickable}>
       <td class="tl-name">${isTarget ? '<span class="tp-star">★</span> ' : ''}${esc(p.name)}</td>
       <td style="color:${posColor};font-weight:600;">${esc(p.pos || '—')}</td>
@@ -2854,7 +2864,12 @@ function renderTrackerListHtml(visible, hasTiers, SKIP_POS) {
     </tr>`;
   }).join('');
 
-  return `<div style="overflow-x:auto;">
+  const hideToggleHtml = `<div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-bottom:8px;">
+    ${draftedCount ? `<span class="card-meta">${draftedCount} drafted ${T.hideDrafted ? 'hidden' : 'shown'}</span>` : ''}
+    <button class="pos-pill ${T.hideDrafted?'active':''}" onclick="toggleHideDrafted()">${T.hideDrafted ? 'Show Drafted' : 'Hide Drafted'}</button>
+  </div>`;
+
+  return `${hideToggleHtml}<div style="overflow-x:auto;">
     <table class="tl-table">
       <thead><tr>
         <th>Player</th><th>Pos</th><th>Team</th><th>Tier</th><th>Rank</th><th>ADP</th><th>Pos Rank</th><th>Pos ADP</th><th>vs ADP</th>
