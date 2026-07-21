@@ -2281,7 +2281,85 @@ const T = {
   myRosterId: null,   // this user's roster_id in the active draft's league
   reversalRound: 0,   // effective reversal round (0 = normal snake, 3 = 3RR) — toggleable
   view: 'board',      // 'board' | 'list'
+  leagueAdp: null,    // {map: {sleeper_id: adp}, suffix, label, season} for the selected draft's own league format
 };
+
+// Sleeper's own player projections payload (season-long, no week segment) carries
+// per-format ADP fields keyed like "adp_std" / "adp_ppr" / "adp_dynasty_2qb" / etc.
+// This mirrors the same suffix-picking logic Sleeper's own draft room uses
+// (reverse-engineered from their web client bundle), but fixes a real bug there:
+// their IDP roster-slot check compares e.g. "dl" against an object keyed "slots_dl"
+// (never matches), so IDP leagues never actually get "idp"/"idp_1qb" client-side.
+// Empirically (comparing real player order under each field): adp_idp skews
+// QB-heavy (Superflex), adp_idp_1qb has no early QBs (1QB) — the reverse of what
+// the names suggest, so that pairing below is trusting the data, not the naming.
+function sleeperAdpSuffix(settings, scoring, rosterPositions) {
+  const rp = rosterPositions || [];
+  if (!settings || !rp.length) return 'std';
+  const isDynasty = settings.type === 2;
+  const isIdp = rp.some(p => p === 'DL' || p === 'LB' || p === 'DB' || p === 'IDP_FLEX');
+  const qbSlots = rp.filter(p => p === 'QB' || p === 'SUPER_FLEX').length;
+  const isSF = qbSlots >= 2;
+  if (isIdp) return isSF ? 'idp' : 'idp_1qb';
+  const rec = scoring?.rec ?? 0;
+  let base = 'std';
+  if (isSF) base = '2qb';
+  else if (rec === 1) base = 'ppr';
+  else if (rec === 0.5) base = 'half_ppr';
+  return isDynasty ? `dynasty_${base}` : base;
+}
+
+const SLEEPER_ADP_LABELS = {
+  std: 'Standard', ppr: 'PPR', half_ppr: 'Half-PPR', '2qb': 'Superflex',
+  idp: 'IDP Superflex', idp_1qb: 'IDP 1QB',
+  dynasty_std: 'Dynasty Standard', dynasty_ppr: 'Dynasty PPR',
+  dynasty_half_ppr: 'Dynasty Half-PPR', dynasty_2qb: 'Dynasty Superflex',
+};
+
+// Fetch the selected draft's own league settings, resolve the matching Sleeper
+// ADP field for that exact format, and (re)apply it to whatever rankings are
+// already loaded so the list view's ADP column reflects this league, not a
+// generic blended number.
+async function loadDraftLeagueAdp(leagueId) {
+  T.leagueAdp = null;
+  if (!leagueId) { applyLeagueAdp(); return; }
+  try {
+    const lg = S.leagueDetails[leagueId] || await api('/league/' + leagueId);
+    const season = S.nflState?.league_create_season || S.nflState?.season || new Date().getFullYear().toString();
+    const suffix = sleeperAdpSuffix(lg.settings, lg.scoring_settings, lg.roster_positions);
+    const key  = 'adp_' + suffix;
+    const proj = await api('/projections/nfl/regular/' + season);
+    const map = {};
+    for (const pid in proj) {
+      const v = proj[pid]?.[key];
+      if (typeof v === 'number' && v < 900) map[pid] = v;
+    }
+    T.leagueAdp = { map, suffix, season, label: SLEEPER_ADP_LABELS[suffix] || suffix };
+    const st = document.getElementById('draft-status');
+    if (st && T.draft?.league_id === leagueId) {
+      st.textContent += ` · ADP: ${T.leagueAdp.label} (this league's format)`;
+    }
+    applyLeagueAdp();
+  } catch (_) {}
+}
+
+// Backfill/upgrade the ADP column for every ranking row that didn't come with
+// its own explicit ADP value (CSV column / My Rankings never carry one).
+// Prefers this league's format-specific Sleeper ADP; falls back to Sleeper's
+// generic blended search_rank when no draft/league format has resolved yet.
+function applyLeagueAdp() {
+  if (!T.rankings.length) return;
+  let changed = false;
+  for (const p of T.rankings) {
+    if (p._adpFromFile) continue;
+    const next = (T.leagueAdp?.map?.[p.sleeper_id]) ?? (S.players[p.sleeper_id]?.search_rank ?? '');
+    if (next !== p.adp) { p.adp = next; changed = true; }
+  }
+  if (changed) {
+    resaveTrackerRankings();
+    renderTrackerBody();
+  }
+}
 
 const TRACKER_STORE_KEY = 'tracker_saved_rankings';
 
@@ -2296,9 +2374,9 @@ function saveTrackerRankings(source, extra) {
   } catch {}
 }
 
-// Re-persist targets after a click-to-toggle change, reusing whatever source
-// (csv/adp/myranks) is currently loaded.
-function resaveTrackerTargets() {
+// Re-persist T.rankings/targets after a target toggle or an ADP backfill,
+// reusing whatever source (csv/adp/myranks) is currently loaded.
+function resaveTrackerRankings() {
   if (!T._persistMeta) return;
   saveTrackerRankings(T._persistMeta.source, T._persistMeta.filename ? { filename: T._persistMeta.filename } : undefined);
 }
@@ -2426,21 +2504,37 @@ async function loadSleeperADP() {
   st.textContent = 'Loading Sleeper ADP…'; st.className = 'setup-status';
   try {
     await loadPlayers();
-    const ranked = Object.entries(S.players)
-      .filter(([, p]) => p.active && p.search_rank && p.search_rank < 9999 && ['QB','RB','WR','TE','DEF'].includes(p.position))
-      .sort((a, b) => (a[1].search_rank || 999) - (b[1].search_rank || 999))
-      .slice(0, 300)
-      .map(([id, p], i) => ({
-        rank: i + 1, name: p.full_name, pos: p.position,
-        team: p.team || 'FA', sleeper_id: id, adp: p.search_rank || '', tier: '',
-      }));
+    let ranked, sourceLabel;
+    // Prefer the selected draft's own league-format ADP (SF/1QB, dynasty/redraft,
+    // PPR/half/standard) over the generic blended number, when it's resolved.
+    if (T.leagueAdp?.map && Object.keys(T.leagueAdp.map).length) {
+      ranked = Object.entries(T.leagueAdp.map)
+        .filter(([id]) => S.players[id] && ['QB','RB','WR','TE','DEF'].includes(S.players[id].position))
+        .sort((a, b) => a[1] - b[1])
+        .slice(0, 300)
+        .map(([id, adp], i) => {
+          const p = S.players[id];
+          return { rank: i + 1, name: p.full_name, pos: p.position, team: p.team || 'FA', sleeper_id: id, adp, tier: '' };
+        });
+      sourceLabel = `this league's ${T.leagueAdp.label} ADP`;
+    } else {
+      ranked = Object.entries(S.players)
+        .filter(([, p]) => p.active && p.search_rank && p.search_rank < 9999 && ['QB','RB','WR','TE','DEF'].includes(p.position))
+        .sort((a, b) => (a[1].search_rank || 999) - (b[1].search_rank || 999))
+        .slice(0, 300)
+        .map(([id, p], i) => ({
+          rank: i + 1, name: p.full_name, pos: p.position,
+          team: p.team || 'FA', sleeper_id: id, adp: p.search_rank || '', tier: '',
+        }));
+      sourceLabel = 'blended Sleeper ADP (all formats — select an active draft to narrow this to its own format)';
+    }
     T.rankings = ranked;
     T.posFilter = 'ALL';
     T.targets = new Set();
     // Reset file input so it can be re-selected
     const fi = document.getElementById('csv-file');
     if (fi) fi.value = '';
-    st.textContent = '✦ Loaded ' + ranked.length + ' players from Sleeper ADP';
+    st.textContent = `✦ Loaded ${ranked.length} players from ${sourceLabel}`;
     st.className = 'setup-status ok';
     saveTrackerRankings('adp');
     renderTrackerBody();
@@ -2472,7 +2566,9 @@ function loadCSV(event) {
       // e.g. grabbing the tier column and merging every player in a tier).
       const iId   = idx('sleeper_id') >= 0 ? idx('sleeper_id') : idx('player_id') >= 0 ? idx('player_id') : -1;
       const iTier = idx('tier') >= 0 ? idx('tier') : 5;
-      const iAdp  = idx('adp') >= 0 ? idx('adp') : 6;
+      // Same reasoning as iId above: an absent 'adp' header must fall through
+      // to the Sleeper ADP lookup below, never guess a column index.
+      const iAdp  = idx('adp') >= 0 ? idx('adp') : -1;
       const iTarget = idx('target') >= 0 ? idx('target') : idx('targets') >= 0 ? idx('targets') : -1;
 
       const parsed = [];
@@ -2497,13 +2593,20 @@ function loadCSV(event) {
         // rather than however the CSV happened to write the name.
         const canonicalName = sleeperId ? S.players[sleeperId]?.full_name : null;
         if (sleeperId && iTarget >= 0 && /^(1|true|yes|y|x)$/i.test(cols[iTarget] || '')) targets.add(String(sleeperId));
+        // Prefer the CSV's own ADP column when present; otherwise pull the
+        // selected draft's league-format ADP if one's resolved, else fall back
+        // to Sleeper's blended ADP (search_rank) — so the list view's ADP
+        // column isn't just blank for rankings files that don't track it.
+        const csvAdp = iAdp >= 0 ? cols[iAdp] : '';
+        const fallbackAdp = sleeperId ? ((T.leagueAdp?.map?.[sleeperId]) ?? (S.players[sleeperId]?.search_rank ?? '')) : '';
         parsed.push({
           rank: parseInt(cols[iRank]) || i,
           name: canonicalName || cols[iName],
           pos:  (cols[iPos] || '').toUpperCase(),
           team: team || '',
           sleeper_id: sleeperId,
-          adp:  iAdp >= 0 ? cols[iAdp] : '',
+          adp:  csvAdp !== '' ? csvAdp : fallbackAdp,
+          _adpFromFile: csvAdp !== '',
           tier: iTier >= 0 ? cols[iTier] : '',
         });
       }
@@ -2521,7 +2624,7 @@ function loadCSV(event) {
 
 async function selectDraft(draftId) {
   if (T.pollTimer) { clearInterval(T.pollTimer); T.pollTimer = null; }
-  if (!draftId) { T.draft = null; T.picked.clear(); renderTrackerBody(); return; }
+  if (!draftId) { T.draft = null; T.picked.clear(); loadDraftLeagueAdp(null); renderTrackerBody(); return; }
   const st = document.getElementById('draft-status');
   st.textContent = 'Loading picks…'; st.className = 'setup-status';
   try {
@@ -2536,6 +2639,10 @@ async function selectDraft(draftId) {
     // Poll every 15 seconds for new picks
     T.pollTimer = setInterval(() => syncPicks(draftId), 15000);
     renderTrackerBody();
+    // Fire-and-forget: resolves this league's exact ADP format (SF/1QB,
+    // dynasty/redraft, PPR/half/standard) and backfills T.rankings' ADP
+    // column once it lands — doesn't block the pick sync above.
+    loadDraftLeagueAdp(T.draft?.league_id);
   } catch(e) { st.textContent = 'Error: ' + e.message; st.className = 'setup-status err'; }
 }
 
@@ -2766,7 +2873,7 @@ function toggleTarget(sleeperId) {
   if (!sleeperId) return;
   if (T.targets.has(sleeperId)) T.targets.delete(sleeperId);
   else T.targets.add(sleeperId);
-  resaveTrackerTargets();
+  resaveTrackerRankings();
   renderTrackerBody();
 }
 
@@ -2937,7 +3044,8 @@ function combineRankingLists(lists) {
       pos:  (p.position || '').toUpperCase(),
       team: p.team || '',
       sleeper_id: sleeperId,
-      adp:  '',
+      adp:  sleeperId ? ((T.leagueAdp?.map?.[sleeperId]) ?? (S.players[sleeperId]?.search_rank ?? '')) : '',
+      _adpFromFile: false,
       tier: singleList ? String(p.tier ?? '') : '',
     };
   });
