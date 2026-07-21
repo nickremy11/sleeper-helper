@@ -165,7 +165,7 @@ a.row-link:hover { color: var(--gold-light); }
 .tracker-player.targeted { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold) inset; }
 .tp-star { position: absolute; top: 3px; right: 5px; color: var(--gold); font-size: 0.65rem; line-height: 1; }
 .tp-pos  { font-family: 'Rye', serif; font-size: 0.38rem; letter-spacing: 0.1em; flex-shrink: 0; line-height: 1.4; }
-.tp-name { font-family: 'Crimson Text', serif; font-size: 0.82rem; color: var(--parchment); line-height: 1.25; word-break: break-word; overflow-wrap: break-word; white-space: normal; padding-right: 12px; }
+.tp-name { font-family: 'Crimson Text', serif; font-size: 0.78rem; color: var(--parchment); line-height: 1.2; overflow-wrap: break-word; white-space: normal; padding-right: 12px; }
 .tp-team { font-family: 'Rye', serif; font-size: 0.48rem; letter-spacing: 0.1em; color: var(--brown-light); line-height: 1.4; }
 /* Position colors */
 .pos-qb { border-left-color: #e05252; } .pos-qb .tp-pos { color: #e05252; }
@@ -2413,18 +2413,22 @@ function loadCSV(event) {
         // Sleeper player IDs are always numeric strings — reject anything else
         // (e.g. a mis-mapped column) so it falls through to name matching.
         let sleeperId = (iId >= 0 && /^\d+$/.test(cols[iId] || '')) ? cols[iId] : '';
-        // Fuzzy match by name+team if no ID
+        // Fuzzy match by name+team if no ID. normName() strips punctuation/spacing
+        // so "AJ Brown"/"A.J. Brown" and similar variants match either way.
         if (!sleeperId) {
-          const name = cols[iName].toLowerCase();
-          const match = Object.entries(S.players).find(([, p]) =>
-            p.full_name?.toLowerCase() === name && (!team || normTeamAbbr(p.team) === team)
+          const nName = normName(cols[iName]);
+          const teamMatch = Object.entries(S.players).find(([, p]) =>
+            normName(p.full_name) === nName && (!team || normTeamAbbr(p.team) === team)
           );
-          sleeperId = match ? match[0] : '';
+          sleeperId = teamMatch ? teamMatch[0] : (S._playersByName[nName] || '');
         }
+        // Prefer Sleeper's canonical spelling (e.g. "A.J. Brown") once matched,
+        // rather than however the CSV happened to write the name.
+        const canonicalName = sleeperId ? S.players[sleeperId]?.full_name : null;
         if (sleeperId && iTarget >= 0 && /^(1|true|yes|y|x)$/i.test(cols[iTarget] || '')) targets.add(String(sleeperId));
         parsed.push({
           rank: parseInt(cols[iRank]) || i,
-          name: cols[iName],
+          name: canonicalName || cols[iName],
           pos:  (cols[iPos] || '').toUpperCase(),
           team: team || '',
           sleeper_id: sleeperId,
@@ -2550,7 +2554,7 @@ function renderTrackerBody() {
     }
     if (row.length) rows.push(row);
 
-    gridHtml = `<div class="tracker-snake" style="grid-template-columns:repeat(${teams},1fr);">`;
+    gridHtml = `<div class="tracker-snake" style="grid-template-columns:repeat(${teams},minmax(96px,1fr));">`;
     rows.forEach((rowPlayers, roundIdx) => {
       const round = roundIdx + 1;
       const isReversed = isReversedRound(round, type, T.reversalRound);
@@ -2742,15 +2746,18 @@ function combineRankingLists(lists) {
   players.sort((a, b) => a.avg - b.avg);
 
   const singleList = lists.length === 1;
-  return players.map(({ key, p }, i) => ({
-    rank: i + 1,
-    name: p.player_name,
-    pos:  (p.position || '').toUpperCase(),
-    team: p.team || '',
-    sleeper_id: S._playersByName?.[normName(p.player_name)] || '',
-    adp:  '',
-    tier: singleList ? String(p.tier ?? '') : '',
-  }));
+  return players.map(({ key, p }, i) => {
+    const sleeperId = S._playersByName?.[normName(p.player_name)] || '';
+    return {
+      rank: i + 1,
+      name: (sleeperId && S.players[sleeperId]?.full_name) || p.player_name,
+      pos:  (p.position || '').toUpperCase(),
+      team: p.team || '',
+      sleeper_id: sleeperId,
+      adp:  '',
+      tier: singleList ? String(p.tier ?? '') : '',
+    };
+  });
 }
 
 
