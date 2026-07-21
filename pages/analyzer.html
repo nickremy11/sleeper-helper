@@ -109,6 +109,7 @@
     /* ── Playoff progress bar ── */
     .az-playoff-cell { padding: 0 8px; display: flex; flex-direction: column; justify-content: center; gap: 3px; }
     .az-playoff-bar-wrap { width: 100%; height: 5px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; }
+    .az-bye-line { font-family: 'Crimson Text', serif; font-size: 0.68rem; font-style: italic; color: var(--brown-light); white-space: nowrap; }
     .az-playoff-bar-fill { height: 100%; border-radius: 3px; opacity: 0.8; }
 
     .az-chevron {
@@ -638,8 +639,8 @@
   }
 
   function runSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams, N = 5000) {
-    const count = {};
-    for (const t of teams) count[t.rosterId] = 0;
+    const count = {}, count2 = {};
+    for (const t of teams) { count[t.rosterId] = 0; count2[t.rosterId] = 0; }
 
     for (let sim = 0; sim < N; sim++) {
       const wins = {}, pts = {};
@@ -668,11 +669,12 @@
         return wd !== 0 ? wd : (pts[b.rosterId] || 0) - (pts[a.rosterId] || 0);
       });
       for (let i = 0; i < Math.min(playoffTeams, ranked.length); i++) count[ranked[i].rosterId]++;
+      for (let i = 0; i < Math.min(2, ranked.length); i++) count2[ranked[i].rosterId]++;
     }
 
-    const odds = {};
-    for (const t of teams) odds[t.rosterId] = count[t.rosterId] / N;
-    return odds;
+    const odds = {}, top2 = {};
+    for (const t of teams) { odds[t.rosterId] = count[t.rosterId] / N; top2[t.rosterId] = count2[t.rosterId] / N; }
+    return { odds, top2 };
   }
 
   // ── Sleeper load ──────────────────────────────────────────────────────────────
@@ -824,17 +826,20 @@
 
     // Check session cache — keyed by league + season + regular-season length
     const _simCacheKey = `az_odds_${lgId}_${nflSeason}_w${regularSeasonWeeks}`;
-    let _cachedOdds = null;
+    let _cachedOdds = null, _cachedTop2 = null;
     try {
       const _c = JSON.parse(sessionStorage.getItem(_simCacheKey) || 'null');
-      if (_c && Date.now() - _c.ts < 2 * 3600 * 1000) _cachedOdds = _c.odds;
+      if (_c && Date.now() - _c.ts < 2 * 3600 * 1000) { _cachedOdds = _c.odds; _cachedTop2 = _c.top2; }
     } catch {}
 
     if (_cachedOdds) {
-      for (const t of teams) { if (_cachedOdds[t.rosterId] !== undefined) t.playoffOdds = _cachedOdds[t.rosterId]; }
+      for (const t of teams) {
+        if (_cachedOdds[t.rosterId] !== undefined) t.playoffOdds = _cachedOdds[t.rosterId];
+        if (_cachedTop2?.[t.rosterId] !== undefined) t.top2Odds = _cachedTop2[t.rosterId];
+      }
     } else if (futureWeeks.length === 0) {
       // Post-season: standings are final — assign hard 1.0 / 0.0
-      byStand.forEach((t, i) => { t.playoffOdds = i < playoffTeams ? 1.0 : 0.0; });
+      byStand.forEach((t, i) => { t.playoffOdds = i < playoffTeams ? 1.0 : 0.0; t.top2Odds = i < 2 ? 1.0 : 0.0; });
     } else {
       // Fetch player projections for every remaining week in parallel.
       // Sleeper projection endpoint: /projections/nfl/{season_type}/{season}/{week}
@@ -883,11 +888,12 @@
         }
       }
 
-      const odds = runSimulation(simTeams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams);
+      const { odds, top2 } = runSimulation(simTeams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams);
       for (const t of teams) {
         if (odds[t.rosterId] !== undefined) t.playoffOdds = odds[t.rosterId];
+        if (top2[t.rosterId] !== undefined) t.top2Odds = top2[t.rosterId];
       }
-      try { sessionStorage.setItem(_simCacheKey, JSON.stringify({ ts: Date.now(), odds })); } catch {}
+      try { sessionStorage.setItem(_simCacheKey, JSON.stringify({ ts: Date.now(), odds, top2 })); } catch {}
     }
 
     // Re-value next-year picks based on original team's playoff odds
@@ -1208,9 +1214,13 @@
               color  = p >= 0.70 ? '#5cb85c' : p >= 0.30 ? 'var(--gold-light)' : '#e05252';
               weight = p >= 0.70 || p < 0.30 ? '700' : '400';
             }
+            const byePct = Math.round((team.top2Odds ?? 0) * 100);
+            const byeLine = team.top2Odds != null
+              ? `<span class="az-bye-line">${byePct}% bye</span>` : '';
             return `<div class="az-rank-cell az-playoff-cell">
               <span class="az-chances-badge" style="color:${color};font-weight:${weight};">${label}</span>
               <div class="az-playoff-bar-wrap"><div class="az-playoff-bar-fill" style="width:${barPct}%;background:${color};"></div></div>
+              ${byeLine}
             </div>`;
           }
           const { label, cls } = team.playoffChances || { label: '—', cls: 'az-chances-nervy' };

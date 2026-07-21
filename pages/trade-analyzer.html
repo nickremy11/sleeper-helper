@@ -183,6 +183,7 @@
     .ta-odds-bar-wrap { height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; position: relative; }
     .ta-odds-bar-behind { height: 100%; position: absolute; left: 0; border-radius: 3px; opacity: 0.35; }
     .ta-odds-bar-front  { height: 100%; position: absolute; left: 0; border-radius: 3px; opacity: 0.85; }
+    .ta-odds-bye { font-family: 'Crimson Text', serif; font-size: 0.8rem; font-style: italic; color: var(--brown-light); margin-top: 8px; }
     .ta-delta-up-txt  { color: #5cb85c; }
     .ta-delta-dn-txt  { color: #e05252; }
     .ta-delta-flat-txt{ color: var(--brown-light); }
@@ -487,7 +488,8 @@
   }
 
   function runSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams, N = 5000) {
-    const count = {}; for (const t of teams) count[t.rosterId] = 0;
+    const count = {}, count2 = {};
+    for (const t of teams) { count[t.rosterId] = 0; count2[t.rosterId] = 0; }
     for (let sim = 0; sim < N; sim++) {
       const wins = {}, pts = {};
       for (const t of teams) { wins[t.rosterId] = t.wins; pts[t.rosterId] = t.fpts; }
@@ -513,10 +515,11 @@
         return wd !== 0 ? wd : (pts[b.rosterId]||0) - (pts[a.rosterId]||0);
       });
       for (let i = 0; i < Math.min(playoffTeams, ranked.length); i++) count[ranked[i].rosterId]++;
+      for (let i = 0; i < Math.min(2, ranked.length); i++) count2[ranked[i].rosterId]++;
     }
-    const odds = {};
-    for (const t of teams) odds[t.rosterId] = count[t.rosterId] / N;
-    return odds;
+    const odds = {}, top2 = {};
+    for (const t of teams) { odds[t.rosterId] = count[t.rosterId] / N; top2[t.rosterId] = count2[t.rosterId] / N; }
+    return { odds, top2 };
   }
 
   function computeRanks(teams) {
@@ -637,7 +640,7 @@
         wins, losses, fpts,
         overall: Math.round(overall), contender: Math.round(contenderBase + wins * 50),
         posValues: { QB: Math.round(posValues.QB), RB: Math.round(posValues.RB), WR: Math.round(posValues.WR), TE: Math.round(posValues.TE), DL: Math.round(posValues.DL) },
-        draft: Math.round(draftValue), playerList, pickList, standing: 0, playoffOdds: null,
+        draft: Math.round(draftValue), playerList, pickList, standing: 0, playoffOdds: null, top2Odds: null,
       };
     });
 
@@ -657,7 +660,7 @@
       if (!(matchups || []).some(m => (m.points ?? 0) > 0)) futureWeeks.push(week);
     });
 
-    let playoffOdds = {};
+    let playoffOdds = {}, top2Odds = {};
     let projectionsByWeek = {};
     let muMap = {}, sigmaMap = {};
     let useFc = true;
@@ -665,7 +668,7 @@
     const simTeams = teams.filter(t => t.overall > 0 || t.wins > 0 || t.losses > 0);
 
     if (futureWeeks.length === 0) {
-      byStand.forEach((t, i) => { playoffOdds[t.rosterId] = i < playoffTeams ? 1.0 : 0.0; });
+      byStand.forEach((t, i) => { playoffOdds[t.rosterId] = i < playoffTeams ? 1.0 : 0.0; top2Odds[t.rosterId] = i < 2 ? 1.0 : 0.0; });
     } else {
       const projResults = await Promise.all(
         futureWeeks.map(w =>
@@ -699,12 +702,13 @@
           }
         }
       }
-      playoffOdds = runSimulation(simTeams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams);
+      ({ odds: playoffOdds, top2: top2Odds } = runSimulation(simTeams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams));
     }
 
     const nextSeason = String(parseInt(nflSeason) + 1);
     for (const t of teams) {
       t.playoffOdds = playoffOdds[t.rosterId] ?? null;
+      t.top2Odds    = top2Odds[t.rosterId] ?? null;
       let adj = 0;
       for (const pick of t.pickList) {
         if (pick.season === nextSeason && pick.originalRosterId != null) {
@@ -773,7 +777,9 @@
 
     const beforeOddsA = teams.find(t => t.rosterId === _teamAId)?.playoffOdds ?? null;
     const beforeOddsB = teams.find(t => t.rosterId === _teamBId)?.playoffOdds ?? null;
-    let afterOddsA = null, afterOddsB = null;
+    const beforeTop2A = teams.find(t => t.rosterId === _teamAId)?.top2Odds ?? null;
+    const beforeTop2B = teams.find(t => t.rosterId === _teamBId)?.top2Odds ?? null;
+    let afterOddsA = null, afterOddsB = null, afterTop2A = null, afterTop2B = null;
 
     if (futureWeeks.length > 0) {
       const newMu    = Object.fromEntries(Object.entries(muMap).map(([k,v]) => [k, {...v}]));
@@ -798,8 +804,10 @@
 
       const simTeams = cloned.filter(t => t.overall > 0 || t.wins > 0 || t.losses > 0);
       const after = runSimulation(simTeams, matchupsByWeek, newMu, newSigma, futureWeeks, _rawData.playoffTeams);
-      afterOddsA = after[_teamAId] ?? null;
-      afterOddsB = after[_teamBId] ?? null;
+      afterOddsA = after.odds[_teamAId] ?? null;
+      afterOddsB = after.odds[_teamBId] ?? null;
+      afterTop2A = after.top2[_teamAId] ?? null;
+      afterTop2B = after.top2[_teamBId] ?? null;
     }
 
     const projMap   = futureWeeks.length > 0 ? (projectionsByWeek[futureWeeks[0]] || {}) : {};
@@ -814,6 +822,7 @@
     const lineupAfterB  = buildOptimalLineup(cB.playerList.map(p => p.pid),    fcMap, projMap, lineupFc, scoringSettings, rp, players);
 
     return { beforeRanks, afterRanks, beforeOddsA, afterOddsA, beforeOddsB, afterOddsB,
+             beforeTop2A, afterTop2A, beforeTop2B, afterTop2B,
              lineupBeforeA, lineupAfterA, lineupBeforeB, lineupAfterB, numTeams: _rawData.numTeams };
   }
 
@@ -1130,6 +1139,7 @@
 
   function buildResultsHtml(res) {
     const { beforeRanks, afterRanks, beforeOddsA, afterOddsA, beforeOddsB, afterOddsB,
+            beforeTop2A, afterTop2A, beforeTop2B, afterTop2B,
             lineupBeforeA, lineupAfterA, lineupBeforeB, lineupAfterB, numTeams } = res;
     const { hasIDP, teams } = _rawData;
     const { futureWeeks } = _simData;
@@ -1169,7 +1179,7 @@
       ${rankCell((beforeRanks[m.key]||{})[_teamBId], (afterRanks[m.key]||{})[_teamBId])}
     </tr>`).join('');
 
-    function oddsCard(team, before, after, label, teamColor) {
+    function oddsCard(team, before, after, label, teamColor, top2Before, top2After) {
       const name = esc(displayName(team));
       if (!futureWeeks.length) {
         return `<div class="ta-odds-card">
@@ -1184,6 +1194,16 @@
       const delta = aPct - bPct;
       const dCls = delta > 0 ? 'ta-delta-up-txt' : delta < 0 ? 'ta-delta-dn-txt' : 'ta-delta-flat-txt';
       const dStr = delta > 0 ? `+${delta}pp` : delta < 0 ? `${delta}pp` : '±0pp';
+
+      let byeLine = '';
+      if (top2Before != null) {
+        const bT2Pct = Math.round(top2Before * 100), aT2Pct = Math.round((top2After ?? top2Before) * 100);
+        const t2Delta = aT2Pct - bT2Pct;
+        const t2DCls  = t2Delta > 0 ? 'ta-delta-up-txt' : t2Delta < 0 ? 'ta-delta-dn-txt' : 'ta-delta-flat-txt';
+        const t2DStr  = t2Delta > 0 ? `+${t2Delta}pp` : t2Delta < 0 ? `${t2Delta}pp` : '±0pp';
+        byeLine = `<div class="ta-odds-bye">Bye (top 2): ${bT2Pct}% → ${aT2Pct}% <span class="${t2DCls}" style="font-size:0.75rem;">${t2DStr}</span></div>`;
+      }
+
       return `<div class="ta-odds-card">
         <div class="ta-odds-lbl">${label} — Playoff Odds</div>
         <div class="ta-odds-team" style="color:${teamColor};">${name}</div>
@@ -1193,6 +1213,7 @@
           <div class="ta-odds-bar-behind" style="width:${bPct}%;background:${bF.color};"></div>
           <div class="ta-odds-bar-front"  style="width:${aPct}%;background:${aF.color};"></div>
         </div>
+        ${byeLine}
       </div>`;
     }
 
@@ -1212,8 +1233,8 @@
       </div>
 
       <div class="ta-odds-row">
-        ${oddsCard(tA, beforeOddsA, afterOddsA, 'Team A', '#7ed07e')}
-        ${oddsCard(tB, beforeOddsB, afterOddsB, 'Team B', '#8eb8e5')}
+        ${oddsCard(tA, beforeOddsA, afterOddsA, 'Team A', '#7ed07e', beforeTop2A, afterTop2A)}
+        ${oddsCard(tB, beforeOddsB, afterOddsB, 'Team B', '#8eb8e5', beforeTop2B, afterTop2B)}
       </div>
 
       <div class="ta-step-hdr">Starting Lineups — After Trade</div>

@@ -259,6 +259,7 @@ a.row-link.ls-contender-name { color: var(--gold-light); font-weight: 700; }
 .ls-po-v2 { border: 2px solid var(--gold); padding: 1px 6px; color: var(--gold-light); border-radius: 2px; display: inline-block; line-height: 1.4; }
 /* Playoff chances labels */
 .ls-odds-pct     { font-weight: 700; }
+.ls-bye-pct      { display: block; font-size: 0.7rem; font-style: italic; color: var(--brown-light); margin-top: 2px; }
 .ls-chance-vl    { color: #5cb85c; font-weight: 700; }
 .ls-chance-lg    { color: var(--gold-light); }
 .ls-chance-nervy { color: var(--parchment); font-style: italic; }
@@ -3656,8 +3657,8 @@ function lsGaussianRandom(mu, sigma) {
 }
 
 function lsRunSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams, N = 5000) {
-  const count = {};
-  for (const t of teams) count[t.rosterId] = 0;
+  const count = {}, count2 = {};
+  for (const t of teams) { count[t.rosterId] = 0; count2[t.rosterId] = 0; }
 
   for (let sim = 0; sim < N; sim++) {
     const wins = {}, pts = {};
@@ -3686,11 +3687,12 @@ function lsRunSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, pl
       return wd !== 0 ? wd : (pts[b.rosterId] || 0) - (pts[a.rosterId] || 0);
     });
     for (let i = 0; i < Math.min(playoffTeams, ranked.length); i++) count[ranked[i].rosterId]++;
+    for (let i = 0; i < Math.min(2, ranked.length); i++) count2[ranked[i].rosterId]++;
   }
 
-  const odds = {};
-  for (const t of teams) odds[t.rosterId] = count[t.rosterId] / N;
-  return odds;
+  const odds = {}, top2 = {};
+  for (const t of teams) { odds[t.rosterId] = count[t.rosterId] / N; top2[t.rosterId] = count2[t.rosterId] / N; }
+  return { odds, top2 };
 }
 
 function lsRestoreOddsCache() {
@@ -3707,6 +3709,7 @@ function lsRestoreOddsCache() {
       const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
       if (cached && Date.now() - cached.ts < 24 * 3600 * 1000) {
         d.playoffOdds = cached.odds;
+        d.top2Odds    = cached.top2Odds;
         anyRestored = true;
       }
     } catch (_) {}
@@ -3768,6 +3771,7 @@ async function lsSimulateAllLeagues() {
           const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
           if (cached && Date.now() - cached.ts < 24 * 3600 * 1000) {
             d.playoffOdds = cached.odds;
+            d.top2Odds    = cached.top2Odds;
             return;
           }
         } catch (_) {}
@@ -3775,6 +3779,7 @@ async function lsSimulateAllLeagues() {
         if (futureWeeks.length === 0) {
           // Season is over — standings are final
           d.playoffOdds = d.standing <= d.playoffTeams ? 1.0 : 0.0;
+          d.top2Odds    = d.standing <= 2 ? 1.0 : 0.0;
           return;
         }
 
@@ -3819,11 +3824,12 @@ async function lsSimulateAllLeagues() {
         ) / Math.max(1, teams.length * futureWeeks.length);
         if (avgMu < 20) throw new Error('Projection data empty for this league');
 
-        const odds = lsRunSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, d.playoffTeams);
+        const { odds, top2 } = lsRunSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, d.playoffTeams);
         d.playoffOdds = odds[d.myRosterId] ?? null;
+        d.top2Odds    = top2[d.myRosterId] ?? null;
 
         try {
-          localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), odds: d.playoffOdds }));
+          localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), odds: d.playoffOdds, top2Odds: d.top2Odds }));
         } catch (_) {}
       } catch (e) {
         d.playoffOddsError = e.message;
@@ -4006,6 +4012,7 @@ function lsDrawTable() {
       apWins:          d?.apWins,
       apLosses:        d?.apLosses,
       playoffOdds:     d?.playoffOdds,
+      top2Odds:        d?.top2Odds,
       playoffOddsError: d?.playoffOddsError,
       crScore, crRank, crColor,
     };
@@ -4075,7 +4082,9 @@ function lsDrawTable() {
     } else if (row.playoffOdds !== undefined && row.playoffOdds !== null) {
       const pct  = Math.round(row.playoffOdds * 100);
       const hue  = Math.round(pct * 1.2); // 0→red, 100→green
-      chancesCell = `<td><span class="ls-odds-pct" style="color:hsl(${hue},70%,38%)">${pct}%</span></td>`;
+      const byeHtml = row.top2Odds != null
+        ? `<span class="ls-bye-pct">${Math.round(row.top2Odds * 100)}% bye</span>` : '';
+      chancesCell = `<td><span class="ls-odds-pct" style="color:hsl(${hue},70%,38%)">${pct}%</span>${byeHtml}</td>`;
     } else if (row.playoffOddsError) {
       chancesCell = '<td><span style="color:var(--brown-light);font-size:0.8rem;">—</span></td>';
     } else {
