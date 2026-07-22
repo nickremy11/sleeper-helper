@@ -322,9 +322,11 @@ async function handleProjections(request, env, url) {
 
   const season = Number(url.searchParams.get('season')) || PROJ_SEASON_DEFAULT;
 
-  if (sub === 'players')  return handleProjPlayers(request, env, cors, user, season);
-  if (sub === 'teams')    return handleProjTeams(request, env, cors, user, season);
-  if (sub === 'ppg')      return handleProjPpg(request, env, cors, user, season);
+  if (sub === 'players')          return handleProjPlayers(request, env, cors, user, season);
+  if (sub === 'teams')            return handleProjTeams(request, env, cors, user, season);
+  if (sub === 'ppg')              return handleProjPpg(request, env, cors, user, season, url);
+  if (sub === 'scoring-presets')  return handleProjScoringPresets(request, env, cors, user);
+  if (sub === 'scores')           return handleProjScores(request, env, cors, user, season, url);
 
   return new Response('Not found', { status: 404, headers: cors });
 }
@@ -437,15 +439,96 @@ async function handleProjTeams(request, env, cors, user, season) {
   return new Response('Method not allowed', { status: 405, headers: cors });
 }
 
-async function handleProjPpg(request, env, cors, user, season) {
+// Without ?preset=, returns the same thing it always has: whatever scoring was
+// active in the projections app the last time each player was saved. With
+// ?preset=, reads the separate per-preset table instead — populated by that
+// app's "Recompute" action, not by normal team saves.
+async function handleProjPpg(request, env, cors, user, season, url) {
+  const preset = url?.searchParams.get('preset') || '';
+  const map = {};
+  if (preset) {
+    const rows = await env.DB.prepare(
+      'SELECT player_name, calc_ppg FROM player_projection_scores WHERE user_id = ? AND season = ? AND preset = ?'
+    ).bind(user.user_id, season, preset).all();
+    for (const r of (rows.results || [])) {
+      if (r.calc_ppg != null) map[r.player_name] = r.calc_ppg;
+    }
+    return projJson(map, cors);
+  }
   const rows = await env.DB.prepare(
     'SELECT player_name, calc_ppg FROM player_projections WHERE user_id = ? AND season = ?'
   ).bind(user.user_id, season).all();
-  const map = {};
   for (const r of (rows.results || [])) {
     if (r.calc_ppg != null) map[r.player_name] = r.calc_ppg;
   }
   return projJson(map, cors);
+}
+
+// Named scoring presets (definitions only — weights, not computed numbers) so
+// other origins (the Draft Tracker) can list what presets exist at all; these
+// previously lived only in the projections app's own browser localStorage.
+async function handleProjScoringPresets(request, env, cors, user) {
+  if (request.method === 'GET') {
+    const rows = await env.DB.prepare(
+      'SELECT preset, scoring FROM scoring_presets WHERE user_id = ? ORDER BY preset'
+    ).bind(user.user_id).all();
+    const presets = (rows.results || []).map(r => ({ preset: r.preset, scoring: safeParse(r.scoring, {}) }));
+    return projJson({ presets }, cors);
+  }
+
+  if (request.method === 'POST') {
+    let body;
+    try { body = await request.json(); } catch { return new Response('Invalid JSON', { status: 400, headers: cors }); }
+    const preset = body.preset;
+    if (!preset || typeof preset !== 'string') return new Response('preset name required', { status: 400, headers: cors });
+    await env.DB.prepare(
+      `INSERT INTO scoring_presets (user_id, preset, scoring, updated_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(user_id, preset) DO UPDATE SET scoring=excluded.scoring, updated_at=excluded.updated_at`
+    ).bind(user.user_id, preset, JSON.stringify(body.scoring || {}), Date.now()).run();
+    return projJson({ ok: true }, cors);
+  }
+
+  if (request.method === 'DELETE') {
+    let body;
+    try { body = await request.json(); } catch { return new Response('Invalid JSON', { status: 400, headers: cors }); }
+    if (!body.preset) return new Response('preset required', { status: 400, headers: cors });
+    await env.DB.prepare('DELETE FROM scoring_presets WHERE user_id = ? AND preset = ?')
+      .bind(user.user_id, body.preset).run();
+    // Also drop any computed scores under that name (all seasons) so a deleted
+    // preset doesn't leave orphaned, unlistable numbers behind.
+    await env.DB.prepare('DELETE FROM player_projection_scores WHERE user_id = ? AND preset = ?')
+      .bind(user.user_id, body.preset).run();
+    return projJson({ ok: true }, cors);
+  }
+
+  return new Response('Method not allowed', { status: 405, headers: cors });
+}
+
+// Bulk upsert of PPG/points computed under one named preset — the projections
+// app's "Recompute" action re-runs its existing calc engine over already-saved
+// team/player inputs with that preset's scoring swapped in, then posts the
+// results here in one shot rather than requiring every team to be re-saved.
+async function handleProjScores(request, env, cors, user, season, url) {
+  if (request.method !== 'POST') return new Response('Method not allowed', { status: 405, headers: cors });
+  let body;
+  try { body = await request.json(); } catch { return new Response('Invalid JSON', { status: 400, headers: cors }); }
+  const preset = body.preset;
+  const scores = Array.isArray(body.scores) ? body.scores : [];
+  if (!preset || typeof preset !== 'string') return new Response('preset name required', { status: 400, headers: cors });
+
+  const now = Date.now();
+  const stmts = scores.filter(s => s.player_name).map(s => env.DB.prepare(
+    `INSERT INTO player_projection_scores (user_id, player_name, season, preset, calc_ppg, calc_pts, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, player_name, season, preset) DO UPDATE SET
+       calc_ppg=excluded.calc_ppg, calc_pts=excluded.calc_pts, updated_at=excluded.updated_at`
+  ).bind(user.user_id, s.player_name, season, preset, s.calc_ppg ?? null, s.calc_pts ?? null, now));
+
+  for (let i = 0; i < stmts.length; i += 50) {
+    await env.DB.batch(stmts.slice(i, i + 50));
+  }
+  return projJson({ ok: true, saved: stmts.length }, cors);
 }
 
 // ── External projection sets (PDF scrapers) ───────────────────────────────────

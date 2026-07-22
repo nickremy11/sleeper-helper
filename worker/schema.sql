@@ -159,3 +159,33 @@ CREATE TABLE IF NOT EXISTS team_projections (
 );
 
 CREATE INDEX IF NOT EXISTS idx_team_proj_user ON team_projections(user_id, season);
+
+-- Named scoring presets (e.g. "PPR", "Half-PPR", "Dynasty SF"), synced from the
+-- projections app's scoring modal so other origins (e.g. the Draft Tracker on
+-- helper.ffhistorian.com) can list them — these previously only lived in that
+-- app's own browser localStorage and were invisible cross-origin.
+CREATE TABLE IF NOT EXISTS scoring_presets (
+  user_id    TEXT    NOT NULL,
+  preset     TEXT    NOT NULL,  -- preset name, used as its own key
+  scoring    TEXT    NOT NULL,  -- JSON: the SCORING weights for this preset
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, preset)
+);
+
+-- Per-preset computed PPG/points, separate from player_projections.calc_ppg
+-- (which always holds whatever scoring was active at last save — unchanged,
+-- for backward compatibility). Populated by the projections app's "Recompute"
+-- action, which re-runs its existing calc engine over already-saved inputs
+-- under a chosen preset's weights — no re-entry of inputs required.
+CREATE TABLE IF NOT EXISTS player_projection_scores (
+  user_id     TEXT    NOT NULL,
+  player_name TEXT    NOT NULL,
+  season      INTEGER NOT NULL,
+  preset      TEXT    NOT NULL,
+  calc_ppg    REAL,
+  calc_pts    REAL,
+  updated_at  INTEGER NOT NULL,
+  PRIMARY KEY (user_id, player_name, season, preset)
+);
+
+CREATE INDEX IF NOT EXISTS idx_player_proj_scores_lookup ON player_projection_scores(user_id, season, preset);

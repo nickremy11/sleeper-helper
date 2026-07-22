@@ -2283,6 +2283,10 @@ const T = {
   view: 'board',      // 'board' | 'list'
   leagueAdp: null,    // {map: {sleeper_id: adp}, suffix, label, season} for the selected draft's own league format
   hideDrafted: false, // list view only: hide picked players instead of just crossing them off
+  myProj: null,       // {map: {sleeper_id: ppg}, season} from the logged-in user's saved projections, if any
+  myProjPresets: [],  // preset names available on the account (from projections.ffhistorian.com)
+  myProjPreset: '',   // '' = default (whatever was active at last save); otherwise a preset name
+  myProjSeason: null, // season used for the My Proj fetch, needed by the preset dropdown's onchange
 };
 
 function toggleHideDrafted() {
@@ -2365,6 +2369,50 @@ function applyLeagueAdp() {
     resaveTrackerRankings();
     renderTrackerBody();
   }
+}
+
+// Pull the logged-in user's own saved projections (projections.ffhistorian.com)
+// in for the list view's "My Proj" column. Only meaningful once we know the
+// season, so it fires alongside the league ADP lookup when a draft is selected.
+// Stays null (column omitted entirely) if the account isn't logged in or has
+// no saved projections for the season/preset.
+async function loadMyProjections(season, preset) {
+  T.myProj = null;
+  if (!S.auth) { renderTrackerBody(); return; }
+  try {
+    await loadPlayers();
+    const presetParam = preset ? `&preset=${encodeURIComponent(preset)}` : '';
+    const res = await fetch(`/api/projections/ppg?season=${season}${presetParam}`, { credentials: 'include' });
+    if (!res.ok) { renderTrackerBody(); return; }
+    const data = await res.json();
+    const map = {};
+    for (const [name, ppg] of Object.entries(data || {})) {
+      const pid = S._playersByName[normName(name)];
+      if (pid && typeof ppg === 'number') map[pid] = ppg;
+    }
+    if (Object.keys(map).length) T.myProj = { map, season, preset: preset || '' };
+    renderTrackerBody();
+  } catch (_) { renderTrackerBody(); }
+}
+
+// List of named scoring presets saved on the account (via the projections
+// app's "Recompute for Draft Tracker" action) — powers the preset dropdown
+// in the list view. Empty when logged out or no presets exist yet.
+async function loadMyProjectionPresets() {
+  T.myProjPresets = [];
+  if (!S.auth) return;
+  try {
+    const res = await fetch('/api/projections/scoring-presets', { credentials: 'include' });
+    if (!res.ok) return;
+    const data = await res.json();
+    T.myProjPresets = (data.presets || []).map(p => p.preset).filter(Boolean);
+    renderTrackerBody();
+  } catch (_) {}
+}
+
+function setMyProjPreset(preset, season) {
+  T.myProjPreset = preset;
+  loadMyProjections(season, preset);
 }
 
 const TRACKER_STORE_KEY = 'tracker_saved_rankings';
@@ -2630,7 +2678,12 @@ function loadCSV(event) {
 
 async function selectDraft(draftId) {
   if (T.pollTimer) { clearInterval(T.pollTimer); T.pollTimer = null; }
-  if (!draftId) { T.draft = null; T.picked.clear(); loadDraftLeagueAdp(null); renderTrackerBody(); return; }
+  if (!draftId) {
+    T.draft = null; T.picked.clear(); loadDraftLeagueAdp(null);
+    T.myProj = null; T.myProjPresets = []; T.myProjPreset = ''; T.myProjSeason = null;
+    renderTrackerBody();
+    return;
+  }
   const st = document.getElementById('draft-status');
   st.textContent = 'Loading picks…'; st.className = 'setup-status';
   try {
@@ -2649,6 +2702,13 @@ async function selectDraft(draftId) {
     // dynasty/redraft, PPR/half/standard) and backfills T.rankings' ADP
     // column once it lands — doesn't block the pick sync above.
     loadDraftLeagueAdp(T.draft?.league_id);
+    // Same trigger point: also pull the logged-in user's own saved projections
+    // for the list view's "My Proj" column, if any exist for this season.
+    const projSeason = T.draft?.season || S.nflState?.league_create_season || S.nflState?.season || new Date().getFullYear().toString();
+    T.myProjSeason = projSeason;
+    T.myProjPreset = '';
+    loadMyProjections(projSeason);
+    loadMyProjectionPresets();
   } catch(e) { st.textContent = 'Error: ' + e.message; st.className = 'setup-status err'; }
 }
 
@@ -2833,6 +2893,11 @@ function renderTrackerListHtml(visible, hasTiers, SKIP_POS) {
   const draftedCount = visible.filter(p => T.picked.has(String(p.sleeper_id))).length;
   const rowsSource = T.hideDrafted ? visible.filter(p => !T.picked.has(String(p.sleeper_id))) : visible;
 
+  // "My Proj" only appears once the account actually has saved projections —
+  // otherwise the column is omitted entirely rather than shown empty.
+  const showMyProj = !!(T.myProj?.map && Object.keys(T.myProj.map).length);
+  const colCount = showMyProj ? 10 : 9;
+
   const rows = [...rowsSource].sort((a, b) => (aggRank(a) ?? Infinity) - (aggRank(b) ?? Infinity)).map(p => {
     const isPicked = T.picked.has(String(p.sleeper_id));
     const isTarget = p.sleeper_id && T.targets.has(String(p.sleeper_id));
@@ -2851,6 +2916,8 @@ function renderTrackerListHtml(visible, hasTiers, SKIP_POS) {
       : d === 0 ? '<span class="tl-diff-even">even</span>'
       : d > 0 ? `<span class="tl-diff-better">▲ +${d.toFixed(1)}</span>`
       : `<span class="tl-diff-worse">▼ ${d.toFixed(1)}</span>`;
+    const myProjVal = T.myProj?.map?.[p.sleeper_id];
+    const myProjTd = showMyProj ? `<td>${typeof myProjVal === 'number' ? myProjVal.toFixed(1) : '—'}</td>` : '';
     return `<tr class="${rowCls}" ${clickable}>
       <td class="tl-name">${isTarget ? '<span class="tp-star">★</span> ' : ''}${esc(p.name)}</td>
       <td style="color:${posColor};font-weight:600;">${esc(p.pos || '—')}</td>
@@ -2858,23 +2925,37 @@ function renderTrackerListHtml(visible, hasTiers, SKIP_POS) {
       <td>${p.tier ? esc(String(p.tier)) : '—'}</td>
       <td>${rk != null ? rk : '—'}</td>
       <td>${adpNum != null ? adpNum : '—'}</td>
+      ${myProjTd}
       <td>${pr ? esc(p.pos) + pr : '—'}</td>
       <td>${par ? esc(p.pos) + par : '—'}</td>
       <td>${diffHtml}</td>
     </tr>`;
   }).join('');
 
-  const hideToggleHtml = `<div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-bottom:8px;">
-    ${draftedCount ? `<span class="card-meta">${draftedCount} drafted ${T.hideDrafted ? 'hidden' : 'shown'}</span>` : ''}
-    <button class="pos-pill ${T.hideDrafted?'active':''}" onclick="toggleHideDrafted()">${T.hideDrafted ? 'Show Drafted' : 'Hide Drafted'}</button>
+  // Only worth showing once the account actually has named presets to pick
+  // from (via the projections app's "Recompute for Draft Tracker" action).
+  const presetPickerHtml = T.myProjPresets.length ? `<div style="display:flex;align-items:center;gap:6px;">
+    <span class="card-meta">My Proj:</span>
+    <select class="tracker-select" style="padding:5px 24px 5px 8px;" onchange="setMyProjPreset(this.value, '${esc(String(T.myProjSeason || ''))}')">
+      <option value="" ${T.myProjPreset === '' ? 'selected' : ''}>Default</option>
+      ${T.myProjPresets.map(p => `<option value="${esc(p)}" ${T.myProjPreset === p ? 'selected' : ''}>${esc(p)}</option>`).join('')}
+    </select>
+  </div>` : '<div></div>';
+
+  const hideToggleHtml = `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+    ${presetPickerHtml}
+    <div style="display:flex;align-items:center;gap:8px;">
+      ${draftedCount ? `<span class="card-meta">${draftedCount} drafted ${T.hideDrafted ? 'hidden' : 'shown'}</span>` : ''}
+      <button class="pos-pill ${T.hideDrafted?'active':''}" onclick="toggleHideDrafted()">${T.hideDrafted ? 'Show Drafted' : 'Hide Drafted'}</button>
+    </div>
   </div>`;
 
   return `${hideToggleHtml}<div style="overflow-x:auto;">
     <table class="tl-table">
       <thead><tr>
-        <th>Player</th><th>Pos</th><th>Team</th><th>Tier</th><th>Rank</th><th>ADP</th><th>Pos Rank</th><th>Pos ADP</th><th>vs ADP</th>
+        <th>Player</th><th>Pos</th><th>Team</th><th>Tier</th><th>Rank</th><th>ADP</th>${showMyProj ? '<th>My Proj</th>' : ''}<th>Pos Rank</th><th>Pos ADP</th><th>vs ADP</th>
       </tr></thead>
-      <tbody>${rows || '<tr><td colspan="9" style="text-align:center;font-style:italic;color:var(--brown-light);padding:16px;">No players match the current filters</td></tr>'}</tbody>
+      <tbody>${rows || `<tr><td colspan="${colCount}" style="text-align:center;font-style:italic;color:var(--brown-light);padding:16px;">No players match the current filters</td></tr>`}</tbody>
     </table>
   </div>`;
 }
