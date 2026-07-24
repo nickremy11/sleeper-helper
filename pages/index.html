@@ -306,6 +306,9 @@ a.row-link.ls-contender-name { color: var(--gold-light); font-weight: 700; }
 .pf-compare-wrap { padding: 0 14px 14px; border-top: 1px solid var(--brown-mid); }
 .pf-compare-header-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 10px 0 6px; margin-bottom: 8px; }
 .pf-compare-col-header { font-family: 'Rye', serif; font-size: 0.45rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--gold); }
+.pf-compare-footer { display: flex; gap: 10px; flex-wrap: wrap; padding-top: 10px; margin-top: 8px; border-top: 1px dashed rgba(255,255,255,0.08); }
+.pf-compare-link { flex: 1; min-width: 140px; text-align: center; background: none; border: 1px solid var(--brown-mid); color: var(--brown-light); font-family: 'Rye', serif; font-size: 0.48rem; letter-spacing: 0.12em; text-transform: uppercase; padding: 7px 10px; border-radius: 2px; text-decoration: none; transition: border-color 0.2s, color 0.2s; }
+.pf-compare-link:hover { border-color: var(--gold); color: var(--gold); }
 .pf-pos-section { margin-bottom: 10px; }
 .pf-pos-label-row { padding: 5px 0 4px; border-bottom: 1px dashed rgba(255,255,255,0.08); margin-bottom: 4px; }
 .pf-pos-content-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -484,7 +487,8 @@ const PF = {
   myPid:         null,   // player 2 — the player I'm filtering by (what I'd offer)
   allRosterData: null,   // [{lg, rs, uMap}] from the initial fetch
   fcMap:         null,   // FantasyCalc values (lazy-loaded on first comparison open)
-  expanded:      null,   // lgId of currently expanded comparison panel
+  expanded:      null,   // lgId of currently expanded Trade Targets comparison panel
+  expandedOther: null,   // lgId of currently expanded "On other rosters" comparison panel
 };
 
 // ── Waivers state ─────────────────────────────────────────────────────────────
@@ -1078,10 +1082,14 @@ function pfRenderResults() {
         <span style="display:flex;align-items:center;gap:6px;">${injuryBadge(player.injury_status)}<span class="badge ${f.starter?'badge-green':'badge-outline'}">${f.starter?'Starting':'Bench'}</span></span>
       </div>`).join('')}</div>` : ''}
 
-    ${theirs.length ? `<div class="sect">On other rosters</div><div class="pf-theirs">${theirs.map(f=>`
-      <div class="data-row">
-        <a href="https://sleeper.com/leagues/${esc(f.lgId)}" target="_blank" class="row-link">${esc(f.lgName)}</a>
-        <span class="card-meta">${esc(f.ownerName)}</span>
+    ${theirs.length ? `<div class="sect">On other rosters</div><div class="pf-trade-list">${theirs.map(f => `
+      <div class="pf-trade-card" id="pf-or-tc-${esc(f.lgId)}">
+        <div class="pf-trade-header" onclick="pfToggleOtherRoster('${esc(f.lgId)}', ${f.theirRosterId})">
+          <span class="pf-trade-chevron" id="pf-or-chev-${esc(f.lgId)}">›</span>
+          <span style="font-family:'Crimson Text',serif;font-size:0.95rem;color:var(--parchment);">${esc(f.lgName)}</span>
+          <span class="card-meta">${esc(f.ownerName)}</span>
+        </div>
+        <div id="pf-or-compare-${esc(f.lgId)}" style="display:none;"></div>
       </div>`).join('')}</div>` : ''}
 
     ${free.length ? `<div class="sect">Free agent in</div><div class="pf-free">${free.map(f=>`
@@ -1112,6 +1120,50 @@ function pfTradeTargetsHtml(targets, targetPlayer, myPlayer) {
   </div>`;
 }
 
+async function pfLoadComparisonData(lgId, theirRosterId) {
+  await loadPlayers();
+
+  // Lazy-load FC values
+  if (!PF.fcMap) {
+    const fc = await fetch('/api/fantasycalc').then(r => r.ok ? r.json() : []);
+    PF.fcMap = {};
+    for (const item of (Array.isArray(fc) ? fc : [])) {
+      const sid = item.player?.sleeperId || item.player?.maybeSleeperID;
+      if (sid) PF.fcMap[String(sid)] = item.value ?? 0;
+    }
+  }
+
+  const rd = PF.allRosterData?.find(d => d?.lg?.league_id === lgId);
+  if (!rd) throw new Error('League data not found');
+
+  const myRoster    = rd.rs.find(r => r.owner_id === S.userId);
+  const theirRoster = rd.rs.find(r => r.roster_id === theirRosterId);
+  if (!myRoster || !theirRoster) throw new Error('Could not locate rosters');
+
+  const nflSeason = S.nflState?.season || new Date().getFullYear().toString();
+  let tradedPicks = [], ridToSlot = null;
+  try {
+    const [draftsRes, tradedRes] = await Promise.all([
+      fetch(`/api/sleeper/league/${lgId}/drafts`),
+      fetch(`/api/sleeper/league/${lgId}/traded_picks`),
+    ]);
+    tradedPicks = tradedRes.ok  ? (await tradedRes.json()  || []) : [];
+    const drafts = draftsRes.ok ? (await draftsRes.json() || []) : [];
+    const curDraft = drafts.find(d => d.season === nflSeason);
+    const rawSlots = curDraft?.slot_to_roster_id;
+    if (rawSlots && Object.keys(rawSlots).length > 0) {
+      ridToSlot = {};
+      for (const [slot, rid] of Object.entries(rawSlots)) ridToSlot[String(rid)] = parseInt(slot);
+    }
+  } catch { /* picks won't be shown */ }
+
+  const myData    = pfBuildRosterData(myRoster,    rd.rs, tradedPicks, ridToSlot, nflSeason);
+  const theirData = pfBuildRosterData(theirRoster, rd.rs, tradedPicks, ridToSlot, nflSeason);
+  const theirName = rd.uMap[theirRoster.owner_id] || 'Opponent';
+
+  return { myData, theirData, theirName };
+}
+
 async function pfToggleComparison(lgId, theirRosterId) {
   const container = document.getElementById(`pf-compare-${lgId}`);
   const chevron   = document.getElementById(`pf-chev-${lgId}`);
@@ -1138,47 +1190,41 @@ async function pfToggleComparison(lgId, theirRosterId) {
   container.innerHTML = `<div class="pf-compare-wrap">${loading('Loading rosters…')}</div>`;
 
   try {
-    await loadPlayers();
+    const { myData, theirData, theirName } = await pfLoadComparisonData(lgId, theirRosterId);
+    container.innerHTML = pfCompareHtml(myData, theirData, theirName, lgId, theirRosterId);
+  } catch(e) {
+    container.innerHTML = `<div class="pf-compare-wrap">${errHtml(e)}</div>`;
+  }
+}
 
-    // Lazy-load FC values
-    if (!PF.fcMap) {
-      const fc = await fetch('/api/fantasycalc').then(r => r.ok ? r.json() : []);
-      PF.fcMap = {};
-      for (const item of (Array.isArray(fc) ? fc : [])) {
-        const sid = item.player?.sleeperId || item.player?.maybeSleeperID;
-        if (sid) PF.fcMap[String(sid)] = item.value ?? 0;
-      }
-    }
+async function pfToggleOtherRoster(lgId, theirRosterId) {
+  const container = document.getElementById(`pf-or-compare-${lgId}`);
+  const chevron   = document.getElementById(`pf-or-chev-${lgId}`);
+  if (!container) return;
 
-    const rd = PF.allRosterData?.find(d => d?.lg?.league_id === lgId);
-    if (!rd) throw new Error('League data not found');
+  if (PF.expandedOther === lgId) {
+    PF.expandedOther = null;
+    container.style.display = 'none';
+    if (chevron) { chevron.textContent = '›'; chevron.classList.remove('open'); }
+    return;
+  }
 
-    const myRoster    = rd.rs.find(r => r.owner_id === S.userId);
-    const theirRoster = rd.rs.find(r => r.roster_id === theirRosterId);
-    if (!myRoster || !theirRoster) throw new Error('Could not locate rosters');
+  // Close previously expanded panel
+  if (PF.expandedOther) {
+    const prev = document.getElementById(`pf-or-compare-${PF.expandedOther}`);
+    const prevChev = document.getElementById(`pf-or-chev-${PF.expandedOther}`);
+    if (prev) prev.style.display = 'none';
+    if (prevChev) { prevChev.textContent = '›'; prevChev.classList.remove('open'); }
+  }
 
-    const nflSeason = S.nflState?.season || new Date().getFullYear().toString();
-    let tradedPicks = [], ridToSlot = null;
-    try {
-      const [draftsRes, tradedRes] = await Promise.all([
-        fetch(`/api/sleeper/league/${lgId}/drafts`),
-        fetch(`/api/sleeper/league/${lgId}/traded_picks`),
-      ]);
-      tradedPicks = tradedRes.ok  ? (await tradedRes.json()  || []) : [];
-      const drafts = draftsRes.ok ? (await draftsRes.json() || []) : [];
-      const curDraft = drafts.find(d => d.season === nflSeason);
-      const rawSlots = curDraft?.slot_to_roster_id;
-      if (rawSlots && Object.keys(rawSlots).length > 0) {
-        ridToSlot = {};
-        for (const [slot, rid] of Object.entries(rawSlots)) ridToSlot[String(rid)] = parseInt(slot);
-      }
-    } catch { /* picks won't be shown */ }
+  PF.expandedOther = lgId;
+  container.style.display = 'block';
+  if (chevron) { chevron.textContent = '›'; chevron.classList.add('open'); }
+  container.innerHTML = `<div class="pf-compare-wrap">${loading('Loading rosters…')}</div>`;
 
-    const myData    = pfBuildRosterData(myRoster,    rd.rs, tradedPicks, ridToSlot, nflSeason);
-    const theirData = pfBuildRosterData(theirRoster, rd.rs, tradedPicks, ridToSlot, nflSeason);
-    const theirName = rd.uMap[theirRoster.owner_id] || 'Opponent';
-
-    container.innerHTML = pfCompareHtml(myData, theirData, theirName);
+  try {
+    const { myData, theirData, theirName } = await pfLoadComparisonData(lgId, theirRosterId);
+    container.innerHTML = pfCompareHtml(myData, theirData, theirName, lgId, theirRosterId);
   } catch(e) {
     container.innerHTML = `<div class="pf-compare-wrap">${errHtml(e)}</div>`;
   }
@@ -1222,7 +1268,7 @@ function pfBuildRosterData(roster, allRosters, tradedPicks, ridToSlot, nflSeason
   return { groups };
 }
 
-function pfCompareHtml(myData, theirData, theirName) {
+function pfCompareHtml(myData, theirData, theirName, lgId, theirRosterId) {
   const POS_ORDER = ['QB','RB','WR','TE','PICK'];
   const posColorClass = { QB:'rs-pos-QB', RB:'rs-pos-RB', WR:'rs-pos-WR', TE:'rs-pos-TE', PICK:'rs-pos-PICK' };
 
@@ -1254,6 +1300,10 @@ function pfCompareHtml(myData, theirData, theirName) {
       <div class="pf-compare-col-header">${esc(theirName)}'s Roster</div>
     </div>
     ${sections}
+    <div class="pf-compare-footer">
+      <a href="https://sleeper.com/leagues/${esc(lgId)}" target="_blank" class="pf-compare-link">View League on Sleeper</a>
+      <a href="/trade-analyzer?league=${encodeURIComponent(lgId)}&b=${theirRosterId}" target="_blank" class="pf-compare-link">Open in Trade Analyzer ⇄</a>
+    </div>
   </div>`;
 }
 
