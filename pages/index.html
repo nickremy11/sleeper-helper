@@ -2502,7 +2502,7 @@ function renderDraftTracker() {
 
     <div class="setup-card" style="margin-bottom:20px;">
       <div style="margin-bottom:14px;">
-        <label class="setup-label-rye">Rankings CSV <span class="setup-label-sub">— columns: name, position, team, rank, sleeper_id (optional), tier (optional), adp (optional), target (optional)</span></label>
+        <label class="setup-label-rye">Rankings CSV <span class="setup-label-sub">— needs a name column plus a rank and/or tier column; position, team, sleeper_id, adp, target are optional. Columns can be in any order and headers don't need to match exactly.</span></label>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <input type="file" id="csv-file" accept=".csv" style="color:var(--cream);font-family:'Crimson Text',serif;font-size:0.9rem;flex:1;" onchange="loadCSV(event)" />
           <button class="setup-btn" onclick="loadSleeperADP()">Use Sleeper ADP</button>
@@ -2645,6 +2645,75 @@ async function loadSleeperADP() {
   } catch(e) { st.textContent = 'Error: ' + e.message; st.className = 'setup-status err'; }
 }
 
+// Damerau-Levenshtein edit distance (adjacent transposition counts as a single
+// edit, like plain substitution/insert/delete) — used to tolerate minor
+// misspellings/variants in CSV headers (e.g. "Postion", "Rnak", "Ranking")
+// when an exact synonym match fails. Transposition matters here since it's
+// one of the most common typo patterns (swapped adjacent letters).
+function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1]
+        : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+      if (i > 1 && j > 1 && a[i-1] === b[j-2] && a[i-2] === b[j-1]) {
+        dp[i][j] = Math.min(dp[i][j], dp[i-2][j-2] + 1);
+      }
+    }
+  }
+  return dp[m][n];
+}
+
+// Known header spellings per field, normalized (lowercase, alphanumeric only)
+// at match time. Position/team/rank/tier/id/adp/target intentionally have no
+// positional fallback if unmatched — a wrong guess (e.g. grabbing the tier
+// column as rank) silently produces bogus data, so an unmatched field is left
+// absent rather than guessed.
+const CSV_FIELD_SYNONYMS = {
+  name:     ['name','player','playername','fullname'],
+  position: ['position','pos'],
+  team:     ['team','tm','nflteam'],
+  rank:     ['rank','rk','overallrank','overall','ranking'],
+  tier:     ['tier','tiers','tierlevel'],
+  id:       ['sleeperid','playerid','id'],
+  adp:      ['adp'],
+  target:   ['target','targets','targeted'],
+};
+
+// Maps CSV header cells to known fields regardless of column order, first by
+// exact synonym match, then (for anything left unresolved) by closest fuzzy
+// match — so slightly relabeled or reordered headers still get picked up.
+function matchCsvColumns(headerCells) {
+  const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const cells = headerCells.map(norm);
+  const used = new Set();
+  const result = {};
+  const fields = Object.keys(CSV_FIELD_SYNONYMS);
+  for (const field of fields) {
+    const i = cells.findIndex((c, idx) => !used.has(idx) && CSV_FIELD_SYNONYMS[field].includes(c));
+    if (i >= 0) { result[field] = i; used.add(i); }
+  }
+  for (const field of fields) {
+    if (result[field] !== undefined) continue;
+    let best = -1, bestDist = Infinity;
+    cells.forEach((c, idx) => {
+      if (used.has(idx) || !c) return;
+      for (const syn of CSV_FIELD_SYNONYMS[field]) {
+        const dist = levenshtein(c, syn);
+        const threshold = Math.max(1, Math.floor(syn.length / 3));
+        if (dist <= threshold && dist < bestDist) { bestDist = dist; best = idx; }
+      }
+    });
+    if (best >= 0) { result[field] = best; used.add(best); }
+  }
+  return result;
+}
+
 function loadCSV(event) {
   const file = event.target.files[0];
   if (!file) return;
@@ -2654,33 +2723,32 @@ function loadCSV(event) {
     try {
       await loadPlayers();
       const lines = e.target.result.split('\n').map(l => l.trim()).filter(Boolean);
-      const header = lines[0].toLowerCase().split(',').map(h => h.trim().replace(/"/g,''));
-      const idx = (name) => header.indexOf(name);
-      // Support flexible column names.
-      // Fallback positional order (name, position, team, rank, tier, adp) only
-      // applies to display fields — the ID column is never positionally guessed,
-      // see iId below.
-      const iName = idx('name') >= 0 ? idx('name') : idx('player') >= 0 ? idx('player') : 0;
-      const iPos  = idx('position') >= 0 ? idx('position') : idx('pos') >= 0 ? idx('pos') : 1;
-      const iTeam = idx('team') >= 0 ? idx('team') : 2;
-      const iRank = idx('rank') >= 0 ? idx('rank') : 3;
-      // No positional fallback for the ID column — an absent sleeper_id/player_id
-      // header must fall through to name-based matching below, never guess a
-      // column index (a wrong guess silently produces bogus "IDs" that collide,
-      // e.g. grabbing the tier column and merging every player in a tier).
-      const iId   = idx('sleeper_id') >= 0 ? idx('sleeper_id') : idx('player_id') >= 0 ? idx('player_id') : -1;
-      const iTier = idx('tier') >= 0 ? idx('tier') : 5;
-      // Same reasoning as iId above: an absent 'adp' header must fall through
-      // to the Sleeper ADP lookup below, never guess a column index.
-      const iAdp  = idx('adp') >= 0 ? idx('adp') : -1;
-      const iTarget = idx('target') >= 0 ? idx('target') : idx('targets') >= 0 ? idx('targets') : -1;
+      const headerCells = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g,''));
+      const m = matchCsvColumns(headerCells);
+      // Name has a positional fallback (first column) since it's always
+      // required; every other field is left absent (-1) if unmatched.
+      const iName   = m.name ?? 0;
+      const iPos    = m.position ?? -1;
+      const iTeam   = m.team ?? -1;
+      const iRank   = m.rank ?? -1;
+      const iTier   = m.tier ?? -1;
+      const iId     = m.id ?? -1;
+      const iAdp    = m.adp ?? -1;
+      const iTarget = m.target ?? -1;
+      if (iRank < 0 && iTier < 0) {
+        throw new Error("couldn't find a rank or tier column");
+      }
+      // Whether every row gets its own individually-meaningful rank (from the
+      // file) vs. only a tier — drives whether the list view shows that raw
+      // rank or falls back to a tier-averaged one (see renderTrackerListHtml).
+      const hasFileRank = iRank >= 0;
 
       const parsed = [];
       const targets = new Set();
       for (let i = 1; i < lines.length; i++) {
         const cols = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g,''));
         if (!cols[iName]) continue;
-        const team = normTeamAbbr(cols[iTeam]);
+        const team = normTeamAbbr(iTeam >= 0 ? cols[iTeam] : '');
         // Sleeper player IDs are always numeric strings — reject anything else
         // (e.g. a mis-mapped column) so it falls through to name matching.
         let sleeperId = (iId >= 0 && /^\d+$/.test(cols[iId] || '')) ? cols[iId] : '';
@@ -2703,15 +2771,17 @@ function loadCSV(event) {
         // column isn't just blank for rankings files that don't track it.
         const csvAdp = iAdp >= 0 ? cols[iAdp] : '';
         const fallbackAdp = sleeperId ? ((T.leagueAdp?.map?.[sleeperId]) ?? (S.players[sleeperId]?.search_rank ?? '')) : '';
+        const csvRank = iRank >= 0 ? parseInt(cols[iRank]) : NaN;
         parsed.push({
-          rank: parseInt(cols[iRank]) || i,
+          rank: Number.isFinite(csvRank) ? csvRank : i,
           name: canonicalName || cols[iName],
-          pos:  (cols[iPos] || '').toUpperCase(),
+          pos:  (iPos >= 0 ? cols[iPos] : '').toUpperCase(),
           team: team || '',
           sleeper_id: sleeperId,
           adp:  csvAdp !== '' ? csvAdp : fallbackAdp,
           _adpFromFile: csvAdp !== '',
           tier: iTier >= 0 ? cols[iTier] : '',
+          _rankFromFile: hasFileRank,
         });
       }
       T.rankings = parsed;
@@ -2800,6 +2870,7 @@ function renderTrackerBody() {
   const teams    = T.draft?.settings?.teams ?? 12;
   const type     = T.draft?.type ?? 'snake';
   const hasTiers = T.rankings.some(p => p.tier && p.tier !== '');
+  const hasFileRank = T.rankings.some(p => p._rankFromFile);
 
   const posClass = p => ({ QB:'pos-qb', RB:'pos-rb', WR:'pos-wr', TE:'pos-te', DEF:'pos-def' })[p] || '';
 
@@ -2854,7 +2925,7 @@ function renderTrackerBody() {
   let mainHtml = '';
 
   if (T.view === 'list') {
-    mainHtml = renderTrackerListHtml(visible, hasTiers, SKIP_POS);
+    mainHtml = renderTrackerListHtml(visible, hasTiers, SKIP_POS, hasFileRank);
   } else if (T.posFilter === 'ALL' && !T.targetsOnly && T.draft) {
     // Snake grid: rows of `teams` with direction arrows
     const rows = [];
@@ -2898,16 +2969,19 @@ const TL_POS_COLORS = { QB:'#e05252', RB:'#5cb85c', WR:'#5bc0de', TE:'#e8734b', 
 // List view: every loaded player as a row (position, team, tier, aggregate
 // rank, Sleeper ADP, position rank, position ADP, and a colored my-rank-vs-ADP
 // indicator), still crossed off as they're drafted.
-function renderTrackerListHtml(visible, hasTiers, SKIP_POS) {
+function renderTrackerListHtml(visible, hasTiers, SKIP_POS, hasFileRank) {
   const numRank = p => { const n = parseFloat(p.rank); return Number.isFinite(n) ? n : Infinity; };
   const numAdp  = p => { const n = parseFloat(p.adp);  return Number.isFinite(n) ? n : null; };
   const rowKey  = p => p.sleeper_id || p.name;
 
   // Aggregate rank: within a tier, every player shares that tier's average raw
   // rank (rounded) rather than their own individual rank — computed over the
-  // full rankings list so it doesn't shift as filters change.
+  // full rankings list so it doesn't shift as filters change. Skipped entirely
+  // when the CSV supplied its own per-player rank (hasFileRank) — that rank is
+  // already individually meaningful, so it's shown as-is; only the tier
+  // shading (not the displayed number) is tier-based in that case.
   const tierAvg = {};
-  if (hasTiers) {
+  if (hasTiers && !hasFileRank) {
     const groups = {};
     for (const p of T.rankings) {
       const t = (p.tier ?? '').toString().trim();
@@ -2920,6 +2994,7 @@ function renderTrackerListHtml(visible, hasTiers, SKIP_POS) {
     }
   }
   const aggRank = p => {
+    if (hasFileRank) return Number.isFinite(numRank(p)) ? numRank(p) : null;
     const t = (p.tier ?? '').toString().trim();
     if (hasTiers && t && tierAvg[t] != null) return tierAvg[t];
     return Number.isFinite(numRank(p)) ? numRank(p) : null;
