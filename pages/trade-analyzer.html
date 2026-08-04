@@ -86,6 +86,24 @@
     .ta-btn-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 24px; }
     .ta-btn-note { font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--brown-light); font-style: italic; }
 
+    /* ── Add 3rd team dropdown ── */
+    .ta-addteam-wrap { position: relative; }
+    .ta-addteam-panel {
+      position: absolute; left: 0; top: calc(100% + 6px); width: 260px;
+      background: var(--brown-dark); border: 1px solid var(--brown-mid);
+      border-radius: 3px; box-shadow: 0 4px 24px rgba(0,0,0,0.5); z-index: 300;
+      max-height: 320px; overflow-y: auto;
+    }
+    .ta-addteam-item {
+      display: block; padding: 9px 14px; font-family: 'Crimson Text', serif;
+      font-size: 0.9rem; color: var(--parchment); text-decoration: none; cursor: pointer;
+      border-bottom: 1px dashed rgba(255,255,255,0.05); transition: background 0.1s;
+    }
+    .ta-addteam-item:last-child { border-bottom: none; }
+    .ta-addteam-item:hover { background: rgba(255,255,255,0.06); color: var(--cream); }
+    .ta-addteam-item-sub { font-size: 0.75rem; color: var(--brown-light); margin-top: 1px; }
+    .ta-addteam-empty { padding: 12px 14px; font-family: 'Crimson Text', serif; font-size: 0.86rem; color: var(--brown-light); font-style: italic; }
+
     /* ── Trade summary visual ── */
     .ta-summary-box {
       background: var(--brown-dark); border: 1.5px solid var(--brown-mid);
@@ -189,8 +207,12 @@
 
     /* ── Playoff odds ── */
     .ta-odds-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
-    .ta-odds-card { flex: 1; min-width: 210px; background: var(--brown-dark); border: 1px solid var(--brown-mid); border-radius: 3px; padding: 14px 16px; }
+    .ta-odds-card { flex: 1; min-width: 230px; background: var(--brown-dark); border: 1px solid var(--brown-mid); border-radius: 3px; padding: 14px 16px; }
     .ta-odds-lbl  { font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brown-light); margin-bottom: 8px; }
+    .ta-odds-metric { margin-top: 12px; padding-top: 10px; border-top: 1px dashed rgba(255,255,255,0.06); }
+    .ta-odds-metric:first-of-type { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--brown-mid); }
+    .ta-odds-metric-lbl { font-family: 'Rye', serif; font-size: 0.4rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--brown-light); margin-bottom: 4px; }
+    .ta-odds-metric-val { font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--parchment); margin-bottom: 5px; }
     .ta-odds-team { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 0.88rem; margin-bottom: 6px; }
     .ta-odds-before { font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--parchment); margin-bottom: 3px; }
     .ta-odds-after  { font-family: 'Crimson Text', serif; font-size: 1.05rem; font-weight: 600; margin-bottom: 8px; }
@@ -317,7 +339,7 @@
     };
   }
 
-  function displayName(t) { return t.teamName || t.ownerName || ('Team ' + t.rosterId); }
+  function displayName(t) { return t.ownerName || t.teamName || ('Team ' + t.rosterId); }
   function pickKey(k)  { return `k:${k.season}_${k.round}_${k.originalRosterId}`; }
   function playerKey(p){ return `p:${p.pid}`; }
 
@@ -1031,7 +1053,7 @@
       return `<div class="ta-team-card${cls}" onclick="selectTeam(${rid})">
         ${badge}
         <div class="ta-team-name">${esc(displayName(t))}</div>
-        ${t.teamName && t.ownerName ? `<div class="ta-team-owner">${esc(t.ownerName)}</div>` : ''}
+        ${t.teamName ? `<div class="ta-team-owner">${esc(t.teamName)}</div>` : ''}
         <div class="ta-team-record">${t.wins}-${t.losses} · #${ovrR} Overall</div>
       </div>`;
     }).join('');
@@ -1134,7 +1156,7 @@
         <div class="ta-panel-dot ${dotCls}"></div>
         <div class="ta-panel-hdr-info">
           <div class="ta-panel-title">${esc(displayName(team))}</div>
-          <div class="ta-panel-sub">${team.wins}-${team.losses} · Sends ${routes.size} asset${routes.size !== 1 ? 's' : ''}</div>
+          <div class="ta-panel-sub">${team.teamName ? esc(team.teamName) + ' · ' : ''}${team.wins}-${team.losses} · Sends ${routes.size} asset${routes.size !== 1 ? 's' : ''}</div>
         </div>
         ${selVal > 0 ? `<div class="ta-panel-total">~${Number(Math.round(selVal)).toLocaleString()}</div>` : ''}
       </div>
@@ -1158,10 +1180,19 @@
       ? `<span class="ta-btn-note">${sides.map((t, i) => `${esc(displayName(t))} ~${Number(Math.round(valBySide[i])).toLocaleString()}`).join(' ↔ ')}</span>`
       : `<span class="ta-btn-note">Check players and picks below</span>`;
 
+    const addTeamHtml = _teamIds.length < 3 ? `
+      <div class="ta-addteam-wrap">
+        <button class="ta-btn-secondary" onclick="toggleAddTeamMenu(event)">+ Add 3rd Team</button>
+        <div id="ta-addteam-panel" class="ta-addteam-panel" style="display:none;">
+          ${renderAddTeamList()}
+        </div>
+      </div>` : '';
+
     document.getElementById('content').innerHTML = `
       ${renderFlags()}
       <div class="ta-btn-row" style="margin-bottom:20px;">
         <button class="ta-btn-secondary" onclick="backToTeamSelect()">← Change Teams</button>
+        ${addTeamHtml}
         <button class="ta-btn" onclick="analyzeClick()" ${hasAssets ? '' : 'disabled'}>Analyze Trade</button>
         <button class="ta-btn-secondary" onclick="clearTrade()">Clear</button>
         ${noteHtml}
@@ -1176,6 +1207,47 @@
       </div>
     `;
   }
+
+  function renderAddTeamList() {
+    const { teams } = _rawData;
+    const available = teams.filter(t => !_teamIds.includes(t.rosterId));
+    if (!available.length) return `<div class="ta-addteam-empty">No other teams in this league</div>`;
+    return available.map(t => `<div class="ta-addteam-item" onclick="addTeamToTrade(${t.rosterId})">
+      ${esc(displayName(t))}
+      ${t.teamName ? `<div class="ta-addteam-item-sub">${esc(t.teamName)}</div>` : ''}
+    </div>`).join('');
+  }
+
+  function toggleAddTeamMenu(e) {
+    e.stopPropagation();
+    const panel = document.getElementById('ta-addteam-panel');
+    if (!panel) return;
+    panel.style.display = panel.style.display !== 'none' ? 'none' : 'block';
+  }
+
+  // Adding a 3rd team keeps the existing 2-team selections/routes intact —
+  // only the new side starts with an empty asset map.
+  function addTeamToTrade(rid) {
+    if (_teamIds.includes(rid) || _teamIds.length >= 3) return;
+    _teamIds.push(rid);
+    _routes.push(new Map());
+    _analysis = null;
+    renderTradeBuilder();
+  }
+
+  document.addEventListener('click', e => {
+    const panel = document.getElementById('ta-addteam-panel');
+    if (panel && !panel.contains(e.target) && !e.target.closest('.ta-addteam-wrap')) {
+      panel.style.display = 'none';
+    }
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      const panel = document.getElementById('ta-addteam-panel');
+      if (panel) panel.style.display = 'none';
+    }
+  });
 
   function toggleAsset(sideIdx, key) {
     const routes = _routes[sideIdx];
@@ -1296,26 +1368,24 @@
       ${_teamIds.map(rid => rankCell((beforeRanks[m.key]||{})[rid], (afterRanks[m.key]||{})[rid])).join('')}
     </tr>`).join('');
 
-    function oddsCard(name, teamColor, label, before, after) {
-      if (!futureWeeks.length) {
-        return `<div class="ta-odds-card">
-          <div class="ta-odds-lbl">${label} — Playoff Odds</div>
-          <div class="ta-odds-team" style="color:${teamColor};">${name}</div>
-          <div style="font-family:'Crimson Text',serif;font-size:0.85rem;color:var(--brown-light);font-style:italic;">Season complete — standings are locked</div>
-        </div>`;
-      }
+    // One metric row (before → after, with a delta pill) inside a team's combined odds card.
+    // invert=true means a rising % is bad (e.g. last-place odds), so delta coloring flips.
+    function metricRow(metricLabel, before, after, fmtFn, invert) {
       if (before == null) return '';
-      const bF = fmtOdds(before), aF = fmtOdds(after ?? before);
+      const bF = fmtFn(before), aF = fmtFn(after ?? before);
       const bPct = Math.round(before * 100), aPct = Math.round((after ?? before) * 100);
       const delta = aPct - bPct;
-      const dCls = delta > 0 ? 'ta-delta-up-txt' : delta < 0 ? 'ta-delta-dn-txt' : 'ta-delta-flat-txt';
+      const rising = delta > 0 ? true : delta < 0 ? false : null;
+      const dCls = rising == null ? 'ta-delta-flat-txt' : (rising !== invert) ? 'ta-delta-up-txt' : 'ta-delta-dn-txt';
       const dStr = delta > 0 ? `+${delta}pp` : delta < 0 ? `${delta}pp` : '±0pp';
-
-      return `<div class="ta-odds-card">
-        <div class="ta-odds-lbl">${label} — Playoff Odds</div>
-        <div class="ta-odds-team" style="color:${teamColor};">${name}</div>
-        <div class="ta-odds-before">Before: <span style="color:${bF.color};font-weight:${bF.weight};">${bF.label}</span></div>
-        <div class="ta-odds-after" style="color:${aF.color};font-weight:${aF.weight};">${aF.label} <span class="${dCls}" style="font-size:0.75rem;">${dStr}</span></div>
+      return `<div class="ta-odds-metric">
+        <div class="ta-odds-metric-lbl">${metricLabel}</div>
+        <div class="ta-odds-metric-val">
+          <span style="color:${bF.color};">${bF.label}</span>
+          <span class="ta-rank-arrow">→</span>
+          <span style="color:${aF.color};font-weight:${aF.weight};">${aF.label}</span>
+          <span class="${dCls}" style="font-size:0.72rem;">${dStr}</span>
+        </div>
         <div class="ta-odds-bar-wrap">
           <div class="ta-odds-bar-behind" style="width:${bPct}%;background:${bF.color};"></div>
           <div class="ta-odds-bar-front"  style="width:${aPct}%;background:${aF.color};"></div>
@@ -1323,52 +1393,28 @@
       </div>`;
     }
 
-    function byeCard(name, teamColor, label, before, after) {
-      if (!futureWeeks.length || before == null) return '';
-      const bPct = Math.round(before * 100), aPct = Math.round((after ?? before) * 100);
-      const delta = aPct - bPct;
-      const dCls = delta > 0 ? 'ta-delta-up-txt' : delta < 0 ? 'ta-delta-dn-txt' : 'ta-delta-flat-txt';
-      const dStr = delta > 0 ? `+${delta}pp` : delta < 0 ? `${delta}pp` : '±0pp';
-      return `<div class="ta-odds-card">
-        <div class="ta-odds-lbl">${label} — Bye (Top 2) Odds</div>
-        <div class="ta-odds-team" style="color:${teamColor};">${name}</div>
-        <div class="ta-odds-after" style="color:var(--parchment);">${bPct}% → ${aPct}% <span class="${dCls}" style="font-size:0.75rem;">${dStr}</span></div>
-      </div>`;
-    }
-
-    function lastOddsCard(name, teamColor, label, before, after) {
+    // One card per team, with playoff / bye / last-place odds stacked as rows —
+    // keeps everything about a single team's roster together in one place.
+    function teamOddsCard(name, teamColor, label, pt) {
       if (!futureWeeks.length) {
         return `<div class="ta-odds-card">
-          <div class="ta-odds-lbl">${label} — Last Place Odds</div>
+          <div class="ta-odds-lbl">${label}</div>
           <div class="ta-odds-team" style="color:${teamColor};">${name}</div>
           <div style="font-family:'Crimson Text',serif;font-size:0.85rem;color:var(--brown-light);font-style:italic;">Season complete — standings are locked</div>
         </div>`;
       }
-      if (before == null) return '';
-      const bF = fmtLastOdds(before), aF = fmtLastOdds(after ?? before);
-      const bPct = Math.round(before * 100), aPct = Math.round((after ?? before) * 100);
-      const delta = aPct - bPct; // rising last-place risk is bad → inverted delta coloring
-      const dCls = delta > 0 ? 'ta-delta-dn-txt' : delta < 0 ? 'ta-delta-up-txt' : 'ta-delta-flat-txt';
-      const dStr = delta > 0 ? `+${delta}pp` : delta < 0 ? `${delta}pp` : '±0pp';
-
       return `<div class="ta-odds-card">
-        <div class="ta-odds-lbl">${label} — Last Place Odds</div>
+        <div class="ta-odds-lbl">${label}</div>
         <div class="ta-odds-team" style="color:${teamColor};">${name}</div>
-        <div class="ta-odds-before">Before: <span style="color:${bF.color};font-weight:${bF.weight};">${bF.label}</span></div>
-        <div class="ta-odds-after" style="color:${aF.color};font-weight:${aF.weight};">${aF.label} <span class="${dCls}" style="font-size:0.75rem;">${dStr}</span></div>
-        <div class="ta-odds-bar-wrap">
-          <div class="ta-odds-bar-behind" style="width:${bPct}%;background:${bF.color};"></div>
-          <div class="ta-odds-bar-front"  style="width:${aPct}%;background:${aF.color};"></div>
-        </div>
+        ${metricRow('Playoff Odds',     pt.beforeOdds, pt.afterOdds, fmtOdds,     false)}
+        ${metricRow('Bye (Top 2) Odds', pt.beforeTop2, pt.afterTop2, fmtOdds,     false)}
+        ${metricRow('Last Place Odds',  pt.beforeLast, pt.afterLast, fmtLastOdds, true)}
       </div>`;
     }
 
-    const oddsCardsHtml = perTeam.map((pt, i) => {
-      const label = 'Team ' + SIDE_LABELS[i];
-      return oddsCard(names[i], SIDE_COLORS[i], label, pt.beforeOdds, pt.afterOdds)
-           + byeCard(names[i], SIDE_COLORS[i], label, pt.beforeTop2, pt.afterTop2)
-           + lastOddsCard(names[i], SIDE_COLORS[i], label, pt.beforeLast, pt.afterLast);
-    }).join('');
+    const oddsCardsHtml = perTeam.map((pt, i) =>
+      teamOddsCard(names[i], SIDE_COLORS[i], 'Team ' + SIDE_LABELS[i], pt)
+    ).join('');
 
     const lineupCardsHtml = perTeam.map((pt, i) => `
       <div class="ta-lineup-card">
