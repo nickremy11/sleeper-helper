@@ -55,12 +55,14 @@
     /* Solid dark tinted backgrounds so text remains readable */
     .ta-team-card.selected-a { border: 2px solid #5cb85c; background: #192813; }
     .ta-team-card.selected-b { border: 2px solid #5b9bd5; background: #111e2e; }
+    .ta-team-card.selected-c { border: 2px solid #d6a84a; background: #2a1f0c; }
     .ta-team-badge {
       display: inline-block; font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.1em;
       padding: 3px 8px; border-radius: 2px; margin-bottom: 6px; text-transform: uppercase;
     }
     .ta-team-badge-a { background: rgba(92,184,92,0.25); color: #7ed07e; border: 1px solid rgba(92,184,92,0.5); }
     .ta-team-badge-b { background: rgba(91,155,213,0.25); color: #8eb8e5; border: 1px solid rgba(91,155,213,0.5); }
+    .ta-team-badge-c { background: rgba(214,168,74,0.25); color: #e0b15c; border: 1px solid rgba(214,168,74,0.5); }
     .ta-team-name   { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 0.9rem; color: var(--cream); }
     .ta-team-owner  { font-family: 'Crimson Text', serif; font-size: 0.78rem; color: var(--brown-light); margin-top: 2px; }
     .ta-team-record { font-family: 'Crimson Text', serif; font-size: 0.78rem; color: var(--parchment); margin-top: 4px; }
@@ -88,9 +90,10 @@
     .ta-summary-box {
       background: var(--brown-dark); border: 1.5px solid var(--brown-mid);
       border-radius: 3px; padding: 14px 16px; margin-bottom: 20px;
-      display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: start;
+      display: flex; flex-wrap: wrap; gap: 16px; align-items: stretch;
       min-height: 190px; box-sizing: border-box;
     }
+    .ta-summary-side { flex: 1 1 200px; min-width: 180px; }
     .ta-summary-team-lbl {
       font-family: 'Rye', serif; font-size: 0.44rem; letter-spacing: 0.14em;
       text-transform: uppercase; margin-bottom: 8px;
@@ -101,13 +104,14 @@
     }
     .ta-summary-row:last-of-type { border-bottom: none; }
     .ta-summary-player { font-size: 0.88rem; color: var(--parchment); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ta-summary-dest   { font-size: 0.7rem; color: var(--gold-light); font-style: italic; white-space: nowrap; }
     .ta-summary-val    { font-size: 0.78rem; color: var(--brown-light); white-space: nowrap; }
     .ta-summary-total  { font-family: 'Crimson Text', serif; font-size: 0.82rem; color: var(--gold-light); margin-top: 8px; border-top: 1px solid var(--brown-mid); padding-top: 6px; }
     .ta-summary-empty  { font-family: 'Crimson Text', serif; font-style: italic; font-size: 0.82rem; color: var(--brown-light); padding: 4px 0; }
-    .ta-summary-divider { display: flex; align-items: center; justify-content: center; color: var(--gold); font-size: 1.2rem; padding-top: 24px; }
+    .ta-summary-divider { display: flex; align-items: center; justify-content: center; color: var(--gold); font-size: 1.2rem; flex: 0 0 auto; }
 
     /* ── Trade builder panels ── */
-    .ta-builder { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+    .ta-builder { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 20px; }
     @media (max-width: 620px) { .ta-builder { grid-template-columns: 1fr; } }
 
     .ta-panel { background: var(--brown-dark); border: 1.5px solid var(--brown-mid); border-radius: 3px; overflow: hidden; }
@@ -118,6 +122,7 @@
     .ta-panel-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
     .ta-panel-dot-a { background: #5cb85c; }
     .ta-panel-dot-b { background: #5b9bd5; }
+    .ta-panel-dot-c { background: #d6a84a; }
     .ta-panel-hdr-info { flex: 1; min-width: 0; }
     .ta-panel-title { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 0.9rem; color: var(--cream); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .ta-panel-sub { font-family: 'Crimson Text', serif; font-size: 0.75rem; color: var(--brown-light); margin-top: 2px; }
@@ -143,6 +148,16 @@
     .ta-asset-via  { font-style: italic; font-size: 0.72rem; color: var(--brown-light); }
     .ta-asset-val  { font-family: 'Crimson Text', serif; font-size: 0.78rem; color: var(--brown-light); white-space: nowrap; flex-shrink: 0; }
 
+    /* ── Per-asset destination picker (3-team trades) ── */
+    .ta-dest-row { display: flex; gap: 6px; padding: 0 14px 7px 37px; flex-wrap: wrap; }
+    .ta-dest-pill {
+      font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.08em; text-transform: uppercase;
+      padding: 4px 9px; border-radius: 10px; border: 1px solid var(--brown-mid);
+      background: transparent; color: var(--brown-light); cursor: pointer; transition: all 0.12s;
+    }
+    .ta-dest-pill:hover { border-color: var(--gold); color: var(--gold-light); }
+    .ta-dest-pill.active { background: rgba(201,150,42,0.22); border-color: var(--gold); color: var(--gold-light); }
+
     /* ── Results section ── */
     .ta-divider { border: none; border-top: 2px solid var(--brown-mid); margin: 4px 0 24px; }
     .ta-results-hdr {
@@ -159,8 +174,7 @@
       background: #1e0e05; border-bottom: 1px solid var(--brown-mid); white-space: nowrap;
     }
     .ta-rank-table th.ta-th-metric { text-align: left; color: var(--brown-light); }
-    .ta-rank-table th.ta-th-a { text-align: center; color: #7ed07e; }
-    .ta-rank-table th.ta-th-b { text-align: center; color: #8eb8e5; }
+    .ta-rank-table th.ta-th-side { text-align: center; }
     .ta-rank-table td { padding: 7px 12px; border-bottom: 1px dashed rgba(255,255,255,0.05); vertical-align: middle; }
     .ta-rank-table tr:last-child td { border-bottom: none; }
     .ta-rank-table tr:hover td { background: rgba(255,255,255,0.02); }
@@ -189,7 +203,7 @@
     .ta-delta-flat-txt{ color: var(--brown-light); }
 
     /* ── Full lineup display ── */
-    .ta-lineup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+    .ta-lineup-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 24px; }
     @media (max-width: 620px) { .ta-lineup-grid { grid-template-columns: 1fr; } }
     .ta-lineup-card { background: var(--brown-dark); border: 1px solid var(--brown-mid); border-radius: 3px; padding: 14px; }
     .ta-lineup-lbl  { font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brown-light); margin-bottom: 10px; }
@@ -246,14 +260,20 @@
   const presetB = parseInt(_params.get('b') || '0') || null;
 
   // ── State ─────────────────────────────────────────────────────────────────────
+  // Trades support 2 or 3 teams. _teamIds is the ordered list of participant
+  // rosterIds ("sides"); _routes[sideIdx] maps an asset key the side is sending
+  // to the rosterId of whichever other side receives it (per-asset routing,
+  // needed once a 3rd team is involved).
 
   let _rawData  = null;
   let _simData  = null;
-  let _teamAId  = null;
-  let _teamBId  = null;
-  let _selectedA = new Set();
-  let _selectedB = new Set();
-  let _analysis  = null;
+  let _teamIds  = [];
+  let _routes   = [];
+  let _analysis = null;
+
+  const SIDE_LABELS = ['A', 'B', 'C'];
+  const SIDE_COLORS = ['#7ed07e', '#8eb8e5', '#e0b15c'];
+  const SIDE_CLS    = ['a', 'b', 'c'];
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -281,6 +301,19 @@
       label:  pct + '%',
       color:  p >= 0.70 ? '#5cb85c' : p >= 0.30 ? 'var(--gold-light)' : '#e05252',
       weight: (p >= 0.70 || p < 0.30) ? '700' : '400',
+    };
+  }
+
+  // Same shape as fmtOdds, but inverted — for last-place odds, LOW is good (green), HIGH is bad (red).
+  function fmtLastOdds(p) {
+    if (p == null)   return { label: '—',    color: 'var(--brown-light)', weight: '400' };
+    if (p >= 0.995)  return { label: 'Lock', color: '#e05252',            weight: '700' };
+    if (p <= 0.005)  return { label: 'Safe', color: '#5cb85c',            weight: '700' };
+    const pct = Math.round(p * 100);
+    return {
+      label:  pct + '%',
+      color:  p >= 0.40 ? '#e05252' : p >= 0.15 ? 'var(--gold-light)' : '#5cb85c',
+      weight: (p >= 0.40 || p < 0.15) ? '700' : '400',
     };
   }
 
@@ -487,12 +520,40 @@
     return Math.max(0, mu + sigma * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v));
   }
 
-  function runSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams, N = 5000) {
-    const count = {}, count2 = {};
-    for (const t of teams) { count[t.rosterId] = 0; count2[t.rosterId] = 0; }
+  // Best-ball-equivalent total for a single already-played week, built from the
+  // matchup's actual players_points (all rostered players that week, not just starters).
+  function computeWeeklyOptimalPoints(pids, ptsMap, rp, players) {
+    const starterSlots  = rp.filter(p => !['BN','IR','TAXI'].includes(p));
+    const specificSlots = starterSlots.filter(s => !['FLEX','SUPER_FLEX','IDP_FLEX'].includes(s));
+    const flexSlots     = starterSlots.filter(s =>  ['FLEX','SUPER_FLEX','IDP_FLEX'].includes(s));
+    const pool = (pids || []).map(pid => {
+      const p = players[pid]; if (!p) return null;
+      const pos = normPos(p.position); if (!pos) return null;
+      return { pid, pos, pts: ptsMap[pid] ?? 0 };
+    }).filter(Boolean);
+    const used = new Set(); let total = 0;
+    const sc2 = {};
+    for (const s of specificSlots) sc2[s] = (sc2[s] || 0) + 1;
+    for (const [pos, count] of Object.entries(sc2)) {
+      const elig = pool.filter(p => p.pos === pos && !used.has(p.pid)).sort((a,b) => b.pts - a.pts);
+      for (let i = 0; i < Math.min(count, elig.length); i++) {
+        const pl = elig[i]; used.add(pl.pid); total += pl.pts;
+      }
+    }
+    for (const slot of flexSlots) {
+      const ep = slot === 'FLEX' ? ['RB','WR','TE'] : slot === 'SUPER_FLEX' ? ['QB','RB','WR','TE'] : ['DL','LB','DB'];
+      const elig = pool.filter(p => ep.includes(p.pos) && !used.has(p.pid)).sort((a,b) => b.pts - a.pts);
+      if (elig.length) { const pl = elig[0]; used.add(pl.pid); total += pl.pts; }
+    }
+    return total;
+  }
+
+  function runSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams, potentialPtsSoFar = {}, N = 5000) {
+    const count = {}, count2 = {}, countLast = {};
+    for (const t of teams) { count[t.rosterId] = 0; count2[t.rosterId] = 0; countLast[t.rosterId] = 0; }
     for (let sim = 0; sim < N; sim++) {
-      const wins = {}, pts = {};
-      for (const t of teams) { wins[t.rosterId] = t.wins; pts[t.rosterId] = t.fpts; }
+      const wins = {}, pts = {}, potPts = {};
+      for (const t of teams) { wins[t.rosterId] = t.wins; pts[t.rosterId] = t.fpts; potPts[t.rosterId] = potentialPtsSoFar[t.rosterId] || 0; }
       for (const week of futureWeeks) {
         const groups = {};
         for (const m of (matchupsByWeek[week] || [])) {
@@ -506,6 +567,9 @@
           const sB = gaussianRandom(muMap[b.roster_id]?.[week] ?? 100, sigmaMap[b.roster_id]?.[week] ?? 20);
           pts[a.roster_id] = (pts[a.roster_id] || 0) + sA;
           pts[b.roster_id] = (pts[b.roster_id] || 0) + sB;
+          // sA/sB are draws from the optimal-lineup projection, i.e. this week's "potential" score
+          potPts[a.roster_id] = (potPts[a.roster_id] || 0) + sA;
+          potPts[b.roster_id] = (potPts[b.roster_id] || 0) + sB;
           if      (sA > sB) wins[a.roster_id] = (wins[a.roster_id] || 0) + 1;
           else if (sB > sA) wins[b.roster_id] = (wins[b.roster_id] || 0) + 1;
         }
@@ -516,10 +580,13 @@
       });
       for (let i = 0; i < Math.min(playoffTeams, ranked.length); i++) count[ranked[i].rosterId]++;
       for (let i = 0; i < Math.min(2, ranked.length); i++) count2[ranked[i].rosterId]++;
+
+      const rankedByPot = teams.slice().sort((a, b) => potPts[a.rosterId] - potPts[b.rosterId]);
+      if (rankedByPot.length) countLast[rankedByPot[0].rosterId]++;
     }
-    const odds = {}, top2 = {};
-    for (const t of teams) { odds[t.rosterId] = count[t.rosterId] / N; top2[t.rosterId] = count2[t.rosterId] / N; }
-    return { odds, top2 };
+    const odds = {}, top2 = {}, last = {};
+    for (const t of teams) { odds[t.rosterId] = count[t.rosterId] / N; top2[t.rosterId] = count2[t.rosterId] / N; last[t.rosterId] = countLast[t.rosterId] / N; }
+    return { odds, top2, last };
   }
 
   function computeRanks(teams) {
@@ -660,7 +727,20 @@
       if (!(matchups || []).some(m => (m.points ?? 0) > 0)) futureWeeks.push(week);
     });
 
-    let playoffOdds = {}, top2Odds = {};
+    // Best-ball-equivalent points banked so far, from real players_points on already-played weeks
+    const futureWeekSet = new Set(futureWeeks);
+    const potentialPtsSoFar = {};
+    for (const roster of allRosters) potentialPtsSoFar[roster.roster_id] = 0;
+    for (const [weekStr, matchups] of Object.entries(matchupsByWeek)) {
+      if (futureWeekSet.has(Number(weekStr))) continue;
+      for (const m of matchups) {
+        if (m.roster_id == null) continue;
+        potentialPtsSoFar[m.roster_id] = (potentialPtsSoFar[m.roster_id] || 0) +
+          computeWeeklyOptimalPoints(m.players || [], m.players_points || {}, rp, players);
+      }
+    }
+
+    let playoffOdds = {}, top2Odds = {}, lastOdds = {};
     let projectionsByWeek = {};
     let muMap = {}, sigmaMap = {};
     let useFc = true;
@@ -669,6 +749,9 @@
 
     if (futureWeeks.length === 0) {
       byStand.forEach((t, i) => { playoffOdds[t.rosterId] = i < playoffTeams ? 1.0 : 0.0; top2Odds[t.rosterId] = i < 2 ? 1.0 : 0.0; });
+      const minPot = Math.min(...teams.map(t => potentialPtsSoFar[t.rosterId] ?? Infinity));
+      const lastTeams = teams.filter(t => (potentialPtsSoFar[t.rosterId] ?? Infinity) === minPot);
+      for (const t of teams) lastOdds[t.rosterId] = lastTeams.includes(t) ? 1 / lastTeams.length : 0;
     } else {
       const projResults = await Promise.all(
         futureWeeks.map(w =>
@@ -702,13 +785,14 @@
           }
         }
       }
-      ({ odds: playoffOdds, top2: top2Odds } = runSimulation(simTeams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams));
+      ({ odds: playoffOdds, top2: top2Odds, last: lastOdds } = runSimulation(simTeams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams, potentialPtsSoFar));
     }
 
     const nextSeason = String(parseInt(nflSeason) + 1);
     for (const t of teams) {
-      t.playoffOdds = playoffOdds[t.rosterId] ?? null;
-      t.top2Odds    = top2Odds[t.rosterId] ?? null;
+      t.playoffOdds   = playoffOdds[t.rosterId] ?? null;
+      t.top2Odds      = top2Odds[t.rosterId] ?? null;
+      t.lastPlaceOdds = lastOdds[t.rosterId] ?? null;
       let adj = 0;
       for (const pick of t.pickList) {
         if (pick.season === nextSeason && pick.originalRosterId != null) {
@@ -727,7 +811,7 @@
       allRosters, tradedPicks, players, fcMap, fcPickMap, ridToSlot, numRounds,
       rp, scoringSettings, rosterNames,
     };
-    _simData = { matchupsByWeek, futureWeeks, projectionsByWeek, muMap, sigmaMap, useFc };
+    _simData = { matchupsByWeek, futureWeeks, projectionsByWeek, muMap, sigmaMap, useFc, potentialPtsSoFar };
   }
 
   // ── Trade analysis ──────────────────────────────────────────────────────────
@@ -753,39 +837,41 @@
 
   function executeTradeAnalysis() {
     const { teams, players, rp, scoringSettings, fcMap } = _rawData;
-    const { matchupsByWeek, futureWeeks, projectionsByWeek, muMap, sigmaMap, useFc } = _simData;
+    const { matchupsByWeek, futureWeeks, projectionsByWeek, muMap, sigmaMap, useFc, potentialPtsSoFar } = _simData;
 
     const cloned = teams.map(t => ({ ...t, playerList: t.playerList.map(p => ({...p})), pickList: t.pickList.map(p => ({...p})) }));
-    const cA = cloned.find(t => t.rosterId === _teamAId);
-    const cB = cloned.find(t => t.rosterId === _teamBId);
+    const cSides = _teamIds.map(rid => cloned.find(t => t.rosterId === rid));
 
-    const aToB_p = cA.playerList.filter(p => _selectedA.has(playerKey(p)));
-    const aToB_k = cA.pickList.filter(k => _selectedA.has(pickKey(k)));
-    const bToA_p = cB.playerList.filter(p => _selectedB.has(playerKey(p)));
-    const bToA_k = cB.pickList.filter(k => _selectedB.has(pickKey(k)));
+    // Move each routed asset from its origin side to its chosen destination side
+    _teamIds.forEach((rid, sideIdx) => {
+      const cFrom = cSides[sideIdx];
+      for (const [key, destRid] of _routes[sideIdx]) {
+        const destIdx = _teamIds.indexOf(destRid);
+        if (destIdx === -1) continue;
+        const cTo = cSides[destIdx];
+        if (key.startsWith('p:')) {
+          const p = cFrom.playerList.find(pl => playerKey(pl) === key);
+          if (p) { cFrom.playerList.splice(cFrom.playerList.indexOf(p), 1); cTo.playerList.push({ ...p }); }
+        } else {
+          const k = cFrom.pickList.find(pk => pickKey(pk) === key);
+          if (k) { cFrom.pickList.splice(cFrom.pickList.indexOf(k), 1); cTo.pickList.push({ ...k }); }
+        }
+      }
+    });
 
-    for (const p of aToB_p) { cA.playerList.splice(cA.playerList.indexOf(p), 1); cB.playerList.push({...p}); }
-    for (const k of aToB_k) { cA.pickList.splice(cA.pickList.indexOf(k), 1);   cB.pickList.push({...k}); }
-    for (const p of bToA_p) { cB.playerList.splice(cB.playerList.indexOf(p), 1); cA.playerList.push({...p}); }
-    for (const k of bToA_k) { cB.pickList.splice(cB.pickList.indexOf(k), 1);   cA.pickList.push({...k}); }
-
-    recomputeTeamValues(cA);
-    recomputeTeamValues(cB);
+    for (const c of cSides) recomputeTeamValues(c);
 
     const beforeRanks = computeRanks(teams);
     const afterRanks  = computeRanks(cloned);
+    const beforeBySide = _teamIds.map(rid => teams.find(t => t.rosterId === rid));
 
-    const beforeOddsA = teams.find(t => t.rosterId === _teamAId)?.playoffOdds ?? null;
-    const beforeOddsB = teams.find(t => t.rosterId === _teamBId)?.playoffOdds ?? null;
-    const beforeTop2A = teams.find(t => t.rosterId === _teamAId)?.top2Odds ?? null;
-    const beforeTop2B = teams.find(t => t.rosterId === _teamBId)?.top2Odds ?? null;
-    let afterOddsA = null, afterOddsB = null, afterTop2A = null, afterTop2B = null;
+    let afterOddsMap = {}, afterTop2Map = {}, afterLastMap = {};
 
     if (futureWeeks.length > 0) {
       const newMu    = Object.fromEntries(Object.entries(muMap).map(([k,v]) => [k, {...v}]));
       const newSigma = Object.fromEntries(Object.entries(sigmaMap).map(([k,v]) => [k, {...v}]));
 
-      for (const cTeam of [cA, cB]) {
+      for (const cTeam of cSides) {
         const pids = cTeam.playerList.map(p => p.pid);
         newMu[cTeam.rosterId] = {}; newSigma[cTeam.rosterId] = {};
         for (const week of futureWeeks) {
@@ -803,27 +889,30 @@
       }
 
       const simTeams = cloned.filter(t => t.overall > 0 || t.wins > 0 || t.losses > 0);
-      const after = runSimulation(simTeams, matchupsByWeek, newMu, newSigma, futureWeeks, _rawData.playoffTeams);
-      afterOddsA = after.odds[_teamAId] ?? null;
-      afterOddsB = after.odds[_teamBId] ?? null;
-      afterTop2A = after.top2[_teamAId] ?? null;
-      afterTop2B = after.top2[_teamBId] ?? null;
+      const after = runSimulation(simTeams, matchupsByWeek, newMu, newSigma, futureWeeks, _rawData.playoffTeams, potentialPtsSoFar);
+      afterOddsMap = after.odds; afterTop2Map = after.top2; afterLastMap = after.last;
     }
 
     const projMap   = futureWeeks.length > 0 ? (projectionsByWeek[futureWeeks[0]] || {}) : {};
     const lineupFc  = useFc || futureWeeks.length === 0;
 
-    const origA = teams.find(t => t.rosterId === _teamAId);
-    const origB = teams.find(t => t.rosterId === _teamBId);
+    const perTeam = _teamIds.map((rid, sideIdx) => {
+      const orig  = beforeBySide[sideIdx];
+      const cTeam = cSides[sideIdx];
+      return {
+        rosterId:     rid,
+        beforeOdds:   orig?.playoffOdds ?? null,
+        afterOdds:    futureWeeks.length > 0 ? (afterOddsMap[rid] ?? null) : null,
+        beforeTop2:   orig?.top2Odds ?? null,
+        afterTop2:    futureWeeks.length > 0 ? (afterTop2Map[rid] ?? null) : null,
+        beforeLast:   orig?.lastPlaceOdds ?? null,
+        afterLast:    futureWeeks.length > 0 ? (afterLastMap[rid] ?? null) : null,
+        lineupBefore: buildOptimalLineup(orig.playerList.map(p => p.pid),  fcMap, projMap, lineupFc, scoringSettings, rp, players),
+        lineupAfter:  buildOptimalLineup(cTeam.playerList.map(p => p.pid), fcMap, projMap, lineupFc, scoringSettings, rp, players),
+      };
+    });
 
-    const lineupBeforeA = buildOptimalLineup(origA.playerList.map(p => p.pid), fcMap, projMap, lineupFc, scoringSettings, rp, players);
-    const lineupAfterA  = buildOptimalLineup(cA.playerList.map(p => p.pid),    fcMap, projMap, lineupFc, scoringSettings, rp, players);
-    const lineupBeforeB = buildOptimalLineup(origB.playerList.map(p => p.pid), fcMap, projMap, lineupFc, scoringSettings, rp, players);
-    const lineupAfterB  = buildOptimalLineup(cB.playerList.map(p => p.pid),    fcMap, projMap, lineupFc, scoringSettings, rp, players);
-
-    return { beforeRanks, afterRanks, beforeOddsA, afterOddsA, beforeOddsB, afterOddsB,
-             beforeTop2A, afterTop2A, beforeTop2B, afterTop2B,
-             lineupBeforeA, lineupAfterA, lineupBeforeB, lineupAfterB, numTeams: _rawData.numTeams };
+    return { beforeRanks, afterRanks, perTeam, numTeams: _rawData.numTeams };
   }
 
   // ── Render helpers ──────────────────────────────────────────────────────────
@@ -844,46 +933,48 @@
 
   function renderTradeSummary() {
     const { teams } = _rawData;
-    const tA = teams.find(t => t.rosterId === _teamAId);
-    const tB = teams.find(t => t.rosterId === _teamBId);
-    if (!tA || !tB) return '';
+    const sides = _teamIds.map(rid => teams.find(t => t.rosterId === rid));
+    if (sides.length < 2 || sides.some(s => !s)) return '';
 
-    const getSelAssets = (team, sel) => [
-      ...team.playerList.filter(p => sel.has(playerKey(p))),
-      ...team.pickList.filter(k => sel.has(pickKey(k))),
+    const getSelAssets = (team, sideIdx) => [
+      ...team.playerList.filter(p => _routes[sideIdx].has(playerKey(p))),
+      ...team.pickList.filter(k => _routes[sideIdx].has(pickKey(k))),
     ];
 
-    const selA = getSelAssets(tA, _selectedA);
-    const selB = getSelAssets(tB, _selectedB);
-    const valA = selA.reduce((s, a) => s + (a.val || 0), 0);
-    const valB = selB.reduce((s, a) => s + (a.val || 0), 0);
-
-    const renderItems = (items) => {
+    const renderItems = (sideIdx, items) => {
       if (!items.length) return `<div class="ta-summary-empty">Select players or picks to include in the trade</div>`;
       return items.map(a => {
         const pos = a.pid ? a.pos : 'PICK';
         const cls = POS_CLS[pos] || 'rs-pos-PICK';
+        const key = a.pid ? playerKey(a) : pickKey(a);
+        const destIdx = _teamIds.indexOf(_routes[sideIdx].get(key));
+        const destName = destIdx !== -1 ? esc(displayName(sides[destIdx])) : '';
         return `<div class="ta-summary-row">
           <span class="rs-pos ${cls}" style="font-size:0.36rem;">${pos}</span>
           <span class="ta-summary-player">${esc(a.pid ? a.name : a.label)}</span>
+          ${destName && sides.length > 2 ? `<span class="ta-summary-dest">→ ${destName}</span>` : ''}
           <span class="ta-summary-val">${a.val > 0 ? Number(Math.round(a.val)).toLocaleString() : '—'}</span>
         </div>`;
       }).join('');
     };
 
-    return `<div class="ta-summary-box">
-      <div>
-        <div class="ta-summary-team-lbl" style="color:#7ed07e;">${esc(displayName(tA))} gives</div>
-        ${renderItems(selA)}
-        ${selA.length ? `<div class="ta-summary-total">~${Number(Math.round(valA)).toLocaleString()} value</div>` : ''}
-      </div>
-      <div class="ta-summary-divider">⇄</div>
-      <div>
-        <div class="ta-summary-team-lbl" style="color:#8eb8e5;">${esc(displayName(tB))} gives</div>
-        ${renderItems(selB)}
-        ${selB.length ? `<div class="ta-summary-total">~${Number(Math.round(valB)).toLocaleString()} value</div>` : ''}
-      </div>
-    </div>`;
+    const boxes = sides.map((team, sideIdx) => {
+      const items = getSelAssets(team, sideIdx);
+      const val = items.reduce((s, a) => s + (a.val || 0), 0);
+      return `<div class="ta-summary-side">
+        <div class="ta-summary-team-lbl" style="color:${SIDE_COLORS[sideIdx]};">${esc(displayName(team))} gives</div>
+        ${renderItems(sideIdx, items)}
+        ${items.length ? `<div class="ta-summary-total">~${Number(Math.round(val)).toLocaleString()} value</div>` : ''}
+      </div>`;
+    });
+
+    const parts = [];
+    boxes.forEach((b, i) => {
+      if (i > 0) parts.push(`<div class="ta-summary-divider">⇄</div>`);
+      parts.push(b);
+    });
+
+    return `<div class="ta-summary-box">${parts.join('')}</div>`;
   }
 
   // ── League picker ──────────────────────────────────────────────────────────
@@ -927,16 +1018,15 @@
   // ── Team selection ──────────────────────────────────────────────────────────
 
   function renderTeamSelect() {
-    const { teams, numTeams } = _rawData;
+    const { teams } = _rawData;
     const ranks = computeRanks(teams);
 
     const cards = teams.map(t => {
       const rid = t.rosterId;
-      const isA = rid === _teamAId, isB = rid === _teamBId;
-      const cls = isA ? ' selected-a' : isB ? ' selected-b' : '';
-      const badge = isA
-        ? `<div class="ta-team-badge ta-team-badge-a">Team A</div>`
-        : isB ? `<div class="ta-team-badge ta-team-badge-b">Team B</div>` : '';
+      const sideIdx = _teamIds.indexOf(rid);
+      const cls = sideIdx !== -1 ? ` selected-${SIDE_CLS[sideIdx]}` : '';
+      const badge = sideIdx !== -1
+        ? `<div class="ta-team-badge ta-team-badge-${SIDE_CLS[sideIdx]}">Team ${SIDE_LABELS[sideIdx]}</div>` : '';
       const ovrR = ranks.overall[rid] || 0;
       return `<div class="ta-team-card${cls}" onclick="selectTeam(${rid})">
         ${badge}
@@ -946,45 +1036,64 @@
       </div>`;
     }).join('');
 
-    const tA = _teamAId ? teams.find(t => t.rosterId === _teamAId) : null;
-    const tB = _teamBId ? teams.find(t => t.rosterId === _teamBId) : null;
-    const canBuild = tA && tB;
+    const canBuild = _teamIds.length >= 2;
+    const names = _teamIds.map(rid => teams.find(t => t.rosterId === rid)).filter(Boolean).map(t => esc(displayName(t)));
 
     document.getElementById('content').innerHTML = `
       ${renderFlags()}
-      <div class="ta-step-hdr">Select two teams for this trade</div>
+      <div class="ta-step-hdr">Select 2 or 3 teams for this trade</div>
       <div class="ta-team-grid">${cards}</div>
       <div class="ta-btn-row">
         <button class="ta-btn" onclick="proceedToBuilder()" ${canBuild ? '' : 'disabled'}>Build Trade →</button>
         ${canBuild
-          ? `<span class="ta-btn-note">${esc(displayName(tA))} ↔ ${esc(displayName(tB))}</span>`
-          : `<span class="ta-btn-note">Click two teams to select trade partners</span>`}
+          ? `<span class="ta-btn-note">${names.join(' ↔ ')}${_teamIds.length < 3 ? ' · click a 3rd team to add it' : ''}</span>`
+          : `<span class="ta-btn-note">Click 2 or 3 teams to select trade partners</span>`}
       </div>
     `;
   }
 
   function selectTeam(rid) {
-    if      (_teamAId === rid) { _teamAId = null; _selectedA.clear(); }
-    else if (_teamBId === rid) { _teamBId = null; _selectedB.clear(); }
-    else if (!_teamAId)        { _teamAId = rid;  _selectedA.clear(); }
-    else if (!_teamBId)        { _teamBId = rid;  _selectedB.clear(); }
-    else                       { _teamBId = rid;  _selectedB.clear(); }
+    const idx = _teamIds.indexOf(rid);
+    if (idx !== -1) {
+      _teamIds.splice(idx, 1);
+    } else if (_teamIds.length < 3) {
+      _teamIds.push(rid);
+    } else {
+      return; // 3 teams already selected — deselect one first
+    }
+    _routes = _teamIds.map(() => new Map());
     _analysis = null;
     renderTeamSelect();
   }
 
   function proceedToBuilder() {
-    if (!_teamAId || !_teamBId) return;
+    if (_teamIds.length < 2) return;
     renderTradeBuilder();
   }
 
   // ── Trade builder ──────────────────────────────────────────────────────────
 
-  function renderPanel(team, selSet, side) {
-    const dotCls = side === 'A' ? 'ta-panel-dot-a' : 'ta-panel-dot-b';
+  function renderPanel(team, sideIdx) {
+    const dotCls = `ta-panel-dot-${SIDE_CLS[sideIdx]}`;
+    const routes = _routes[sideIdx];
+    const otherSides = _teamIds.map((_, i) => i).filter(i => i !== sideIdx);
+    const { teams } = _rawData;
+
     const selVal = [...team.playerList, ...team.pickList]
-      .filter(a => selSet.has(a.pid ? playerKey(a) : pickKey(a)))
+      .filter(a => routes.has(a.pid ? playerKey(a) : pickKey(a)))
       .reduce((s, a) => s + (a.val || 0), 0);
+
+    // Only render a destination picker when there's more than one possible
+    // recipient (i.e. a 3rd team is in the trade) — 2-team trades have one obvious destination.
+    const destPickerHtml = (key) => {
+      if (otherSides.length <= 1) return '';
+      const destRid = routes.get(key);
+      return `<div class="ta-dest-row">${otherSides.map(destIdx => {
+        const destTeam = teams.find(t => t.rosterId === _teamIds[destIdx]);
+        const active = _teamIds[destIdx] === destRid;
+        return `<button class="ta-dest-pill${active ? ' active' : ''}" onclick="event.stopPropagation();setAssetDest(${sideIdx},'${key}',${_teamIds[destIdx]})">→ ${esc(displayName(destTeam))}</button>`;
+      }).join('')}</div>`;
+    };
 
     const POS_ORDER = ['QB','RB','WR','TE','DL','LB','DB'];
     const byPos = {};
@@ -992,12 +1101,12 @@
 
     const playerSections = POS_ORDER.filter(p => byPos[p]?.length).map(pos => {
       const rows = byPos[pos].map(pl => {
-        const key = playerKey(pl); const sel = selSet.has(key);
-        return `<div class="ta-asset-row${sel ? ' selected' : ''}" onclick="toggleAsset('${side}','${key}')">
+        const key = playerKey(pl); const sel = routes.has(key);
+        return `<div class="ta-asset-row${sel ? ' selected' : ''}" onclick="toggleAsset(${sideIdx},'${key}')">
           <div class="ta-check"></div>
           <span class="ta-asset-name">${esc(pl.name)}</span>
           <span class="ta-asset-val">${pl.val > 0 ? Number(Math.round(pl.val)).toLocaleString() : '—'}</span>
-        </div>`;
+        </div>${sel ? destPickerHtml(key) : ''}`;
       }).join('');
       return `<div class="ta-asset-section">
         <div class="ta-asset-pos-hdr"><span class="rs-pos ${POS_CLS[pos]||''}">${pos}</span></div>
@@ -1007,12 +1116,12 @@
 
     const pickSection = team.pickList.length ? (() => {
       const rows = team.pickList.map(k => {
-        const key = pickKey(k); const sel = selSet.has(key);
-        return `<div class="ta-asset-row${sel ? ' selected' : ''}" onclick="toggleAsset('${side}','${key}')">
+        const key = pickKey(k); const sel = routes.has(key);
+        return `<div class="ta-asset-row${sel ? ' selected' : ''}" onclick="toggleAsset(${sideIdx},'${key}')">
           <div class="ta-check"></div>
           <span class="ta-asset-name">${esc(k.label)}${k.viaName ? `<span class="ta-asset-via"> via ${esc(k.viaName)}</span>` : ''}</span>
           <span class="ta-asset-val">${k.val > 0 ? Number(Math.round(k.val)).toLocaleString() : '—'}</span>
-        </div>`;
+        </div>${sel ? destPickerHtml(key) : ''}`;
       }).join('');
       return `<div class="ta-asset-section">
         <div class="ta-asset-pos-hdr"><span class="rs-pos rs-pos-PICK">Picks</span></div>
@@ -1025,7 +1134,7 @@
         <div class="ta-panel-dot ${dotCls}"></div>
         <div class="ta-panel-hdr-info">
           <div class="ta-panel-title">${esc(displayName(team))}</div>
-          <div class="ta-panel-sub">${team.wins}-${team.losses} · Sends ${selSet.size} asset${selSet.size !== 1 ? 's' : ''}</div>
+          <div class="ta-panel-sub">${team.wins}-${team.losses} · Sends ${routes.size} asset${routes.size !== 1 ? 's' : ''}</div>
         </div>
         ${selVal > 0 ? `<div class="ta-panel-total">~${Number(Math.round(selVal)).toLocaleString()}</div>` : ''}
       </div>
@@ -1035,17 +1144,18 @@
 
   function renderTradeBuilder() {
     const { teams } = _rawData;
-    const tA = teams.find(t => t.rosterId === _teamAId);
-    const tB = teams.find(t => t.rosterId === _teamBId);
+    const sides = _teamIds.map(rid => teams.find(t => t.rosterId === rid));
 
-    const selA = [...tA.playerList, ...tA.pickList].filter(a => _selectedA.has(a.pid ? playerKey(a) : pickKey(a)));
-    const selB = [...tB.playerList, ...tB.pickList].filter(a => _selectedB.has(a.pid ? playerKey(a) : pickKey(a)));
-    const hasAssets = selA.length + selB.length > 0;
+    const hasAssets = _routes.some(r => r.size > 0);
 
-    const valA = selA.reduce((s, a) => s + (a.val || 0), 0);
-    const valB = selB.reduce((s, a) => s + (a.val || 0), 0);
+    const valBySide = sides.map((team, sideIdx) =>
+      [...team.playerList, ...team.pickList]
+        .filter(a => _routes[sideIdx].has(a.pid ? playerKey(a) : pickKey(a)))
+        .reduce((s, a) => s + (a.val || 0), 0)
+    );
+
     const noteHtml = hasAssets
-      ? `<span class="ta-btn-note">${esc(displayName(tA))} ~${Number(Math.round(valA)).toLocaleString()} ↔ ${esc(displayName(tB))} ~${Number(Math.round(valB)).toLocaleString()}</span>`
+      ? `<span class="ta-btn-note">${sides.map((t, i) => `${esc(displayName(t))} ~${Number(Math.round(valBySide[i])).toLocaleString()}`).join(' ↔ ')}</span>`
       : `<span class="ta-btn-note">Check players and picks below</span>`;
 
     document.getElementById('content').innerHTML = `
@@ -1062,20 +1172,31 @@
       ${_analysis ? buildResultsHtml(_analysis) : ''}
 
       <div class="ta-builder">
-        ${renderPanel(tA, _selectedA, 'A')}
-        ${renderPanel(tB, _selectedB, 'B')}
+        ${sides.map((team, sideIdx) => renderPanel(team, sideIdx)).join('')}
       </div>
     `;
   }
 
-  function toggleAsset(side, key) {
-    const sel = side === 'A' ? _selectedA : _selectedB;
-    if (sel.has(key)) sel.delete(key); else sel.add(key);
+  function toggleAsset(sideIdx, key) {
+    const routes = _routes[sideIdx];
+    if (routes.has(key)) {
+      routes.delete(key);
+    } else {
+      const otherSides = _teamIds.map((_, i) => i).filter(i => i !== sideIdx);
+      if (!otherSides.length) return;
+      routes.set(key, _teamIds[otherSides[0]]); // default destination — the only other team, or the first when 3-way
+    }
+    renderTradeBuilder();
+  }
+
+  function setAssetDest(sideIdx, key, destRid) {
+    _routes[sideIdx].set(key, destRid);
     renderTradeBuilder();
   }
 
   function clearTrade() {
-    _selectedA.clear(); _selectedB.clear(); _analysis = null;
+    _routes = _teamIds.map(() => new Map());
+    _analysis = null;
     renderTradeBuilder();
   }
 
@@ -1138,14 +1259,11 @@
   // ── Results section ─────────────────────────────────────────────────────────
 
   function buildResultsHtml(res) {
-    const { beforeRanks, afterRanks, beforeOddsA, afterOddsA, beforeOddsB, afterOddsB,
-            beforeTop2A, afterTop2A, beforeTop2B, afterTop2B,
-            lineupBeforeA, lineupAfterA, lineupBeforeB, lineupAfterB, numTeams } = res;
+    const { beforeRanks, afterRanks, perTeam, numTeams } = res;
     const { hasIDP, teams } = _rawData;
     const { futureWeeks } = _simData;
-    const tA = teams.find(t => t.rosterId === _teamAId);
-    const tB = teams.find(t => t.rosterId === _teamBId);
-    const nA = esc(displayName(tA)), nB = esc(displayName(tB));
+    const sides = _teamIds.map(rid => teams.find(t => t.rosterId === rid));
+    const names = sides.map(t => esc(displayName(t)));
 
     const METRICS = [
       { key: 'overall',   label: 'Overall'   },
@@ -1175,12 +1293,10 @@
 
     const tableRows = METRICS.map(m => `<tr>
       <td><span class="ta-metric-lbl">${esc(m.label)}</span></td>
-      ${rankCell((beforeRanks[m.key]||{})[_teamAId], (afterRanks[m.key]||{})[_teamAId])}
-      ${rankCell((beforeRanks[m.key]||{})[_teamBId], (afterRanks[m.key]||{})[_teamBId])}
+      ${_teamIds.map(rid => rankCell((beforeRanks[m.key]||{})[rid], (afterRanks[m.key]||{})[rid])).join('')}
     </tr>`).join('');
 
-    function oddsCard(team, before, after, label, teamColor, top2Before, top2After) {
-      const name = esc(displayName(team));
+    function oddsCard(name, teamColor, label, before, after) {
       if (!futureWeeks.length) {
         return `<div class="ta-odds-card">
           <div class="ta-odds-lbl">${label} — Playoff Odds</div>
@@ -1195,15 +1311,6 @@
       const dCls = delta > 0 ? 'ta-delta-up-txt' : delta < 0 ? 'ta-delta-dn-txt' : 'ta-delta-flat-txt';
       const dStr = delta > 0 ? `+${delta}pp` : delta < 0 ? `${delta}pp` : '±0pp';
 
-      let byeLine = '';
-      if (top2Before != null) {
-        const bT2Pct = Math.round(top2Before * 100), aT2Pct = Math.round((top2After ?? top2Before) * 100);
-        const t2Delta = aT2Pct - bT2Pct;
-        const t2DCls  = t2Delta > 0 ? 'ta-delta-up-txt' : t2Delta < 0 ? 'ta-delta-dn-txt' : 'ta-delta-flat-txt';
-        const t2DStr  = t2Delta > 0 ? `+${t2Delta}pp` : t2Delta < 0 ? `${t2Delta}pp` : '±0pp';
-        byeLine = `<div class="ta-odds-bye">Bye (top 2): ${bT2Pct}% → ${aT2Pct}% <span class="${t2DCls}" style="font-size:0.75rem;">${t2DStr}</span></div>`;
-      }
-
       return `<div class="ta-odds-card">
         <div class="ta-odds-lbl">${label} — Playoff Odds</div>
         <div class="ta-odds-team" style="color:${teamColor};">${name}</div>
@@ -1213,9 +1320,61 @@
           <div class="ta-odds-bar-behind" style="width:${bPct}%;background:${bF.color};"></div>
           <div class="ta-odds-bar-front"  style="width:${aPct}%;background:${aF.color};"></div>
         </div>
-        ${byeLine}
       </div>`;
     }
+
+    function byeCard(name, teamColor, label, before, after) {
+      if (!futureWeeks.length || before == null) return '';
+      const bPct = Math.round(before * 100), aPct = Math.round((after ?? before) * 100);
+      const delta = aPct - bPct;
+      const dCls = delta > 0 ? 'ta-delta-up-txt' : delta < 0 ? 'ta-delta-dn-txt' : 'ta-delta-flat-txt';
+      const dStr = delta > 0 ? `+${delta}pp` : delta < 0 ? `${delta}pp` : '±0pp';
+      return `<div class="ta-odds-card">
+        <div class="ta-odds-lbl">${label} — Bye (Top 2) Odds</div>
+        <div class="ta-odds-team" style="color:${teamColor};">${name}</div>
+        <div class="ta-odds-after" style="color:var(--parchment);">${bPct}% → ${aPct}% <span class="${dCls}" style="font-size:0.75rem;">${dStr}</span></div>
+      </div>`;
+    }
+
+    function lastOddsCard(name, teamColor, label, before, after) {
+      if (!futureWeeks.length) {
+        return `<div class="ta-odds-card">
+          <div class="ta-odds-lbl">${label} — Last Place Odds</div>
+          <div class="ta-odds-team" style="color:${teamColor};">${name}</div>
+          <div style="font-family:'Crimson Text',serif;font-size:0.85rem;color:var(--brown-light);font-style:italic;">Season complete — standings are locked</div>
+        </div>`;
+      }
+      if (before == null) return '';
+      const bF = fmtLastOdds(before), aF = fmtLastOdds(after ?? before);
+      const bPct = Math.round(before * 100), aPct = Math.round((after ?? before) * 100);
+      const delta = aPct - bPct; // rising last-place risk is bad → inverted delta coloring
+      const dCls = delta > 0 ? 'ta-delta-dn-txt' : delta < 0 ? 'ta-delta-up-txt' : 'ta-delta-flat-txt';
+      const dStr = delta > 0 ? `+${delta}pp` : delta < 0 ? `${delta}pp` : '±0pp';
+
+      return `<div class="ta-odds-card">
+        <div class="ta-odds-lbl">${label} — Last Place Odds</div>
+        <div class="ta-odds-team" style="color:${teamColor};">${name}</div>
+        <div class="ta-odds-before">Before: <span style="color:${bF.color};font-weight:${bF.weight};">${bF.label}</span></div>
+        <div class="ta-odds-after" style="color:${aF.color};font-weight:${aF.weight};">${aF.label} <span class="${dCls}" style="font-size:0.75rem;">${dStr}</span></div>
+        <div class="ta-odds-bar-wrap">
+          <div class="ta-odds-bar-behind" style="width:${bPct}%;background:${bF.color};"></div>
+          <div class="ta-odds-bar-front"  style="width:${aPct}%;background:${aF.color};"></div>
+        </div>
+      </div>`;
+    }
+
+    const oddsCardsHtml = perTeam.map((pt, i) => {
+      const label = 'Team ' + SIDE_LABELS[i];
+      return oddsCard(names[i], SIDE_COLORS[i], label, pt.beforeOdds, pt.afterOdds)
+           + byeCard(names[i], SIDE_COLORS[i], label, pt.beforeTop2, pt.afterTop2)
+           + lastOddsCard(names[i], SIDE_COLORS[i], label, pt.beforeLast, pt.afterLast);
+    }).join('');
+
+    const lineupCardsHtml = perTeam.map((pt, i) => `
+      <div class="ta-lineup-card">
+        <div class="ta-lineup-lbl" style="color:${SIDE_COLORS[i]};">${names[i]}</div>
+        ${fullLineupHtml(pt.lineupBefore, pt.lineupAfter)}
+      </div>`).join('');
 
     return `
       <hr class="ta-divider">
@@ -1225,28 +1384,19 @@
         <table class="ta-rank-table">
           <thead><tr>
             <th class="ta-th-metric">Metric</th>
-            <th class="ta-th-a">${nA}</th>
-            <th class="ta-th-b">${nB}</th>
+            ${names.map((n, i) => `<th class="ta-th-side" style="color:${SIDE_COLORS[i]};">${n}</th>`).join('')}
           </tr></thead>
           <tbody>${tableRows}</tbody>
         </table>
       </div>
 
       <div class="ta-odds-row">
-        ${oddsCard(tA, beforeOddsA, afterOddsA, 'Team A', '#7ed07e', beforeTop2A, afterTop2A)}
-        ${oddsCard(tB, beforeOddsB, afterOddsB, 'Team B', '#8eb8e5', beforeTop2B, afterTop2B)}
+        ${oddsCardsHtml}
       </div>
 
       <div class="ta-step-hdr">Starting Lineups — After Trade</div>
       <div class="ta-lineup-grid">
-        <div class="ta-lineup-card">
-          <div class="ta-lineup-lbl" style="color:#7ed07e;">${nA}</div>
-          ${fullLineupHtml(lineupBeforeA, lineupAfterA)}
-        </div>
-        <div class="ta-lineup-card">
-          <div class="ta-lineup-lbl" style="color:#8eb8e5;">${nB}</div>
-          ${fullLineupHtml(lineupBeforeB, lineupAfterB)}
-        </div>
+        ${lineupCardsHtml}
       </div>
       <hr class="ta-divider">
     `;
@@ -1282,13 +1432,13 @@
 
       // Auto-detect user's team as Team A
       const user = SharedAuth.getUser?.();
-      if (user?.sleeper_username && !_teamAId) {
+      if (user?.sleeper_username && !_teamIds.length) {
         try {
           const su = await fetch(`${API}/sleeper/user/${encodeURIComponent(user.sleeper_username)}`).then(r => r.json());
           const myRoster = _rawData.allRosters.find(r => r.owner_id === su.user_id);
           if (myRoster) {
             const myTeam = _rawData.teams.find(t => t.rosterId === myRoster.roster_id);
-            if (myTeam) _teamAId = myTeam.rosterId;
+            if (myTeam) _teamIds.push(myTeam.rosterId);
           }
         } catch {}
       }
@@ -1296,10 +1446,11 @@
       // If a partner was pre-selected (from analyzer), skip straight to builder
       if (presetB) {
         const presetTeam = _rawData.teams.find(t => t.rosterId === presetB);
-        if (presetTeam && presetTeam.rosterId !== _teamAId) _teamBId = presetB;
+        if (presetTeam && !_teamIds.includes(presetB)) _teamIds.push(presetB);
       }
+      _routes = _teamIds.map(() => new Map());
 
-      if (_teamAId && _teamBId) renderTradeBuilder();
+      if (_teamIds.length >= 2) renderTradeBuilder();
       else renderTeamSelect();
     } catch(e) {
       document.getElementById('content').innerHTML = errHtml(e);

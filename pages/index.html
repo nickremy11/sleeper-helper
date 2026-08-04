@@ -468,6 +468,7 @@ const LS = {
   sortCol:    'record',
   sortDir:    -1,
   filter:     'all', // 'all' | 'contenders' | 'rebuilders'
+  search:     '',
   oddsLoaded:  false,
   oddsLoading: false,
   oddsError:   null,
@@ -4466,6 +4467,18 @@ function lsSetFilter(f) {
   lsDrawTable();
 }
 
+function lsOnSearch() {
+  const inp = document.getElementById('ls-search');
+  const pos = inp ? inp.selectionStart : null;
+  LS.search = inp?.value || '';
+  lsDrawTable();
+  const inp2 = document.getElementById('ls-search');
+  if (inp2) {
+    inp2.focus();
+    if (pos != null) inp2.setSelectionRange(pos, pos);
+  }
+}
+
 function lsSort(col) {
   LS.sortDir = LS.sortCol === col ? LS.sortDir * -1 : (col === 'name' ? 1 : -1);
   LS.sortCol = col;
@@ -4522,6 +4535,10 @@ function lsDrawTable() {
   // Apply filter
   if (LS.filter === 'contenders') rows = rows.filter(r => r.contender);
   if (LS.filter === 'rebuilders') rows = rows.filter(r => r.rebuilder);
+  if (LS.search) {
+    const q = LS.search.toLowerCase();
+    rows = rows.filter(r => r.name.toLowerCase().includes(q));
+  }
 
   rows = lsSortRows(rows);
 
@@ -4545,7 +4562,7 @@ function lsDrawTable() {
     `<th class="${thCls(c.key)}" onclick="lsSort('${c.key}')">${c.lbl}${arr(c.key)}</th>`
   ).join('')}</tr></thead>`;
 
-  const tbody = `<tbody>${rows.map(row => {
+  const tbody = `<tbody id="ls-tbody">${rows.map(row => {
     // League name cell
     const nameCls = row.contender ? ' ls-contender-name' : '';
     const nameCell = `<td><a href="/analyzer?league=${row.lgId}" class="row-link${nameCls}">${esc(row.name)}</a></td>`;
@@ -4619,6 +4636,8 @@ function lsDrawTable() {
       <button class="ghost-btn${LS.filter==='rebuilders'?' active':''}" onclick="lsSetFilter('rebuilders')"
         style="${LS.filter==='rebuilders'?'border-color:var(--gold);color:var(--gold);':''}"
         ${hasPrefs?'':'disabled title="Fill out Root For Me first"'}>Rebuilders</button>
+      <input type="text" class="search-input" id="ls-search" placeholder="Search leagues…"
+        oninput="lsOnSearch()" value="${esc(LS.search)}" style="max-width:180px;margin-left:4px;" />
     </div>`;
 
   const oddsBtn = LS.oddsLoading
