@@ -377,6 +377,7 @@
   // to auto-detect this, so it's a manual allowlist — add league IDs as needed.
   const BIG_POOL_LEAGUES = new Set(['1366390746625642496']); // SFB16
   const BIG_POOL_WIN_THRESHOLD = 12.5; // real cutoff is ~13 wins w/ points tiebreak; fudged to an even number
+  const BIG_POOL_REGULAR_SEASON_WEEKS = 11; // weeks 1-11, per-league — no in-platform playoff to derive this from
   let isBigPool = false;
 
   // Contender rank: shares the formula + localStorage cache with League
@@ -1049,8 +1050,11 @@
     for (const t of teams) t.playoffChances = playoffLabel(t.standing, playoffTeams, numTeams);
 
     // ── Playoff simulation ────────────────────────────────────────────────────
+    // Big-pool leagues don't run an in-platform playoff, so playoff_week_start
+    // isn't a meaningful signal for them (often 0/1/unset) — use the known
+    // regular-season length instead.
     const playoffWeekStart   = leagueRes?.settings?.playoff_week_start ?? 15;
-    const regularSeasonWeeks = playoffWeekStart - 1;
+    const regularSeasonWeeks = isBigPool ? BIG_POOL_REGULAR_SEASON_WEEKS : Math.max(1, playoffWeekStart - 1);
     const scoringSettings    = leagueRes?.scoring_settings || {};
 
     // Fetch all regular-season matchup weeks in parallel
