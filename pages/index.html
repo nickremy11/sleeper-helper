@@ -4335,6 +4335,7 @@ async function lsSimulateAllLeagues() {
         } catch (_) {}
       } catch (e) {
         d.playoffOddsError = e.message;
+        console.error(`[playoff odds] ${lgId}:`, e);
       }
     }));
 
@@ -4604,7 +4605,7 @@ function lsDrawTable() {
         ? `<span class="ls-bye-pct">${Math.round(row.top2Odds * 100)}% bye</span>` : '';
       chancesCell = `<td><span class="ls-odds-pct" style="color:hsl(${hue},70%,38%)">${pct}%</span>${byeHtml}</td>`;
     } else if (row.playoffOddsError) {
-      chancesCell = '<td><span style="color:var(--brown-light);font-size:0.8rem;">—</span></td>';
+      chancesCell = `<td><span style="color:var(--brown-light);font-size:0.8rem;" title="${esc(row.playoffOddsError)}">— ⚠︎</span></td>`;
     } else {
       const { label, cls } = lsPlayoffChancesLabel(row.standing, row.numTeams);
       chancesCell = `<td><span class="${cls}">${label}</span></td>`;

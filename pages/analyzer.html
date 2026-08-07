@@ -362,6 +362,13 @@
   let sortKey = 'overall';
   let sortDir = 1; // -1 = desc (highest value first), 1 = asc
   let hasIDP  = false;
+  // Two independent axes: Dynasty/Redraft (keeper status) and Best Ball/Lineup
+  // (start-your-lineup vs auto-optimal). Every league is exactly one of each —
+  // e.g. a league can be Dynasty Best Ball or Redraft Best Ball. Only dynasty
+  // leagues carry forward draft capital, so Overall/Draft columns are hidden
+  // for redraft leagues regardless of best-ball status.
+  let isDynasty = false;
+  let isBB      = false;
 
   // Contender rank: shares the formula + localStorage cache with League
   // Summaries (cr* helpers in shared-utils.js). Default mode 'adp'.
@@ -373,7 +380,7 @@
   // Column layout — same grid template applied to header and every card row.
   // Rebuilt after hasIDP is known. Includes: team | overall | contender | QB | RB | WR | TE | [DL] | draft | playoff | chevron
   function gridTpl() {
-    return `minmax(0,1fr) 68px 78px 58px 58px 58px 58px${hasIDP ? ' 74px' : ''} 64px 140px 22px`;
+    return `minmax(0,1fr)${isDynasty ? ' 68px' : ''} 78px 58px 58px 58px 58px${hasIDP ? ' 74px' : ''}${isDynasty ? ' 64px' : ''} 140px 22px`;
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -434,16 +441,17 @@
   }
 
   function getSortKeys() {
-    const keys = [
-      { key: 'overall',   label: 'Overall'   },
+    const keys = [];
+    if (isDynasty) keys.push({ key: 'overall', label: 'Overall' });
+    keys.push(
       { key: 'contender', label: 'Contender' },
       { key: 'QB',        label: 'QB'        },
       { key: 'RB',        label: 'RB'        },
       { key: 'WR',        label: 'WR'        },
       { key: 'TE',        label: 'TE'        },
-    ];
+    );
     if (hasIDP) keys.push({ key: 'DL', label: 'DL/LB/DB' });
-    keys.push({ key: 'draft',   label: 'Draft'   });
+    if (isDynasty) keys.push({ key: 'draft', label: 'Draft' });
     keys.push({ key: 'chances', label: 'Playoff' });
     return keys;
   }
@@ -790,8 +798,9 @@
     const IDP_SLOTS    = new Set(['DL','LB','DB','DE','DT','IDP_FLEX','CB','S']);
     hasIDP             = rp.some(p => IDP_SLOTS.has(p));
     const lgType       = leagueRes?.settings?.type ?? 0;
-    const isBB         = leagueRes?.settings?.best_ball === 1;
-    const category     = isBB ? 'bestball' : lgType === 2 ? 'dynasty' : 'redraft';
+    isDynasty          = lgType === 2;
+    isBB               = leagueRes?.settings?.best_ball === 1;
+    if (!isDynasty && sortKey === 'overall') sortKey = 'contender';
     const lgName       = leagueRes?.name || lgId;
     const playoffTeams = leagueRes?.settings?.playoff_teams ?? Math.floor(numTeams / 2);
     const formatFlags  = buildFormatFlags(leagueRes || {});
@@ -999,7 +1008,7 @@
     return {
       teams: teams.filter(t => t.overall > 0 || t.wins > 0 || t.losses > 0),
       allRosters,
-      lgName, category, season: nflSeason, formatFlags, numTeams,
+      lgName, season: nflSeason, formatFlags, numTeams,
       numStartersPerTeam, is2TE, nextSeason,
       crCtx: { players, byName, rosterPositions: rp, scoring: scoringSettings, season: nflSeason },
     };
@@ -1023,6 +1032,9 @@
     const fcMap     = buildFcMap(fcRes);
     const { players, byName } = buildPlayerMap(playersRes);
     const lgName    = espnRes?.settings?.name || `ESPN ${espnNumId}`;
+    isDynasty       = false; // ESPN leagues have no dynasty concept in this app
+    isBB            = false;
+    if (sortKey === 'overall') sortKey = 'contender';
     const numTeams  = (espnRes?.teams || []).length;
     const playoffTeams = Math.floor(numTeams / 2);
 
@@ -1070,7 +1082,7 @@
     for (const t of teams) t.playoffChances = playoffLabel(t.standing, playoffTeams, numTeams);
 
     return {
-      teams, lgName, category: 'redraft', season: nflSeason, formatFlags: [], numTeams,
+      teams, lgName, season: nflSeason, formatFlags: [], numTeams,
       crCtx: { players, byName, rosterPositions: CR_ESPN_LINEUP, scoring: {}, season: nflSeason },
     };
   }
@@ -1107,7 +1119,7 @@
 
   async function loadAndRender() {
     const result = isEspn ? await loadEspn() : await loadSleeper();
-    const { teams, lgName, category, season, formatFlags, numTeams, crCtx,
+    const { teams, lgName, season, formatFlags, numTeams, crCtx,
             numStartersPerTeam, is2TE, nextSeason, allRosters } = result;
 
     document.getElementById('league-title').textContent = lgName + ' · ' + season;
@@ -1120,7 +1132,7 @@
     window._azTeams = teams;
     window._azCtx   = crCtx;
     window._azMeta  = {
-      category, numTeams, formatFlags,
+      numTeams, formatFlags,
       numStartersPerTeam: numStartersPerTeam || 0,
       is2TE:              is2TE              || false,
       nextSeason:         nextSeason         || String(new Date().getFullYear() + 1),
@@ -1211,7 +1223,7 @@
   function renderAll() {
     const teams    = window._azTeams || [];
     const ranks    = window._azRanks || {};
-    const { category, numTeams, formatFlags } = window._azMeta || {};
+    const { numTeams, formatFlags } = window._azMeta || {};
 
     if (!teams.length) {
       document.getElementById('content').innerHTML = '<div class="empty-state"><p>No roster data found for this league</p></div>';
@@ -1231,11 +1243,15 @@
 
     const tpl = gridTpl();
 
-    // Format flags bar
-    const badgeCls = category === 'dynasty' ? 'az-badge-dynasty' : category === 'bestball' ? 'az-badge-bestball' : 'az-badge-redraft';
-    const badgeLbl = category === 'dynasty' ? 'Dynasty' : category === 'bestball' ? 'Best Ball' : 'Redraft';
+    // Format flags bar — two independent badges: Dynasty/Redraft, plus Best Ball
+    // when applicable (a league is never both bestball and non-bestball, but IS
+    // independently one of {dynasty,redraft} and one of {bestball,lineup}).
+    const keeperBadge = isDynasty
+      ? '<span class="az-badge az-badge-dynasty">Dynasty</span>'
+      : '<span class="az-badge az-badge-redraft">Redraft</span>';
+    const bbBadge = isBB ? '<span class="az-badge az-badge-bestball">Best Ball</span>' : '';
     const flagsHtml = `<div class="az-flags">
-      <span class="az-badge ${badgeCls}">${badgeLbl}</span>
+      ${keeperBadge}${bbBadge}
       <span class="az-flag">${numTeams} Teams</span>
       ${(formatFlags || []).map(f => `<span class="az-flag${f.hi ? ' az-flag-hi' : ''}">${f.label}</span>`).join('')}
     </div>`;
@@ -1252,10 +1268,10 @@
     if (hasIDP) posCols.push('DL');
     const crModeLbl = crMode === 'adp' ? 'ADP' : crData.loading ? '…' : 'Proj';
     const rankCols = [
-      { key: 'overall',   label: 'Overall'   },
+      ...(isDynasty ? [{ key: 'overall', label: 'Overall' }] : []),
       { key: 'contender', label: 'Contender<br><span class="az-th-sub">' + crModeLbl + '</span>' },
       ...posCols.map(p => ({ key: p, label: p === 'DL' ? 'DL/LB/DB' : p })),
-      { key: 'draft',     label: 'Draft'     },
+      ...(isDynasty ? [{ key: 'draft', label: 'Draft' }] : []),
       { key: 'chances',   label: 'Playoff'   },
     ];
 
@@ -1352,7 +1368,7 @@
         </div>`;
       }).join('');
 
-      const picksHtml = team.pickList.length ? (() => {
+      const picksHtml = (isDynasty && team.pickList.length) ? (() => {
         const pickRk   = (ranks.draft || {})[team.rosterId];
         const pickBg   = pickRk ? rankColor(pickRk, teams.length) : 'transparent';
         const pickBadge = pickRk ? `<span class="az-pos-rank-badge" style="background:${pickBg};">${pickRk}</span>` : '';
