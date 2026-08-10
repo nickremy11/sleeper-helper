@@ -457,12 +457,13 @@
   // ─── State ────────────────────────────────────────────────────────────────────
 
   const A = {
-    leagueId: null,      // ESPN numeric league ID or null
+    leagueId: null,      // ESPN numeric league ID, Sleeper league ID, or null
     leagueName: '',
+    source: null,        // 'espn' | 'sleeper' | null (manual/CSV)
     budget: 200,
     rosterSpots: 16,
     teams: [],           // [{id, name, spent, draftedCount, players:[{name,pos,price,keeper}]}]
-    players: [],         // [{name, pos, nflTeam, myVal, espnVal, drafted, price, teamId, keeper}]
+    players: [],         // [{name, pos, nflTeam, myVal, espnVal, drafted, price, teamId, keeper, _sleeperId}]
     posFilter: 'ALL',
     teamFilter: '',
     sortBy: 'inflated',  // 'my' | 'inflated' | 'espn'
@@ -471,8 +472,11 @@
     showDrafted: true,
     pollTimer: null,
     espnLeagues: [],     // [{id, name}] from settings
+    sleeperLeagues: [],  // [{id, name}] from the user's Sleeper username
+    sleeperDraftId: null,// the specific auction draft_id being polled
+    _sleeperPlayers: null, // Map<sleeperPlayerId, {name, pos, team}> — lazy-loaded, for pick resolution
     _modalPlayer: null,  // index into A.players
-    _nameMap: null,      // Map<normalizedName, idx> for ESPN matching
+    _nameMap: null,      // Map<normalizedName, idx> for ESPN/Sleeper name matching
     _espnValNote: null,  // status string for the one-shot ESPN $ auto-fill
     _notePopoverOpen: null, // 'target' | 'avoid' | 'dart' | null — which note search box is open
   };
@@ -480,12 +484,16 @@
   // ─── Persistence ─────────────────────────────────────────────────────────────
 
   function saveKey() {
+    // Sleeper gets its own namespace to avoid any theoretical collision with an
+    // ESPN numeric league ID; ESPN/manual keep their original (pre-Sleeper) format
+    // so existing saved drafts keep resolving.
+    if (A.source === 'sleeper') return 'auction_sleeper_' + A.leagueId;
     return 'auction_' + (A.leagueId || 'manual');
   }
 
   function persist() {
     const snap = {
-      leagueId: A.leagueId, leagueName: A.leagueName,
+      leagueId: A.leagueId, leagueName: A.leagueName, source: A.source, sleeperDraftId: A.sleeperDraftId,
       budget: A.budget, rosterSpots: A.rosterSpots,
       teams: A.teams, players: A.players,
     };
@@ -570,6 +578,7 @@
     draftedFor: ['$ drafted for', 'drafted for', 'keeper $', 'keeper price', 'keeper cost', 'draft $', 'kept for', 'kept $'],
     draftedTo:  ['team drafted to', 'drafted to', 'keeper team', 'kept by', 'owner'],
     tier:       ['position tier', 'tier', 'pos tier', 'rank tier', 'player tier'],
+    sleeperId:  ['sleeper id', 'sleeper_id', 'sleeperid', 'sleeper player id'],
   };
 
   function matchHeader(raw) {
@@ -692,6 +701,7 @@
         keeper:   isKeeper,
         price:    isKeeper ? draftedFor : 0,
         teamId:   isKeeper ? draftedTo : null,
+        _sleeperId: col.sleeperId !== undefined ? (parts[col.sleeperId] || '').trim() : '',
       });
     }
     const guessedCols = Object.keys(col).filter(k => headerCol[k] === undefined);
@@ -882,6 +892,11 @@
         A.espnLeagues.map(l => `<option value="${esc(l.id)}">${esc(l.name)}</option>`).join('')
       : `<option value="">— No ESPN leagues found —</option>`;
 
+    const sleeperOptions = A.sleeperLeagues.length
+      ? `<option value="">— No Sleeper league (CSV only) —</option>` +
+        A.sleeperLeagues.map(l => `<option value="${esc(l.id)}">${esc(l.name)}</option>`).join('')
+      : `<option value="">— No Sleeper leagues found —</option>`;
+
     const resumeBanner = resumeData ? `
       <div class="auc-resume-banner">
         <span>Resume saved draft? <strong>${esc(resumeData.leagueName || 'Manual')}</strong>
@@ -903,6 +918,13 @@
           <select id="setup-league" class="auc-select" onchange="onLeagueSelect(this.value)">${espnOptions}</select>
         </div>
         <div id="espn-team-mapping"></div>` : ''}
+
+        ${A.sleeperLeagues.length ? `
+        <div class="auc-field">
+          <label class="auc-label">Sleeper League (optional — enables live sync, auction drafts only)</label>
+          <select id="setup-sleeper-league" class="auc-select" onchange="onSleeperLeagueSelect(this.value)">${sleeperOptions}</select>
+        </div>
+        <div id="sleeper-team-mapping"></div>` : ''}
 
         <div class="auc-row2">
           <div class="auc-field">
@@ -926,8 +948,8 @@
             </div>
             <div class="auc-csv-hint">
               Only Player + a $ value are required — we'll guess those from the data if headers don't match.<br>
-              Also recognized: Position, Team, ESPN $ Value, Tier, $ Drafted For, Team Drafted To<br>
-              For keepers: fill $ Drafted For + Team Drafted To using the shorthand from your ESPN team mapping above.
+              Also recognized: Position, Team, ESPN $ Value, Tier, $ Drafted For, Team Drafted To, Sleeper ID<br>
+              For keepers: fill $ Drafted For + Team Drafted To using the shorthand from your ESPN/Sleeper team mapping above.
             </div>
           </div>
           <input id="csv-file" type="file" accept=".csv,text/csv" style="display:none" onchange="handleFileInput(this)">
@@ -946,16 +968,20 @@
     renderSetup(null);
   }
 
-  function doResume() {
+  async function doResume() {
     const d = window._resumeData;
     if (!d) return;
     Object.assign(A, {
       leagueId: d.leagueId, leagueName: d.leagueName,
+      // Old saves predate the `source` field — a saved leagueId with no source was always ESPN.
+      source: d.source || (d.leagueId ? 'espn' : null),
+      sleeperDraftId: d.sleeperDraftId || null,
       budget: d.budget, rosterSpots: d.rosterSpots,
       teams: d.teams, players: d.players,
     });
     buildNameMap();
-    if (A.leagueId) startEspnPoll();
+    if (A.source === 'espn' && A.leagueId) startEspnPoll();
+    else if (A.source === 'sleeper' && A.sleeperDraftId) await startSleeperPoll();
     renderMain();
   }
 
@@ -1055,7 +1081,7 @@
     reader.readAsText(file);
   }
 
-  function startDraft() {
+  async function startDraft() {
     if (!window._pendingPlayers) return;
 
     // Read ESPN team shorthands from the mapping section
@@ -1064,6 +1090,14 @@
       const id = inp.dataset.espnId;
       const name = inp.value.trim();
       if (id && name) espnShorthands[id] = name;
+    });
+
+    // Read Sleeper team shorthands from the mapping section
+    const sleeperShorthands = {}; // { rosterId: 'Nick' }
+    document.querySelectorAll('.sleeper-team-input').forEach(inp => {
+      const id = inp.dataset.sleeperId;
+      const name = inp.value.trim();
+      if (id && name) sleeperShorthands[id] = name;
     });
 
     // Read CSV-only keeper team renames (CSV-only mode fallback)
@@ -1080,20 +1114,50 @@
     }));
     A.budget     = parseInt(document.getElementById('setup-budget')?.value) || 200;
     A.rosterSpots = parseInt(document.getElementById('setup-spots')?.value) || 16;
-    const lgSel   = document.getElementById('setup-league');
-    A.leagueId    = lgSel ? lgSel.value || null : null;
-    A.leagueName  = lgSel && lgSel.value
-      ? (A.espnLeagues.find(l => l.id === lgSel.value) || {}).name || lgSel.value
-      : 'Manual';
-    A.espnTeamMap = espnShorthands;
 
-    const useEspn = A.leagueId && window._espnTeams && window._espnTeams.length > 0;
+    const espnSel    = document.getElementById('setup-league');
+    const sleeperSel = document.getElementById('setup-sleeper-league');
+    const espnVal    = espnSel ? espnSel.value : '';
+    const sleeperVal = sleeperSel ? sleeperSel.value : '';
+
+    A.source   = sleeperVal ? 'sleeper' : (espnVal ? 'espn' : null);
+    A.leagueId = sleeperVal || espnVal || null;
+    A.leagueName = A.source === 'sleeper'
+      ? (A.sleeperLeagues.find(l => l.id === sleeperVal) || {}).name || sleeperVal
+      : A.source === 'espn'
+        ? (A.espnLeagues.find(l => l.id === espnVal) || {}).name || espnVal
+        : 'Manual';
+    A.espnTeamMap = espnShorthands;
+    A.sleeperDraftId = A.source === 'sleeper' ? (window._sleeperDraft?.draft_id || null) : null;
+
+    const useEspn    = A.source === 'espn'    && window._espnTeams    && window._espnTeams.length > 0;
+    const useSleeper = A.source === 'sleeper' && window._sleeperTeams && window._sleeperTeams.length > 0;
 
     if (useEspn) {
       // Build all teams from ESPN, using the user-supplied shorthands as display names
       A.teams = window._espnTeams.map(et => ({
         id:           String(et.id),
         name:         espnShorthands[String(et.id)] || et.name || et.abbrev || `Team ${et.id}`,
+        spent:        0,
+        draftedCount: 0,
+        players:      [],
+      }));
+
+      // Merge keeper rows: match player.teamId (shorthand) → team by name, case-insensitive
+      A.players.forEach(p => {
+        if (!p.keeper || !p.teamId) return;
+        const team = A.teams.find(t => t.name.toLowerCase() === p.teamId.toLowerCase());
+        if (team) {
+          team.spent        += p.price;
+          team.draftedCount += 1;
+          team.players.push({ name: p.name, pos: p.pos, price: p.price, keeper: true });
+        }
+      });
+    } else if (useSleeper) {
+      // Build all teams from Sleeper rosters, using the user-supplied shorthands as display names
+      A.teams = window._sleeperTeams.map(st => ({
+        id:           st.id,
+        name:         sleeperShorthands[st.id] || st.name,
         spent:        0,
         draftedCount: 0,
         players:      [],
@@ -1116,7 +1180,8 @@
 
     buildNameMap();
     persist();
-    if (A.leagueId) startEspnPoll();
+    if (A.source === 'espn' && A.leagueId) startEspnPoll();
+    else if (A.source === 'sleeper' && A.sleeperDraftId) await startSleeperPoll();
     renderMain();
   }
 
@@ -1253,7 +1318,7 @@
         </div>
         <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
           <span class="auc-poll-dot${A.pollTimer ? ' live' : ''}"></span>
-          <span class="auc-poll-status">${A.pollTimer ? 'Live · ESPN' : 'Manual mode'}</span>
+          <span class="auc-poll-status">${A.pollTimer ? 'Live · ' + (A.source === 'sleeper' ? 'Sleeper' : 'ESPN') : 'Manual mode'}</span>
           ${A._espnValNote ? `<span class="auc-poll-status">${esc(A._espnValNote)}</span>` : ''}
           <button class="auc-btn auc-btn-ghost" style="margin-top:0;padding:5px 14px;font-size:0.38rem;" onclick="goReset()">New Draft</button>
         </div>
@@ -1482,7 +1547,7 @@
     if (!confirm('Start a new draft? All current data will be cleared.')) return;
     clearSaved();
     if (A.pollTimer) { clearInterval(A.pollTimer); A.pollTimer = null; }
-    Object.assign(A, { leagueId: null, leagueName: '', teams: [], players: [], posFilter: 'ALL', teamFilter: '', sortBy: 'inflated', sortDir: -1, search: '', showDrafted: true, _modalPlayer: null, _nameMap: null, _espnValNote: null, _notePopoverOpen: null });
+    Object.assign(A, { leagueId: null, leagueName: '', source: null, sleeperDraftId: null, teams: [], players: [], posFilter: 'ALL', teamFilter: '', sortBy: 'inflated', sortDir: -1, search: '', showDrafted: true, _modalPlayer: null, _nameMap: null, _espnValNote: null, _notePopoverOpen: null });
     init();
   }
 
@@ -1510,6 +1575,14 @@
   }
 
   async function onLeagueSelect(leagueId) {
+    // Mutual exclusivity: picking an ESPN league clears any Sleeper selection
+    const sleeperSel = document.getElementById('setup-sleeper-league');
+    if (sleeperSel) sleeperSel.value = '';
+    const sleeperMapEl = document.getElementById('sleeper-team-mapping');
+    if (sleeperMapEl) sleeperMapEl.innerHTML = '';
+    window._sleeperTeams = null;
+    window._sleeperDraft = null;
+
     const el = document.getElementById('espn-team-mapping');
     if (!leagueId) { if (el) el.innerHTML = ''; window._espnTeams = null; return; }
 
@@ -1663,6 +1736,169 @@
     }
   }
 
+  // ─── Sleeper integration ───────────────────────────────────────────────────────
+
+  async function fetchSleeperLeagues() {
+    try {
+      const username = SharedAuth.getUser?.()?.sleeper_username;
+      if (!username) return;
+      const [nflState, sleeperUser] = await Promise.all([
+        fetch(`${API}/sleeper/state/nfl`).then(r => r.ok ? r.json() : null),
+        fetch(`${API}/sleeper/user/${encodeURIComponent(username)}`).then(r => r.ok ? r.json() : null),
+      ]);
+      if (!sleeperUser?.user_id) return;
+      const season = nflState?.league_create_season || nflState?.season || String(new Date().getFullYear());
+      const leagues = await fetch(`${API}/sleeper/user/${sleeperUser.user_id}/leagues/nfl/${season}`)
+        .then(r => r.ok ? r.json() : []);
+      A.sleeperLeagues = (leagues || []).map(lg => ({ id: lg.league_id, name: lg.name || lg.league_id }));
+    } catch (_) {}
+  }
+
+  async function onSleeperLeagueSelect(leagueId) {
+    // Mutual exclusivity: picking a Sleeper league clears any ESPN selection
+    const espnSel = document.getElementById('setup-league');
+    if (espnSel) espnSel.value = '';
+    const espnMapEl = document.getElementById('espn-team-mapping');
+    if (espnMapEl) espnMapEl.innerHTML = '';
+    window._espnTeams = null;
+
+    const el = document.getElementById('sleeper-team-mapping');
+    if (!leagueId) { if (el) el.innerHTML = ''; window._sleeperTeams = null; window._sleeperDraft = null; return; }
+
+    if (el) el.innerHTML = `<div style="font-family:'Crimson Text',serif;font-size:0.86rem;color:var(--brown-light);padding:8px 0;">Loading teams…</div>`;
+
+    try {
+      const [rosters, users, league, drafts] = await Promise.all([
+        fetch(`${API}/sleeper/league/${leagueId}/rosters`).then(r => r.json()),
+        fetch(`${API}/sleeper/league/${leagueId}/users`).then(r => r.json()),
+        fetch(`${API}/sleeper/league/${leagueId}`).then(r => r.json()),
+        fetch(`${API}/sleeper/league/${leagueId}/drafts`).then(r => r.json()),
+      ]);
+
+      const auctionDrafts = (drafts || []).filter(d => d.type === 'auction');
+      if (!auctionDrafts.length) {
+        if (el) el.innerHTML = `<div style="font-family:'Crimson Text',serif;font-size:0.82rem;color:#e05252;padding:8px 0;">No auction draft found for this league. (Snake drafts aren't supported by this tool.)</div>`;
+        window._sleeperTeams = null; window._sleeperDraft = null;
+        return;
+      }
+      // Prefer a currently-live draft; otherwise the most recently started one.
+      const live = auctionDrafts.find(d => d.status === 'drafting' || d.status === 'paused');
+      const draft = live || [...auctionDrafts].sort((a, b) => (b.start_time || 0) - (a.start_time || 0))[0];
+      window._sleeperDraft = draft;
+
+      const usersById = new Map((users || []).map(u => [u.user_id, u]));
+      window._sleeperTeams = (rosters || []).map(r => {
+        const u = usersById.get(r.owner_id);
+        const name = u?.metadata?.team_name || u?.display_name || `Team ${r.roster_id}`;
+        return { id: String(r.roster_id), name };
+      });
+
+      // Pre-fill budget + roster spots from the draft/league settings
+      const budgetEl = document.getElementById('setup-budget');
+      if (budgetEl && draft.settings?.budget) budgetEl.value = draft.settings.budget;
+      const spotsEl = document.getElementById('setup-spots');
+      if (spotsEl && league?.roster_positions?.length) spotsEl.value = league.roster_positions.length;
+
+      if (!window._sleeperTeams.length) {
+        if (el) el.innerHTML = `<div style="font-family:'Crimson Text',serif;font-size:0.82rem;color:var(--brown-light);font-style:italic;padding:8px 0;">No teams found for this league.</div>`;
+        return;
+      }
+
+      if (el) el.innerHTML = `
+        <div style="border-top:1px dashed rgba(255,255,255,0.08);padding-top:14px;margin-top:2px;">
+          <div class="auc-label" style="margin-bottom:6px;">Team Nicknames</div>
+          <div style="font-family:'Crimson Text',serif;font-size:0.8rem;color:var(--brown-light);margin-bottom:12px;">
+            ${draft.status === 'complete' ? '<em style="color:var(--gold);">This draft has already completed — picks won\'t sync live.</em><br>' : ''}
+            Give each team a shorthand. Use the <em>same shorthand</em> in your CSV's
+            <strong style="color:var(--parchment);">Team Drafted To</strong> column for keepers.
+          </div>
+          ${window._sleeperTeams.map(t => `
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+                <span style="font-family:'Crimson Text',serif;font-size:0.82rem;color:var(--brown-light);
+                             flex:1.2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                      title="${esc(t.name)}">${esc(t.name)}</span>
+                <span style="color:var(--brown-light);flex-shrink:0;">→</span>
+                <input class="auc-input sleeper-team-input"
+                       data-sleeper-id="${esc(t.id)}"
+                       value="${esc(t.name)}"
+                       style="flex:1;padding:6px 10px;"
+                       placeholder="e.g. Nick">
+              </div>`).join('')}
+        </div>`;
+    } catch (err) {
+      if (el) el.innerHTML = `<div style="font-family:'Crimson Text',serif;font-size:0.82rem;color:#e05252;padding:8px 0;">Could not load Sleeper teams: ${esc(err.message)}</div>`;
+      window._sleeperTeams = null; window._sleeperDraft = null;
+    }
+  }
+
+  // Lazy-loaded once per session: id → {name, pos, team}, used to resolve a
+  // Sleeper draft pick's player_id into a name we can match against A._nameMap.
+  async function loadSleeperPlayerMap() {
+    if (A._sleeperPlayers) return;
+    try {
+      const r = await fetch(`${API}/players`);
+      if (!r.ok) return;
+      const data = await r.json();
+      const m = new Map();
+      for (const id in data) {
+        const pl = data[id];
+        if (!pl?.full_name) continue;
+        m.set(id, { name: pl.full_name, pos: pl.position, team: pl.team });
+      }
+      A._sleeperPlayers = m;
+    } catch (_) {}
+  }
+
+  async function pollSleeperDraft() {
+    if (!A.sleeperDraftId) return;
+    try {
+      const r = await fetch(`${API}/sleeper/draft/${A.sleeperDraftId}/picks`);
+      if (!r.ok) return;
+      const picks = await r.json();
+      let changed = false;
+
+      (picks || []).forEach(pick => {
+        const price = parseFloat(pick.metadata?.amount);
+        if (isNaN(price)) return; // not yet a recorded auction bid
+        const teamId = String(pick.roster_id ?? '');
+        if (!teamId) return;
+
+        // Prefer an exact Sleeper ID match (from CSV), fall back to name matching
+        const sleeperId = String(pick.player_id ?? '');
+        let pIdx = sleeperId ? A.players.findIndex(p => p._sleeperId && p._sleeperId === sleeperId) : -1;
+        if (pIdx < 0) {
+          const sp = A._sleeperPlayers?.get(sleeperId);
+          if (sp) pIdx = A._nameMap?.get(normalizePlayerName(sp.name)) ?? -1;
+        }
+        if (pIdx < 0) return;
+
+        const p = A.players[pIdx];
+        if (p.drafted) return; // already recorded
+
+        const team = A.teams.find(t => t.id === teamId);
+        if (!team) return;
+
+        p.drafted = true;
+        p.price = price;
+        p.teamId = teamId;
+        p._sleeperId = sleeperId;
+        team.spent += price;
+        team.draftedCount += 1;
+        team.players.push({ name: p.name, pos: p.pos, price, keeper: false });
+        changed = true;
+      });
+
+      if (changed) { persist(); renderMain(); }
+    } catch (_) {}
+  }
+
+  async function startSleeperPoll() {
+    await loadSleeperPlayerMap();
+    if (A.pollTimer) clearInterval(A.pollTimer);
+    A.pollTimer = setInterval(pollSleeperDraft, 10000);
+    pollSleeperDraft();
+  }
+
   // ─── Init ─────────────────────────────────────────────────────────────────────
 
   async function init() {
@@ -1672,8 +1908,8 @@
     const savedKey = localStorage.getItem('auction_last_key');
     const resumeData = savedKey ? loadSaved(savedKey) : loadSaved('auction_manual');
 
-    // Fetch ESPN leagues if logged in
-    await fetchEspnSettings();
+    // Fetch ESPN + Sleeper leagues if logged in
+    await Promise.all([fetchEspnSettings(), fetchSleeperLeagues()]);
 
     renderSetup(resumeData && resumeData.players && resumeData.players.length ? resumeData : null);
   }
@@ -1694,6 +1930,7 @@
   window.addTeamPrompt = addTeamPrompt;
   window.renameTeam    = renameTeam;
   window.onLeagueSelect = onLeagueSelect;
+  window.onSleeperLeagueSelect = onSleeperLeagueSelect;
   window.goReset       = goReset;
   window.handleDrop    = handleDrop;
   window.handleFileInput = handleFileInput;
