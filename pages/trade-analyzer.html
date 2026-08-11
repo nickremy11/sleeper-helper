@@ -660,8 +660,18 @@
       ridToSlot = {};
       for (const [slot, rid] of Object.entries(rawSlots)) ridToSlot[String(rid)] = parseInt(slot);
     }
-    const maxTradedRound = tradedPicks.reduce((m, tp) => Math.max(m, tp.round || 0), 0);
-    const numRounds    = curDraft?.settings?.rounds || maxTradedRound || 4;
+    // Actual rounds the league drafts — from draft settings, then highest traded pick round, then 4.
+    // curDraft is whichever draft matches the current season, which for a league that just did its
+    // startup this year IS the startup — a 20+ round draft that fills the whole roster, not
+    // representative of the ~4-round rookie drafts every future season. Ignore it in that case, and
+    // only look at trades for future seasons (a startup-day trade of e.g. a 28th-round pick shouldn't
+    // inflate future-season round counts either) — see analyzer.html for the same fix.
+    const curYear         = parseInt(nflSeason);
+    const STARTUP_ROUND_THRESHOLD = 10;
+    const curDraftRounds  = curDraft?.settings?.rounds;
+    const isLikelyStartupDraft = curDraftRounds > STARTUP_ROUND_THRESHOLD;
+    const maxTradedRound  = tradedPicks.reduce((m, tp) => (parseInt(tp.season) > curYear ? Math.max(m, tp.round || 0) : m), 0);
+    const numRounds       = (!isLikelyStartupDraft && curDraftRounds) || maxTradedRound || 4;
     const allRosters   = rostersRes || [];
     const numTeams     = allRosters.length;
     const rp           = leagueRes?.roster_positions || [];
