@@ -474,6 +474,8 @@
     espnLeagues: [],     // [{id, name}] from settings
     sleeperLeagues: [],  // [{id, name}] from the user's Sleeper username
     sleeperDraftId: null,// the specific auction draft_id being polled
+    _sleeperUsername: undefined, // undefined = fetch not yet run; null = no username on profile; string = looked up
+    _sleeperFetchState: null,    // null | 'no-user' | 'error' | 'ok' — why sleeperLeagues came back empty, for the setup UI
     _sleeperPlayers: null, // Map<sleeperPlayerId, {name, pos, team}> — lazy-loaded, for pick resolution
     _modalPlayer: null,  // index into A.players
     _nameMap: null,      // Map<normalizedName, idx> for ESPN/Sleeper name matching
@@ -895,7 +897,31 @@
     const sleeperOptions = A.sleeperLeagues.length
       ? `<option value="">— No Sleeper league (CSV only) —</option>` +
         A.sleeperLeagues.map(l => `<option value="${esc(l.id)}">${esc(l.name)}</option>`).join('')
-      : `<option value="">— No Sleeper leagues found —</option>`;
+      : `<option value="">— No Sleeper leagues found for ${esc(A._sleeperUsername || '')} —</option>`;
+
+    // Sleeper League field — always visible once the lookup has run, but its content
+    // depends on *why* sleeperLeagues might be empty so it's never a silent no-op.
+    const sleeperFieldHtml = A._sleeperFetchState === 'no-user' ? `
+      <div class="auc-field">
+        <label class="auc-label">Sleeper League (optional — enables live sync)</label>
+        <div style="font-family:'Crimson Text',serif;font-size:0.86rem;color:var(--brown-light);font-style:italic;">
+          Set your Sleeper username in your <a href="/myprofile" style="color:var(--gold);">profile</a> to enable Sleeper live sync.
+        </div>
+      </div>`
+      : A._sleeperFetchState === 'error' ? `
+      <div class="auc-field">
+        <label class="auc-label">Sleeper League (optional — enables live sync)</label>
+        <div style="font-family:'Crimson Text',serif;font-size:0.86rem;color:#e05252;">
+          Could not look up Sleeper leagues for "${esc(A._sleeperUsername || '')}" — check the username in your <a href="/myprofile" style="color:var(--gold);">profile</a>.
+        </div>
+      </div>`
+      : A._sleeperFetchState === 'ok' ? `
+      <div class="auc-field">
+        <label class="auc-label">Sleeper League (optional — enables live sync, auction drafts only)</label>
+        <select id="setup-sleeper-league" class="auc-select" onchange="onSleeperLeagueSelect(this.value)">${sleeperOptions}</select>
+      </div>
+      <div id="sleeper-team-mapping"></div>`
+      : '';
 
     const resumeBanner = resumeData ? `
       <div class="auc-resume-banner">
@@ -919,12 +945,7 @@
         </div>
         <div id="espn-team-mapping"></div>` : ''}
 
-        ${A.sleeperLeagues.length ? `
-        <div class="auc-field">
-          <label class="auc-label">Sleeper League (optional — enables live sync, auction drafts only)</label>
-          <select id="setup-sleeper-league" class="auc-select" onchange="onSleeperLeagueSelect(this.value)">${sleeperOptions}</select>
-        </div>
-        <div id="sleeper-team-mapping"></div>` : ''}
+        ${sleeperFieldHtml}
 
         <div class="auc-row2">
           <div class="auc-field">
@@ -1739,19 +1760,21 @@
   // ─── Sleeper integration ───────────────────────────────────────────────────────
 
   async function fetchSleeperLeagues() {
+    const username = SharedAuth.getUser?.()?.sleeper_username;
+    A._sleeperUsername = username || null;
+    if (!username) { A._sleeperFetchState = 'no-user'; return; }
     try {
-      const username = SharedAuth.getUser?.()?.sleeper_username;
-      if (!username) return;
       const [nflState, sleeperUser] = await Promise.all([
         fetch(`${API}/sleeper/state/nfl`).then(r => r.ok ? r.json() : null),
         fetch(`${API}/sleeper/user/${encodeURIComponent(username)}`).then(r => r.ok ? r.json() : null),
       ]);
-      if (!sleeperUser?.user_id) return;
+      if (!sleeperUser?.user_id) { A._sleeperFetchState = 'error'; return; }
       const season = nflState?.league_create_season || nflState?.season || String(new Date().getFullYear());
       const leagues = await fetch(`${API}/sleeper/user/${sleeperUser.user_id}/leagues/nfl/${season}`)
         .then(r => r.ok ? r.json() : []);
       A.sleeperLeagues = (leagues || []).map(lg => ({ id: lg.league_id, name: lg.name || lg.league_id }));
-    } catch (_) {}
+      A._sleeperFetchState = 'ok';
+    } catch (_) { A._sleeperFetchState = 'error'; }
   }
 
   async function onSleeperLeagueSelect(leagueId) {
