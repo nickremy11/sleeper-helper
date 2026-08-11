@@ -964,7 +964,9 @@
     const STARTUP_ROUND_THRESHOLD = 10;
     const curDraftRounds = curDraft?.settings?.rounds;
     const isLikelyStartupDraft = curDraftRounds > STARTUP_ROUND_THRESHOLD;
-    const maxTradedRound = tradedPicks.reduce((m, tp) => Math.max(m, tp.round || 0), 0);
+    // Only look at trades for future seasons — a startup-day trade of e.g. a 28th-round pick
+    // (still recorded against the current season) shouldn't inflate future-season round counts.
+    const maxTradedRound = tradedPicks.reduce((m, tp) => (parseInt(tp.season) > curYear ? Math.max(m, tp.round || 0) : m), 0);
     const numRounds = (!isLikelyStartupDraft && curDraftRounds) || maxTradedRound || 4;
 
     const allRosters = rostersRes || [];
