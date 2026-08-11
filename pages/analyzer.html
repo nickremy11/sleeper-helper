@@ -956,9 +956,16 @@
       ridToSlot = {};
       for (const [slot, rid] of Object.entries(rawSlots)) ridToSlot[String(rid)] = parseInt(slot);
     }
-    // Actual rounds the league drafts — from draft settings, then highest traded pick round, then 4
+    // Actual rounds the league drafts — from draft settings, then highest traded pick round, then 4.
+    // curDraft is whichever draft matches the current season, which for a league that just did its
+    // startup this year IS the startup — a 20+ round draft that fills the whole roster, not
+    // representative of the ~4-round rookie drafts every future season. Ignore it in that case so
+    // future-season picks fall back to traded-pick evidence / the 4-round default instead.
+    const STARTUP_ROUND_THRESHOLD = 10;
+    const curDraftRounds = curDraft?.settings?.rounds;
+    const isLikelyStartupDraft = curDraftRounds > STARTUP_ROUND_THRESHOLD;
     const maxTradedRound = tradedPicks.reduce((m, tp) => Math.max(m, tp.round || 0), 0);
-    const numRounds = curDraft?.settings?.rounds || maxTradedRound || 4;
+    const numRounds = (!isLikelyStartupDraft && curDraftRounds) || maxTradedRound || 4;
 
     const allRosters = rostersRes || [];
     const numTeams   = allRosters.length;
