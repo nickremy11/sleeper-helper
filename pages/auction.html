@@ -462,6 +462,7 @@
     source: null,        // 'espn' | 'sleeper' | null (manual/CSV)
     budget: 200,
     rosterSpots: 16,
+    lineupReqs: null,     // {QB,RB,WR,TE,FLEX,K,DST} starter counts — null until Start Tracking; drives "Needs"
     teams: [],           // [{id, name, spent, draftedCount, players:[{name,pos,price,keeper}]}]
     players: [],         // [{name, pos, nflTeam, myVal, espnVal, drafted, price, teamId, keeper, _sleeperId}]
     posFilter: 'ALL',
@@ -496,7 +497,7 @@
   function persist() {
     const snap = {
       leagueId: A.leagueId, leagueName: A.leagueName, source: A.source, sleeperDraftId: A.sleeperDraftId,
-      budget: A.budget, rosterSpots: A.rosterSpots,
+      budget: A.budget, rosterSpots: A.rosterSpots, lineupReqs: A.lineupReqs,
       teams: A.teams, players: A.players,
     };
     try {
@@ -576,7 +577,10 @@
     pos:        ['position', 'pos'],
     nflTeam:    ['team', 'nfl team', 'nfl_team', 'nfl', 'pro team'],
     myVal:      ['my $ value', 'my $', 'my value', 'myval', 'value', 'my_value', 'my$', 'my dollar value'],
-    espnVal:    ['espn $ value', 'espn $', 'espn value', 'espnval', 'espn_value', 'espn$', 'espn dollar value'],
+    // "espnVal" is really just "the external $ value" — it also accepts a Sleeper $
+    // header, since which one is meaningful depends on the draft's source (see extValLabel()).
+    espnVal:    ['espn $ value', 'espn $', 'espn value', 'espnval', 'espn_value', 'espn$', 'espn dollar value',
+                 'sleeper $ value', 'sleeper $', 'sleeper value', 'sleeperval', 'sleeper_value', 'sleeper$', 'sleeper dollar value'],
     draftedFor: ['$ drafted for', 'drafted for', 'keeper $', 'keeper price', 'keeper cost', 'draft $', 'kept for', 'kept $'],
     draftedTo:  ['team drafted to', 'drafted to', 'keeper team', 'kept by', 'owner'],
     tier:       ['position tier', 'tier', 'pos tier', 'rank tier', 'player tier'],
@@ -738,6 +742,51 @@
     return name.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
   }
 
+  // ─── Starting lineup requirements ──────────────────────────────────────────────
+  // {QB,RB,WR,TE,FLEX,K,DST} starter counts. Drives each team's "Needs" hint.
+  // Falls back to this shape when nothing's been detected/entered yet.
+  const DEFAULT_LINEUP_REQS = { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 2, K: 1, DST: 1 };
+  const LINEUP_REQ_POS = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'K', 'DST'];
+
+  // Sleeper's league.roster_positions is a flat array like
+  // ['QB','RB','RB','WR','WR','TE','FLEX','FLEX','K','DEF','BN','BN',...] — one
+  // entry per roster slot. Bench/reserve slots and IDP slots (not tracked by this
+  // tool) are dropped; any flex variant (FLEX/SUPER_FLEX/REC_FLEX) buckets to FLEX.
+  function lineupReqsFromSleeperPositions(rosterPositions) {
+    const req = { QB: 0, RB: 0, WR: 0, TE: 0, FLEX: 0, K: 0, DST: 0 };
+    const FLEX_SLOTS = new Set(['FLEX', 'SUPER_FLEX', 'REC_FLEX', 'WRRB_FLEX']);
+    (rosterPositions || []).forEach(slot => {
+      if (slot === 'BN' || slot === 'IR' || slot === 'TAXI') return;
+      if (slot === 'DEF') { req.DST++; return; }
+      if (FLEX_SLOTS.has(slot)) { req.FLEX++; return; }
+      if (req[slot] !== undefined) req[slot]++;
+      // else: unrecognized/IDP slot (DL, LB, DB, ...) — silently dropped
+    });
+    return req;
+  }
+
+  // ESPN's mSettings → settings.rosterSettings.lineupSlotCounts is keyed by
+  // lineup slot ID (per ESPN's stable, widely-used numbering: see the espn-api
+  // project's POSITION_MAP). Bench (20), IR (21), and IDP slots are dropped.
+  const ESPN_LINEUP_SLOT_MAP = { 0: 'QB', 2: 'RB', 3: 'FLEX', 4: 'WR', 5: 'FLEX', 6: 'TE', 16: 'DST', 17: 'K', 23: 'FLEX' };
+  function lineupReqsFromEspnSlotCounts(slotCounts) {
+    const req = { QB: 0, RB: 0, WR: 0, TE: 0, FLEX: 0, K: 0, DST: 0 };
+    Object.entries(slotCounts || {}).forEach(([slotId, count]) => {
+      const pos = ESPN_LINEUP_SLOT_MAP[Number(slotId)];
+      if (pos) req[pos] += (parseInt(count) || 0);
+    });
+    return req;
+  }
+
+  // Pushes detected/loaded lineup requirements into the setup form's inputs.
+  function applyLineupReqsToInputs(req) {
+    if (!req) return;
+    document.querySelectorAll('.lineup-req-input').forEach(inp => {
+      const pos = inp.dataset.pos;
+      if (req[pos] !== undefined) inp.value = req[pos];
+    });
+  }
+
   function buildNameMap() {
     const m = new Map();
     A.players.forEach((p, i) => m.set(normalizePlayerName(p.name), i));
@@ -766,18 +815,20 @@
   }
 
   function teamNeeds(team) {
-    const SLOT_ORDER = ['QB','RB','RB','WR','WR','TE','RB/WR/TE','K','DST'];
-    const slots = SLOT_ORDER.slice(0, A.rosterSpots);
+    // Starter requirements come from the league (Sleeper roster_positions / ESPN
+    // lineupSlotCounts) when detected at setup, else the user's manual entry, else
+    // a standard-league default. FLEX isn't folded in here — attributing it to a
+    // specific position would need real starter-slot assignment, not just a count.
+    const req = A.lineupReqs || DEFAULT_LINEUP_REQS;
     const roster = [...team.players];
     const needs = [];
-    const filled = { QB:0, RB:0, WR:0, TE:0, K:0, DST:0, FLEX:0 };
+    const filled = { QB:0, RB:0, WR:0, TE:0, K:0, DST:0 };
     roster.forEach(p => {
       const pos = normPos(p.pos) || p.pos;
       if (filled[pos] !== undefined) filled[pos]++;
     });
-    const want = { QB:1, RB:2, WR:2, TE:1, K:1, DST:1 };
-    for (const [pos, n] of Object.entries(want)) {
-      const need = n - (filled[pos] || 0);
+    for (const pos of ['QB','RB','WR','TE','K','DST']) {
+      const need = (req[pos] || 0) - (filled[pos] || 0);
       if (need > 0) needs.push(`${need} ${pos}`);
     }
     return needs;
@@ -888,6 +939,14 @@
     return '$' + Math.round(n);
   }
 
+  // Label for the 3rd $ column (p.espnVal) — the field itself stays named "espnVal"
+  // internally (it's just "the external $ value", populated from a CSV column or,
+  // for ESPN sources, ESPN's own live auction-value feed), but what it represents
+  // depends on which draft source is active.
+  function extValLabel() {
+    return A.source === 'sleeper' ? 'Sleeper $' : A.source === 'espn' ? 'ESPN $' : 'Other $';
+  }
+
   function renderSetup(resumeData) {
     const espnOptions = A.espnLeagues.length
       ? `<option value="">— No ESPN league (CSV only) —</option>` +
@@ -959,6 +1018,19 @@
         </div>
 
         <div class="auc-field">
+          <label class="auc-label">Starting Lineup <span style="font-family:'Crimson Text',serif;text-transform:none;letter-spacing:normal;font-style:italic;color:var(--brown-light);">— drives each team's "Needs" hint; auto-filled when you pick an ESPN/Sleeper league above</span></label>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            ${LINEUP_REQ_POS.map(pos => `
+              <div style="display:flex;flex-direction:column;align-items:center;gap:5px;">
+                <label style="font-family:'Rye',serif;font-size:0.4rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--brown-light);">${pos}</label>
+                <input type="number" min="0" class="auc-input lineup-req-input" data-pos="${pos}"
+                  value="${(A.lineupReqs || DEFAULT_LINEUP_REQS)[pos]}"
+                  style="width:56px;padding:7px 4px;text-align:center;">
+              </div>`).join('')}
+          </div>
+        </div>
+
+        <div class="auc-field">
           <label class="auc-label">Player Values CSV</label>
           <div class="auc-csv-drop" id="csv-drop" onclick="document.getElementById('csv-file').click()"
             ondragover="event.preventDefault();this.classList.add('drag-over')"
@@ -969,7 +1041,7 @@
             </div>
             <div class="auc-csv-hint">
               Only Player + a $ value are required — we'll guess those from the data if headers don't match.<br>
-              Also recognized: Position, Team, ESPN $ Value, Tier, $ Drafted For, Team Drafted To, Sleeper ID<br>
+              Also recognized: Position, Team, ESPN/Sleeper $ Value, Tier, $ Drafted For, Team Drafted To, Sleeper ID<br>
               For keepers: fill $ Drafted For + Team Drafted To using the shorthand from your ESPN/Sleeper team mapping above.
             </div>
           </div>
@@ -997,7 +1069,7 @@
       // Old saves predate the `source` field — a saved leagueId with no source was always ESPN.
       source: d.source || (d.leagueId ? 'espn' : null),
       sleeperDraftId: d.sleeperDraftId || null,
-      budget: d.budget, rosterSpots: d.rosterSpots,
+      budget: d.budget, rosterSpots: d.rosterSpots, lineupReqs: d.lineupReqs || null,
       teams: d.teams, players: d.players,
     });
     buildNameMap();
@@ -1031,7 +1103,7 @@
 
         // Column detection summary
         const COL_LABELS = { player:'Player', pos:'Position', nflTeam:'NFL Team',
-          myVal:'My $', espnVal:'ESPN $', draftedFor:'$ Drafted For', draftedTo:'Team Drafted To', tier:'Tier' };
+          myVal:'My $', espnVal:'ESPN/Sleeper $', draftedFor:'$ Drafted For', draftedTo:'Team Drafted To', tier:'Tier', sleeperId:'Sleeper ID' };
         const colPills = Object.entries(COL_LABELS).map(([k, lbl]) =>
           detectedCols[k] !== undefined
             ? `<span style="color:var(--green-light);margin-right:6px;">✓ ${lbl}${guessedCols.includes(k) ? ' <em style="color:var(--gold);font-style:italic;">(guessed)</em>' : ''}</span>`
@@ -1135,6 +1207,12 @@
     }));
     A.budget     = parseInt(document.getElementById('setup-budget')?.value) || 200;
     A.rosterSpots = parseInt(document.getElementById('setup-spots')?.value) || 16;
+
+    const lineupReqs = {};
+    document.querySelectorAll('.lineup-req-input').forEach(inp => {
+      lineupReqs[inp.dataset.pos] = parseInt(inp.value) || 0;
+    });
+    A.lineupReqs = lineupReqs;
 
     const espnSel    = document.getElementById('setup-league');
     const sleeperSel = document.getElementById('setup-sleeper-league');
@@ -1378,7 +1456,7 @@
         onclick="setPosFilter('${pos}')">${pos}</button>`).join('');
 
     const sortPills = [
-      ['inflated', 'Inflated $'], ['my', 'My $'], ['espn', 'ESPN $']
+      ['inflated', 'Inflated $'], ['my', 'My $'], ['espn', extValLabel()]
     ].map(([key, lbl]) => `
       <button class="auc-pill${A.sortBy === key ? ' active' : ''}"
         onclick="setSort('${key}')">${lbl}</button>`).join('');
@@ -1458,7 +1536,7 @@
           <th>Team</th>
           <th class="num sortable${A.sortBy==='my'?' sort-active':''}" onclick="setSort('my')">My ${sortArrow('my')}</th>
           <th class="num sortable${A.sortBy==='inflated'?' sort-active':''}" onclick="setSort('inflated')">Inflated ${sortArrow('inflated')}</th>
-          <th class="num sortable${A.sortBy==='espn'?' sort-active':''}" onclick="setSort('espn')">ESPN ${sortArrow('espn')}</th>
+          <th class="num sortable${A.sortBy==='espn'?' sort-active':''}" onclick="setSort('espn')">${esc(extValLabel())} ${sortArrow('espn')}</th>
           <th>Status</th>
         </tr></thead>
         <tbody>${tableBody}</tbody>
@@ -1568,7 +1646,7 @@
     if (!confirm('Start a new draft? All current data will be cleared.')) return;
     clearSaved();
     if (A.pollTimer) { clearInterval(A.pollTimer); A.pollTimer = null; }
-    Object.assign(A, { leagueId: null, leagueName: '', source: null, sleeperDraftId: null, teams: [], players: [], posFilter: 'ALL', teamFilter: '', sortBy: 'inflated', sortDir: -1, search: '', showDrafted: true, _modalPlayer: null, _nameMap: null, _espnValNote: null, _notePopoverOpen: null });
+    Object.assign(A, { leagueId: null, leagueName: '', source: null, sleeperDraftId: null, lineupReqs: null, teams: [], players: [], posFilter: 'ALL', teamFilter: '', sortBy: 'inflated', sortDir: -1, search: '', showDrafted: true, _modalPlayer: null, _nameMap: null, _espnValNote: null, _notePopoverOpen: null });
     init();
   }
 
@@ -1615,12 +1693,13 @@
       const d = await r.json();
       window._espnTeams = d.teams || [];
 
-      // Pre-fill roster spots from league settings
+      // Pre-fill roster spots + starting lineup from league settings
       const slotCounts = d.settings?.rosterSettings?.lineupSlotCounts;
       if (slotCounts) {
         const total = Object.values(slotCounts).reduce((s, v) => s + v, 0);
         const spotsEl = document.getElementById('setup-spots');
         if (total > 0 && spotsEl) spotsEl.value = total;
+        applyLineupReqsToInputs(lineupReqsFromEspnSlotCounts(slotCounts));
       }
 
       if (!window._espnTeams.length) {
@@ -1816,11 +1895,12 @@
         return { id: String(r.roster_id), name };
       });
 
-      // Pre-fill budget + roster spots from the draft/league settings
+      // Pre-fill budget + roster spots + starting lineup from the draft/league settings
       const budgetEl = document.getElementById('setup-budget');
       if (budgetEl && draft.settings?.budget) budgetEl.value = draft.settings.budget;
       const spotsEl = document.getElementById('setup-spots');
       if (spotsEl && league?.roster_positions?.length) spotsEl.value = league.roster_positions.length;
+      if (league?.roster_positions) applyLineupReqsToInputs(lineupReqsFromSleeperPositions(league.roster_positions));
 
       if (!window._sleeperTeams.length) {
         if (el) el.innerHTML = `<div style="font-family:'Crimson Text',serif;font-size:0.82rem;color:var(--brown-light);font-style:italic;padding:8px 0;">No teams found for this league.</div>`;
