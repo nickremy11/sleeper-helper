@@ -1001,6 +1001,12 @@
         <div class="auc-field">
           <label class="auc-label">ESPN League (optional — enables live sync)</label>
           <select id="setup-league" class="auc-select" onchange="onLeagueSelect(this.value)">${espnOptions}</select>
+          <div style="margin-top:8px;">
+            <a href="#" id="espn-csv-export-link" onclick="exportEspnDollarCsv(event)"
+              style="font-family:'Crimson Text',serif;font-size:0.82rem;color:var(--gold);text-decoration:underline;cursor:pointer;">
+              ⇩ Export ESPN $ values as CSV
+            </a>
+          </div>
         </div>
         <div id="espn-team-mapping"></div>` : ''}
 
@@ -1791,6 +1797,74 @@
     fetchEspnAuctionValues();
   }
 
+  // Serializes rows (2D array) as a CSV string and triggers a browser download.
+  function downloadCsv(filename, rows) {
+    const csv = rows.map(r => r.map(v => {
+      const s = String(v ?? '');
+      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    }).join(',')).join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // Standalone export: player name + ESPN $ value → CSV, independent of Start
+  // Tracking (works pre-draft — kona_player_info is ESPN's player pool, not the
+  // draft feed). ESPN only publishes 4 rank buckets (STANDARD/PPR/ELIMINATION/
+  // SUPERFLEX) — there's no half-PPR bucket. STANDARD = 0 pts/reception, PPR = 1
+  // pt/reception, so averaging them is the exact value for a 0.5 PPR league
+  // specifically (not a general "works for any format" interpolation — ESPN
+  // doesn't expose enough to detect an arbitrary league's real rec value reliably).
+  async function exportEspnDollarCsv(e) {
+    if (e) e.preventDefault();
+    const linkEl = e?.target;
+    const origText = linkEl ? linkEl.textContent : null;
+    const sel = document.getElementById('setup-league');
+    const leagueId = (sel && sel.value) || (A.espnLeagues[0] && A.espnLeagues[0].id);
+    if (!leagueId) { alert('No ESPN league available to export from.'); return; }
+    if (linkEl) linkEl.textContent = 'Exporting…';
+    try {
+      const filter = JSON.stringify({
+        players: { limit: 4000, sortDraftRanks: { sortPriority: 100, sortAsc: true, value: 'STANDARD' } },
+      });
+      const r = await fetch(`${API}/espn/fantasy/${leagueId}?view=kona_player_info&scoringPeriodId=0`, {
+        credentials: 'include',
+        headers: { 'X-Fantasy-Filter': filter },
+      });
+      if (!r.ok) throw new Error(`ESPN returned ${r.status}`);
+      const d = await r.json();
+      const list = d.players || [];
+      if (!list.length) throw new Error('ESPN returned no players.');
+
+      const rows = [['Player', 'ESPN $ Value']];
+      list.forEach(entry => {
+        const pl = entry.player || entry;
+        const name = pl.fullName;
+        if (!name) return;
+        const ranks = pl.draftRanksByRankType || {};
+        const std = ranks.STANDARD?.auctionValue;
+        const ppr = ranks.PPR?.auctionValue;
+        let val;
+        if (std != null && ppr != null) val = Math.round((std + ppr) / 2);
+        else if (ppr != null) val = ppr;
+        else if (std != null) val = std;
+        else if (pl.ownership?.auctionValueAverage != null) val = Math.round(pl.ownership.auctionValueAverage);
+        else return;
+        rows.push([name, val]);
+      });
+
+      if (rows.length <= 1) throw new Error('No auction values found in the response.');
+      downloadCsv('espn_dollar_values_half_ppr.csv', rows);
+    } catch (err) {
+      alert('Export failed: ' + err.message);
+    } finally {
+      if (linkEl) linkEl.textContent = origText;
+    }
+  }
+
   // One-shot pull of ESPN's own auction valuations (not part of the pick-polling
   // loop — this is ESPN's player pool, not the draft feed). Only fills players
   // whose CSV row didn't already provide an ESPN $ value.
@@ -2037,6 +2111,7 @@
   window.addTeamPrompt = addTeamPrompt;
   window.renameTeam    = renameTeam;
   window.onLeagueSelect = onLeagueSelect;
+  window.exportEspnDollarCsv = exportEspnDollarCsv;
   window.onSleeperLeagueSelect = onSleeperLeagueSelect;
   window.goReset       = goReset;
   window.handleDrop    = handleDrop;
