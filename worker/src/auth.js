@@ -401,7 +401,7 @@ async function deleteAccount(request, env) {
 
 // Authorized either by the shared X-Admin-Secret header (scripts/curl) or by a
 // logged-in session belonging to an is_admin user (the Site Lead dashboard).
-async function requireAdmin(request, env) {
+export async function requireAdmin(request, env) {
   const secret = request.headers.get('X-Admin-Secret');
   if (secret && secret === env.ADMIN_SECRET) return true;
   const user = await getAuthUser(request, env);

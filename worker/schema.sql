@@ -1,8 +1,9 @@
--- NOTE: `users.email_verified` and `users.is_admin` are added via one-time migrations,
--- run once by hand (ALTER TABLE ADD COLUMN isn't safely re-runnable like CREATE TABLE
--- IF NOT EXISTS):
+-- NOTE: `users.email_verified`, `users.is_admin`, and `eliteffl_keeper_options.espn_value`
+-- are added via one-time migrations, run once by hand (ALTER TABLE ADD COLUMN isn't
+-- safely re-runnable like CREATE TABLE IF NOT EXISTS):
 --   ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 1;
 --   ALTER TABLE users ADD COLUMN is_admin       INTEGER NOT NULL DEFAULT 0;
+--   ALTER TABLE eliteffl_keeper_options ADD COLUMN espn_value INTEGER;
 -- New registrations explicitly insert email_verified = 0 until the OTP is confirmed.
 CREATE TABLE IF NOT EXISTS users (
   id            TEXT PRIMARY KEY,
@@ -189,3 +190,49 @@ CREATE TABLE IF NOT EXISTS player_projection_scores (
 );
 
 CREATE INDEX IF NOT EXISTS idx_player_proj_scores_lookup ON player_projection_scores(user_id, season, preset);
+
+-- ── Elite FFL — Draft History + Keeper Options (ffhistorian.com/eliteffl) ──────
+-- Global (not per-user) — single league, edited only by the Site Lead. All years
+-- live in one table (not one table per season) so "previous year PPG" and
+-- "player's original draft price" lookups are plain queries, not a growing set
+-- of per-season UNIONs, and adding a new season needs no schema change.
+
+CREATE TABLE IF NOT EXISTS eliteffl_draft_picks (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  season      INTEGER NOT NULL,
+  owner       TEXT    NOT NULL,   -- canonical nickname (same identity as NICKNAME_MAP in eliteffl/index.html)
+  player_name TEXT    NOT NULL,
+  position    TEXT    NOT NULL,   -- QB | RB | WR | TE | DST | K | DL | LB | DB
+  price       INTEGER NOT NULL,
+  is_keeper   INTEGER NOT NULL DEFAULT 0,
+  times_kept  INTEGER,            -- 1/2/3/... — only meaningful when is_keeper = 1
+  ppg_prev    REAL,               -- player's PPG the year before this draft
+  ppg_this    REAL,               -- player's PPG in this draft's season
+  notes       TEXT,
+  updated_at  INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_eliteffl_picks_season ON eliteffl_draft_picks(season);
+CREATE INDEX IF NOT EXISTS idx_eliteffl_picks_owner  ON eliteffl_draft_picks(owner);
+CREATE INDEX IF NOT EXISTS idx_eliteffl_picks_player ON eliteffl_draft_picks(player_name);
+CREATE INDEX IF NOT EXISTS idx_eliteffl_picks_pos    ON eliteffl_draft_picks(position);
+
+-- Working chart for the *upcoming* draft's keeper decisions — manually curated
+-- (rosters/trades aren't tracked live), pre-filled client-side from the most
+-- recent eliteffl_draft_picks row for a matching player_name, then editable.
+CREATE TABLE IF NOT EXISTS eliteffl_keeper_options (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  owner          TEXT    NOT NULL,
+  player_name    TEXT    NOT NULL,
+  position       TEXT    NOT NULL,
+  times_kept     INTEGER NOT NULL DEFAULT 0,
+  original_price INTEGER,
+  keeper_cost    INTEGER,
+  ppg            REAL,
+  notes          TEXT,
+  sort_order     INTEGER NOT NULL DEFAULT 0,
+  updated_at     INTEGER NOT NULL
+  -- espn_value INTEGER  -- added via one-time ALTER TABLE, see note at top of file
+);
+
+CREATE INDEX IF NOT EXISTS idx_eliteffl_keeper_owner ON eliteffl_keeper_options(owner);
