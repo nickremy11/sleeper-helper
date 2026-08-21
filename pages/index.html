@@ -691,6 +691,9 @@ async function loadEspnLeagues(season) {
       for (const id of newEspnIds) RS.selectedLeagues.add(id);
       rsDrawFull();
     }
+    // Draft Tracker's selector is built at tab-render time — ESPN leagues load
+    // asynchronously after that, so re-populate it if the tab is already open.
+    if (S.tab === 'tracker') populateDraftSelector();
   } catch {}
 }
 
@@ -2329,8 +2332,9 @@ const T = {
   pollTimer: null,
   myRanksSets: null,  // cached {primary, sets, sharedSets} from myranks API
   pickCount: 0,       // total picks made in the active draft
-  tradedPicks: [],    // traded_picks for the active draft
-  myRosterId: null,   // this user's roster_id in the active draft's league
+  tradedPicks: [],    // traded_picks for the active draft (Sleeper only — always [] for ESPN)
+  myRosterId: null,   // this user's roster_id (Sleeper) or ESPN team id (ESPN) in the active draft's league
+  espn: null,         // {id, pickOrder} — set only when T.draft._source === 'espn'; pickOrder is round-1 team-id order
   reversalRound: 0,   // effective reversal round (0 = normal snake, 3 = 3RR) — toggleable
   view: 'board',      // 'board' | 'list'
   leagueAdp: null,    // {map: {sleeper_id: adp}, suffix, label, season} for the selected draft's own league format
@@ -2564,6 +2568,9 @@ async function populateDraftSelector() {
   if (!S.userId) return;
   const sel = document.getElementById('draft-select');
   if (!sel) return;
+  // Unified option list across Sleeper + ESPN: {value, label, isLive, start}
+  const options = [];
+
   try {
     // Pull all of the user's drafts for the season in one call — independent of
     // S.leagueDetails (which loads asynchronously after the leagues list).
@@ -2575,6 +2582,7 @@ async function populateDraftSelector() {
     // league's own draft_id and fetch any we don't already have.
     const missing = new Set();
     for (const lg of S.leagues) {
+      if (lg.source === 'espn') continue;
       const did = lg.draft_id || S.leagueDetails[lg.league_id]?.draft_id;
       if (did && !byId.has(String(did))) missing.add(String(did));
     }
@@ -2585,24 +2593,41 @@ async function populateDraftSelector() {
     // 'paused'. Show everything that isn't completed.
     const isLive = d => d.status === 'drafting' || d.status === 'paused';
     const drafts = [...byId.values()].filter(d => d.status && d.status !== 'complete');
-    if (!drafts.length) { sel.innerHTML = '<option value="">— no active or upcoming drafts —</option>'; return; }
-    // Live drafts first, then scheduled by start time.
-    drafts.sort((a, b) => {
-      if (isLive(a) !== isLive(b)) return isLive(a) ? -1 : 1;
-      return (a.start_time || 0) - (b.start_time || 0);
-    });
     const lgName = lid => S.leagues.find(l => l.league_id === lid)?.name;
-    const label = d => {
+    for (const d of drafts) {
       const base = d.metadata?.name || lgName(d.league_id) || d.draft_id;
-      const tag  = isLive(d) ? 'LIVE' : 'scheduled';
-      return `${base} — ${tag}`;
-    };
-    sel.innerHTML = '<option value="">— select a draft —</option>' +
-      drafts.map(d => `<option value="${esc(d.draft_id)}">${esc(label(d))}</option>`).join('');
-    // Auto-select only when there's exactly one live draft.
-    const live = drafts.filter(isLive);
-    if (live.length === 1) { sel.value = live[0].draft_id; selectDraft(live[0].draft_id); }
+      options.push({ value: d.draft_id, label: `${base} — ${isLive(d) ? 'LIVE' : 'scheduled'}`, isLive: isLive(d), start: d.start_time || 0 });
+    }
   } catch(e) {}
+
+  // ESPN drafts — snake/linear only; ESPN auction drafts belong on /auction,
+  // which already has its own live sync and no notion of "picks until turn".
+  const espnLeagues = S.leagues.filter(l => l.source === 'espn');
+  if (espnLeagues.length) {
+    const results = await Promise.all(espnLeagues.map(async lg => {
+      const espnId = S.leagueDetails[lg.league_id]?._espnId;
+      if (!espnId) return null;
+      try {
+        const r = await fetch(`/api/espn/fantasy/${espnId}?view=mDraftDetail&view=mSettings`, { credentials: 'include' });
+        if (!r.ok) return null;
+        const d = await r.json();
+        if (d.settings?.draftSettings?.type === 'AUCTION') return null;
+        if (d.draftDetail?.drafted) return null; // already complete
+        const inProgress = !!d.draftDetail?.inProgress || (d.draftDetail?.picks?.length || 0) > 0;
+        return { value: 'espn_' + espnId, label: `${lg.name} (ESPN) — ${inProgress ? 'LIVE' : 'scheduled'}`, isLive: inProgress, start: d.settings?.draftSettings?.date || 0 };
+      } catch { return null; }
+    }));
+    options.push(...results.filter(Boolean));
+  }
+
+  if (!options.length) { sel.innerHTML = '<option value="">— no active or upcoming drafts —</option>'; return; }
+  // Live drafts first, then scheduled by start time.
+  options.sort((a, b) => (a.isLive !== b.isLive) ? (a.isLive ? -1 : 1) : (a.start - b.start));
+  sel.innerHTML = '<option value="">— select a draft —</option>' +
+    options.map(o => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join('');
+  // Auto-select only when there's exactly one live draft.
+  const live = options.filter(o => o.isLive);
+  if (live.length === 1) { sel.value = live[0].value; selectDraft(live[0].value); }
 }
 
 async function loadSleeperADP() {
@@ -2801,15 +2826,17 @@ function loadCSV(event) {
 async function selectDraft(draftId) {
   if (T.pollTimer) { clearInterval(T.pollTimer); T.pollTimer = null; }
   if (!draftId) {
-    T.draft = null; T.picked.clear(); loadDraftLeagueAdp(null);
+    T.draft = null; T.espn = null; T.picked.clear(); loadDraftLeagueAdp(null);
     T.myProj = null; T.myProjPresets = []; T.myProjPreset = ''; T.myProjSeason = null;
     renderTrackerBody();
     return;
   }
+  if (draftId.startsWith('espn_')) { await selectEspnDraft(draftId.slice(5)); return; }
   const st = document.getElementById('draft-status');
   st.textContent = 'Loading picks…'; st.className = 'setup-status';
   try {
     T.draft = await api('/draft/' + draftId);
+    T.espn = null;
     T.reversalRound = T.draft?.settings?.reversal_round ?? 0;
     T.tradedPicks = await api('/draft/' + draftId + '/traded_picks').catch(() => []) || [];
     const mySlot = T.draft?.draft_order?.[S.userId];
@@ -2846,8 +2873,83 @@ async function syncPicks(draftId) {
   } catch(_) {}
 }
 
+// ── ESPN draft support ──────────────────────────────────────────────────────
+// ESPN has no per-draft id — the draft lives inside the league itself — so
+// espnId here is the numeric ESPN league id (from the 'espn_{id}' select value).
+// T.draft is normalized to the same shape selectDraft() builds for Sleeper
+// ({settings:{teams,rounds}, type, _source}) so renderTrackerBody()/the board
+// and list views need no ESPN-specific branching at all.
+async function selectEspnDraft(espnId) {
+  const st = document.getElementById('draft-status');
+  st.textContent = 'Loading picks…'; st.className = 'setup-status';
+  try {
+    await loadPlayers(); // needed for the name → sleeper_id lookup in applyEspnRosterPicks()
+    const lg = S.leagues.find(l => l.league_id === 'espn_' + espnId);
+    const r = await fetch(`/api/espn/fantasy/${espnId}?view=mDraftDetail&view=mSettings&view=mRoster&view=mTeam`, { credentials: 'include' });
+    if (!r.ok) throw new Error(`ESPN returned ${r.status}`);
+    const d = await r.json();
+    // Total roster spots (starters + bench + IR) = number of draft rounds —
+    // lineupSlotCounts is keyed by ESPN slot id but every value counts toward it.
+    const rounds = Object.values(d.settings?.rosterSettings?.lineupSlotCounts || {}).reduce((a, b) => a + b, 0) || 16;
+    const teamsN = (d.teams || []).length || d.settings?.draftSettings?.pickOrder?.length || 12;
+    T.draft = { league_id: 'espn_' + espnId, name: lg?.name, settings: { teams: teamsN, rounds }, type: 'snake', _source: 'espn' };
+    T.tradedPicks = [];
+    T.reversalRound = 0; // ESPN has no 3rd-round-reversal setting to auto-detect; toggle manually if needed
+    const mySWID = S.espnSettings?.swid || '';
+    const myTeam = (d.teams || []).find(t => t.primaryOwner === mySWID);
+    T.myRosterId = myTeam ? myTeam.id : null;
+    T.espn = { id: espnId, pickOrder: d.settings?.draftSettings?.pickOrder || [] };
+    applyEspnRosterPicks(d);
+    st.textContent = '✦ Synced — auto-refreshing every 15s';
+    st.className = 'setup-status ok';
+    T.pollTimer = setInterval(() => syncEspnPicks(espnId), 15000);
+    renderTrackerBody();
+    // ESPN leagues have no Sleeper-format ADP to resolve — fall back to blended ADP.
+    T.leagueAdp = null;
+    applyLeagueAdp();
+    const projSeason = S.nflState?.league_create_season || S.nflState?.season || new Date().getFullYear().toString();
+    T.myProjSeason = projSeason;
+    T.myProjPreset = '';
+    loadMyProjections(projSeason);
+    loadMyProjectionPresets();
+  } catch(e) { st.textContent = 'Error: ' + e.message; st.className = 'setup-status err'; }
+}
+
+// Derives the picked-player set + pick count from the mDraftDetail/mRoster
+// payload already fetched by the caller (selectEspnDraft or syncEspnPicks).
+// Reading who's picked off team rosters (rather than the picks[] array's
+// player nesting, which is less consistently shaped) reuses the same
+// entry.playerPoolEntry.playerPoolEntry.player path already verified for
+// Rostership's ESPN support.
+function applyEspnRosterPicks(d) {
+  T.pickCount = d.draftDetail?.picks?.length || 0;
+  const picked = new Set();
+  for (const team of (d.teams || [])) {
+    for (const entry of (team.roster?.entries || [])) {
+      const pData = entry.playerPoolEntry?.playerPoolEntry?.player;
+      if (!pData) continue;
+      const fullName = pData.fullName || `${pData.firstName || ''} ${pData.lastName || ''}`.trim();
+      const sid = S._playersByName[normName(fullName)];
+      if (sid) picked.add(String(sid));
+    }
+  }
+  T.picked = picked;
+  renderTrackerBody();
+}
+
+async function syncEspnPicks(espnId) {
+  try {
+    await loadPlayers();
+    const r = await fetch(`/api/espn/fantasy/${espnId}?view=mDraftDetail&view=mRoster&view=mTeam`, { credentials: 'include' });
+    if (!r.ok) return;
+    const d = await r.json();
+    applyEspnRosterPicks(d);
+  } catch(_) {}
+}
+
 async function refreshTrackerPicks() {
   if (!T.draft) return;
+  if (T.draft._source === 'espn') { await syncEspnPicks(T.espn.id); return; }
   await syncPicks(T.draft.draft_id);
 }
 
@@ -3116,10 +3218,26 @@ function trackerPicksUntilTurn() {
   const d = T.draft;
   if (!d || T.myRosterId == null) return null;
   const teams = d.settings?.teams ?? 12, rounds = d.settings?.rounds ?? 5;
+  const done = T.pickCount || 0;
+  if (d._source === 'espn') {
+    // No traded-picks concept here — ESPN pre-draft pick trading isn't
+    // exposed by this endpoint, so slot order is assumed to match pickOrder.
+    const order = T.espn?.pickOrder || [];
+    const myIdx = order.indexOf(T.myRosterId);
+    if (myIdx < 0) return -1;
+    for (let offset = 0; offset < teams * rounds; offset++) {
+      const overall = done + offset;
+      if (overall >= teams * rounds) break;
+      const round = Math.floor(overall / teams) + 1;
+      const pos   = overall % teams;
+      const slotIdx = isReversedRound(round, d.type, T.reversalRound) ? teams - 1 - pos : pos;
+      if (slotIdx === myIdx) return offset;
+    }
+    return -1;
+  }
   const slotToRoster = d.slot_to_roster_id ?? {};
   const tradeMap = {};
   for (const tp of (T.tradedPicks || [])) tradeMap[`${tp.round}.${tp.roster_id}`] = tp.owner_id;
-  const done = T.pickCount || 0;
   for (let offset = 0; offset < teams * rounds; offset++) {
     const overall = done + offset;
     if (overall >= teams * rounds) break;
