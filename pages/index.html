@@ -4502,7 +4502,10 @@ async function lsGzComputeLeague(lgId) {
     }
   }
 
-  const ctx = { ...lsCrCtx(detail), mode: 'projections' }; // real-point scale, needed to blend with actual fpts
+  // Sleeper projections only for guillotine Power Score (per-request) — zeroing
+  // out clayMap/userProjMap makes crPlayerPpg() fall through to sleeperProjMap
+  // alone without touching the shared cr* formula used elsewhere in the app.
+  const ctx = { ...lsCrCtx(detail), mode: 'projections', clayMap: {}, userProjMap: {} };
   const totalBudget = detail.settings?.waiver_budget || 0;
 
   const aliveRosters = rosters.filter(lsGzIsAlive);
