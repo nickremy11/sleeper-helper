@@ -480,6 +480,7 @@ const LS = {
     loaded:         false,
     loading:        false,
   },
+  gz: {},   // {lgId: {loading, loaded, error, computedAtWeek, rows: [...]}} — guillotine leagues, see lsIsGuillotine()
 };
 
 // ── Player Finder state ───────────────────────────────────────────────────────
@@ -4433,6 +4434,246 @@ function lsSetContenderMode(mode) {
   }
 }
 
+// ── Guillotine (elimination) league simulation ───────────────────────────────
+// Sleeper league types: 0=redraft, 1=keeper, 2=dynasty. 3 is Sleeper's native
+// elimination/guillotine format (settings.disable_elimination toggles the
+// mechanic off, but type===3 is the reliable detector). Format: every week
+// the lowest scorer is cut and their roster hits waivers; this repeats until
+// GZ_FINAL_TEAMS remain entering week GZ_CUTOVER_WEEK, then the survivors'
+// scores are summed over GZ_FINALE_WEEKS to crown a champion.
+//
+// There's no closed-form odds formula for sequential lowest-score elimination
+// once teams have unequal/evolving strength, so this runs a Monte Carlo sim
+// (same technique as bracket/survivor-pool calculators): draw a Gaussian score
+// per team per remaining week, cut the lowest, repeat; tally outcomes over
+// GZ_SIM_N trials.
+//
+// NOTE: "alive" detection (lsGzIsAlive) is a best guess made before any real
+// elimination has happened this season (Sleeper is believed to empty a cut
+// team's roster rather than remove it from /rosters, but that's unconfirmed).
+// Re-verify against real data once Week 1 resolves and the first team is cut.
+function lsIsGuillotine(lgId) {
+  return S.leagueDetails[lgId]?.settings?.type === 3;
+}
+
+const GZ_FINAL_TEAMS      = 4;    // teams remaining when the finale starts
+const GZ_CUTOVER_WEEK     = 15;   // finale = weeks 15–17, 3-week cumulative score
+const GZ_FINALE_WEEKS     = 3;
+const GZ_SIM_N            = 5000;
+const GZ_DEFAULT_SIGMA_CV = 0.30; // weekly score stdev as a fraction of mean, until real weeks narrow it
+const GZ_FAAB_COEF        = 0.20; // how strongly relative FAAB reserve nudges projected mean — kept small & bounded
+
+function lsGzIsAlive(roster) {
+  return !!(roster?.players && roster.players.length > 0);
+}
+
+// Fetches rosters/users/matchup history for a guillotine league and derives,
+// per team: alive/weeks-survived, power score (Contender Rank formula forced
+// to projections mode, so it's on the same real-point scale as actual fpts),
+// and FAAB reserve. Does not run the simulation — see lsGzCalculate().
+async function lsGzComputeLeague(lgId) {
+  const detail = S.leagueDetails[lgId];
+  if (!detail) throw new Error('League details not loaded');
+  const currentWeek  = S.nflState?.week || 1;
+  const weeksElapsed = Math.max(0, currentWeek - 1);
+
+  const [rosters, users] = await Promise.all([
+    api('/league/' + lgId + '/rosters'),
+    api('/league/' + lgId + '/users'),
+  ]);
+  if (!rosters?.length) throw new Error('No rosters returned');
+  const uMap = Object.fromEntries((users || []).map(u =>
+    [u.user_id, u.metadata?.team_name || u.display_name || u.username]));
+
+  // Walk past weeks' matchups for each roster's realized scores, used both to
+  // infer weeks-survived and to blend actual performance into the projection.
+  // Treat a 0-point week as "not active" (already cut) rather than a real
+  // scored week — unconfirmed until a real elimination has happened, see note above.
+  const scoresByRoster = {};
+  for (const r of rosters) scoresByRoster[r.roster_id] = [];
+  const weekResults = await Promise.allSettled(
+    Array.from({ length: weeksElapsed }, (_, i) => api('/league/' + lgId + '/matchups/' + (i + 1)))
+  );
+  for (const res of weekResults) {
+    if (res.status !== 'fulfilled' || !Array.isArray(res.value)) continue;
+    for (const m of res.value) {
+      if (!(m.points > 0)) continue;
+      (scoresByRoster[m.roster_id] = scoresByRoster[m.roster_id] || []).push(m.points);
+    }
+  }
+
+  const ctx = { ...lsCrCtx(detail), mode: 'projections' }; // real-point scale, needed to blend with actual fpts
+  const totalBudget = detail.settings?.waiver_budget || 0;
+
+  const aliveRosters = rosters.filter(lsGzIsAlive);
+  const remainingFaab = r => Math.max(0, totalBudget - (r.settings?.waiver_budget_used || 0));
+  const avgRemainingFaab = aliveRosters.length
+    ? aliveRosters.reduce((s, r) => s + remainingFaab(r), 0) / aliveRosters.length
+    : 0;
+
+  return rosters.map(r => {
+    const alive         = lsGzIsAlive(r);
+    const weeksSurvived = (scoresByRoster[r.roster_id] || []).length;
+    const powerScore     = crScoreRoster(r.players || [], ctx); // per-game, real scoring points
+    const actualFpts      = (r.settings?.fpts || 0) + (r.settings?.fpts_decimal || 0) / 100;
+    const actualPpg        = weeksSurvived > 0 ? actualFpts / weeksSurvived : 0;
+    const blendW           = Math.min(weeksSurvived / 6, 1); // shift toward realized average as the season goes
+    const mu                = alive ? (powerScore * (1 - blendW) + actualPpg * blendW) : 0;
+    const sigma              = Math.max(6, mu * GZ_DEFAULT_SIGMA_CV);
+
+    const faabRemaining = remainingFaab(r);
+    const faabPct        = totalBudget > 0 ? faabRemaining / totalBudget : null;
+    const faabEdge         = totalBudget > 0 && alive
+      ? Math.max(-0.15, Math.min(0.15, (faabRemaining - avgRemainingFaab) / totalBudget))
+      : 0;
+
+    return {
+      rosterId: r.roster_id,
+      teamName: uMap[r.owner_id] || ('Team ' + r.roster_id),
+      alive, weeksSurvived,
+      powerScore, faabRemaining, faabPct,
+      mu: mu * (1 + GZ_FAAB_COEF * faabEdge),
+      sigma,
+    };
+  });
+}
+
+// Draws a Gaussian score per alive team each remaining elimination week, cuts
+// the lowest, repeats until GZ_FINAL_TEAMS remain (or scheduled elimination
+// weeks run out); then sums GZ_FINALE_WEEKS more drawn scores among whoever's
+// left and ranks by total. Returns {rosterId: {surviveWeekPct, advanceFinalPct, championPct}}.
+function lsRunGuillotineSimulation(rows, weeksRemaining, N = GZ_SIM_N) {
+  const alive = rows.filter(r => r.alive);
+  const surviveWeek = {}, advanceFinal = {}, champion = {};
+  for (const r of alive) { surviveWeek[r.rosterId] = 0; advanceFinal[r.rosterId] = 0; champion[r.rosterId] = 0; }
+  if (!alive.length) return {};
+
+  for (let sim = 0; sim < N; sim++) {
+    let pool = alive.map(r => ({ rosterId: r.rosterId, mu: r.mu, sigma: r.sigma }));
+    let firstWeekDone = false;
+
+    for (let w = 0; w < weeksRemaining && pool.length > GZ_FINAL_TEAMS; w++) {
+      const scored = pool.map(t => ({ t, s: lsGaussianRandom(t.mu, t.sigma) }))
+        .sort((a, b) => a.s - b.s); // ascending: lowest score first
+      const cutId = scored[0].t.rosterId;
+      if (!firstWeekDone) {
+        for (const { t } of scored) if (t.rosterId !== cutId) surviveWeek[t.rosterId]++;
+        firstWeekDone = true;
+      }
+      pool = pool.filter(t => t.rosterId !== cutId);
+    }
+    if (!firstWeekDone) for (const t of pool) surviveWeek[t.rosterId]++; // already at/under final-4, no cuts left to make
+
+    for (const t of pool) advanceFinal[t.rosterId]++;
+
+    const totals = {};
+    for (const t of pool) {
+      let sum = 0;
+      for (let f = 0; f < GZ_FINALE_WEEKS; f++) sum += lsGaussianRandom(t.mu, t.sigma);
+      totals[t.rosterId] = sum;
+    }
+    let bestId = null, bestVal = -Infinity;
+    for (const [rid, v] of Object.entries(totals)) if (v > bestVal) { bestVal = v; bestId = Number(rid); }
+    if (bestId != null) champion[bestId]++;
+  }
+
+  const out = {};
+  for (const r of alive) {
+    out[r.rosterId] = {
+      surviveWeekPct:  surviveWeek[r.rosterId]  / N,
+      advanceFinalPct: advanceFinal[r.rosterId] / N,
+      championPct:     champion[r.rosterId]     / N,
+    };
+  }
+  return out;
+}
+
+async function lsGzCalculate(lgId) {
+  const gz = LS.gz[lgId] || (LS.gz[lgId] = {});
+  if (gz.loading) return;
+  gz.loading = true;
+  gz.error = null;
+  lsDrawTable();
+  try {
+    await lsLoadContenderData(); // ensures clay/sleeper/user projection maps are cached (gz always reads projections mode)
+    const currentWeek     = S.nflState?.week || 1;
+    const weeksRemaining   = Math.max(0, GZ_CUTOVER_WEEK - currentWeek);
+    const rows             = await lsGzComputeLeague(lgId);
+    const odds             = lsRunGuillotineSimulation(rows, weeksRemaining);
+    for (const r of rows) Object.assign(r, odds[r.rosterId] || {});
+    gz.rows           = rows.sort((a, b) => (b.championPct ?? -1) - (a.championPct ?? -1) || (b.mu - a.mu));
+    gz.computedAtWeek = currentWeek;
+    gz.loaded         = true;
+  } catch (e) {
+    gz.error = e.message;
+  }
+  gz.loading = false;
+  lsDrawTable();
+}
+
+function lsGzSection() {
+  const gzLeagues = S.leagues.filter(lg => lsIsGuillotine(lg.league_id));
+  if (!gzLeagues.length) return '';
+
+  const pct = v => v == null ? '—' : Math.round(v * 100) + '%';
+  const hue = v => v == null ? 0 : Math.round(v * 120); // 0=red, 120=green
+
+  const cards = gzLeagues.map(lg => {
+    const gz = LS.gz[lg.league_id] || {};
+    let body;
+    if (gz.loading) {
+      body = loading('Simulating eliminations…');
+    } else if (gz.error) {
+      body = `<div style="color:#c0392b;font-size:0.85rem;margin-bottom:8px;">${esc(gz.error)}</div>
+        <button class="ghost-btn" onclick="lsGzCalculate('${lg.league_id}')">Retry</button>`;
+    } else if (!gz.loaded) {
+      body = `<button class="setup-btn" onclick="lsGzCalculate('${lg.league_id}')">Calculate Elimination Odds</button>`;
+    } else {
+      const trs = (gz.rows || []).map(r => {
+        if (!r.alive) {
+          return `<tr style="opacity:0.5;">
+            <td>${esc(r.teamName)}</td>
+            <td colspan="5"><span class="badge badge-red">Eliminated${r.weeksSurvived ? ' — Week ' + r.weeksSurvived : ''}</span></td>
+          </tr>`;
+        }
+        return `<tr>
+          <td>${esc(r.teamName)}</td>
+          <td>${r.powerScore.toFixed(1)}</td>
+          <td>${r.faabPct != null ? Math.round(r.faabPct * 100) + '%' : '—'}<span style="font-size:0.7rem;color:var(--brown-light);"> ($${r.faabRemaining})</span></td>
+          <td><span style="color:hsl(${hue(r.surviveWeekPct)},70%,38%)">${pct(r.surviveWeekPct)}</span></td>
+          <td><span style="color:hsl(${hue(r.advanceFinalPct)},70%,38%)">${pct(r.advanceFinalPct)}</span></td>
+          <td><span style="color:hsl(${hue(r.championPct)},70%,38%)">${pct(r.championPct)}</span></td>
+        </tr>`;
+      }).join('');
+      body = `
+        <div style="overflow-x:auto;">
+        <table class="ls-table">
+          <thead><tr>
+            <th>Team</th><th>Power Score</th><th>FAAB Left</th>
+            <th>Survive This Week</th><th>Advance to Final 4</th><th>Championship</th>
+          </tr></thead>
+          <tbody>${trs}</tbody>
+        </table>
+        </div>
+        <button class="ghost-btn" style="margin-top:8px;" onclick="lsGzCalculate('${lg.league_id}')">↺ Recalculate</button>`;
+    }
+    return `
+      <div style="margin-top:20px;">
+        <div class="section-head"><h2>${esc(lg.name || 'Unnamed')} <span style="font-family:'Crimson Text',serif;font-size:0.7rem;font-weight:400;text-transform:none;letter-spacing:0;color:var(--brown-light);">— Guillotine</span></h2><div class="section-head-line"></div></div>
+        ${body}
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="section-head" style="margin-top:36px;"><h2>Guillotine Leagues</h2><div class="section-head-line"></div></div>
+    <p style="font-size:0.82rem;color:var(--brown-light);max-width:640px;margin:0 0 4px;">
+      Lowest scorer is cut each week until ${GZ_FINAL_TEAMS} teams remain entering Week ${GZ_CUTOVER_WEEK};
+      the final ${GZ_FINALE_WEEKS} weeks are decided by cumulative score. Odds are Monte Carlo estimates, not guarantees.
+    </p>
+    ${cards}
+  `;
+}
+
 
 function lsSortRows(rows) {
   return [...rows].sort((a, b) => {
@@ -4498,8 +4739,9 @@ function lsDrawTable() {
     crScoresPerLeague[lg.league_id] = lsCrComputeLeague(lg.league_id);
   }
 
-  // Build rows
-  let rows = S.leagues.map(lg => {
+  // Build rows (guillotine leagues get their own section below — standing/record/
+  // playoff-chances/all-play don't mean anything under elimination rules)
+  let rows = S.leagues.filter(lg => !lsIsGuillotine(lg.league_id)).map(lg => {
     const d    = LS.leagueData[lg.league_id];
     const pref = RS.prefs[lg.league_id];
     const isEspn = lg.source === 'espn';
@@ -4672,6 +4914,7 @@ function lsDrawTable() {
       <table class="ls-table">${thead}${tbody}</table>
     </div>
     ${rows.length === 0 ? '<div class="empty-state" style="margin-top:12px;"><p>No leagues match the current filter</p></div>' : ''}
+    ${lsGzSection()}
   `);
 }
 
