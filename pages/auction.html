@@ -204,6 +204,7 @@
     .auc-pool-table td.val-my { color: var(--gold); font-weight: 600; }
     .auc-pool-table td.val-inf { color: var(--green-light); font-weight: 600; }
     .auc-pool-table td.val-espn { color: var(--brown-light); }
+    .auc-pool-table td.val-myppg { color: var(--gold-light); }
     .auc-pool-table td.val-diff { font-weight: 600; }
     .auc-pool-table td.val-diff.diff-up { color: var(--green-light); }
     .auc-pool-table td.val-diff.diff-down { color: var(--red); }
@@ -458,6 +459,11 @@
     ? 'https://helper.ffhistorian.com/api'
     : '/api';
 
+  // Named scoring preset (projections.ffhistorian.com) whose calc_ppg backs the
+  // "My PPG" column below — tied to this league's scoring, not auto-detected.
+  // Change this if this tracker ever gets reused for a league on a different preset.
+  const MY_PPG_PRESET = '.5 PPR Standard (Elite)';
+
   // ─── State ────────────────────────────────────────────────────────────────────
 
   const A = {
@@ -468,10 +474,10 @@
     rosterSpots: 16,
     lineupReqs: null,     // {QB,RB,WR,TE,FLEX,K,DST} starter counts — null until Start Tracking; drives "Needs"
     teams: [],           // [{id, name, spent, draftedCount, players:[{name,pos,price,keeper}]}]
-    players: [],         // [{name, pos, nflTeam, myVal, espnVal, drafted, price, teamId, keeper, _sleeperId}]
+    players: [],         // [{name, pos, nflTeam, myVal, espnVal, myPpg, drafted, price, teamId, keeper, _sleeperId}]
     posFilter: 'ALL',
     teamFilter: '',
-    sortBy: 'inflated',  // 'my' | 'inflated' | 'espn' | 'posRank'
+    sortBy: 'inflated',  // 'my' | 'inflated' | 'espn' | 'diff' | 'myppg' | 'posRank'
     sortDir: -1,         // -1 = desc (posRank defaults to ascending — see setSort())
     search: '',
     showDrafted: true,
@@ -485,6 +491,7 @@
     _modalPlayer: null,  // index into A.players
     _nameMap: null,      // Map<normalizedName, idx> for ESPN/Sleeper name matching
     _espnValNote: null,  // status string for the one-shot ESPN $ / NFL team auto-fill
+    _myPpgNote: null,    // status string for the one-shot "My PPG" auto-fill (auth-only)
     _notePopoverOpen: null, // 'target' | 'avoid' | 'dart' | null — which note search box is open
   };
 
@@ -1114,6 +1121,7 @@
     buildNameMap();
     if (A.source === 'espn' && A.leagueId) startEspnPoll();
     else if (A.source === 'sleeper' && A.sleeperDraftId) await startSleeperPoll();
+    fetchMyPpg();
     renderMain();
   }
 
@@ -1320,6 +1328,7 @@
     persist();
     if (A.source === 'espn' && A.leagueId) startEspnPoll();
     else if (A.source === 'sleeper' && A.sleeperDraftId) await startSleeperPoll();
+    fetchMyPpg();
     renderMain();
   }
 
@@ -1458,6 +1467,7 @@
           <span class="auc-poll-dot${A.pollTimer ? ' live' : ''}"></span>
           <span class="auc-poll-status">${A.pollTimer ? 'Live · ' + (A.source === 'sleeper' ? 'Sleeper' : 'ESPN') : 'Manual mode'}</span>
           ${A._espnValNote ? `<span class="auc-poll-status">${esc(A._espnValNote)}</span>` : ''}
+          ${A._myPpgNote ? `<span class="auc-poll-status">${esc(A._myPpgNote)}</span>` : ''}
           <button class="auc-btn auc-btn-ghost" style="margin-top:0;padding:5px 14px;font-size:0.38rem;" onclick="goReset()">New Draft</button>
         </div>
       </div>
@@ -1495,7 +1505,7 @@
         onclick="setPosFilter('${pos}')">${pos}</button>`).join('');
 
     const sortPills = [
-      ['inflated', 'Inflated $'], ['my', 'My $'], ['espn', extValLabel()], ['diff', `Δ ${extValLabel()}`], ['posRank', 'Pos Rank']
+      ['inflated', 'Inflated $'], ['my', 'My $'], ['espn', extValLabel()], ['diff', `Δ ${extValLabel()}`], ['myppg', 'My PPG'], ['posRank', 'Pos Rank']
     ].map(([key, lbl]) => `
       <button class="auc-pill${A.sortBy === key ? ' active' : ''}"
         onclick="setSort('${key}')">${lbl}</button>`).join('');
@@ -1527,6 +1537,14 @@
         if (ad == null) return 1;
         if (bd == null) return -1;
         va = ad; vb = bd;
+      }
+      else if (A.sortBy === 'myppg') {
+        // No saved projection for this player (or not logged in) — sort last.
+        const ap = a.myPpg, bp = b.myPpg;
+        if (ap == null && bp == null) return (a.name || '').localeCompare(b.name || '');
+        if (ap == null) return 1;
+        if (bp == null) return -1;
+        va = ap; vb = bp;
       }
       else if (A.sortBy === 'posRank') {
         // Unranked players (no Pos Rank in the CSV) always sort to the bottom,
@@ -1572,9 +1590,10 @@
         <td class="num val-inf">${p.drafted ? '—' : fmtDollar(p._inf)}</td>
         <td class="num val-espn">${fmtDollar(p.espnVal || null)}</td>
         <td class="num val-diff ${diffCls}" title="Inflated $ minus ${esc(extValLabel())}">${diffText}</td>
+        <td class="num val-myppg">${p.myPpg != null ? p.myPpg.toFixed(1) : '—'}</td>
         <td class="status-cell no-strike">${statusHtml}</td>
       </tr>`;
-    }).join('') : `<tr><td colspan="9" class="auc-pool-empty">No players match your filters.</td></tr>`;
+    }).join('') : `<tr><td colspan="10" class="auc-pool-empty">No players match your filters.</td></tr>`;
 
     return `
     <div class="auc-pool">
@@ -1605,6 +1624,7 @@
           <th class="num sortable${A.sortBy==='inflated'?' sort-active':''}" onclick="setSort('inflated')">Inflated ${sortArrow('inflated')}</th>
           <th class="num sortable${A.sortBy==='espn'?' sort-active':''}" onclick="setSort('espn')">${esc(extValLabel())} ${sortArrow('espn')}</th>
           <th class="num sortable${A.sortBy==='diff'?' sort-active':''}" onclick="setSort('diff')" title="Inflated $ minus ${esc(extValLabel())}">&Delta; ${esc(extValLabel())} ${sortArrow('diff')}</th>
+          <th class="num sortable${A.sortBy==='myppg'?' sort-active':''}" onclick="setSort('myppg')" title="Your saved .5 PPR Elite projection">My PPG ${sortArrow('myppg')}</th>
           <th>Status</th>
         </tr></thead>
         <tbody>${tableBody}</tbody>
@@ -1716,7 +1736,7 @@
     if (!confirm('Start a new draft? All current data will be cleared.')) return;
     clearSaved();
     if (A.pollTimer) { clearInterval(A.pollTimer); A.pollTimer = null; }
-    Object.assign(A, { leagueId: null, leagueName: '', source: null, sleeperDraftId: null, lineupReqs: null, teams: [], players: [], posFilter: 'ALL', teamFilter: '', sortBy: 'inflated', sortDir: -1, search: '', showDrafted: true, _modalPlayer: null, _nameMap: null, _espnValNote: null, _notePopoverOpen: null });
+    Object.assign(A, { leagueId: null, leagueName: '', source: null, sleeperDraftId: null, lineupReqs: null, teams: [], players: [], posFilter: 'ALL', teamFilter: '', sortBy: 'inflated', sortDir: -1, search: '', showDrafted: true, _modalPlayer: null, _nameMap: null, _espnValNote: null, _myPpgNote: null, _notePopoverOpen: null });
     init();
   }
 
@@ -1988,6 +2008,34 @@
       renderMain();
     } catch (_) {
       A._espnValNote = 'ESPN $ fetch error';
+      renderMain();
+    }
+  }
+
+  // One-shot pull of the user's own saved projections (projections.ffhistorian.com,
+  // MY_PPG_PRESET's calc_ppg) into a "My PPG" column — independent of draft source,
+  // so it runs regardless of ESPN/Sleeper/manual. Silently no-ops if the user isn't
+  // logged in or has nothing saved under that preset; the column just stays blank.
+  async function fetchMyPpg() {
+    try {
+      const r = await fetch(`${API}/projections/ppg?preset=${encodeURIComponent(MY_PPG_PRESET)}`, { credentials: 'include' });
+      if (!r.ok) return; // not logged in, or no saved projections under this preset
+      const map = await r.json(); // { "Player Name": calc_ppg }
+      const entries = Object.entries(map || {});
+      if (!entries.length) { A._myPpgNote = 'My PPG: no saved projections found'; renderMain(); return; }
+
+      const byNorm = new Map(entries.map(([name, ppg]) => [normalizePlayerName(name), ppg]));
+      let filled = 0;
+      A.players.forEach(p => {
+        const ppg = byNorm.get(normalizePlayerName(p.name));
+        if (ppg != null) { p.myPpg = ppg; filled++; }
+      });
+
+      A._myPpgNote = filled ? `✓ My PPG filled for ${filled} players` : 'My PPG: no matching players found';
+      if (filled) persist();
+      renderMain();
+    } catch (_) {
+      A._myPpgNote = 'My PPG fetch error';
       renderMain();
     }
   }
