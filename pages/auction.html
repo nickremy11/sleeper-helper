@@ -467,8 +467,8 @@
     players: [],         // [{name, pos, nflTeam, myVal, espnVal, drafted, price, teamId, keeper, _sleeperId}]
     posFilter: 'ALL',
     teamFilter: '',
-    sortBy: 'inflated',  // 'my' | 'inflated' | 'espn'
-    sortDir: -1,         // -1 = desc
+    sortBy: 'inflated',  // 'my' | 'inflated' | 'espn' | 'posRank'
+    sortDir: -1,         // -1 = desc (posRank defaults to ascending — see setSort())
     search: '',
     showDrafted: true,
     pollTimer: null,
@@ -480,7 +480,7 @@
     _sleeperPlayers: null, // Map<sleeperPlayerId, {name, pos, team}> — lazy-loaded, for pick resolution
     _modalPlayer: null,  // index into A.players
     _nameMap: null,      // Map<normalizedName, idx> for ESPN/Sleeper name matching
-    _espnValNote: null,  // status string for the one-shot ESPN $ auto-fill
+    _espnValNote: null,  // status string for the one-shot ESPN $ / NFL team auto-fill
     _notePopoverOpen: null, // 'target' | 'avoid' | 'dart' | null — which note search box is open
   };
 
@@ -584,6 +584,10 @@
     draftedFor: ['$ drafted for', 'drafted for', 'keeper $', 'keeper price', 'keeper cost', 'draft $', 'kept for', 'kept $'],
     draftedTo:  ['team drafted to', 'drafted to', 'keeper team', 'kept by', 'owner'],
     tier:       ['position tier', 'tier', 'pos tier', 'rank tier', 'player tier'],
+    // Positional rank (e.g. "RB12"), distinct from Tier and from either $ column —
+    // a player's $ value rank within their position won't always match this.
+    posRank:    ['position rank', 'pos rank', 'positional rank', 'posrank', 'pos_rank',
+                 'position_rank', 'pos rk', 'pos. rank'],
     sleeperId:  ['sleeper id', 'sleeper_id', 'sleeperid', 'sleeper player id'],
   };
 
@@ -662,6 +666,17 @@
     return n;
   }
 
+  // Pos Rank cells show up either as a bare number ("12") or combined with the
+  // position ("RB12", "RB 12") — pull the trailing digits either way.
+  function parsePosRank(str) {
+    const s = String(str || '').trim();
+    if (!s) return null;
+    const m = s.match(/(\d+)\s*$/);
+    if (!m) return null;
+    const n = parseInt(m[1], 10);
+    return isNaN(n) ? null : n;
+  }
+
   function parseCSV(text) {
     // Strip UTF-8 BOM that Excel sometimes adds
     const clean = text.replace(/^﻿/, '');
@@ -703,6 +718,7 @@
         myVal:   col.myVal   !== undefined ? parseNum(parts[col.myVal])  : 0,
         espnVal: col.espnVal !== undefined ? parseNum(parts[col.espnVal]) : 0,
         tier:    col.tier !== undefined ? (parseInt(parts[col.tier]) || 0) : 0,
+        posRank: col.posRank !== undefined ? parsePosRank(parts[col.posRank]) : null,
         drafted:  isKeeper,
         keeper:   isKeeper,
         price:    isKeeper ? draftedFor : 0,
@@ -713,6 +729,11 @@
     const guessedCols = Object.keys(col).filter(k => headerCol[k] === undefined);
     return { players, detectedCols: col, guessedCols, rawHeaders };
   }
+
+  // ESPN proTeamId → NFL abbreviation (Sleeper-compatible). Same table as
+  // index.html's ESPN_TEAM_MAP — duplicated here since auction.html shares no
+  // state with index.html (see "Change auction tracker" notes in CLAUDE.md).
+  const ESPN_TEAM_MAP = {1:'ATL',2:'BUF',3:'CHI',4:'CIN',5:'CLE',6:'DAL',7:'DEN',8:'DET',9:'GB',10:'TEN',11:'IND',12:'KC',13:'LV',14:'LAR',15:'MIA',16:'MIN',17:'NE',18:'NO',19:'NYG',20:'NYJ',21:'PHI',22:'ARI',23:'PIT',24:'LAC',25:'SF',26:'SEA',27:'TB',28:'WAS',29:'CAR',30:'JAX',33:'BAL',34:'HOU'};
 
   function splitCSVLine(line) {
     const out = []; let cur = ''; let inQ = false;
@@ -1113,7 +1134,7 @@
 
         // Column detection summary
         const COL_LABELS = { player:'Player', pos:'Position', nflTeam:'NFL Team',
-          myVal:'My $', espnVal:'ESPN/Sleeper $', draftedFor:'$ Drafted For', draftedTo:'Team Drafted To', tier:'Tier', sleeperId:'Sleeper ID' };
+          myVal:'My $', espnVal:'ESPN/Sleeper $', draftedFor:'$ Drafted For', draftedTo:'Team Drafted To', tier:'Tier', posRank:'Pos Rank', sleeperId:'Sleeper ID' };
         const colPills = Object.entries(COL_LABELS).map(([k, lbl]) =>
           detectedCols[k] !== undefined
             ? `<span style="color:var(--green-light);margin-right:6px;">✓ ${lbl}${guessedCols.includes(k) ? ' <em style="color:var(--gold);font-style:italic;">(guessed)</em>' : ''}</span>`
@@ -1466,7 +1487,7 @@
         onclick="setPosFilter('${pos}')">${pos}</button>`).join('');
 
     const sortPills = [
-      ['inflated', 'Inflated $'], ['my', 'My $'], ['espn', extValLabel()]
+      ['inflated', 'Inflated $'], ['my', 'My $'], ['espn', extValLabel()], ['posRank', 'Pos Rank']
     ].map(([key, lbl]) => `
       <button class="auc-pill${A.sortBy === key ? ' active' : ''}"
         onclick="setSort('${key}')">${lbl}</button>`).join('');
@@ -1490,6 +1511,15 @@
       let va, vb;
       if (A.sortBy === 'my')       { va = a.myVal || 0;   vb = b.myVal || 0; }
       else if (A.sortBy === 'espn') { va = a.espnVal || 0; vb = b.espnVal || 0; }
+      else if (A.sortBy === 'posRank') {
+        // Unranked players (no Pos Rank in the CSV) always sort to the bottom,
+        // regardless of which direction the column is currently sorted.
+        const ar = a.posRank, br = b.posRank;
+        if (ar == null && br == null) return (a.name || '').localeCompare(b.name || '');
+        if (ar == null) return 1;
+        if (br == null) return -1;
+        va = ar; vb = br;
+      }
       else                          { va = a._inf || 0;    vb = b._inf || 0; }
       if (va !== vb) return (vb - va) * A.sortDir * -1;
       return (a.name || '').localeCompare(b.name || '');
@@ -1513,12 +1543,13 @@
         <td>${p.note ? `<span class="auc-name-pill auc-note-${p.note}" onclick="event.stopPropagation();removeNote(${p._i})" title="Click to remove ${esc(p.note)} tag">${esc(p.name)}</span>` : esc(p.name)}${tierBadge}</td>
         <td>${posHtml(p.pos)}</td>
         <td>${esc(p.nflTeam || '—')}</td>
+        <td class="num val-pos-rank">${p.posRank != null ? p.posRank : '—'}</td>
         <td class="num val-my">${fmtDollar(p.myVal)}</td>
         <td class="num val-inf">${p.drafted ? '—' : fmtDollar(p._inf)}</td>
         <td class="num val-espn">${fmtDollar(p.espnVal || null)}</td>
         <td class="status-cell no-strike">${statusHtml}</td>
       </tr>`;
-    }).join('') : `<tr><td colspan="7" class="auc-pool-empty">No players match your filters.</td></tr>`;
+    }).join('') : `<tr><td colspan="8" class="auc-pool-empty">No players match your filters.</td></tr>`;
 
     return `
     <div class="auc-pool">
@@ -1544,6 +1575,7 @@
           <th>Player</th>
           <th>Pos</th>
           <th>Team</th>
+          <th class="num sortable${A.sortBy==='posRank'?' sort-active':''}" onclick="setSort('posRank')">Pos Rank ${sortArrow('posRank')}</th>
           <th class="num sortable${A.sortBy==='my'?' sort-active':''}" onclick="setSort('my')">My ${sortArrow('my')}</th>
           <th class="num sortable${A.sortBy==='inflated'?' sort-active':''}" onclick="setSort('inflated')">Inflated ${sortArrow('inflated')}</th>
           <th class="num sortable${A.sortBy==='espn'?' sort-active':''}" onclick="setSort('espn')">${esc(extValLabel())} ${sortArrow('espn')}</th>
@@ -1616,7 +1648,9 @@
   function setPosFilter(pos) { A.posFilter = pos; renderMain(); }
   function setSort(key) {
     if (A.sortBy === key) A.sortDir *= -1;
-    else { A.sortBy = key; A.sortDir = -1; }
+    // Pos Rank is "lower is better" — default to ascending (best first) on first
+    // click instead of the descending default the $ columns use.
+    else { A.sortBy = key; A.sortDir = key === 'posRank' ? 1 : -1; }
     renderMain();
   }
   function setSearch(val, inputEl) {
@@ -1880,9 +1914,9 @@
     }
   }
 
-  // One-shot pull of ESPN's own auction valuations (not part of the pick-polling
-  // loop — this is ESPN's player pool, not the draft feed). Only fills players
-  // whose CSV row didn't already provide an ESPN $ value.
+  // One-shot pull of ESPN's own auction valuations and player NFL teams (not part
+  // of the pick-polling loop — this is ESPN's player pool, not the draft feed).
+  // Only fills espnVal/nflTeam on rows the CSV didn't already supply a value for.
   async function fetchEspnAuctionValues() {
     if (!A.leagueId) return;
     A._espnValNote = 'Loading ESPN $…';
@@ -1900,21 +1934,31 @@
       const list = d.players || [];
       if (!list.length) { A._espnValNote = 'ESPN $: no players returned'; renderMain(); return; }
 
-      let filled = 0;
+      let filled = 0, teamsFilled = 0;
       list.forEach(entry => {
         const pl = entry.player || entry;
         const name = pl.fullName;
         if (!name) return;
-        const val = espnValueForEntry(entry);
-        if (val == null) return;
         const idx = A._nameMap?.get(normalizePlayerName(name));
         if (idx == null || idx < 0) return;
         const p = A.players[idx];
-        if (!p.espnVal) { p.espnVal = Math.round(val); filled++; }
+
+        const val = espnValueForEntry(entry);
+        if (val != null && !p.espnVal) { p.espnVal = Math.round(val); filled++; }
+
+        // Backfill NFL team from ESPN's proTeamId whenever the CSV didn't supply
+        // one (or left it blank) — covers the whole player pool, not just picks.
+        if (!p.nflTeam && pl.proTeamId != null) {
+          const abbr = ESPN_TEAM_MAP[pl.proTeamId];
+          if (abbr) { p.nflTeam = abbr; teamsFilled++; }
+        }
       });
 
-      A._espnValNote = filled ? `✓ ESPN $ filled for ${filled} players` : 'ESPN $: no matching values found';
-      if (filled) persist();
+      const notes = [];
+      if (filled) notes.push(`✓ ESPN $ filled for ${filled} players`);
+      if (teamsFilled) notes.push(`✓ NFL team filled for ${teamsFilled} players`);
+      A._espnValNote = notes.length ? notes.join(' · ') : 'ESPN $: no matching values found';
+      if (filled || teamsFilled) persist();
       renderMain();
     } catch (_) {
       A._espnValNote = 'ESPN $ fetch error';
