@@ -739,7 +739,11 @@
   }
 
   function normalizePlayerName(name) {
-    return name.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+    const key = name.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+    // NAME_ALIASES/applyNameAlias come from shared-utils.js (nicknames Sleeper's
+    // full_name doesn't share, e.g. Kenneth/Kenny Gainwell) — punctuation-only
+    // mismatches (Tre'/Tre, A.J./AJ) are already handled by the strip above.
+    return (typeof applyNameAlias === 'function') ? applyNameAlias(key) : key;
   }
 
   // ─── Starting lineup requirements ──────────────────────────────────────────────
