@@ -204,6 +204,10 @@
     .auc-pool-table td.val-my { color: var(--gold); font-weight: 600; }
     .auc-pool-table td.val-inf { color: var(--green-light); font-weight: 600; }
     .auc-pool-table td.val-espn { color: var(--brown-light); }
+    .auc-pool-table td.val-diff { font-weight: 600; }
+    .auc-pool-table td.val-diff.diff-up { color: var(--green-light); }
+    .auc-pool-table td.val-diff.diff-down { color: var(--red); }
+    .auc-pool-table td.val-diff.diff-flat { color: var(--brown-light); font-weight: 400; }
     .auc-pool-table td.status-cell {
       font-size: 0.8rem; color: var(--brown-light); text-decoration: none !important;
     }
@@ -1491,7 +1495,7 @@
         onclick="setPosFilter('${pos}')">${pos}</button>`).join('');
 
     const sortPills = [
-      ['inflated', 'Inflated $'], ['my', 'My $'], ['espn', extValLabel()], ['posRank', 'Pos Rank']
+      ['inflated', 'Inflated $'], ['my', 'My $'], ['espn', extValLabel()], ['diff', `Δ ${extValLabel()}`], ['posRank', 'Pos Rank']
     ].map(([key, lbl]) => `
       <button class="auc-pill${A.sortBy === key ? ' active' : ''}"
         onclick="setSort('${key}')">${lbl}</button>`).join('');
@@ -1515,6 +1519,15 @@
       let va, vb;
       if (A.sortBy === 'my')       { va = a.myVal || 0;   vb = b.myVal || 0; }
       else if (A.sortBy === 'espn') { va = a.espnVal || 0; vb = b.espnVal || 0; }
+      else if (A.sortBy === 'diff') {
+        // Players with no ESPN $ on file have no meaningful diff — always sort last.
+        const ad = a.espnVal ? (a._inf - a.espnVal) : null;
+        const bd = b.espnVal ? (b._inf - b.espnVal) : null;
+        if (ad == null && bd == null) return (a.name || '').localeCompare(b.name || '');
+        if (ad == null) return 1;
+        if (bd == null) return -1;
+        va = ad; vb = bd;
+      }
       else if (A.sortBy === 'posRank') {
         // Unranked players (no Pos Rank in the CSV) always sort to the bottom,
         // regardless of which direction the column is currently sorted.
@@ -1543,6 +1556,13 @@
         ? `<span class="auc-tier-badge ${p.tier % 2 === 1 ? 'auc-tier-badge-odd' : 'auc-tier-badge-even'}">T${p.tier}</span>`
         : '';
 
+      let diffCls = 'diff-flat', diffText = '—';
+      if (!p.drafted && p.espnVal) {
+        const d = p._inf - p.espnVal;
+        diffCls = d > 0 ? 'diff-up' : d < 0 ? 'diff-down' : 'diff-flat';
+        diffText = (d > 0 ? '+$' : d < 0 ? '−$' : '$') + Math.abs(d);
+      }
+
       return `<tr class="${[p.drafted ? 'drafted' : '', tierCls].filter(Boolean).join(' ')}" data-idx="${p._i}">
         <td>${p.note ? `<span class="auc-name-pill auc-note-${p.note}" onclick="event.stopPropagation();removeNote(${p._i})" title="Click to remove ${esc(p.note)} tag">${esc(p.name)}</span>` : esc(p.name)}${tierBadge}</td>
         <td>${posHtml(p.pos)}</td>
@@ -1551,9 +1571,10 @@
         <td class="num val-my">${fmtDollar(p.myVal)}</td>
         <td class="num val-inf">${p.drafted ? '—' : fmtDollar(p._inf)}</td>
         <td class="num val-espn">${fmtDollar(p.espnVal || null)}</td>
+        <td class="num val-diff ${diffCls}" title="Inflated $ minus ${esc(extValLabel())}">${diffText}</td>
         <td class="status-cell no-strike">${statusHtml}</td>
       </tr>`;
-    }).join('') : `<tr><td colspan="8" class="auc-pool-empty">No players match your filters.</td></tr>`;
+    }).join('') : `<tr><td colspan="9" class="auc-pool-empty">No players match your filters.</td></tr>`;
 
     return `
     <div class="auc-pool">
@@ -1583,6 +1604,7 @@
           <th class="num sortable${A.sortBy==='my'?' sort-active':''}" onclick="setSort('my')">My ${sortArrow('my')}</th>
           <th class="num sortable${A.sortBy==='inflated'?' sort-active':''}" onclick="setSort('inflated')">Inflated ${sortArrow('inflated')}</th>
           <th class="num sortable${A.sortBy==='espn'?' sort-active':''}" onclick="setSort('espn')">${esc(extValLabel())} ${sortArrow('espn')}</th>
+          <th class="num sortable${A.sortBy==='diff'?' sort-active':''}" onclick="setSort('diff')" title="Inflated $ minus ${esc(extValLabel())}">&Delta; ${esc(extValLabel())} ${sortArrow('diff')}</th>
           <th>Status</th>
         </tr></thead>
         <tbody>${tableBody}</tbody>
