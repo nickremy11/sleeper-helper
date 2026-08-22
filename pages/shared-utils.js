@@ -14,9 +14,18 @@ function applyNameAlias(key) {
   return NAME_ALIASES[key] || key;
 }
 
+// Drop a trailing generational suffix ("Jr", "Sr", "II"..."V") so sources that
+// include it ("Michael Pittman Jr") match sources that don't ("Michael Pittman").
+// Must run after punctuation is already stripped (so "Jr." has become "jr").
+// Shared by normName() below and auction.html's normalizePlayerName().
+function stripNameSuffix(key) {
+  return key.replace(/\s+(jr|sr|ii|iii|iv|v)$/i, '');
+}
+
 // Normalize a player name for matching across sources. Collapses punctuation/spacing
 // differences so "Amon-Ra St Brown"/"Amon-Ra St. Brown", "CJ"/"C.J.", "AJ"/"A.J.",
-// "Tre Harris"/"Tre' Harris" match, then resolves known nickname aliases (see
+// "Tre Harris"/"Tre' Harris" match, drops a trailing "Jr"/"Sr"/"II"-"V" suffix
+// (see stripNameSuffix above), then resolves known nickname aliases (see
 // NAME_ALIASES above). Both the name→id index and every lookup against it MUST
 // go through this.
 function normName(s) {
@@ -25,7 +34,7 @@ function normName(s) {
     .replace(/[.,'’‘]/g, '')  // drop periods/commas/apostrophes: "st." → "st", "c.j." → "cj", "tre'" → "tre"
     .replace(/\s+/g, ' ')     // collapse whitespace
     .trim();
-  return applyNameAlias(key);
+  return applyNameAlias(stripNameSuffix(key));
 }
 function errHtml(e) { return `<div class="err-state">Error: ${esc(e.message)}</div>`; }
 function loading(msg = 'Loading…') { return `<div class="loading-state"><div class="spinner"></div>${esc(msg)}</div>`; }

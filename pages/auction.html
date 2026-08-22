@@ -760,10 +760,14 @@
   }
 
   function normalizePlayerName(name) {
-    const key = name.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
-    // NAME_ALIASES/applyNameAlias come from shared-utils.js (nicknames Sleeper's
-    // full_name doesn't share, e.g. Kenneth/Kenny Gainwell) — punctuation-only
-    // mismatches (Tre'/Tre, A.J./AJ) are already handled by the strip above.
+    let key = name.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+    // stripNameSuffix/NAME_ALIASES/applyNameAlias come from shared-utils.js:
+    // - stripNameSuffix drops a trailing "Jr"/"Sr"/"II"-"V" so "Michael Pittman Jr"
+    //   matches "Michael Pittman" (punctuation-only mismatches like Tre'/Tre,
+    //   A.J./AJ are already handled by the strip above).
+    // - applyNameAlias resolves nicknames Sleeper's full_name doesn't share
+    //   (e.g. Kenneth/Kenny Gainwell).
+    if (typeof stripNameSuffix === 'function') key = stripNameSuffix(key);
     return (typeof applyNameAlias === 'function') ? applyNameAlias(key) : key;
   }
 
