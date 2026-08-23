@@ -1355,6 +1355,11 @@ async function handleEspnSettings(request, env) {
     return new Response(JSON.stringify({
       league_ids:      row ? JSON.parse(row.league_ids || '[]') : [],
       has_credentials: !!(row?.espn_s2 && row?.swid),
+      // SWID is a per-account identifier used client-side to match `team.primaryOwner`
+      // and find "my team" (index.html, analyzer.html, trade-analyzer.html) — safe to
+      // return to the authenticated owner of this row, unlike espn_s2 (the real auth
+      // cookie), which never leaves the server.
+      swid:            row?.swid || null,
     }), { status: 200, headers: { ...cors, 'Content-Type': 'application/json;charset=UTF-8' } });
   }
 
