@@ -279,6 +279,7 @@
   const _params = new URLSearchParams(window.location.search);
   const lgId    = _params.get('league') || '';
   const isEspn  = lgId.startsWith('espn_');
+  const espnNumId = isEspn ? lgId.replace('espn_', '') : null;
   const presetB = parseInt(_params.get('b') || '0') || null;
 
   // ── State ─────────────────────────────────────────────────────────────────────
@@ -431,11 +432,17 @@
         || fcPickMap[`${season}_${round}_early`] || fcPickMap[`${season}_${round}`] || 0;
   }
 
-  function buildFcMap(fcRes) {
+  // opts.redraft: read FantasyCalc's redraftValue instead of its dynasty value
+  // (same response either way — FC returns both fields regardless of the
+  // isDynasty query param — but the numQbs/ppr params sent with the request
+  // still need to match the league's actual format; see loadLeagueData()/
+  // loadEspnLeagueData()). Mirrors analyzer.html's buildFcMap().
+  function buildFcMap(fcRes, opts = {}) {
     const map = {};
+    const key = opts.redraft ? 'redraftValue' : 'value';
     for (const item of (fcRes || [])) {
       const sid = item.player?.sleeperId || item.player?.maybeSleeperID;
-      if (sid) map[String(sid)] = item.value;
+      if (sid) map[String(sid)] = item[key];
     }
     return map;
   }
@@ -630,19 +637,33 @@
   async function loadLeagueData() {
     if (_rawData) return;
 
-    const [leagueRes, rostersRes, usersRes, nflRes, playersRes, fcRes, draftsRaw, tradedRaw] = await Promise.all([
-      fetch(`${API}/sleeper/league/${lgId}`).then(r => r.json()),
+    // League meta needs to be known before the FantasyCalc fetch — both the
+    // dynasty `value` and the redraft `redraftValue` FC returns depend on the
+    // numQbs/ppr sent with the request, so match the league's real format
+    // (mirrors analyzer.html's loadSleeper()).
+    const leagueRes = await fetch(`${API}/sleeper/league/${lgId}`).then(r => r.json());
+    const rpEarly    = leagueRes?.roster_positions || [];
+    const lgType     = leagueRes?.settings?.type ?? 0;
+    const isDynasty  = lgType === 2;
+    const fcNumQbs   = rpEarly.includes('SUPER_FLEX') ? 2 : 1;
+    const fcPpr      = leagueRes?.scoring_settings?.rec ?? 1;
+    const fcNumTeams = leagueRes?.total_rosters || 12;
+    const fcParams = isDynasty
+      ? '?isDynasty=true&numQbs=2&ppr=1&includePickValues=true'
+      : `?isDynasty=false&numQbs=${fcNumQbs}&numTeams=${fcNumTeams}&ppr=${fcPpr}&includeAdp=false&includeRosterPercent=false&includePickValues=false`;
+
+    const [rostersRes, usersRes, nflRes, playersRes, fcRes, draftsRaw, tradedRaw] = await Promise.all([
       fetch(`${API}/sleeper/league/${lgId}/rosters`).then(r => r.json()),
       fetch(`${API}/sleeper/league/${lgId}/users`).then(r => r.json()),
       fetch(`${API}/sleeper/state/nfl`).then(r => r.json()),
       fetch(`${API}/players`).then(r => r.json()),
-      fetch(`${API}/fantasycalc`).then(r => r.json()),
+      fetch(`${API}/fantasycalc${fcParams}`).then(r => r.ok ? r.json() : []).catch(() => []),
       fetch(`${API}/sleeper/league/${lgId}/drafts`).then(r => r.ok ? r.json() : []).catch(() => []),
       fetch(`${API}/sleeper/league/${lgId}/traded_picks`).then(r => r.ok ? r.json() : []).catch(() => []),
     ]);
 
     const nflSeason  = nflRes?.season || String(new Date().getFullYear());
-    const fcMap      = buildFcMap(fcRes);
+    const fcMap      = buildFcMap(fcRes, { redraft: !isDynasty });
     const fcPickMap  = buildPickValueMap(fcRes);
     const { players } = buildPlayerMap(playersRes);
 
@@ -678,7 +699,6 @@
     const te2Mult      = rp.filter(p => p === 'TE').length >= 2 ? 1.4 : 1.0;
     const IDP_SLOTS    = new Set(['DL','LB','DB','DE','DT','IDP_FLEX','CB','S']);
     const hasIDP       = rp.some(p => IDP_SLOTS.has(p));
-    const lgType       = leagueRes?.settings?.type ?? 0;
     const isBB         = leagueRes?.settings?.best_ball === 1;
     const category     = isBB ? 'bestball' : lgType === 2 ? 'dynasty' : 'redraft';
     const lgName       = leagueRes?.name || lgId;
@@ -842,6 +862,176 @@
       numTeams, playoffTeams, hasIDP,
       allRosters, tradedPicks, players, fcMap, fcPickMap, ridToSlot, numRounds,
       rp, scoringSettings, rosterNames,
+    };
+    _simData = { matchupsByWeek, futureWeeks, projectionsByWeek, muMap, sigmaMap, useFc, potentialPtsSoFar };
+  }
+
+  // ── ESPN load ────────────────────────────────────────────────────────────────
+  // Builds the exact same _rawData/_simData shape loadLeagueData() does, so every
+  // downstream function (team select, trade builder, executeTradeAnalysis, results
+  // rendering) works unchanged — mirrors analyzer.html's loadEspn(), reusing this
+  // file's own sim helpers (optimalLineupAndSigma/runSimulation above) plus the
+  // ESPN helpers already shared via shared-utils.js (crParseEspnScoring,
+  // espnRosterPositionsFromSlotCounts, crFetchEspnSchedule,
+  // crEspnScheduleToMatchupsByWeek). No draft-pick concept for ESPN — pickList
+  // stays empty for every team, same as Rostership's ESPN handling.
+  async function loadEspnLeagueData() {
+    if (_rawData) return;
+
+    const ESPN_POS_MAP = {1:'QB',2:'RB',3:'WR',4:'TE',6:'DL',7:'LB',8:'DB',9:'DL',10:'DL',12:'LB',13:'LB',14:'DB',15:'DB',16:'DB'};
+
+    const espnRes = await fetch(`${API}/espn/fantasy/${espnNumId}?view=mRoster&view=mTeam&view=mSettings`, { credentials: 'include' }).then(r => {
+      if (!r.ok) throw new Error('ESPN data unavailable — log in and save ESPN credentials in your profile');
+      return r.json();
+    });
+
+    // ESPN has no dynasty concept, so always use FC's redraftValue — parameterized
+    // to this league's real QB format + PPR, parsed from its actual scoring settings.
+    const { scoring: espnScoring, numQbs: espnNumQbs, ppr: espnPpr, bonusRecTe: espnBonusRecTe } =
+      crParseEspnScoring(espnRes?.settings);
+    const espnTeValueMult = 1 + espnBonusRecTe * 0.4; // same calibration as loadLeagueData()'s te2Mult
+    const rp = espnRosterPositionsFromSlotCounts(espnRes?.settings?.rosterSettings?.lineupSlotCounts);
+    const scoringSettings = espnScoring;
+
+    const [nflRes, playersRes, fcRes] = await Promise.all([
+      fetch(`${API}/sleeper/state/nfl`).then(r => r.json()),
+      fetch(`${API}/players`).then(r => r.json()),
+      fetch(`${API}/fantasycalc?isDynasty=false&numQbs=${espnNumQbs}&numTeams=${espnRes?.settings?.size || 12}&ppr=${espnPpr}&includeAdp=false&includeRosterPercent=false&includePickValues=false`).then(r => r.ok ? r.json() : []).catch(() => []),
+    ]);
+
+    const nflSeason    = nflRes?.season || String(new Date().getFullYear());
+    const fcMap        = buildFcMap(fcRes, { redraft: true });
+    const { players, byName } = buildPlayerMap(playersRes);
+    const lgName       = espnRes?.settings?.name || `ESPN ${espnNumId}`;
+    const numTeams      = (espnRes?.teams || []).length;
+    const playoffTeams  = Math.floor(numTeams / 2);
+
+    const espnPrimaryOwnerByTeamId = {};
+
+    const teams = (espnRes?.teams || []).map(team => {
+      espnPrimaryOwnerByTeamId[team.id] = team.primaryOwner;
+      const wins   = team.record?.overall?.wins   ?? 0;
+      const losses = team.record?.overall?.losses ?? 0;
+      const fpts   = team.record?.overall?.pointsFor ?? 0;
+      const playerList = [];
+      const sleeperPids = []; // matched-only Sleeper ids, for the playoff-odds sim below
+
+      for (const entry of (team.roster?.entries || [])) {
+        const pl = entry.playerPoolEntry?.playerPoolEntry?.player || entry.playerPoolEntry?.player;
+        if (!pl) continue;
+        const pid       = byName[normName(pl.fullName)];
+        const sleeperP  = pid ? players[pid] : null;
+        const espnPos   = ESPN_POS_MAP[pl.defaultPositionId];
+        const pos       = sleeperP ? normPos(sleeperP.position) : (espnPos ? normPos(espnPos) : null);
+        if (!pos) continue;
+        if (pid) sleeperPids.push(pid);
+        const rawVal    = pid ? (fcMap[pid] ?? 0) : 0;
+        const val       = rawVal * (pos === 'TE' ? espnTeValueMult : 1.0);
+        const isStarter = entry.lineupSlotId !== 20 && entry.lineupSlotId !== 21; // 20=Bench, 21=IR
+        playerList.push({ pid: pid || pl.fullName, name: sleeperP?.full_name || pl.fullName || '', pos, val, yearsExp: sleeperP?.years_exp ?? 0, isStarter });
+      }
+      playerList.sort((a, b) => {
+        const ORDER = ['QB','RB','WR','TE','DL','LB','DB'];
+        return ORDER.indexOf(a.pos) !== ORDER.indexOf(b.pos) ? ORDER.indexOf(a.pos) - ORDER.indexOf(b.pos) : b.val - a.val;
+      });
+
+      const t = {
+        rosterId: team.id, teamName: team.name || null, ownerName: null,
+        wins, losses, fpts,
+        overall: 0, contender: 0, posValues: { QB: 0, RB: 0, WR: 0, TE: 0, DL: 0 }, draft: 0,
+        playerList, pickList: [], standing: 0, playoffOdds: null, top2Odds: null, lastPlaceOdds: null,
+        _sleeperPids: sleeperPids,
+      };
+      recomputeTeamValues(t); // fills overall/contender/posValues/draft from playerList/pickList — same formula as Sleeper teams
+      return t;
+    });
+
+    const byStand = [...teams].sort((a, b) => b.wins !== a.wins ? b.wins - a.wins : b.fpts - a.fpts);
+    byStand.forEach((t, i) => { t.standing = i + 1; });
+
+    const simTeams = teams.filter(t => t.overall > 0 || t.wins > 0 || t.losses > 0);
+
+    let playoffOdds = {}, top2Odds = {}, lastOdds = {};
+    let projectionsByWeek = {};
+    let muMap = {}, sigmaMap = {};
+    let useFc = true;
+    let matchupsByWeek = {};
+    let futureWeeks = [];
+    // No per-week realized-points endpoint wired up for ESPN in this app (see
+    // analyzer.html's ESPN sim for the same simplification) — last-place odds
+    // below won't credit weeks already banked, only projected future weeks.
+    const potentialPtsSoFar = {};
+    for (const t of teams) potentialPtsSoFar[t.rosterId] = 0;
+
+    // This is the piece that matters most: real ESPN schedule + real per-week
+    // Sleeper projections run through this league's real scoring/lineup shape,
+    // simulated from each team's actual current record — same engine the
+    // Sleeper path uses, just fed ESPN-shaped inputs.
+    try {
+      const espnRegularSeasonWeeks = espnRes?.settings?.scheduleSettings?.matchupPeriodCount ?? 14;
+      const schedule = await crFetchEspnSchedule(API, espnNumId);
+      for (let w = 1; w <= espnRegularSeasonWeeks; w++) {
+        const played = schedule.some(m => m.matchupPeriodId === w &&
+          ((m.home?.totalPoints ?? 0) > 0 || (m.away?.totalPoints ?? 0) > 0));
+        if (!played) futureWeeks.push(w);
+      }
+      matchupsByWeek = crEspnScheduleToMatchupsByWeek(schedule, futureWeeks);
+
+      if (futureWeeks.length === 0) {
+        byStand.forEach((t, i) => { playoffOdds[t.rosterId] = i < playoffTeams ? 1.0 : 0.0; top2Odds[t.rosterId] = i < 2 ? 1.0 : 0.0; });
+        for (const t of teams) lastOdds[t.rosterId] = 1 / teams.length; // no banked-points signal for ESPN — split evenly
+      } else {
+        const projResults = await Promise.all(
+          futureWeeks.map(w =>
+            fetch(`${API}/sleeper/projections/nfl/regular/${nflSeason}/${w}`).then(r => r.ok ? r.json() : {}).catch(() => ({}))
+          )
+        );
+        futureWeeks.forEach((w, idx) => { projectionsByWeek[w] = projResults[idx] || {}; });
+
+        for (const t of teams) {
+          muMap[t.rosterId] = {}; sigmaMap[t.rosterId] = {};
+          for (const week of futureWeeks) {
+            const { mu, sigma } = optimalLineupAndSigma(t._sleeperPids || [], projectionsByWeek[week], scoringSettings, rp, players);
+            muMap[t.rosterId][week] = mu; sigmaMap[t.rosterId][week] = sigma;
+          }
+        }
+
+        const avgMu = simTeams.reduce((s, t) =>
+          s + futureWeeks.reduce((ws, w) => ws + (muMap[t.rosterId]?.[w] ?? 0), 0), 0
+        ) / Math.max(1, simTeams.length * futureWeeks.length);
+
+        // Real per-week projections came back too thin to trust (e.g. early
+        // offseason) — fall back to overall-value-derived mu, same as the
+        // Sleeper path's useFc fallback.
+        useFc = avgMu < 20;
+        if (useFc) {
+          const meanOverall = simTeams.reduce((s, t) => s + t.overall, 0) / Math.max(1, simTeams.length);
+          for (const t of teams) {
+            const clampedMu = Math.max(60, Math.min(160, meanOverall > 0 ? 110 * (t.overall / meanOverall) : 110));
+            for (const week of futureWeeks) {
+              muMap[t.rosterId][week]    = clampedMu;
+              sigmaMap[t.rosterId][week] = Math.max(12, clampedMu * 0.20);
+            }
+          }
+        }
+        ({ odds: playoffOdds, top2: top2Odds, last: lastOdds } = runSimulation(simTeams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams, potentialPtsSoFar));
+      }
+    } catch (e) {
+      console.warn('[Trade Analyzer] ESPN playoff-odds simulation failed:', e);
+    }
+
+    for (const t of teams) {
+      t.playoffOdds   = playoffOdds[t.rosterId] ?? null;
+      t.top2Odds      = top2Odds[t.rosterId] ?? null;
+      t.lastPlaceOdds = lastOdds[t.rosterId] ?? null;
+    }
+
+    _rawData = {
+      teams: simTeams, lgName, category: 'redraft', season: nflSeason,
+      formatFlags: buildFormatFlags({ scoring_settings: scoringSettings, roster_positions: rp }),
+      numTeams, playoffTeams, hasIDP: false,
+      players, fcMap, rp, scoringSettings,
+      espnPrimaryOwnerByTeamId,
     };
     _simData = { matchupsByWeek, futureWeeks, projectionsByWeek, muMap, sigmaMap, useFc, potentialPtsSoFar };
   }
@@ -1025,26 +1215,54 @@
     const el = document.getElementById('picker-list');
     if (!el) return;
     const user = SharedAuth.getUser?.();
-    if (!user?.sleeper_username) {
-      el.innerHTML = `<div style="color:var(--brown-light);font-family:'Crimson Text',serif;font-style:italic;">Sign in and set your Sleeper username to load leagues.</div>`;
+    if (!user) {
+      el.innerHTML = `<div style="color:var(--brown-light);font-family:'Crimson Text',serif;font-style:italic;">Sign in to load your leagues.</div>`;
       return;
     }
     el.innerHTML = `<div style="color:var(--brown-light);font-family:'Crimson Text',serif;font-style:italic;">Loading…</div>`;
-    try {
-      const [nflRes, sleeperUser] = await Promise.all([
-        fetch(`${API}/sleeper/state/nfl`).then(r => r.json()),
-        fetch(`${API}/sleeper/user/${encodeURIComponent(user.sleeper_username)}`).then(r => r.json()),
-      ]);
-      const season  = nflRes?.season || String(new Date().getFullYear());
-      const leagues = await fetch(`${API}/sleeper/user/${sleeperUser.user_id}/leagues/nfl/${season}`).then(r => r.json());
-      el.innerHTML = (leagues || []).map(lg =>
-        `<a class="ta-team-card" href="/trade-analyzer?league=${encodeURIComponent(lg.league_id)}" style="text-decoration:none;">
-          <div class="ta-team-name">${esc(lg.name || lg.league_id)}</div>
-        </a>`
-      ).join('');
-    } catch(e) {
-      el.innerHTML = `<div class="err-state">${esc(e.message)}</div>`;
+
+    const cards = [];
+
+    if (user.sleeper_username) {
+      try {
+        const [nflRes, sleeperUser] = await Promise.all([
+          fetch(`${API}/sleeper/state/nfl`).then(r => r.json()),
+          fetch(`${API}/sleeper/user/${encodeURIComponent(user.sleeper_username)}`).then(r => r.json()),
+        ]);
+        const season  = nflRes?.season || String(new Date().getFullYear());
+        const leagues = await fetch(`${API}/sleeper/user/${sleeperUser.user_id}/leagues/nfl/${season}`).then(r => r.json());
+        for (const lg of (leagues || [])) {
+          cards.push(`<a class="ta-team-card" href="/trade-analyzer?league=${encodeURIComponent(lg.league_id)}" style="text-decoration:none;">
+            <div class="ta-team-name">${esc(lg.name || lg.league_id)}</div>
+          </a>`);
+        }
+      } catch (e) {
+        cards.push(`<div class="err-state">${esc(e.message)}</div>`);
+      }
     }
+
+    try {
+      const cfg = await fetch(`${API}/espn/settings`, { credentials: 'include' }).then(r => r.ok ? r.json() : null);
+      if (cfg?.has_credentials && cfg.league_ids?.length) {
+        const espnLeagues = await Promise.all(cfg.league_ids.map(id =>
+          fetch(`${API}/espn/fantasy/${id}?view=mSettings&view=mTeam`, { credentials: 'include' })
+            .then(r => r.ok ? r.json() : null)
+            .then(d => d ? { id, name: d.settings?.name || `ESPN ${id}` } : null)
+            .catch(() => null)
+        ));
+        for (const lg of espnLeagues) {
+          if (!lg) continue;
+          cards.push(`<a class="ta-team-card" href="/trade-analyzer?league=${encodeURIComponent('espn_' + lg.id)}" style="text-decoration:none;">
+            <div class="ta-team-name">${esc(lg.name)} <span style="font-family:'Rye',serif;font-size:0.42rem;letter-spacing:0.1em;color:var(--brown-light);">(ESPN)</span></div>
+          </a>`);
+        }
+      }
+    } catch {}
+
+    if (!cards.length) {
+      cards.push(`<div style="color:var(--brown-light);font-family:'Crimson Text',serif;font-style:italic;">Sign in and set your Sleeper username or ESPN credentials in your profile to load leagues.</div>`);
+    }
+    el.innerHTML = cards.join('');
   }
 
   // ── Team selection ──────────────────────────────────────────────────────────
@@ -1355,7 +1573,9 @@
       { key: 'WR',        label: 'WR'        },
       { key: 'TE',        label: 'TE'        },
       ...(hasIDP ? [{ key: 'DL', label: 'DL/LB' }] : []),
-      { key: 'draft',     label: 'Picks'     },
+      // ESPN has no draft-pick concept in this app — every team ties at 0, so
+      // the rank column would just be noise.
+      ...(isEspn ? [] : [{ key: 'draft', label: 'Picks' }]),
     ];
 
     function rankCell(bR, aR) {
@@ -1467,11 +1687,6 @@
       onLogout: () => {},
     });
 
-    if (isEspn) {
-      document.getElementById('content').innerHTML = `<div class="err-state">Trade Analyzer only supports Sleeper leagues. ESPN league trading is not available.</div>`;
-      return;
-    }
-
     if (!lgId) {
       renderLeaguePicker();
       return;
@@ -1482,13 +1697,23 @@
     document.getElementById('content').innerHTML     = loading('Loading league data…');
 
     try {
-      await loadLeagueData();
+      if (isEspn) await loadEspnLeagueData();
+      else        await loadLeagueData();
       document.getElementById('league-title').textContent = _rawData.lgName + ' · ' + _rawData.season;
       document.title = 'Trade Analyzer — ' + _rawData.lgName;
 
       // Auto-detect user's team as Team A
       const user = SharedAuth.getUser?.();
-      if (user?.sleeper_username && !_teamIds.length) {
+      if (isEspn && !_teamIds.length) {
+        try {
+          const espnSettings = await fetch(`${API}/espn/settings`, { credentials: 'include' }).then(r => r.ok ? r.json() : null);
+          const swid = espnSettings?.swid;
+          if (swid) {
+            const myTeam = _rawData.teams.find(t => _rawData.espnPrimaryOwnerByTeamId?.[t.rosterId] === swid);
+            if (myTeam) _teamIds.push(myTeam.rosterId);
+          }
+        } catch {}
+      } else if (user?.sleeper_username && !_teamIds.length) {
         try {
           const su = await fetch(`${API}/sleeper/user/${encodeURIComponent(user.sleeper_username)}`).then(r => r.json());
           const myRoster = _rawData.allRosters.find(r => r.owner_id === su.user_id);
