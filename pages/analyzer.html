@@ -939,23 +939,23 @@
     const rpEarly      = leagueRes?.roster_positions || [];
     const lgType       = leagueRes?.settings?.type ?? 0;
     isDynasty          = lgType === 2;
-    // numQbs/ppr now match the league's actual format for BOTH dynasty and
-    // redraft (previously dynasty was hardcoded 2QB/full-PPR regardless of the
-    // league's real settings — only redraft used to get this treatment).
-    // includePickValues only matters for dynasty (picks aren't shown for redraft).
+    const bonusRecTe = leagueRes?.scoring_settings?.bonus_rec_te ?? 0;
+    const is2TE      = rpEarly.filter(p => p === 'TE').length >= 2;
+    // Dynasty: reverted to the exact fixed request that was reliable for
+    // months (isDynasty=true/numQbs=2/ppr=1/includePickValues=true, no extra
+    // params) — the parameterized version (numTeams/tep/includeAdp/
+    // includeRosterPercent) started intermittently returning empty results for
+    // some leagues and wasn't worth chasing further given how well the fixed
+    // shape already worked. TE premium goes back to the local heuristic below
+    // for dynasty too, since it's no longer asking FC's `tep` param for it.
+    // Redraft keeps its numQbs/ppr/numTeams parameterization (no tep — it
+    // never affected redraftValue anyway, confirmed earlier) since that hasn't
+    // shown this problem.
     const fcNumQbs   = rpEarly.includes('SUPER_FLEX') ? 2 : 1;
     const fcPpr      = leagueRes?.scoring_settings?.rec ?? 1;
     const fcNumTeams = leagueRes?.total_rosters || 12;
-    // TE premium: FC's `tep` param (none | te+ | te++) DOES move dynasty `value`
-    // (confirmed live) but does NOT move `redraftValue` at all regardless of
-    // tep — so this only applies to the dynasty fetch; redraft keeps the local
-    // teValueMult heuristic below. Bucket boundaries match FC's own tep
-    // semantics: te++ = "start 2 TE or >1 TEP bonus", te+ = "0.5 to 1 TEP".
-    const bonusRecTe = leagueRes?.scoring_settings?.bonus_rec_te ?? 0;
-    const is2TE      = rpEarly.filter(p => p === 'TE').length >= 2;
-    const tepTier    = bonusRecTe > 1 || is2TE ? 'te++' : (bonusRecTe > 0 ? 'te+' : 'none');
     const fcParams = isDynasty
-      ? `?isDynasty=true&numQbs=${fcNumQbs}&numTeams=${fcNumTeams}&ppr=${fcPpr}&tep=${tepTier}&includeAdp=false&includeRosterPercent=false&includePickValues=true`
+      ? '?isDynasty=true&numQbs=2&ppr=1&includePickValues=true'
       : `?isDynasty=false&numQbs=${fcNumQbs}&numTeams=${fcNumTeams}&ppr=${fcPpr}&includeAdp=false&includeRosterPercent=false&includePickValues=false`;
 
     const [rostersRes, usersRes, nflRes, playersRes, fcRes, draftsRaw, tradedRaw] = await Promise.all([
@@ -1014,11 +1014,11 @@
 
     // League meta (isDynasty/bonusRecTe/is2TE already resolved above, before the FC fetch)
     const rp           = rpEarly;
-    // Redraft-only local TE premium multiplier — dynasty gets FC's real `tep`
-    // param baked directly into `value` above, so applying this on top of a
-    // dynasty value would double-count the boost. Same 0.4 calibration as
-    // before: a typical +1.0 TEP bonus lands close to the old fixed 1.4x.
-    const teValueMult  = isDynasty ? 1.0 : (1 + bonusRecTe * 0.4);
+    // Local TE premium multiplier for both dynasty and redraft now (dynasty's
+    // fcParams reverted to not asking FC's `tep` param — see the comment
+    // there). Calibrated so a typical +1.0 TEP bonus lands close to the old
+    // fixed 1.4x this replaced.
+    const teValueMult  = 1 + bonusRecTe * 0.4;
     const IDP_SLOTS    = new Set(['DL','LB','DB','DE','DT','IDP_FLEX','CB','S']);
     hasIDP             = rp.some(p => IDP_SLOTS.has(p));
     isBB               = leagueRes?.settings?.best_ball === 1;
