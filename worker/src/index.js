@@ -17,7 +17,8 @@
  *   GET  /api/players             → KV-cached player map (2h TTL)
  *   GET  /api/sleeper/*           → live proxy to api.sleeper.app (no cache)
  *   POST /api/graphql             → proxy to sleeper.com/graphql (authenticated)
- *   GET  /api/fantasycalc         → FantasyCalc values (KV-cached 24h)
+ *   GET  /api/fantasycalc         → FantasyCalc values (KV-cached 24h; optional ?isDynasty=&numQbs=&ppr=&includePickValues=, default = dynasty/2QB/full-PPR)
+ *   GET  /api/aggregate-adp       → JuiceBoxOne consensus ADP CSV, offense only (KV-cached 12h)
  *   GET  /api/espn/scoreboard     → NFL week schedule: team → kickoff ISO (KV-cached 5m)
  *   GET  /api/espn/games          → NFL week games with pairings [{home,away,kickoff}] (KV-cached 5m)
  *   GET  /api/espn/settings       → get ESPN league IDs + credential status (auth required)
@@ -50,9 +51,14 @@ import { handleAuth, getAuthUser, decryptStoredToken, requireAdmin } from './aut
 
 const SLEEPER_BASE  = 'https://api.sleeper.app/v1';
 const SLEEPER_GQL   = 'https://sleeper.com/graphql';
-const FC_URL        = 'https://api.fantasycalc.com/values/current?isDynasty=true&numQbs=2&ppr=1&includePickValues=true';
+// JuiceBoxOne's public consensus ADP sheet (FantasyPros/ESPN/Sleeper/Yahoo blend,
+// "Average" column) — view-only Google Sheet, no auth needed for the CSV export.
+// Offense only (QB/RB/WR/TE, ~200 players) — no IDP, no deep bench. Callers must
+// fall back to Sleeper search_rank for anything not found in this map.
+const AGGREGATE_ADP_URL = 'https://docs.google.com/spreadsheets/d/1HTixsrRtIIpnUafVkOIhET83vCFjKXSUGiG24-5jTHY/export?format=csv&gid=1840800615';
 const PLAYERS_TTL   = 60 * 60 * 2;   // 2 hours
 const FC_TTL        = 60 * 60 * 24;  // 24 hours
+const AGG_ADP_TTL   = 60 * 60 * 12;  // 12 hours — a personal doc, refresh more often than FC in case it moves/breaks
 const ESPN_TTL      = 60 * 5;        // 5 minutes (game times are stable but scores update live)
 const ROOM_TTL_MS   = 7 * 24 * 60 * 60 * 1000; // 7 days
 const ALLOWED_ORIGINS = new Set([
@@ -107,7 +113,11 @@ export default {
     }
 
     if (url.pathname === '/api/fantasycalc' && request.method === 'GET') {
-      return handleFantasyCalc(env);
+      return handleFantasyCalc(env, url);
+    }
+
+    if (url.pathname === '/api/aggregate-adp' && request.method === 'GET') {
+      return handleAggregateAdp(env);
     }
 
     if (url.pathname === '/api/espn/scoreboard' && request.method === 'GET') {
@@ -148,8 +158,30 @@ export default {
 
 // ── FantasyCalc ───────────────────────────────────────────────────────────────
 
-async function handleFantasyCalc(env) {
-  const cached = await env.SLEEPER_KV.getWithMetadata('fc_values', 'text');
+// Query params (all optional, defaults match the original fixed dynasty/2QB/
+// full-PPR fetch so callers that pass nothing get unchanged behavior):
+//   isDynasty (default true), numQbs (default 2), ppr (default 1),
+//   includePickValues (default true), tep, numTeams, includeAdp,
+//   includeRosterPercent (these four passed through only when the caller sets
+//   them — FC has its own defaults otherwise)
+// FantasyCalc's response includes BOTH `value` (scored to the isDynasty flag)
+// and `redraftValue` (FC's own redraft valuation) on every player regardless
+// of isDynasty — but redraftValue still varies with numQbs/ppr, so a redraft
+// caller should still pass the league's real numQbs/ppr even with isDynasty=false.
+// `tep` (none | te+ | te++) moves `value` but NOT `redraftValue` (confirmed
+// live) — only meaningful for dynasty callers.
+async function handleFantasyCalc(env, url) {
+  const isDynasty = (url?.searchParams.get('isDynasty') ?? 'true') === 'true';
+  const numQbs     = url?.searchParams.get('numQbs') || '2';
+  const ppr        = url?.searchParams.get('ppr') || '1';
+  const includePickValues = (url?.searchParams.get('includePickValues') ?? 'true') === 'true';
+  const tep                  = url?.searchParams.get('tep') || '';
+  const numTeams              = url?.searchParams.get('numTeams') || '';
+  const includeAdp            = url?.searchParams.get('includeAdp') || '';
+  const includeRosterPercent  = url?.searchParams.get('includeRosterPercent') || '';
+  const cacheKey = `fc_values_${isDynasty}_${numQbs}_${ppr}_${includePickValues}_${tep}_${numTeams}_${includeAdp}_${includeRosterPercent}`;
+
+  const cached = await env.SLEEPER_KV.getWithMetadata(cacheKey, 'text');
 
   if (cached.value) {
     const age = cached.metadata?.cachedAt
@@ -158,18 +190,96 @@ async function handleFantasyCalc(env) {
     return jsonRes(cached.value, { 'X-Cache': 'HIT', 'X-Cache-Age': String(age) });
   }
 
-  const upstream = await fetch(FC_URL, { headers: { 'User-Agent': 'sleeper-helper/1.0' } });
+  const fcParams = new URLSearchParams({ isDynasty: String(isDynasty), numQbs, ppr, includePickValues: String(includePickValues) });
+  if (tep)                 fcParams.set('tep', tep);
+  if (numTeams)             fcParams.set('numTeams', numTeams);
+  if (includeAdp)           fcParams.set('includeAdp', includeAdp);
+  if (includeRosterPercent) fcParams.set('includeRosterPercent', includeRosterPercent);
+  const fcUrl = `https://api.fantasycalc.com/values/current?${fcParams.toString()}`;
+  const upstream = await fetch(fcUrl, { headers: { 'User-Agent': 'sleeper-helper/1.0' } });
   if (!upstream.ok) {
     return new Response('FantasyCalc upstream error', { status: 502, headers: CORS });
   }
 
   const body = await upstream.text();
-  await env.SLEEPER_KV.put('fc_values', body, {
+  await env.SLEEPER_KV.put(cacheKey, body, {
     expirationTtl: FC_TTL,
     metadata: { cachedAt: Date.now() },
   });
 
   return jsonRes(body, { 'X-Cache': 'MISS' });
+}
+
+// ── Aggregate ADP (JuiceBoxOne consensus sheet) ────────────────────────────────
+// Returns raw rows [{name, team, bye, pos, rank}] — name matching against Sleeper
+// IDs happens client-side (crLoadAggregateAdp in shared-utils.js), same pattern
+// as the Clay projections source.
+
+async function handleAggregateAdp(env) {
+  const cached = await env.SLEEPER_KV.getWithMetadata('agg_adp', 'text');
+  if (cached.value) {
+    const age = cached.metadata?.cachedAt
+      ? Math.floor((Date.now() - cached.metadata.cachedAt) / 1000)
+      : 0;
+    return jsonRes(cached.value, { 'X-Cache': 'HIT', 'X-Cache-Age': String(age) });
+  }
+
+  const upstream = await fetch(AGGREGATE_ADP_URL, { headers: { 'User-Agent': 'sleeper-helper/1.0' } });
+  if (!upstream.ok) {
+    return new Response('Aggregate ADP upstream error', { status: 502, headers: CORS });
+  }
+
+  const csv  = await upstream.text();
+  const rows = parseAggregateAdpCsv(csv);
+  const body = JSON.stringify(rows);
+
+  await env.SLEEPER_KV.put('agg_adp', body, {
+    expirationTtl: AGG_ADP_TTL,
+    metadata: { cachedAt: Date.now() },
+  });
+
+  return jsonRes(body, { 'X-Cache': 'MISS' });
+}
+
+// Sheet columns: (blank), Name, Team, BYE, Pos, ADP, FantasyPros, ESPN Half,
+// Sleeper Half, Y Half, Average, AVGvFP, Landmine, Round, Pick
+function parseAggregateAdpCsv(csv) {
+  const lines = csv.split(/\r?\n/).filter(l => l.length > 0);
+  if (lines.length < 2) return [];
+  const out = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cols    = parseCsvLine(lines[i]);
+    const name    = cols[1];
+    const team    = cols[2];
+    const bye     = Number(cols[3]) || null;
+    const pos     = cols[4];
+    const average = Number(cols[10]);
+    if (!name || !pos || !Number.isFinite(average)) continue;
+    out.push({ name, team, bye, pos, rank: average });
+  }
+  return out;
+}
+
+// Minimal RFC-4180-ish CSV line parser (handles quoted fields with embedded
+// commas/quotes) — Google Sheets' CSV export quotes any field containing a comma.
+function parseCsvLine(line) {
+  const out = [];
+  let cur = '', inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (line[i + 1] === '"') { cur += '"'; i++; }
+        else inQuotes = false;
+      } else cur += c;
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ',') { out.push(cur); cur = ''; }
+      else cur += c;
+    }
+  }
+  out.push(cur);
+  return out;
 }
 
 // ── ESPN Scoreboard ───────────────────────────────────────────────────────────

@@ -44,7 +44,10 @@ function loading(msg = 'Loading…') { return `<div class="loading-state"><div c
 // (index.html) and the League Analyzer (analyzer.html).
 //
 // Two modes:
-//   'adp'         → players ranked by Sleeper search_rank (1000 / √rank decay)
+//   'adp'         → aggregate consensus ADP (JuiceBoxOne sheet: FantasyPros/
+//                   ESPN/Sleeper/Yahoo blend, 1000 / √rank decay), falling back
+//                   to Sleeper's own search_rank for anyone the sheet doesn't
+//                   cover (it's offense-only, ~200 players — no IDP, no deep bench).
 //   'projections' → equal-weight average of Clay (ESPN), Sleeper season
 //                   projections, and the user's own projections, each scored
 //                   with the league's own scoring_settings.
@@ -104,10 +107,12 @@ function crScoreSleeper(proj, scoring) {
 }
 
 // A single player's value for the active mode.
-// ctx = { mode, players, clayMap, sleeperProjMap, userProjMap, scoring }
+// ctx = { mode, players, clayMap, sleeperProjMap, userProjMap, scoring, aggAdpMap }
 function crPlayerPpg(pid, ctx) {
   if (ctx.mode === 'adp') {
-    const rank = ctx.players?.[pid]?.search_rank;
+    // Prefer the aggregate consensus sheet; fall back to Sleeper's own
+    // search_rank for anyone it doesn't cover (IDP, deep bench).
+    const rank = ctx.aggAdpMap?.[pid] ?? ctx.players?.[pid]?.search_rank;
     return rank ? 1000 / Math.sqrt(rank) : 0;
   }
   const vals = [];
@@ -204,6 +209,95 @@ async function crLoadProjectionData(opts) {
     }
   }
   return { clayMap, sleeperProjMap, userProjMap };
+}
+
+// ── ESPN scoring settings → Sleeper-shaped scoring_settings ───────────────────
+// ESPN's league scoring (settings.scoringSettings.scoringItems) is keyed by a
+// numeric statId, not field names. This maps the ones that matter for
+// QB/RB/WR/TE valuation onto the SAME field names Sleeper's own scoring_settings
+// (and its player stat-projection lines) use, so crScoreSleeper()/
+// lsComputeProjPts() work on ESPN leagues completely unchanged — no separate
+// ESPN scoring formula needed. Kicker/D-ST/return-TD categories are
+// intentionally not mapped: crScoreRoster only ever scores QB/RB/WR/TE, and an
+// unmapped statId is a silent no-op (crScoreSleeper only applies a
+// scoring_settings key that also exists on the stat line), never a wrong number.
+//
+// statId source: SETTINGS_SCORING_FORMAT_MAP in the public espn-api project
+// (github.com/cwendt94/espn-api/blob/master/espn_api/football/constant.py) —
+// cross-checked against a real league's live scoringItems response (a
+// 0.5-PPR, 1QB, no-TEP league) before trusting it: statId 53→0.5 matched the
+// league's known half-PPR setting, statId 6→0.5 ("every 10 passing yards")
+// and lineupSlotCounts confirmed 1QB (no slot 0 or 7... — see numQbs below).
+const ESPN_STAT_TO_FIELD = {
+  4: 'pass_td', 20: 'pass_int', 19: 'pass_2pt',
+  25: 'rush_td', 26: 'rush_2pt',
+  43: 'rec_td', 44: 'rec_2pt',
+  72: 'fum_lost',
+};
+// Yardage categories: ESPN lets a league pick EITHER a flat per-yard rate (the
+// "direct" statId) OR a bucketed "every N yards" rate (a different statId per
+// N) — never both for the same category. Both normalize to a continuous
+// per-yard rate (points ÷ N for the bucketed form) to match Sleeper's shape.
+const ESPN_YARDAGE_STATS = {
+  pass_yd: { direct: 3,  everyN: { 5: 5, 6: 10, 7: 20, 8: 25, 9: 50, 10: 100 } },
+  rush_yd: { direct: 24, everyN: { 27: 5, 28: 10, 29: 20, 30: 25, 31: 50, 32: 100 } },
+  rec_yd:  { direct: 42, everyN: { 47: 5, 48: 10, 49: 20, 50: 25, 51: 50, 52: 100 } },
+};
+// "Each reception" (53) is what ESPN's UI actually writes for the PPR dial in
+// practice (confirmed live); 41 ("Receptions") is the same category under a
+// slightly different label in the reference table and is mapped defensively
+// in case a league is ever configured through it instead.
+const ESPN_REC_STAT_IDS = [53, 41];
+const ESPN_TE_POSITION_ID = 6; // POSITION_MAP: TE — pointsOverrides key for a TE-specific reception bonus (TEP)
+
+// opts = { settings } — the `settings` object from an ESPN mSettings response.
+// Returns { scoring, numQbs, ppr, bonusRecTe }.
+function crParseEspnScoring(settings) {
+  const items = settings?.scoringSettings?.scoringItems || [];
+  const scoring = {};
+  let bonusRecTe = 0;
+
+  for (const item of items) {
+    if (ESPN_REC_STAT_IDS.includes(item.statId)) {
+      scoring.rec = item.points ?? 0;
+      const teOverride = item.pointsOverrides?.[String(ESPN_TE_POSITION_ID)];
+      if (teOverride != null) bonusRecTe = teOverride - (item.points ?? 0);
+      continue;
+    }
+    const field = ESPN_STAT_TO_FIELD[item.statId];
+    if (field) { scoring[field] = item.points ?? 0; continue; }
+    for (const [ydField, cfg] of Object.entries(ESPN_YARDAGE_STATS)) {
+      if (item.statId === cfg.direct) { scoring[ydField] = item.points ?? 0; break; }
+      const n = cfg.everyN[item.statId];
+      if (n) { scoring[ydField] = (item.points ?? 0) / n; break; }
+    }
+  }
+
+  // POSITION_MAP: QB=0 (lineup slot), OP=7 (the true superflex/"any offensive
+  // player" slot — NOT the generic RB/WR/TE flex slots, which are 3/5/23).
+  const lineupSlots = settings?.rosterSettings?.lineupSlotCounts || {};
+  const numQbs = ((lineupSlots['0'] ?? 0) >= 2 || (lineupSlots['7'] ?? 0) > 0) ? 2 : 1;
+
+  return { scoring, numQbs, ppr: scoring.rec ?? 1, bonusRecTe };
+}
+
+// Fetch + index the aggregate consensus ADP sheet, keyed by Sleeper player id.
+// opts = { apiBase, byName }. Returns { [pid]: rank }. Offense-only (~200
+// players) — anyone not found here is left for crPlayerPpg's search_rank fallback.
+async function crLoadAggregateAdp(opts) {
+  const { apiBase, byName } = opts;
+  const aggAdpMap = {};
+  try {
+    const res  = await fetch(`${apiBase}/aggregate-adp`);
+    const rows = res.ok ? await res.json() : null;
+    if (Array.isArray(rows)) {
+      for (const row of rows) {
+        const pid = byName[normName(row.name)];
+        if (pid) aggAdpMap[pid] = row.rank;
+      }
+    }
+  } catch (_) {}
+  return aggAdpMap;
 }
 
 // localStorage handoff so the analyzer can reuse what Summaries computed.

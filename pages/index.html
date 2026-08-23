@@ -477,8 +477,11 @@ const LS = {
     clayMap:        {},     // sleeperId → { ppg }
     sleeperProjMap: {},     // sleeperId → { ppg }
     userProjMap:    {},     // sleeperId → { ppg }
+    aggAdpMap:      {},     // sleeperId → aggregate consensus ADP rank (mode 'adp' only)
     loaded:         false,
     loading:        false,
+    aggAdpLoaded:   false,
+    aggAdpLoading:  false,
   },
   gz: {},   // {lgId: {loading, loaded, error, computedAtWeek, rows: [...]}} — guillotine leagues, see lsIsGuillotine()
 };
@@ -4139,7 +4142,9 @@ async function renderLeagueSummaries() {
 
 async function lsLoadData() {
   await getNflState();
+  await loadPlayers(); // ESPN roster→Sleeper-id name matching below needs S._playersByName ready
   await Promise.allSettled(S.leagues.map(async lg => {
+    if (lg.source === 'espn') return lsLoadEspnLeague(lg);
     try {
       const rosters = await api('/league/' + lg.league_id + '/rosters');
       if (!rosters?.length) return;
@@ -4175,14 +4180,70 @@ async function lsLoadData() {
       };
     } catch(_) {}
   }));
-  // Now load all-play in parallel
+  // Now load all-play in parallel (Sleeper only — ESPN all-play isn't built;
+  // apWins/apLosses stay null, which the table already renders as "—")
   await Promise.allSettled(S.leagues.map(async lg => {
+    if (lg.source === 'espn') return;
     const d = LS.leagueData[lg.league_id];
     if (!d) return;
     const ap = await lsLoadAllPlay(lg.league_id, d.myRosterId);
     d.apWins   = ap.apWins;
     d.apLosses = ap.apLosses;
   }));
+}
+
+// ESPN counterpart to the Sleeper branch above — populates LS.leagueData the
+// same shape (standing/numTeams/playoffTeams/wins/losses/myRosterId/
+// rosterPlayers/rosterStats) plus an `_espn` stash (settings + numeric league
+// id) the playoff-odds simulation below needs. Rosters are matched to Sleeper
+// player ids by name — same pattern as rsBuildRows()'s ESPN branch.
+async function lsLoadEspnLeague(lg) {
+  const espnId  = S.leagueDetails[lg.league_id]?._espnId;
+  const season  = S.nflState?.season || new Date().getFullYear().toString();
+  try {
+    const r = await fetch(`/api/espn/fantasy/${espnId}?view=mRoster&view=mTeam&view=mSettings&seasonId=${season}`, { credentials: 'include' });
+    if (!r.ok) return;
+    const d = await r.json();
+    const mySWID = S.espnSettings?.swid || '';
+    const teams  = d.teams || [];
+    const myTeam = teams.find(t => t.primaryOwner === mySWID);
+    if (!myTeam) return;
+
+    const numTeams     = teams.length;
+    const playoffTeams = d.settings?.scheduleSettings?.playoffTeamCount ?? Math.floor(numTeams / 2);
+
+    const sorted = [...teams].sort((a, b) => {
+      const wa = a.record?.overall?.wins || 0, wb = b.record?.overall?.wins || 0;
+      if (wb !== wa) return wb - wa;
+      return (b.record?.overall?.pointsFor || 0) - (a.record?.overall?.pointsFor || 0);
+    });
+    const standing = sorted.findIndex(t => t.id === myTeam.id) + 1;
+
+    const rosterPlayers = {}, rosterStats = {};
+    for (const t of teams) {
+      const pids = [];
+      for (const entry of (t.roster?.entries || [])) {
+        const pl  = entry.playerPoolEntry?.playerPoolEntry?.player || entry.playerPoolEntry?.player;
+        const pid = pl ? S._playersByName[normName(pl.fullName)] : null;
+        if (pid) pids.push(pid);
+      }
+      rosterPlayers[t.id] = pids;
+      rosterStats[t.id]   = {
+        wins: t.record?.overall?.wins || 0,
+        fpts: t.record?.overall?.pointsFor || 0,
+      };
+    }
+
+    LS.leagueData[lg.league_id] = {
+      standing, numTeams, playoffTeams,
+      wins:   myTeam.record?.overall?.wins   || 0,
+      losses: myTeam.record?.overall?.losses || 0,
+      myRosterId: myTeam.id,
+      apWins: null, apLosses: null,
+      rosterPlayers, rosterStats,
+      _espn: { id: espnId, settings: d.settings },
+    };
+  } catch (_) {}
 }
 
 async function lsLoadAllPlay(lgId, myRosterId) {
@@ -4211,6 +4272,54 @@ async function lsLoadAllPlay(lgId, myRosterId) {
 // ── Playoff simulation (ported from analyzer.html) ───────────────────────────
 
 const LS_POS_CV = { QB: 0.43, RB: 0.50, WR: 0.52, TE: 0.58, DL: 0.55, LB: 0.55, DB: 0.55 };
+
+// POSITION_MAP-derived (see crParseEspnScoring in shared-utils.js for the
+// source): converts ESPN's lineupSlotCounts into the same Sleeper-shaped flat
+// rosterPositions array lsOptimalLineupAndSigma() already expects (['QB','RB',
+// 'RB',...,'FLEX','BN',...]). D/ST(16) and K(17) slots are dropped — this app
+// never scores kickers/defense in the sim (rsNormPos() drops them too, so
+// Sleeper leagues already have the same gap; consistent, not new).
+const ESPN_SLOT_TO_ROSTER_POS = {
+  0: 'QB', 2: 'RB', 4: 'WR', 6: 'TE',
+  3: 'FLEX', 5: 'FLEX', 23: 'FLEX', 7: 'SUPER_FLEX',
+  20: 'BN', 21: 'IR',
+};
+function espnRosterPositionsFromSlotCounts(lineupSlotCounts) {
+  const out = [];
+  for (const [slotId, count] of Object.entries(lineupSlotCounts || {})) {
+    const label = ESPN_SLOT_TO_ROSTER_POS[Number(slotId)];
+    if (!label) continue;
+    for (let i = 0; i < count; i++) out.push(label);
+  }
+  return out;
+}
+
+// ESPN has no per-week matchup endpoint like Sleeper's — mMatchupScore returns
+// the WHOLE season's schedule in one call (data.schedule[], each entry
+// {matchupPeriodId, home:{teamId}, away:{teamId}}), so this fetches once per
+// league and the caller filters by week. A bye week's entry has no `away` key
+// (see espn-api's Matchup class) — filtered out below, which is the correct
+// simulation behavior (no win/loss added that week).
+// Synthesizes the SAME {roster_id, matchup_id} shape Sleeper's matchups
+// endpoint returns, grouped in pairs — so lsRunSimulation() needs zero
+// ESPN-specific branching.
+async function lsFetchEspnScheduleByWeek(espnLeagueId, weeks) {
+  const r = await fetch(`/api/espn/fantasy/${espnLeagueId}?view=mMatchupScore`, { credentials: 'include' });
+  if (!r.ok) throw new Error('ESPN schedule unavailable');
+  const d = await r.json();
+  const schedule = d.schedule || [];
+  const byWeek = {};
+  for (const w of weeks) {
+    byWeek[w] = [];
+    for (const m of schedule) {
+      if (m.matchupPeriodId !== w || !m.home || !m.away) continue; // skip other weeks / byes
+      const mid = `${w}_${m.home.teamId}`;
+      byWeek[w].push({ roster_id: m.home.teamId, matchup_id: mid });
+      byWeek[w].push({ roster_id: m.away.teamId, matchup_id: mid });
+    }
+  }
+  return byWeek;
+}
 
 function lsComputeProjPts(stats, scoringSettings) {
   let pts = 0;
@@ -4316,15 +4425,23 @@ function lsRunSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, pl
   return { odds, top2 };
 }
 
+// Regular-season-length lookup shared by lsRestoreOddsCache/lsSimulateAllLeagues —
+// Sleeper: detail.settings.playoff_week_start - 1. ESPN: settings.scheduleSettings.
+// matchupPeriodCount is already the regular-season week count directly (no -1).
+function lsRegularSeasonWeeks(lg, d, detail) {
+  return lg.source === 'espn'
+    ? (d?._espn?.settings?.scheduleSettings?.matchupPeriodCount ?? 14)
+    : (detail?.settings?.playoff_week_start ?? 15) - 1;
+}
+
 function lsRestoreOddsCache() {
   const nflSeason = S.nflState?.season || String(new Date().getFullYear());
   let anyRestored = false;
   for (const lg of S.leagues) {
-    if (lg.source === 'espn') continue;
     const d      = LS.leagueData[lg.league_id];
     const detail = S.leagueDetails[lg.league_id];
-    if (!d || !detail) continue;
-    const regularSeasonWeeks = (detail.settings?.playoff_week_start ?? 15) - 1;
+    if (!d || (lg.source !== 'espn' && !detail)) continue;
+    const regularSeasonWeeks = lsRegularSeasonWeeks(lg, d, detail);
     const cacheKey = `ls_odds_${lg.league_id}_${nflSeason}_w${regularSeasonWeeks}`;
     try {
       const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
@@ -4355,15 +4472,13 @@ async function lsSimulateAllLeagues() {
     // Collect unique future weeks across all leagues
     const leagueInfos = [];
     for (const lg of S.leagues) {
-      if (lg.source === 'espn') continue; // ESPN leagues don't have Sleeper matchup data
       const d      = LS.leagueData[lg.league_id];
       const detail = S.leagueDetails[lg.league_id];
-      if (!d || !detail) continue;
-      const playoffWeekStart   = detail.settings?.playoff_week_start ?? 15;
-      const regularSeasonWeeks = playoffWeekStart - 1;
+      if (!d || (lg.source !== 'espn' && !detail)) continue;
+      const regularSeasonWeeks = lsRegularSeasonWeeks(lg, d, detail);
       const futureWeeks        = [];
       for (let w = weeksCompleted + 1; w <= regularSeasonWeeks; w++) futureWeeks.push(w);
-      leagueInfos.push({ lgId: lg.league_id, d, detail, regularSeasonWeeks, futureWeeks });
+      leagueInfos.push({ lgId: lg.league_id, isEspn: lg.source === 'espn', d, detail, regularSeasonWeeks, futureWeeks });
     }
 
     const allFutureWeeks = [...new Set(leagueInfos.flatMap(li => li.futureWeeks))].sort((a, b) => a - b);
@@ -4385,7 +4500,7 @@ async function lsSimulateAllLeagues() {
     }
 
     // Per league: fetch future matchup schedules and run simulation
-    await Promise.allSettled(leagueInfos.map(async ({ lgId, d, detail, regularSeasonWeeks, futureWeeks }) => {
+    await Promise.allSettled(leagueInfos.map(async ({ lgId, isEspn, d, detail, regularSeasonWeeks, futureWeeks }) => {
       try {
         const cacheKey = `ls_odds_${lgId}_${nflSeason}_w${regularSeasonWeeks}`;
         try {
@@ -4404,19 +4519,28 @@ async function lsSimulateAllLeagues() {
           return;
         }
 
-        // Fetch only future matchup weeks (for schedule structure — who plays whom)
-        const matchupResults = await Promise.all(
-          futureWeeks.map(w =>
-            api('/league/' + lgId + '/matchups/' + w)
-              .then(r => { if (!r) throw new Error(`matchups week ${w} unavailable`); return r; })
-          )
-        );
+        // Fetch the future-weeks schedule structure (who plays whom). Sleeper
+        // has one endpoint per week; ESPN returns the whole season in one call.
+        let matchupsByWeek;
+        if (isEspn) {
+          matchupsByWeek = await lsFetchEspnScheduleByWeek(d._espn.id, futureWeeks);
+        } else {
+          const matchupResults = await Promise.all(
+            futureWeeks.map(w =>
+              api('/league/' + lgId + '/matchups/' + w)
+                .then(r => { if (!r) throw new Error(`matchups week ${w} unavailable`); return r; })
+            )
+          );
+          matchupsByWeek = {};
+          futureWeeks.forEach((w, i) => { matchupsByWeek[w] = matchupResults[i] || []; });
+        }
 
-        const matchupsByWeek = {};
-        futureWeeks.forEach((w, i) => { matchupsByWeek[w] = matchupResults[i] || []; });
-
-        const scoringSettings = detail.scoring_settings || {};
-        const rosterPositions = detail.roster_positions || [];
+        const scoringSettings = isEspn
+          ? crParseEspnScoring(d._espn.settings).scoring
+          : (detail.scoring_settings || {});
+        const rosterPositions = isEspn
+          ? espnRosterPositionsFromSlotCounts(d._espn.settings?.rosterSettings?.lineupSlotCounts)
+          : (detail.roster_positions || []);
 
         // Build teams list using roster standings already stored from lsLoadData
         const teams = Object.entries(d.rosterStats).map(([ridStr, stats]) => ({
@@ -4490,9 +4614,24 @@ function lsCrCtx(league) {
     clayMap:         cd.clayMap,
     sleeperProjMap:  cd.sleeperProjMap,
     userProjMap:     cd.userProjMap,
+    aggAdpMap:       cd.aggAdpMap,
     scoring:         league.scoring_settings || {},
     rosterPositions: league.roster_positions || [],
   };
+}
+
+// Fetches once, lazily, the first time ADP mode is actually rendered (mirrors
+// lsLoadContenderData's pattern for 'projections' but with its own loaded/
+// loading flags — the two fetches are independent of each other).
+async function lsLoadAggregateAdp() {
+  const cd = LS.contenderData;
+  if (cd.aggAdpLoaded || cd.aggAdpLoading) return;
+  cd.aggAdpLoading = true;
+  await loadPlayers(); // ensure S._playersByName is ready
+  cd.aggAdpMap = await crLoadAggregateAdp({ apiBase: '/api', byName: S._playersByName });
+  cd.aggAdpLoaded  = true;
+  cd.aggAdpLoading = false;
+  lsDrawTable();
 }
 
 // Returns {rosterId: score} for all rosters in a league, and caches it so the
@@ -4852,6 +4991,7 @@ function lsDrawTable() {
   const hasPrefs = S.leagues.some(lg => RS.prefs[lg.league_id] !== null);
   const cd = LS.contenderData;
   const crLoading = cd.mode === 'projections' && cd.loading;
+  if (cd.mode === 'adp' && !cd.aggAdpLoaded && !cd.aggAdpLoading) lsLoadAggregateAdp();
 
   // Compute contender scores per league (keyed roster_id → score)
   const crScoresPerLeague = {};

@@ -383,7 +383,10 @@
   // Contender rank: shares the formula + localStorage cache with League
   // Summaries (cr* helpers in shared-utils.js). Default mode 'adp'.
   let crMode = 'adp';
-  const crData = { clayMap: {}, sleeperProjMap: {}, userProjMap: {}, loaded: false, loading: false };
+  const crData = {
+    clayMap: {}, sleeperProjMap: {}, userProjMap: {}, loaded: false, loading: false,
+    aggAdpMap: {}, aggAdpLoaded: false, aggAdpLoading: false,
+  };
   // Fallback starting lineup for ESPN leagues (no Sleeper roster_positions).
   const CR_ESPN_LINEUP = ['QB','RB','RB','WR','WR','WR','TE','FLEX','FLEX'];
 
@@ -564,11 +567,16 @@
 
   // ── Data builders ─────────────────────────────────────────────────────────────
 
-  function buildFcMap(fcRes) {
+  // opts.redraft: read FantasyCalc's redraftValue instead of its dynasty value
+  // (same response either way — FC returns both fields regardless of the
+  // isDynasty query param — but the numQbs/ppr params sent with the request
+  // still need to match the league's actual format; see loadSleeper()/loadEspn()).
+  function buildFcMap(fcRes, opts = {}) {
     const map = {};
+    const key = opts.redraft ? 'redraftValue' : 'value';
     for (const item of (fcRes || [])) {
       const sid = item.player?.sleeperId || item.player?.maybeSleeperID;
-      if (sid) map[String(sid)] = item.value;
+      if (sid) map[String(sid)] = item[key];
     }
     return map;
   }
@@ -924,20 +932,45 @@
   // ── Sleeper load ──────────────────────────────────────────────────────────────
 
   async function loadSleeper() {
-    const [leagueRes, rostersRes, usersRes, nflRes, playersRes, fcRes, draftsRaw, tradedRaw] = await Promise.all([
-      fetch(`${API}/sleeper/league/${lgId}`).then(r => r.json()),
+    // League meta needs to be known before the FantasyCalc fetch — both the
+    // dynasty `value` and the redraft `redraftValue` FC returns depend on the
+    // numQbs/ppr sent with the request, so match the league's real format.
+    const leagueRes = await fetch(`${API}/sleeper/league/${lgId}`).then(r => r.json());
+    const rpEarly      = leagueRes?.roster_positions || [];
+    const lgType       = leagueRes?.settings?.type ?? 0;
+    isDynasty          = lgType === 2;
+    // numQbs/ppr now match the league's actual format for BOTH dynasty and
+    // redraft (previously dynasty was hardcoded 2QB/full-PPR regardless of the
+    // league's real settings — only redraft used to get this treatment).
+    // includePickValues only matters for dynasty (picks aren't shown for redraft).
+    const fcNumQbs   = rpEarly.includes('SUPER_FLEX') ? 2 : 1;
+    const fcPpr      = leagueRes?.scoring_settings?.rec ?? 1;
+    const fcNumTeams = leagueRes?.total_rosters || 12;
+    // TE premium: FC's `tep` param (none | te+ | te++) DOES move dynasty `value`
+    // (confirmed live) but does NOT move `redraftValue` at all regardless of
+    // tep — so this only applies to the dynasty fetch; redraft keeps the local
+    // teValueMult heuristic below. Bucket boundaries match FC's own tep
+    // semantics: te++ = "start 2 TE or >1 TEP bonus", te+ = "0.5 to 1 TEP".
+    const bonusRecTe = leagueRes?.scoring_settings?.bonus_rec_te ?? 0;
+    const is2TE      = rpEarly.filter(p => p === 'TE').length >= 2;
+    const tepTier    = bonusRecTe > 1 || is2TE ? 'te++' : (bonusRecTe > 0 ? 'te+' : 'none');
+    const fcParams = isDynasty
+      ? `?isDynasty=true&numQbs=${fcNumQbs}&numTeams=${fcNumTeams}&ppr=${fcPpr}&tep=${tepTier}&includeAdp=false&includeRosterPercent=false&includePickValues=true`
+      : `?isDynasty=false&numQbs=${fcNumQbs}&numTeams=${fcNumTeams}&ppr=${fcPpr}&includeAdp=false&includeRosterPercent=false&includePickValues=false`;
+
+    const [rostersRes, usersRes, nflRes, playersRes, fcRes, draftsRaw, tradedRaw] = await Promise.all([
       fetch(`${API}/sleeper/league/${lgId}/rosters`).then(r => r.json()),
       fetch(`${API}/sleeper/league/${lgId}/users`).then(r => r.json()),
       fetch(`${API}/sleeper/state/nfl`).then(r => r.json()),
       fetch(`${API}/players`).then(r => r.json()),
-      fetch(`${API}/fantasycalc`).then(r => r.json()),
+      fetch(`${API}/fantasycalc${fcParams}`).then(r => r.json()),
       fetch(`${API}/sleeper/league/${lgId}/drafts`).then(r => r.ok ? r.json() : []).catch(() => []),
       fetch(`${API}/sleeper/league/${lgId}/traded_picks`).then(r => r.ok ? r.json() : []).catch(() => []),
     ]);
 
     const nflSeason  = nflRes?.season || String(new Date().getFullYear());
     const curYear    = parseInt(nflSeason);
-    const fcMap      = buildFcMap(fcRes);
+    const fcMap      = buildFcMap(fcRes, { redraft: !isDynasty });
     const fcPickMap  = buildPickValueMap(fcRes);
     const { players, byName } = buildPlayerMap(playersRes);
 
@@ -979,13 +1012,15 @@
       rosterNames[r.roster_id] = info?.teamName || info?.displayName || ('Team ' + r.roster_id);
     }
 
-    // League meta
-    const rp           = leagueRes?.roster_positions || [];
-    const te2Mult      = rp.filter(p => p === 'TE').length >= 2 ? 1.4 : 1.0;
+    // League meta (isDynasty/bonusRecTe/is2TE already resolved above, before the FC fetch)
+    const rp           = rpEarly;
+    // Redraft-only local TE premium multiplier — dynasty gets FC's real `tep`
+    // param baked directly into `value` above, so applying this on top of a
+    // dynasty value would double-count the boost. Same 0.4 calibration as
+    // before: a typical +1.0 TEP bonus lands close to the old fixed 1.4x.
+    const teValueMult  = isDynasty ? 1.0 : (1 + bonusRecTe * 0.4);
     const IDP_SLOTS    = new Set(['DL','LB','DB','DE','DT','IDP_FLEX','CB','S']);
     hasIDP             = rp.some(p => IDP_SLOTS.has(p));
-    const lgType       = leagueRes?.settings?.type ?? 0;
-    isDynasty          = lgType === 2;
     isBB               = leagueRes?.settings?.best_ball === 1;
     isBigPool          = BIG_POOL_LEAGUES.has(lgId);
     if (!isDynasty && sortKey === 'overall') sortKey = 'contender';
@@ -1011,7 +1046,7 @@
         if (!p) continue;
         const pos = normPos(p.position);
         if (!pos) continue;
-        const val = (fcMap[pid] ?? 0) * (pos === 'TE' ? te2Mult : 1.0);
+        const val = (fcMap[pid] ?? 0) * (pos === 'TE' ? teValueMult : 1.0);
         overall += val;
         const bucket = DEF_P.has(pos) ? 'DL' : pos;
         if (bucket in posValues) posValues[bucket] += val;
@@ -1198,7 +1233,7 @@
     }
 
     const numStartersPerTeam = rp.filter(p => !['BN','IR','TAXI'].includes(p)).length;
-    const is2TE = te2Mult > 1;
+    // is2TE already resolved early (before the FC fetch, feeds the tep tier too)
     const nextSeason = _nextSeason; // already computed above
 
     return {
@@ -1214,18 +1249,29 @@
 
   async function loadEspn() {
     const ESPN_POS_MAP = {1:'QB',2:'RB',3:'WR',4:'TE',6:'DL',7:'LB',8:'DB',9:'DL',10:'DL',12:'LB',13:'LB',14:'DB',15:'DB',16:'DB'};
-    const [espnRes, nflRes, playersRes, fcRes] = await Promise.all([
-      fetch(`${API}/espn/fantasy/${espnNumId}?view=mRoster&view=mTeam`, { credentials: 'include' }).then(r => {
-        if (!r.ok) throw new Error('ESPN data unavailable — log in and save ESPN credentials in your profile');
-        return r.json();
-      }),
+    // League settings need to be known before the FantasyCalc fetch — same
+    // reason as loadSleeper(). mSettings is fetched in the same call as
+    // mRoster/mTeam (ESPN's proxy accepts multiple view= params at once).
+    const espnRes = await fetch(`${API}/espn/fantasy/${espnNumId}?view=mRoster&view=mTeam&view=mSettings`, { credentials: 'include' }).then(r => {
+      if (!r.ok) throw new Error('ESPN data unavailable — log in and save ESPN credentials in your profile');
+      return r.json();
+    });
+
+    // ESPN leagues have no dynasty concept, so always use FC's redraftValue —
+    // parameterized to this league's real QB format + PPR, parsed from its
+    // actual scoring settings (see crParseEspnScoring in shared-utils.js).
+    const { scoring: espnScoring, numQbs: espnNumQbs, ppr: espnPpr, bonusRecTe: espnBonusRecTe } =
+      crParseEspnScoring(espnRes?.settings);
+    const espnTeValueMult = 1 + espnBonusRecTe * 0.4; // same calibration as loadSleeper()'s teValueMult
+
+    const [nflRes, playersRes, fcRes] = await Promise.all([
       fetch(`${API}/sleeper/state/nfl`).then(r => r.json()),
       fetch(`${API}/players`).then(r => r.json()),
-      fetch(`${API}/fantasycalc`).then(r => r.json()),
+      fetch(`${API}/fantasycalc?isDynasty=false&numQbs=${espnNumQbs}&numTeams=${espnRes?.settings?.size || 12}&ppr=${espnPpr}&includeAdp=false&includeRosterPercent=false&includePickValues=false`).then(r => r.json()),
     ]);
 
     const nflSeason = nflRes?.season || String(new Date().getFullYear());
-    const fcMap     = buildFcMap(fcRes);
+    const fcMap     = buildFcMap(fcRes, { redraft: true });
     const { players, byName } = buildPlayerMap(playersRes);
     const lgName    = espnRes?.settings?.name || `ESPN ${espnNumId}`;
     isDynasty       = false; // ESPN leagues have no dynasty concept in this app
@@ -1234,6 +1280,11 @@
     if (sortKey === 'overall') sortKey = 'contender';
     const numTeams  = (espnRes?.teams || []).length;
     const playoffTeams = Math.floor(numTeams / 2);
+    // Fallback starting lineup for Contender Rank (ESPN has no roster_positions
+    // like Sleeper) — bumped to reflect a real superflex league when detected.
+    const crEspnLineup = espnNumQbs === 2
+      ? ['QB','SUPER_FLEX','RB','RB','WR','WR','TE','FLEX']
+      : CR_ESPN_LINEUP;
 
     const teams = (espnRes?.teams || []).map(team => {
       const wins   = team.record?.overall?.wins   ?? 0;
@@ -1251,7 +1302,7 @@
         const espnPos   = ESPN_POS_MAP[pl.defaultPositionId];
         const pos       = sleeperP ? normPos(sleeperP.position) : (espnPos ? normPos(espnPos) : null);
         if (!pos) continue;
-        const val       = pid ? (fcMap[pid] ?? 0) : 0;
+        const val       = pid ? (fcMap[pid] ?? 0) * (pos === 'TE' ? espnTeValueMult : 1.0) : 0;
         overall += val;
         const bucket = ['DL','LB','DB'].includes(pos) ? 'DL' : pos;
         if (bucket in posValues) posValues[bucket] += val;
@@ -1280,7 +1331,7 @@
 
     return {
       teams, lgName, season: nflSeason, formatFlags: [], numTeams,
-      crCtx: { players, byName, rosterPositions: CR_ESPN_LINEUP, scoring: {}, season: nflSeason },
+      crCtx: { players, byName, rosterPositions: crEspnLineup, scoring: espnScoring, season: nflSeason },
     };
   }
 
@@ -1392,9 +1443,17 @@
         crData.clayMap = d.clayMap; crData.sleeperProjMap = d.sleeperProjMap; crData.userProjMap = d.userProjMap;
         crData.loaded = true; crData.loading = false;
       }
+      // ADP mode needs the aggregate consensus sheet loaded once (independent
+      // of the projections fetch above).
+      if (crMode === 'adp' && !crData.aggAdpLoaded && !crData.aggAdpLoading) {
+        crData.aggAdpLoading = true;
+        crData.aggAdpMap = await crLoadAggregateAdp({ apiBase: API, byName: ctx.byName || {} });
+        crData.aggAdpLoaded = true; crData.aggAdpLoading = false;
+      }
       const scoreCtx = {
         mode: crMode, players: ctx.players || {},
         clayMap: crData.clayMap, sleeperProjMap: crData.sleeperProjMap, userProjMap: crData.userProjMap,
+        aggAdpMap: crData.aggAdpMap,
         scoring: ctx.scoring || {}, rosterPositions: ctx.rosterPositions || [],
       };
       scores = {};
