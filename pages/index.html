@@ -2352,6 +2352,7 @@ const T = {
   tradedPicks: [],    // traded_picks for the active draft (Sleeper only — always [] for ESPN)
   myRosterId: null,   // this user's roster_id (Sleeper) or ESPN team id (ESPN) in the active draft's league
   espn: null,         // {id, pickOrder} — set only when T.draft._source === 'espn'; pickOrder is round-1 team-id order
+  espnManualPicked: new Set(), // sleeper_ids manually marked drafted (see toggleEspnManualPick) — merged into T.picked on every ESPN sync
   reversalRound: 0,   // effective reversal round (0 = normal snake, 3 = 3RR) — toggleable
   view: 'board',      // 'board' | 'list'
   leagueAdp: null,    // {map: {sleeper_id: adp}, suffix, label, season} for the selected draft's own league format
@@ -2843,7 +2844,7 @@ function loadCSV(event) {
 async function selectDraft(draftId) {
   if (T.pollTimer) { clearInterval(T.pollTimer); T.pollTimer = null; }
   if (!draftId) {
-    T.draft = null; T.espn = null; T.picked.clear(); loadDraftLeagueAdp(null);
+    T.draft = null; T.espn = null; T.espnManualPicked = new Set(); T.picked.clear(); loadDraftLeagueAdp(null);
     T.myProj = null; T.myProjPresets = []; T.myProjPreset = ''; T.myProjSeason = null;
     renderTrackerBody();
     return;
@@ -2853,7 +2854,7 @@ async function selectDraft(draftId) {
   st.textContent = 'Loading picks…'; st.className = 'setup-status';
   try {
     T.draft = await api('/draft/' + draftId);
-    T.espn = null;
+    T.espn = null; T.espnManualPicked = new Set();
     T.reversalRound = T.draft?.settings?.reversal_round ?? 0;
     T.tradedPicks = await api('/draft/' + draftId + '/traded_picks').catch(() => []) || [];
     const mySlot = T.draft?.draft_order?.[S.userId];
@@ -2916,6 +2917,7 @@ async function selectEspnDraft(espnId) {
     const myTeam = (d.teams || []).find(t => t.primaryOwner === mySWID);
     T.myRosterId = myTeam ? myTeam.id : null;
     T.espn = { id: espnId, pickOrder: d.settings?.draftSettings?.pickOrder || [] };
+    T.espnManualPicked = loadEspnManualPicks(espnId);
     applyEspnRosterPicks(d);
     st.textContent = '✦ Synced — auto-refreshing every 15s';
     st.className = 'setup-status ok';
@@ -2939,7 +2941,6 @@ async function selectEspnDraft(espnId) {
 // entry.playerPoolEntry.playerPoolEntry.player path already verified for
 // Rostership's ESPN support.
 function applyEspnRosterPicks(d) {
-  T.pickCount = d.draftDetail?.picks?.length || 0;
   const picked = new Set();
   for (const team of (d.teams || [])) {
     for (const entry of (team.roster?.entries || [])) {
@@ -2950,8 +2951,43 @@ function applyEspnRosterPicks(d) {
       if (sid) picked.add(String(sid));
     }
   }
+  // Merge in manual overrides (toggleEspnManualPick) — ESPN's roster-entries
+  // view has been observed to lag well behind real draft-room picks (live
+  // testing found it can go a full session without updating), so a manual
+  // mark fills that gap immediately. A synced pick naturally takes over once
+  // ESPN's data catches up since it's added to the same set either way.
+  for (const sid of T.espnManualPicked) picked.add(sid);
   T.picked = picked;
+  // Drives trackerPicksUntilTurn()'s snake-order math — must be actual picks
+  // made so far. draftDetail.picks.length is *not* that: ESPN pre-populates
+  // every slot for the whole draft (drafted or not, playerId:-1 until filled),
+  // so that length is always teams*rounds regardless of progress.
+  T.pickCount = picked.size;
   renderTrackerBody();
+}
+
+// Manual drafted-marking for ESPN drafts, so a pick made in ESPN's own draft
+// room can be reflected here immediately rather than waiting on (possibly
+// unreliable) live sync — see applyEspnRosterPicks. Persisted per-league so a
+// refresh mid-draft doesn't lose your manual marks.
+function toggleEspnManualPick(sleeperId) {
+  if (!sleeperId || T.draft?._source !== 'espn') return;
+  if (T.espnManualPicked.has(sleeperId)) { T.espnManualPicked.delete(sleeperId); T.picked.delete(sleeperId); }
+  else { T.espnManualPicked.add(sleeperId); T.picked.add(sleeperId); }
+  saveEspnManualPicks();
+  renderTrackerBody();
+}
+
+function saveEspnManualPicks() {
+  if (!T.espn?.id) return;
+  try { localStorage.setItem('espn_manual_picks_' + T.espn.id, JSON.stringify([...T.espnManualPicked])); } catch {}
+}
+
+function loadEspnManualPicks(espnId) {
+  try {
+    const raw = localStorage.getItem('espn_manual_picks_' + espnId);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch { return new Set(); }
 }
 
 async function syncEspnPicks(espnId) {
@@ -3028,16 +3064,26 @@ function renderTrackerBody() {
     ${rrToggle}
   </div>`;
 
+  const isEspn = T.draft?._source === 'espn';
   const playerTile = (p) => {
     const isPicked  = T.picked.has(String(p.sleeper_id));
     const isTarget  = p.sleeper_id && T.targets.has(String(p.sleeper_id));
     const pc        = posClass(p.pos);
     const tierNum   = parseInt(p.tier) || 0;
     const tierCls   = hasTiers && tierNum && tierNum % 2 === 0 ? 'tier-even' : '';
-    const clickable = p.sleeper_id ? `onclick="toggleTarget('${esc(String(p.sleeper_id))}')" title="Click to ${isTarget?'un-target':'target'} ${esc(p.name)}"` : '';
+    // ESPN drafts: the card itself marks/unmarks drafted (manual fallback for
+    // unreliable live sync — see toggleEspnManualPick); targeting moves to a
+    // dedicated star so it's still reachable. Everywhere else, unchanged —
+    // click targets, star is a display-only indicator.
+    const clickable = !p.sleeper_id ? '' : isEspn
+      ? `onclick="toggleEspnManualPick('${esc(String(p.sleeper_id))}')" title="Click to ${isPicked?'un-mark':'mark'} ${esc(p.name)} as drafted"`
+      : `onclick="toggleTarget('${esc(String(p.sleeper_id))}')" title="Click to ${isTarget?'un-target':'target'} ${esc(p.name)}"`;
+    const starHtml = !p.sleeper_id ? (isTarget ? ' <span class="tp-star">★</span>' : '') : isEspn
+      ? ` <span class="tp-star" onclick="event.stopPropagation();toggleTarget('${esc(String(p.sleeper_id))}')" style="cursor:pointer;" title="${isTarget?'Un-target':'Target'} ${esc(p.name)}">${isTarget?'★':'☆'}</span>`
+      : (isTarget ? ' <span class="tp-star">★</span>' : '');
     const nameHtml  = trackerNameLines(p.name).map(l => `<span class="tp-name-line">${esc(l)}</span>`).join('');
     return `<div class="tracker-player ${isPicked?'picked':''} ${pc} ${tierCls} ${isTarget?'targeted':''}" ${clickable}>
-      <span class="tp-pos">${esc(p.pos)}${isTarget ? ' <span class="tp-star">★</span>' : ''}</span>
+      <span class="tp-pos">${esc(p.pos)}${starHtml}</span>
       <span class="tp-name">${nameHtml}</span>
       ${p.team ? `<span class="tp-team">${esc(p.team)}</span>` : ''}
     </div>`;
@@ -3138,6 +3184,7 @@ function renderTrackerListHtml(visible, hasTiers, SKIP_POS, hasFileRank) {
 
   const draftedCount = visible.filter(p => T.picked.has(String(p.sleeper_id))).length;
   const rowsSource = T.hideDrafted ? visible.filter(p => !T.picked.has(String(p.sleeper_id))) : visible;
+  const isEspn = T.draft?._source === 'espn';
 
   // "My Proj" only appears once the account actually has saved projections —
   // otherwise the column is omitted entirely rather than shown empty.
@@ -3150,7 +3197,13 @@ function renderTrackerListHtml(visible, hasTiers, SKIP_POS, hasFileRank) {
     const tierNum  = parseInt(p.tier) || 0;
     const tierCls  = hasTiers && tierNum && tierNum % 2 === 0 ? 'tl-tier-even' : '';
     const rowCls   = [isPicked ? 'tl-picked' : '', tierCls, isTarget ? 'tl-target' : ''].filter(Boolean).join(' ');
-    const clickable = p.sleeper_id ? `onclick="toggleTarget('${esc(String(p.sleeper_id))}')" title="Click to ${isTarget?'un-target':'target'} ${esc(p.name)}"` : '';
+    // See the board view's playerTile for why ESPN rows behave differently.
+    const clickable = !p.sleeper_id ? '' : isEspn
+      ? `onclick="toggleEspnManualPick('${esc(String(p.sleeper_id))}')" title="Click to ${isPicked?'un-mark':'mark'} ${esc(p.name)} as drafted"`
+      : `onclick="toggleTarget('${esc(String(p.sleeper_id))}')" title="Click to ${isTarget?'un-target':'target'} ${esc(p.name)}"`;
+    const starPrefix = !p.sleeper_id ? (isTarget ? '<span class="tp-star">★</span> ' : '') : isEspn
+      ? `<span class="tp-star" onclick="event.stopPropagation();toggleTarget('${esc(String(p.sleeper_id))}')" style="cursor:pointer;" title="${isTarget?'Un-target':'Target'} ${esc(p.name)}">${isTarget?'★':'☆'}</span> `
+      : (isTarget ? '<span class="tp-star">★</span> ' : '');
     const posColor = TL_POS_COLORS[p.pos] || 'inherit';
     const rk     = aggRank(p);
     const adpNum = numAdp(p);
@@ -3165,7 +3218,7 @@ function renderTrackerListHtml(visible, hasTiers, SKIP_POS, hasFileRank) {
     const myProjVal = T.myProj?.map?.[p.sleeper_id];
     const myProjTd = showMyProj ? `<td>${typeof myProjVal === 'number' ? myProjVal.toFixed(1) : '—'}</td>` : '';
     return `<tr class="${rowCls}" ${clickable}>
-      <td class="tl-name">${isTarget ? '<span class="tp-star">★</span> ' : ''}${esc(p.name)}</td>
+      <td class="tl-name">${starPrefix}${esc(p.name)}</td>
       <td style="color:${posColor};font-weight:600;">${esc(p.pos || '—')}</td>
       <td>${esc(p.team || '—')}</td>
       <td>${p.tier ? esc(String(p.tier)) : '—'}</td>
