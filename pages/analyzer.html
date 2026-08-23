@@ -2217,13 +2217,16 @@
       .slice()
       .sort((a, b) => (ranks.overall?.[a.rosterId] || 99) - (ranks.overall?.[b.rosterId] || 99))
       .map(t => {
-        const name = t.ownerName || ('Team ' + t.rosterId);
-        const team  = t.teamName || null;
+        // team name first, same priority as the rest of the page's team displays
+        // (renderAll's cards, Trade Targets) — ownerName alone falls back to a
+        // meaningless "Team N" for leagues where it isn't set.
+        const name  = t.teamName || t.ownerName || ('Team ' + t.rosterId);
+        const owner = (t.ownerName && t.ownerName !== name) ? t.ownerName : null;
         const rank  = ranks.overall?.[t.rosterId];
         const rec   = `${t.wins}-${t.losses}`;
         return `<a class="az-trade-item" href="/trade-analyzer?league=${encodeURIComponent(lgId)}&b=${t.rosterId}">
           ${esc(name)}
-          <div class="az-trade-item-sub">${team ? esc(team) + ' · ' : ''}${rec}${rank ? ' · #' + rank + ' overall' : ''}</div>
+          <div class="az-trade-item-sub">${owner ? esc(owner) + ' · ' : ''}${rec}${rank ? ' · #' + rank + ' overall' : ''}</div>
         </a>`;
       }).join('');
   }
