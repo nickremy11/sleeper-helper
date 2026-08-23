@@ -1148,6 +1148,10 @@
         }
       } catch {}
 
+      console.log('[Analyzer odds] branch check', {
+        cacheHit: !!_cachedOdds, futureWeeksLen: futureWeeks.length, regularSeasonWeeks,
+        teamsLen: teams.length, sampleOverall: teams[0]?.overall, sampleWins: teams[0]?.wins,
+      });
       if (_cachedOdds) {
         for (const t of teams) {
           if (_cachedOdds[t.rosterId] !== undefined) t.playoffOdds = _cachedOdds[t.rosterId];
@@ -1155,6 +1159,7 @@
           if (_cachedLast?.[t.rosterId] !== undefined) t.lastPlaceOdds = _cachedLast[t.rosterId];
         }
       } else if (futureWeeks.length === 0) {
+        console.log('[Analyzer odds] taking the "season over" branch — futureWeeks is empty', { byStandLen: byStand.length });
         // Post-season: standings are final — assign hard 1.0 / 0.0
         byStand.forEach((t, i) => { t.playoffOdds = i < playoffTeams ? 1.0 : 0.0; t.top2Odds = i < 2 ? 1.0 : 0.0; });
         const minPot = Math.min(...teams.map(t => potentialPtsSoFar[t.rosterId] ?? Infinity));
@@ -1209,6 +1214,10 @@
         }
 
         const { odds, top2, last } = runSimulation(simTeams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams, potentialPtsSoFar);
+        console.log('[Analyzer odds] sim result', {
+          simTeamsLen: simTeams.length, avgMu, oddsKeysLen: Object.keys(odds).length,
+          sampleOdds: Object.values(odds).slice(0, 3),
+        });
         for (const t of teams) {
           if (odds[t.rosterId] !== undefined) t.playoffOdds = odds[t.rosterId];
           if (top2[t.rosterId] !== undefined) t.top2Odds = top2[t.rosterId];
