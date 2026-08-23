@@ -963,7 +963,7 @@
       fetch(`${API}/sleeper/league/${lgId}/users`).then(r => r.json()),
       fetch(`${API}/sleeper/state/nfl`).then(r => r.json()),
       fetch(`${API}/players`).then(r => r.json()),
-      fetch(`${API}/fantasycalc${fcParams}`).then(r => r.json()),
+      fetch(`${API}/fantasycalc${fcParams}`).then(r => r.ok ? r.json() : []).catch(() => []),
       fetch(`${API}/sleeper/league/${lgId}/drafts`).then(r => r.ok ? r.json() : []).catch(() => []),
       fetch(`${API}/sleeper/league/${lgId}/traded_picks`).then(r => r.ok ? r.json() : []).catch(() => []),
     ]);
@@ -1286,7 +1286,7 @@
     const [nflRes, playersRes, fcRes] = await Promise.all([
       fetch(`${API}/sleeper/state/nfl`).then(r => r.json()),
       fetch(`${API}/players`).then(r => r.json()),
-      fetch(`${API}/fantasycalc?isDynasty=false&numQbs=${espnNumQbs}&numTeams=${espnRes?.settings?.size || 12}&ppr=${espnPpr}&includeAdp=false&includeRosterPercent=false&includePickValues=false`).then(r => r.json()),
+      fetch(`${API}/fantasycalc?isDynasty=false&numQbs=${espnNumQbs}&numTeams=${espnRes?.settings?.size || 12}&ppr=${espnPpr}&includeAdp=false&includeRosterPercent=false&includePickValues=false`).then(r => r.ok ? r.json() : []).catch(() => []),
     ]);
 
     const nflSeason = nflRes?.season || String(new Date().getFullYear());
@@ -1312,6 +1312,7 @@
       let overall = 0;
       const posValues = { QB: 0, RB: 0, WR: 0, TE: 0, DL: 0 };
       const playerList = [];
+      const sleeperPids = []; // matched-only Sleeper ids, for the playoff-odds sim below
 
       for (const entry of (team.roster?.entries || [])) {
         const pl = entry.playerPoolEntry?.playerPoolEntry?.player || entry.playerPoolEntry?.player;
@@ -1321,6 +1322,7 @@
         const espnPos   = ESPN_POS_MAP[pl.defaultPositionId];
         const pos       = sleeperP ? normPos(sleeperP.position) : (espnPos ? normPos(espnPos) : null);
         if (!pos) continue;
+        if (pid) sleeperPids.push(pid);
         const val       = pid ? (fcMap[pid] ?? 0) * (pos === 'TE' ? espnTeValueMult : 1.0) : 0;
         overall += val;
         const bucket = ['DL','LB','DB'].includes(pos) ? 'DL' : pos;
@@ -1341,6 +1343,7 @@
         posValues: { QB: Math.round(posValues.QB), RB: Math.round(posValues.RB), WR: Math.round(posValues.WR), TE: Math.round(posValues.TE), DL: Math.round(posValues.DL) },
         draft: 0, playerList, pickList: [], standing: 0,
         playoffChances: { label: '—', cls: 'az-chances-nervy' },
+        _sleeperPids: sleeperPids,
       };
     });
 
@@ -1348,9 +1351,106 @@
     byStand.forEach((t, i) => { t.standing = i + 1; });
     for (const t of teams) t.playoffChances = playoffLabel(t.standing, playoffTeams, numTeams);
 
+    // ── Playoff simulation (ESPN) ────────────────────────────────────────────
+    // Same shape as loadSleeper()'s sim below, adapted for ESPN: real schedule
+    // via crFetchEspnSchedule/crEspnScheduleToMatchupsByWeek (mMatchupScore,
+    // one fetch for the whole season — verified against espn-api's own
+    // scoreboard() source), real scoring already resolved above as
+    // espnScoring, lineup slots via espnRosterPositionsFromSlotCounts. No
+    // "potential points banked so far" enrichment (needs per-week realized box
+    // scores, a heavier fetch not built here) — simpler than the Sleeper
+    // version, so lastPlaceOdds treats the whole season as still-to-play
+    // rather than crediting weeks already banked.
+    // Also used below (in crCtx) as a more accurate stand-in for CR_ESPN_LINEUP —
+    // the real lineup slot counts, not a guessed generic shape.
+    const espnRosterPositions = espnRosterPositionsFromSlotCounts(espnRes?.settings?.rosterSettings?.lineupSlotCounts);
+    try {
+      const espnRegularSeasonWeeks = espnRes?.settings?.scheduleSettings?.matchupPeriodCount ?? 14;
+      const schedule = await crFetchEspnSchedule(API, espnNumId);
+      const futureWeeks = [];
+      for (let w = 1; w <= espnRegularSeasonWeeks; w++) {
+        const played = schedule.some(m => m.matchupPeriodId === w &&
+          ((m.home?.totalPoints ?? 0) > 0 || (m.away?.totalPoints ?? 0) > 0));
+        if (!played) futureWeeks.push(w);
+      }
+
+      const _simCacheKey = `az_odds_${lgId}_${nflSeason}_w${espnRegularSeasonWeeks}`;
+      let _cachedOdds = null, _cachedTop2 = null, _cachedLast = null;
+      try {
+        const _c = JSON.parse(sessionStorage.getItem(_simCacheKey) || 'null');
+        if (_c && Date.now() - _c.ts < 2 * 3600 * 1000 && _c.odds && Object.keys(_c.odds).length > 0) {
+          _cachedOdds = _c.odds; _cachedTop2 = _c.top2; _cachedLast = _c.last;
+        }
+      } catch {}
+
+      if (_cachedOdds) {
+        for (const t of teams) {
+          if (_cachedOdds[t.rosterId] !== undefined) t.playoffOdds = _cachedOdds[t.rosterId];
+          if (_cachedTop2?.[t.rosterId] !== undefined) t.top2Odds = _cachedTop2[t.rosterId];
+          if (_cachedLast?.[t.rosterId] !== undefined) t.lastPlaceOdds = _cachedLast[t.rosterId];
+        }
+      } else if (futureWeeks.length === 0) {
+        byStand.forEach((t, i) => { t.playoffOdds = i < playoffTeams ? 1.0 : 0.0; t.top2Odds = i < 2 ? 1.0 : 0.0; });
+      } else {
+        const matchupsByWeek = crEspnScheduleToMatchupsByWeek(schedule, futureWeeks);
+
+        const projResults = await Promise.all(
+          futureWeeks.map(w =>
+            fetch(`${API}/sleeper/projections/nfl/regular/${nflSeason}/${w}`)
+              .then(r => r.ok ? r.json() : {}).catch(() => ({}))
+          )
+        );
+        const projectionsByWeek = {};
+        futureWeeks.forEach((w, idx) => { projectionsByWeek[w] = projResults[idx] || {}; });
+
+        const muMap = {}, sigmaMap = {};
+        for (const t of teams) {
+          muMap[t.rosterId] = {}; sigmaMap[t.rosterId] = {};
+          for (const week of futureWeeks) {
+            const { mu, sigma } = optimalLineupAndSigma(
+              t._sleeperPids || [], projectionsByWeek[week], espnScoring, espnRosterPositions, players
+            );
+            muMap[t.rosterId][week] = mu;
+            sigmaMap[t.rosterId][week] = sigma;
+          }
+        }
+
+        const avgMu = teams.reduce((s, t) =>
+          s + futureWeeks.reduce((ws, w) => ws + (muMap[t.rosterId]?.[w] ?? 0), 0), 0
+        ) / Math.max(1, teams.length * futureWeeks.length);
+
+        if (avgMu < 20) {
+          const meanOverall = teams.reduce((s, t) => s + t.overall, 0) / Math.max(1, teams.length);
+          for (const t of teams) {
+            const mu = meanOverall > 0 ? 110 * (t.overall / meanOverall) : 110;
+            const clampedMu = Math.max(60, Math.min(160, mu));
+            const sigma = Math.max(12, clampedMu * 0.20);
+            for (const week of futureWeeks) {
+              muMap[t.rosterId][week] = clampedMu;
+              sigmaMap[t.rosterId][week] = sigma;
+            }
+          }
+        }
+
+        const { odds, top2, last } = runSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams);
+        for (const t of teams) {
+          if (odds[t.rosterId] !== undefined) t.playoffOdds = odds[t.rosterId];
+          if (top2[t.rosterId] !== undefined) t.top2Odds = top2[t.rosterId];
+          if (last[t.rosterId] !== undefined) t.lastPlaceOdds = last[t.rosterId];
+        }
+        if (Object.keys(odds).length > 0) {
+          try { sessionStorage.setItem(_simCacheKey, JSON.stringify({ ts: Date.now(), odds, top2, last })); } catch {}
+        }
+      }
+    } catch (e) {
+      console.warn('[Analyzer odds] ESPN simulation failed:', e);
+    }
+
     return {
       teams, lgName, season: nflSeason, formatFlags: [], numTeams,
-      crCtx: { players, byName, rosterPositions: crEspnLineup, scoring: espnScoring, season: nflSeason },
+      // Prefer the real lineup slot counts; fall back to the guessed generic
+      // shape only if settings parsing came back empty for some reason.
+      crCtx: { players, byName, rosterPositions: espnRosterPositions.length ? espnRosterPositions : crEspnLineup, scoring: espnScoring, season: nflSeason },
     };
   }
 

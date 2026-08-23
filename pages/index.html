@@ -4287,52 +4287,13 @@ async function lsLoadAllPlay(lgId, myRosterId) {
 
 const LS_POS_CV = { QB: 0.43, RB: 0.50, WR: 0.52, TE: 0.58, DL: 0.55, LB: 0.55, DB: 0.55 };
 
-// POSITION_MAP-derived (see crParseEspnScoring in shared-utils.js for the
-// source): converts ESPN's lineupSlotCounts into the same Sleeper-shaped flat
-// rosterPositions array lsOptimalLineupAndSigma() already expects (['QB','RB',
-// 'RB',...,'FLEX','BN',...]). D/ST(16) and K(17) slots are dropped — this app
-// never scores kickers/defense in the sim (rsNormPos() drops them too, so
-// Sleeper leagues already have the same gap; consistent, not new).
-const ESPN_SLOT_TO_ROSTER_POS = {
-  0: 'QB', 2: 'RB', 4: 'WR', 6: 'TE',
-  3: 'FLEX', 5: 'FLEX', 23: 'FLEX', 7: 'SUPER_FLEX',
-  20: 'BN', 21: 'IR',
-};
-function espnRosterPositionsFromSlotCounts(lineupSlotCounts) {
-  const out = [];
-  for (const [slotId, count] of Object.entries(lineupSlotCounts || {})) {
-    const label = ESPN_SLOT_TO_ROSTER_POS[Number(slotId)];
-    if (!label) continue;
-    for (let i = 0; i < count; i++) out.push(label);
-  }
-  return out;
-}
-
-// ESPN has no per-week matchup endpoint like Sleeper's — mMatchupScore returns
-// the WHOLE season's schedule in one call (data.schedule[], each entry
-// {matchupPeriodId, home:{teamId}, away:{teamId}}), so this fetches once per
-// league and the caller filters by week. A bye week's entry has no `away` key
-// (see espn-api's Matchup class) — filtered out below, which is the correct
-// simulation behavior (no win/loss added that week).
-// Synthesizes the SAME {roster_id, matchup_id} shape Sleeper's matchups
-// endpoint returns, grouped in pairs — so lsRunSimulation() needs zero
-// ESPN-specific branching.
+// espnRosterPositionsFromSlotCounts / crFetchEspnSchedule /
+// crEspnScheduleToMatchupsByWeek now live in shared-utils.js (analyzer.html's
+// own ESPN odds sim needs them too). Thin wrapper kept here so existing call
+// sites below don't need to change.
 async function lsFetchEspnScheduleByWeek(espnLeagueId, weeks) {
-  const r = await fetch(`/api/espn/fantasy/${espnLeagueId}?view=mMatchupScore`, { credentials: 'include' });
-  if (!r.ok) throw new Error('ESPN schedule unavailable');
-  const d = await r.json();
-  const schedule = d.schedule || [];
-  const byWeek = {};
-  for (const w of weeks) {
-    byWeek[w] = [];
-    for (const m of schedule) {
-      if (m.matchupPeriodId !== w || !m.home || !m.away) continue; // skip other weeks / byes
-      const mid = `${w}_${m.home.teamId}`;
-      byWeek[w].push({ roster_id: m.home.teamId, matchup_id: mid });
-      byWeek[w].push({ roster_id: m.away.teamId, matchup_id: mid });
-    }
-  }
-  return byWeek;
+  const schedule = await crFetchEspnSchedule('/api', espnLeagueId);
+  return crEspnScheduleToMatchupsByWeek(schedule, weeks);
 }
 
 function lsComputeProjPts(stats, scoringSettings) {

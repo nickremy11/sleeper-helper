@@ -202,6 +202,15 @@ async function handleFantasyCalc(env, url) {
   }
 
   const body = await upstream.text();
+  // A 200 with a malformed/truncated body (network blip, FC serving an HTML
+  // error page with a 200, etc.) must never get cached — that would keep
+  // every caller sharing this exact param combo broken for the full 24h TTL.
+  // FC always returns a JSON array on success.
+  try {
+    if (!Array.isArray(JSON.parse(body))) throw new Error('not an array');
+  } catch (_) {
+    return new Response('FantasyCalc upstream returned malformed data', { status: 502, headers: CORS });
+  }
   await env.SLEEPER_KV.put(cacheKey, body, {
     expirationTtl: FC_TTL,
     metadata: { cachedAt: Date.now() },

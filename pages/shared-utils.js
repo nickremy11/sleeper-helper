@@ -281,6 +281,59 @@ function crParseEspnScoring(settings) {
   return { scoring, numQbs, ppr: scoring.rec ?? 1, bonusRecTe };
 }
 
+// POSITION_MAP-derived (see crParseEspnScoring's source comment above):
+// converts ESPN's lineupSlotCounts into the same Sleeper-shaped flat
+// rosterPositions array Sleeper's own roster_positions field already is
+// (['QB','RB','RB',...,'FLEX','BN',...]) — used by both pages' playoff-odds
+// lineup optimizers. D/ST(16) and K(17) slots are dropped — this app never
+// scores kickers/defense in either sim (rsNormPos() drops them for Sleeper
+// too), so it's a pre-existing, consistent gap, not new for ESPN.
+const ESPN_SLOT_TO_ROSTER_POS = {
+  0: 'QB', 2: 'RB', 4: 'WR', 6: 'TE',
+  3: 'FLEX', 5: 'FLEX', 23: 'FLEX', 7: 'SUPER_FLEX',
+  20: 'BN', 21: 'IR',
+};
+function espnRosterPositionsFromSlotCounts(lineupSlotCounts) {
+  const out = [];
+  for (const [slotId, count] of Object.entries(lineupSlotCounts || {})) {
+    const label = ESPN_SLOT_TO_ROSTER_POS[Number(slotId)];
+    if (!label) continue;
+    for (let i = 0; i < count; i++) out.push(label);
+  }
+  return out;
+}
+
+// ESPN has no per-week matchup endpoint like Sleeper's — mMatchupScore returns
+// the WHOLE season's schedule in one call (data.schedule[], each entry
+// {matchupPeriodId, home:{teamId,totalPoints}, away:{teamId,totalPoints}}) —
+// verified against espn-api's own scoreboard()/Matchup source, not guessed.
+// Fetch once per league; a bye week's entry has no `away` key.
+async function crFetchEspnSchedule(apiBase, espnLeagueId) {
+  const r = await fetch(`${apiBase}/espn/fantasy/${espnLeagueId}?view=mMatchupScore`, { credentials: 'include' });
+  if (!r.ok) throw new Error('ESPN schedule unavailable');
+  const d = await r.json();
+  return d.schedule || [];
+}
+
+// Groups a raw schedule (from crFetchEspnSchedule) into the SAME
+// {week: [{roster_id, matchup_id}, ...]} shape Sleeper's matchups endpoint
+// returns, for the given weeks — so the Sleeper-shaped simulation functions in
+// both pages need zero ESPN-specific branching. Byes are dropped (no win/loss
+// added that week, which is the correct simulation behavior).
+function crEspnScheduleToMatchupsByWeek(schedule, weeks) {
+  const byWeek = {};
+  for (const w of weeks) {
+    byWeek[w] = [];
+    for (const m of schedule) {
+      if (m.matchupPeriodId !== w || !m.home || !m.away) continue;
+      const mid = `${w}_${m.home.teamId}`;
+      byWeek[w].push({ roster_id: m.home.teamId, matchup_id: mid });
+      byWeek[w].push({ roster_id: m.away.teamId, matchup_id: mid });
+    }
+  }
+  return byWeek;
+}
+
 // Fetch + index the aggregate consensus ADP sheet, keyed by Sleeper player id.
 // opts = { apiBase, byName }. Returns { [pid]: rank }. Offense-only (~200
 // players) — anyone not found here is left for crPlayerPpg's search_rank fallback.
