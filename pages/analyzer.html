@@ -1139,7 +1139,13 @@
       let _cachedOdds = null, _cachedTop2 = null, _cachedLast = null;
       try {
         const _c = JSON.parse(sessionStorage.getItem(_simCacheKey) || 'null');
-        if (_c && Date.now() - _c.ts < 2 * 3600 * 1000) { _cachedOdds = _c.odds; _cachedTop2 = _c.top2; _cachedLast = _c.last; }
+        // An empty odds object (e.g. cached from an earlier run where simTeams
+        // came back empty — a broken/incomplete FC fetch, a since-fixed bug,
+        // etc.) is treated as "no cache" so a stale bad result can't get stuck
+        // replaying for the rest of the 2h TTL — re-simulate instead.
+        if (_c && Date.now() - _c.ts < 2 * 3600 * 1000 && _c.odds && Object.keys(_c.odds).length > 0) {
+          _cachedOdds = _c.odds; _cachedTop2 = _c.top2; _cachedLast = _c.last;
+        }
       } catch {}
 
       if (_cachedOdds) {
@@ -1208,7 +1214,11 @@
           if (top2[t.rosterId] !== undefined) t.top2Odds = top2[t.rosterId];
           if (last[t.rosterId] !== undefined) t.lastPlaceOdds = last[t.rosterId];
         }
-        try { sessionStorage.setItem(_simCacheKey, JSON.stringify({ ts: Date.now(), odds, top2, last })); } catch {}
+        // Don't persist an empty result (simTeams came back empty this run,
+        // e.g. a transient fetch failure) — see the read-side comment above.
+        if (Object.keys(odds).length > 0) {
+          try { sessionStorage.setItem(_simCacheKey, JSON.stringify({ ts: Date.now(), odds, top2, last })); } catch {}
+        }
       }
     }
 
