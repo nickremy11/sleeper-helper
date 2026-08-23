@@ -1193,7 +1193,7 @@
 
         // Fallback: if projections returned empty (avg mu < 20 pts) use FC overall values
         // scaled to realistic weekly scoring range so results are still meaningful.
-        const simTeams = teams.filter(t => t.overall > 0 || t.wins > 0 || t.losses > 0);
+        const simTeams = teams.filter(t => t.playerList.length > 0 || t.wins > 0 || t.losses > 0);
         const avgMu = simTeams.reduce((s, t) =>
           s + futureWeeks.reduce((ws, w) => ws + (muMap[t.rosterId]?.[w] ?? 0), 0), 0
         ) / Math.max(1, simTeams.length * futureWeeks.length);
@@ -1256,7 +1256,11 @@
     const nextSeason = _nextSeason; // already computed above
 
     return {
-      teams: teams.filter(t => t.overall > 0 || t.wins > 0 || t.losses > 0),
+      // playerList.length (not overall > 0) is the real "has an actual roster"
+      // signal — overall is derived from FantasyCalc values and goes to 0 for
+      // every team alike if that fetch fails/degrades, which used to make a
+      // perfectly fine league look like it had no roster data at all.
+      teams: teams.filter(t => t.playerList.length > 0 || t.wins > 0 || t.losses > 0),
       allRosters,
       lgName, season: nflSeason, formatFlags, numTeams,
       numStartersPerTeam, is2TE, nextSeason,
