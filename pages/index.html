@@ -697,6 +697,20 @@ async function loadEspnLeagues(season) {
     // Draft Tracker's selector is built at tab-render time — ESPN leagues load
     // asynchronously after that, so re-populate it if the tab is already open.
     if (S.tab === 'tracker') populateDraftSelector();
+    // League Summaries is the default landing tab, so it usually renders (and
+    // calls lsLoadData()) before this async load appends ESPN leagues to
+    // S.leagues — leaving LS.leagueData never populated for them (blank
+    // standing/record/odds) until now. Backfill just the new ESPN leagues and
+    // redraw; Sleeper leagues are unaffected (already loaded synchronously
+    // before render() was ever called).
+    if (S.tab === 'leagues' && LS.loaded) {
+      const newEspnLeagues = S.leagues.filter(l => l.source === 'espn' && !LS.leagueData[l.league_id]);
+      if (newEspnLeagues.length) {
+        await Promise.all(newEspnLeagues.map(lg => lsLoadEspnLeague(lg)));
+        lsRestoreOddsCache();
+        lsDrawTable();
+      }
+    }
   } catch {}
 }
 
