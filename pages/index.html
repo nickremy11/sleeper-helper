@@ -155,14 +155,28 @@ a.row-link:hover { color: var(--gold-light); }
 .pos-pill.active { background: var(--brown-dark); border-color: var(--gold); color: var(--gold-light); }
 /* Snake grid: CSS grid with fixed columns set via inline style per draft */
 .tracker-snake { display: grid; gap: 3px; overflow-x: auto; padding-bottom: 8px; }
-.tracker-round-label { grid-column: 1 / -1; font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.2em; color: var(--gold); padding: 8px 0 2px; border-top: 1px solid var(--brown-mid); margin-top: 4px; }
+.tracker-round-label { grid-column: 1 / -1; font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.2em; color: var(--gold); padding: 7px 10px 6px; border-top: 1px solid var(--brown-mid); margin-top: 4px; display: flex; align-items: center; gap: 10px; border-radius: 2px; }
 .tracker-round-label:first-child { border-top: none; margin-top: 0; }
+/* Direction cue: gradient fades toward the edge picks flow to, chevrons point the way */
+.tracker-round-label.dir-ltr { background: linear-gradient(to right, rgba(201,150,42,0.18), rgba(201,150,42,0.02)); }
+.tracker-round-label.dir-rtl { background: linear-gradient(to left, rgba(201,150,42,0.18), rgba(201,150,42,0.02)); flex-direction: row-reverse; }
+.trl-round { font-size: 0.56rem; color: var(--gold-light); }
+.trl-dir { font-family: 'Crimson Text', serif; font-size: 0.8rem; letter-spacing: 0; font-style: italic; color: var(--brown-light); text-transform: none; }
+.trl-chev { color: var(--gold-light); font-size: 0.9rem; letter-spacing: 0.05em; animation: trlSlide 1.6s ease-in-out infinite; }
+.tracker-round-label.dir-rtl .trl-chev { animation-name: trlSlideRev; }
+@keyframes trlSlide { 0%,100% { transform: translateX(-2px); opacity: 0.55; } 50% { transform: translateX(3px); opacity: 1; } }
+@keyframes trlSlideRev { 0%,100% { transform: translateX(2px); opacity: 0.55; } 50% { transform: translateX(-3px); opacity: 1; } }
+.tp-pick { position: absolute; top: 2px; right: 3px; font-family: 'Rye', serif; font-size: 0.4rem; letter-spacing: 0.02em; color: var(--brown-light); opacity: 0.75; }
+.tracker-player.targeted .tp-pick { color: var(--gold-light); opacity: 1; }
 .tracker-player { background: var(--brown-dark); border: 1px solid var(--brown-mid); border-left: 3px solid var(--brown-mid); border-radius: 2px; padding: 4px 4px; display: flex; flex-direction: column; gap: 1px; transition: opacity 0.2s, box-shadow 0.15s; min-width: 0; min-height: 56px; cursor: pointer; position: relative; }
 .tracker-player:hover { box-shadow: 0 0 0 1px var(--brown-light) inset; }
 .tracker-player.tier-even { background: #5a3e28; }
 .tracker-player.picked { opacity: 0.22; }
 .tracker-player.picked .tp-name { text-decoration: line-through; }
-.tracker-player.targeted { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold) inset; }
+.tracker-player.targeted { border-color: var(--gold-light); background: #4a3410; box-shadow: 0 0 0 2px var(--gold-light), 0 0 12px 2px rgba(232,184,75,0.5); z-index: 2; }
+.tracker-player.targeted.tier-even { background: #593d13; }
+.tracker-player.targeted .tp-name { color: var(--gold-light); font-weight: 700; }
+.tracker-player.targeted.picked { opacity: 0.4; box-shadow: 0 0 0 2px var(--gold); }
 .tp-pos  { font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.08em; flex-shrink: 0; line-height: 1.3; }
 .tp-star { color: var(--gold); }
 .tp-name { font-family: 'Crimson Text', serif; font-size: 0.7rem; color: var(--parchment); line-height: 1.14; overflow-wrap: break-word; white-space: normal; }
@@ -187,7 +201,10 @@ a.row-link:hover { color: var(--gold-light); }
 .tl-table tr.tl-tier-even td { background: #5a3e28; }
 .tl-table tr.tl-tier-even:hover td { background: #64462d; }
 .tl-table tr.tl-picked td { opacity: 0.3; text-decoration: line-through; }
-.tl-table tr.tl-target td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
+.tl-table tr.tl-target td { background: rgba(232,184,75,0.14); }
+.tl-table tr.tl-target:hover td { background: rgba(232,184,75,0.2); }
+.tl-table tr.tl-target td:first-child { box-shadow: inset 4px 0 0 var(--gold-light); }
+.tl-table tr.tl-target td.tl-name { color: var(--gold-light); font-weight: 700; }
 .tl-table td.tl-name { white-space: normal; min-width: 140px; cursor: pointer; }
 .tl-diff-better { color: #6fd66f; font-weight: 600; }
 .tl-diff-worse  { color: #e05252; font-weight: 600; }
@@ -2356,6 +2373,7 @@ const T = {
   reversalRound: 0,   // effective reversal round (0 = normal snake, 3 = 3RR) — toggleable
   view: 'board',      // 'board' | 'list'
   leagueAdp: null,    // {map: {sleeper_id: adp}, suffix, label, season} for the selected draft's own league format
+  espnAdp: null,      // {map: {sleeper_id: adp}, count} — ESPN's own average draft position (ESPN drafts only)
   hideDrafted: false, // list view only: hide picked players instead of just crossing them off
   myProj: null,       // {map: {sleeper_id: ppg}, season} from the logged-in user's saved projections, if any
   myProjPresets: [],  // preset names available on the account (from projections.ffhistorian.com)
@@ -2427,6 +2445,40 @@ async function loadDraftLeagueAdp(leagueId) {
   } catch (_) {}
 }
 
+// ESPN's own average draft position (from kona_player_info — the same player-pool
+// endpoint /auction uses), keyed name → sleeper_id so the list view's ADP column
+// shows a real ESPN number for ESPN drafts instead of Sleeper's blended rank.
+async function loadEspnAdp(espnId) {
+  T.espnAdp = null;
+  try {
+    await loadPlayers();
+    const filter = JSON.stringify({
+      players: { limit: 4000, sortDraftRanks: { sortPriority: 100, sortAsc: true, value: 'STANDARD' } },
+    });
+    const r = await fetch(`/api/espn/fantasy/${espnId}?view=kona_player_info&scoringPeriodId=0`, {
+      credentials: 'include',
+      headers: { 'X-Fantasy-Filter': filter },
+    });
+    if (!r.ok) { applyLeagueAdp(); return; }
+    const d = await r.json();
+    const map = {};
+    for (const entry of (d.players || [])) {
+      const pl = entry.player || entry;
+      const adp = pl.ownership?.averageDraftPosition;
+      if (!pl.fullName || typeof adp !== 'number' || adp <= 0) continue;
+      const sid = S._playersByName[normName(pl.fullName)];
+      if (sid) map[sid] = Math.round(adp * 10) / 10;
+    }
+    const count = Object.keys(map).length;
+    if (count) T.espnAdp = { map, count };
+    const st = document.getElementById('draft-status');
+    if (st && T.draft?._source === 'espn' && count) {
+      st.textContent += ` · ADP: ESPN (${count} players)`;
+    }
+    applyLeagueAdp();
+  } catch (_) { applyLeagueAdp(); }
+}
+
 // Backfill/upgrade the ADP column for every ranking row that didn't come with
 // its own explicit ADP value (CSV column / My Rankings never carry one).
 // Prefers this league's format-specific Sleeper ADP; falls back to Sleeper's
@@ -2436,7 +2488,7 @@ function applyLeagueAdp() {
   let changed = false;
   for (const p of T.rankings) {
     if (p._adpFromFile) continue;
-    const next = (T.leagueAdp?.map?.[p.sleeper_id]) ?? (S.players[p.sleeper_id]?.search_rank ?? '');
+    const next = (T.espnAdp?.map?.[p.sleeper_id]) ?? (T.leagueAdp?.map?.[p.sleeper_id]) ?? (S.players[p.sleeper_id]?.search_rank ?? '');
     if (next !== p.adp) { p.adp = next; changed = true; }
   }
   if (changed) {
@@ -2844,7 +2896,7 @@ function loadCSV(event) {
 async function selectDraft(draftId) {
   if (T.pollTimer) { clearInterval(T.pollTimer); T.pollTimer = null; }
   if (!draftId) {
-    T.draft = null; T.espn = null; T.espnManualPicked = new Set(); T.picked.clear(); loadDraftLeagueAdp(null);
+    T.draft = null; T.espn = null; T.espnManualPicked = new Set(); T.picked.clear(); T.espnAdp = null; loadDraftLeagueAdp(null);
     T.myProj = null; T.myProjPresets = []; T.myProjPreset = ''; T.myProjSeason = null;
     renderTrackerBody();
     return;
@@ -2854,7 +2906,7 @@ async function selectDraft(draftId) {
   st.textContent = 'Loading picks…'; st.className = 'setup-status';
   try {
     T.draft = await api('/draft/' + draftId);
-    T.espn = null; T.espnManualPicked = new Set();
+    T.espn = null; T.espnManualPicked = new Set(); T.espnAdp = null;
     T.reversalRound = T.draft?.settings?.reversal_round ?? 0;
     T.tradedPicks = await api('/draft/' + draftId + '/traded_picks').catch(() => []) || [];
     const mySlot = T.draft?.draft_order?.[S.userId];
@@ -2923,9 +2975,12 @@ async function selectEspnDraft(espnId) {
     st.className = 'setup-status ok';
     T.pollTimer = setInterval(() => syncEspnPicks(espnId), 15000);
     renderTrackerBody();
-    // ESPN leagues have no Sleeper-format ADP to resolve — fall back to blended ADP.
+    // ESPN leagues have no Sleeper-format ADP to resolve — use ESPN's own ADP,
+    // falling back to Sleeper's blended rank for anyone ESPN hasn't priced.
     T.leagueAdp = null;
+    T.espnAdp = null;
     applyLeagueAdp();
+    loadEspnAdp(espnId);
     const projSeason = S.nflState?.league_create_season || S.nflState?.season || new Date().getFullYear().toString();
     T.myProjSeason = projSeason;
     T.myProjPreset = '';
@@ -3062,10 +3117,11 @@ function renderTrackerBody() {
     ${T.draft ? `<span class="card-meta">Round ${Math.floor(pickedCount/teams)+1} · Pick ${(pickedCount%teams)+1} of ${teams}</span>` : ''}
     ${puHtml}
     ${rrToggle}
-  </div>`;
+  </div>
+  ${T.draft?._source === 'espn' ? `<div class="card-meta" style="margin:-6px 0 14px;color:var(--gold-light);font-style:italic;">ESPN auto-sync can lag — click any card to mark it drafted yourself (☆ toggles a target)</div>` : ''}`;
 
   const isEspn = T.draft?._source === 'espn';
-  const playerTile = (p) => {
+  const playerTile = (p, pickLabel) => {
     const isPicked  = T.picked.has(String(p.sleeper_id));
     const isTarget  = p.sleeper_id && T.targets.has(String(p.sleeper_id));
     const pc        = posClass(p.pos);
@@ -3083,6 +3139,7 @@ function renderTrackerBody() {
       : (isTarget ? ' <span class="tp-star">★</span>' : '');
     const nameHtml  = trackerNameLines(p.name).map(l => `<span class="tp-name-line">${esc(l)}</span>`).join('');
     return `<div class="tracker-player ${isPicked?'picked':''} ${pc} ${tierCls} ${isTarget?'targeted':''}" ${clickable}>
+      ${pickLabel ? `<span class="tp-pick">${esc(pickLabel)}</span>` : ''}
       <span class="tp-pos">${esc(p.pos)}${starHtml}</span>
       <span class="tp-name">${nameHtml}</span>
       ${p.team ? `<span class="tp-team">${esc(p.team)}</span>` : ''}
@@ -3094,7 +3151,7 @@ function renderTrackerBody() {
   if (T.view === 'list') {
     mainHtml = renderTrackerListHtml(visible, hasTiers, SKIP_POS, hasFileRank);
   } else if (T.posFilter === 'ALL' && !T.targetsOnly && T.draft) {
-    // Snake grid: rows of `teams` with direction arrows
+    // Snake grid: rows of `teams`, each row's flow direction spelled out
     const rows = [];
     let row = [];
     for (const p of visible) {
@@ -3106,19 +3163,28 @@ function renderTrackerBody() {
     mainHtml = `<div class="tracker-snake" style="grid-template-columns:repeat(${teams},minmax(0,1fr));">`;
     rows.forEach((rowPlayers, roundIdx) => {
       const round = roundIdx + 1;
-      const isReversed = isReversedRound(round, type, T.reversalRound);
-      const arrow = type !== 'snake' ? '→' : (isReversed ? '←' : '→');
+      const isReversed = type === 'snake' && isReversedRound(round, type, T.reversalRound);
+      const dirCls  = isReversed ? 'dir-rtl' : 'dir-ltr';
+      const chev    = isReversed ? '◀ ◀ ◀' : '▶ ▶ ▶';
+      const dirText = isReversed ? 'picks run right → left' : 'picks run left → right';
+      // Display columns stay fixed (col 1 = team 1); on a reversed round the row
+      // is flipped so the tile in col 1 is that round's *last* pick.
       const orderedRow = isReversed ? [...rowPlayers].reverse() : rowPlayers;
-      mainHtml += `<div class="tracker-round-label" style="grid-column:1/-1;">
-        Round ${round} <span style="color:var(--brown-light);margin-left:6px;">${arrow}</span>
+      mainHtml += `<div class="tracker-round-label ${dirCls}" style="grid-column:1/-1;">
+        <span class="trl-round">Round ${round}</span>
+        <span class="trl-chev">${chev}</span>
+        <span class="trl-dir">${dirText}</span>
       </div>`;
-      mainHtml += orderedRow.map(playerTile).join('');
+      mainHtml += orderedRow.map((p, i) => {
+        const pickInRound = isReversed ? (rowPlayers.length - i) : (i + 1);
+        return playerTile(p, `${round}.${String(pickInRound).padStart(2, '0')}`);
+      }).join('');
     });
     mainHtml += '</div>';
   } else {
     // Position-filtered view: simple responsive grid, no snake ordering
     mainHtml = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:3px;">
-      ${visible.map(playerTile).join('')}
+      ${visible.map(p => playerTile(p)).join('')}
     </div>`;
   }
 
@@ -3190,6 +3256,9 @@ function renderTrackerListHtml(visible, hasTiers, SKIP_POS, hasFileRank) {
   // otherwise the column is omitted entirely rather than shown empty.
   const showMyProj = !!(T.myProj?.map && Object.keys(T.myProj.map).length);
   const colCount = showMyProj ? 10 : 9;
+  // ADP column reflects its real source: ESPN's own ADP for ESPN drafts (once
+  // loadEspnAdp resolves), this league's Sleeper-format ADP, or blended Sleeper.
+  const adpLabel = (isEspn && T.espnAdp) ? 'ESPN ADP' : (T.leagueAdp ? T.leagueAdp.label + ' ADP' : 'ADP');
 
   const rows = [...rowsSource].sort((a, b) => (aggRank(a) ?? Infinity) - (aggRank(b) ?? Infinity)).map(p => {
     const isPicked = T.picked.has(String(p.sleeper_id));
@@ -3252,7 +3321,7 @@ function renderTrackerListHtml(visible, hasTiers, SKIP_POS, hasFileRank) {
   return `${hideToggleHtml}<div style="overflow-x:auto;">
     <table class="tl-table">
       <thead><tr>
-        <th>Player</th><th>Pos</th><th>Team</th><th>Tier</th><th>Rank</th><th>ADP</th>${showMyProj ? '<th>My Proj</th>' : ''}<th>Pos Rank</th><th>Pos ADP</th><th>vs ADP</th>
+        <th>Player</th><th>Pos</th><th>Team</th><th>Tier</th><th>Rank</th><th>${esc(adpLabel)}</th>${showMyProj ? '<th>My Proj</th>' : ''}<th>Pos Rank</th><th>Pos ADP</th><th>vs ADP</th>
       </tr></thead>
       <tbody>${rows || `<tr><td colspan="${colCount}" style="text-align:center;font-style:italic;color:var(--brown-light);padding:16px;">No players match the current filters</td></tr>`}</tbody>
     </table>
