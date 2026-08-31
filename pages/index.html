@@ -162,10 +162,7 @@ a.row-link:hover { color: var(--gold-light); }
 .tracker-round-label.dir-rtl { background: linear-gradient(to left, rgba(201,150,42,0.18), rgba(201,150,42,0.02)); flex-direction: row-reverse; }
 .trl-round { font-size: 0.56rem; color: var(--gold-light); }
 .trl-dir { font-family: 'Crimson Text', serif; font-size: 0.8rem; letter-spacing: 0; font-style: italic; color: var(--brown-light); text-transform: none; }
-.trl-chev { color: var(--gold-light); font-size: 0.9rem; letter-spacing: 0.05em; animation: trlSlide 1.6s ease-in-out infinite; }
-.tracker-round-label.dir-rtl .trl-chev { animation-name: trlSlideRev; }
-@keyframes trlSlide { 0%,100% { transform: translateX(-2px); opacity: 0.55; } 50% { transform: translateX(3px); opacity: 1; } }
-@keyframes trlSlideRev { 0%,100% { transform: translateX(2px); opacity: 0.55; } 50% { transform: translateX(-3px); opacity: 1; } }
+.trl-chev { color: var(--gold-light); font-size: 0.9rem; letter-spacing: 0.05em; }
 .tp-pick { position: absolute; top: 2px; right: 3px; font-family: 'Rye', serif; font-size: 0.4rem; letter-spacing: 0.02em; color: var(--brown-light); opacity: 0.75; }
 .tracker-player.targeted .tp-pick { color: var(--gold-light); opacity: 1; }
 .tracker-player { background: var(--brown-dark); border: 1px solid var(--brown-mid); border-left: 3px solid var(--brown-mid); border-radius: 2px; padding: 4px 4px; display: flex; flex-direction: column; gap: 1px; transition: opacity 0.2s, box-shadow 0.15s; min-width: 0; min-height: 56px; cursor: pointer; position: relative; }
