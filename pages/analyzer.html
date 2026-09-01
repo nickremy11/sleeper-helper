@@ -404,6 +404,23 @@
   const BIG_POOL_REGULAR_SEASON_WEEKS = 11; // weeks 1-11, per-league — no in-platform playoff to derive this from
   let isBigPool = false;
 
+  // Points-only leagues have no playoff bracket — the champion is simply whoever
+  // scores the most total points over the full 17-week season. For these the
+  // "Playoff" column becomes "% finish #1 in points" (with a "% top 3" sub-line
+  // in place of "% bye"). Manual allowlist — no reliable Sleeper setting for it.
+  const POINTS_ONLY_LEAGUES = new Set(['1318053615725715456']);
+  const POINTS_ONLY_REGULAR_SEASON_WEEKS = 17;
+  let isPointsOnly = false;
+
+  // Standing chip fallback for points-only leagues (shown only before the sim
+  // populates real odds) — ranked by points-for, not record.
+  function pointsRankLabel(standing, numTeams) {
+    if (standing === 1)                       return { label: '1st',       cls: 'az-chances-lock'  };
+    if (standing <= 3)                        return { label: 'Top 3',     cls: 'az-chances-good'  };
+    if (standing <= Math.ceil(numTeams / 2))  return { label: 'Bubble',    cls: 'az-chances-nervy' };
+    return                                           { label: 'Long Shot', cls: 'az-chances-long'  };
+  }
+
   // Contender rank: shares the formula + localStorage cache with League
   // Summaries (cr* helpers in shared-utils.js). Default mode 'adp'.
   let crMode = 'adp';
@@ -747,7 +764,12 @@
     return Math.max(0, mu + sigma * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v));
   }
 
-  function runSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams, potentialPtsSoFar = {}, N = 5000) {
+  // opts.pointsOnly: rank the simulated season by total points scored (not W/L).
+  // count → finished #1 in points, count2 → finished top opts.topCount (default 3),
+  // countLast → fewest total points.
+  function runSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams, potentialPtsSoFar = {}, opts = {}, N = 5000) {
+    const pointsOnly = !!opts.pointsOnly;
+    const topCount   = opts.topCount || 3;
     const count = {}, count2 = {}, countLast = {};
     for (const t of teams) { count[t.rosterId] = 0; count2[t.rosterId] = 0; countLast[t.rosterId] = 0; }
 
@@ -776,15 +798,22 @@
         }
       }
 
-      const ranked = teams.slice().sort((a, b) => {
-        const wd = (wins[b.rosterId] || 0) - (wins[a.rosterId] || 0);
-        return wd !== 0 ? wd : (pts[b.rosterId] || 0) - (pts[a.rosterId] || 0);
-      });
-      for (let i = 0; i < Math.min(playoffTeams, ranked.length); i++) count[ranked[i].rosterId]++;
-      for (let i = 0; i < Math.min(2, ranked.length); i++) count2[ranked[i].rosterId]++;
+      const ranked = pointsOnly
+        ? teams.slice().sort((a, b) => (pts[b.rosterId] || 0) - (pts[a.rosterId] || 0))
+        : teams.slice().sort((a, b) => {
+            const wd = (wins[b.rosterId] || 0) - (wins[a.rosterId] || 0);
+            return wd !== 0 ? wd : (pts[b.rosterId] || 0) - (pts[a.rosterId] || 0);
+          });
+      const seedCount = pointsOnly ? 1 : playoffTeams;
+      const topSlots  = pointsOnly ? topCount : 2;
+      for (let i = 0; i < Math.min(seedCount, ranked.length); i++) count[ranked[i].rosterId]++;
+      for (let i = 0; i < Math.min(topSlots, ranked.length); i++) count2[ranked[i].rosterId]++;
 
-      // Last place: fewest total "potential" (best-ball-equivalent) points for the season
-      const rankedByPot = teams.slice().sort((a, b) => potPts[a.rosterId] - potPts[b.rosterId]);
+      // Last place: fewest total points scored (points-only) or fewest total
+      // "potential" (best-ball-equivalent) points for the season.
+      const rankedByPot = pointsOnly
+        ? teams.slice().sort((a, b) => (pts[a.rosterId] || 0) - (pts[b.rosterId] || 0))
+        : teams.slice().sort((a, b) => potPts[a.rosterId] - potPts[b.rosterId]);
       if (rankedByPot.length) countLast[rankedByPot[0].rosterId]++;
     }
 
@@ -1055,6 +1084,7 @@
     hasIDP             = rp.some(p => IDP_SLOTS.has(p));
     isBB               = leagueRes?.settings?.best_ball === 1;
     isBigPool          = BIG_POOL_LEAGUES.has(lgId);
+    isPointsOnly       = POINTS_ONLY_LEAGUES.has(lgId);
     if (!isDynasty && sortKey === 'overall') sortKey = 'contender';
     const lgName       = leagueRes?.name || lgId;
     const playoffTeams = leagueRes?.settings?.playoff_teams ?? Math.floor(numTeams / 2);
@@ -1120,17 +1150,24 @@
       };
     });
 
-    // Compute standings and playoff chances
-    const byStand = [...teams].sort((a, b) => b.wins !== a.wins ? b.wins - a.wins : b.fpts - a.fpts);
+    // Compute standings and playoff chances. Points-only leagues stand by
+    // total points-for, not record.
+    const byStand = isPointsOnly
+      ? [...teams].sort((a, b) => b.fpts - a.fpts)
+      : [...teams].sort((a, b) => b.wins !== a.wins ? b.wins - a.wins : b.fpts - a.fpts);
     byStand.forEach((t, i) => { t.standing = i + 1; });
-    for (const t of teams) t.playoffChances = playoffLabel(t.standing, playoffTeams, numTeams);
+    for (const t of teams) t.playoffChances = isPointsOnly
+      ? pointsRankLabel(t.standing, numTeams)
+      : playoffLabel(t.standing, playoffTeams, numTeams);
 
     // ── Playoff simulation ────────────────────────────────────────────────────
     // Big-pool leagues don't run an in-platform playoff, so playoff_week_start
     // isn't a meaningful signal for them (often 0/1/unset) — use the known
     // regular-season length instead.
     const playoffWeekStart   = leagueRes?.settings?.playoff_week_start ?? 15;
-    const regularSeasonWeeks = isBigPool ? BIG_POOL_REGULAR_SEASON_WEEKS : Math.max(1, playoffWeekStart - 1);
+    const regularSeasonWeeks = isBigPool ? BIG_POOL_REGULAR_SEASON_WEEKS
+      : isPointsOnly ? POINTS_ONLY_REGULAR_SEASON_WEEKS
+      : Math.max(1, playoffWeekStart - 1);
     const scoringSettings    = leagueRes?.scoring_settings || {};
 
     // Fetch all regular-season matchup weeks in parallel
@@ -1167,7 +1204,7 @@
                                  scoringSettings, rp, players, lgId, nflSeason);
     } else {
       // Check session cache — keyed by league + season + regular-season length
-      const _simCacheKey = `az_odds_${lgId}_${nflSeason}_w${regularSeasonWeeks}`;
+      const _simCacheKey = `az_odds_${lgId}_${nflSeason}_w${regularSeasonWeeks}${isPointsOnly ? '_po' : ''}`;
       let _cachedOdds = null, _cachedTop2 = null, _cachedLast = null;
       try {
         const _c = JSON.parse(sessionStorage.getItem(_simCacheKey) || 'null');
@@ -1193,10 +1230,17 @@
       } else if (futureWeeks.length === 0) {
         console.log('[Analyzer odds] taking the "season over" branch — futureWeeks is empty', { byStandLen: byStand.length });
         // Post-season: standings are final — assign hard 1.0 / 0.0
-        byStand.forEach((t, i) => { t.playoffOdds = i < playoffTeams ? 1.0 : 0.0; t.top2Odds = i < 2 ? 1.0 : 0.0; });
-        const minPot = Math.min(...teams.map(t => potentialPtsSoFar[t.rosterId] ?? Infinity));
-        const lastTeams = teams.filter(t => (potentialPtsSoFar[t.rosterId] ?? Infinity) === minPot);
-        for (const t of teams) t.lastPlaceOdds = lastTeams.includes(t) ? 1 / lastTeams.length : 0;
+        if (isPointsOnly) {
+          byStand.forEach((t, i) => { t.playoffOdds = i < 1 ? 1.0 : 0.0; t.top2Odds = i < 3 ? 1.0 : 0.0; });
+          const minPts = Math.min(...teams.map(t => t.fpts ?? Infinity));
+          const lastTeams = teams.filter(t => (t.fpts ?? Infinity) === minPts);
+          for (const t of teams) t.lastPlaceOdds = lastTeams.includes(t) ? 1 / lastTeams.length : 0;
+        } else {
+          byStand.forEach((t, i) => { t.playoffOdds = i < playoffTeams ? 1.0 : 0.0; t.top2Odds = i < 2 ? 1.0 : 0.0; });
+          const minPot = Math.min(...teams.map(t => potentialPtsSoFar[t.rosterId] ?? Infinity));
+          const lastTeams = teams.filter(t => (potentialPtsSoFar[t.rosterId] ?? Infinity) === minPot);
+          for (const t of teams) t.lastPlaceOdds = lastTeams.includes(t) ? 1 / lastTeams.length : 0;
+        }
       } else {
         // Fetch player projections for every remaining week in parallel.
         // Sleeper projection endpoint: /projections/nfl/{season_type}/{season}/{week}
@@ -1245,7 +1289,7 @@
           }
         }
 
-        const { odds, top2, last } = runSimulation(simTeams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams, potentialPtsSoFar);
+        const { odds, top2, last } = runSimulation(simTeams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams, potentialPtsSoFar, { pointsOnly: isPointsOnly });
         console.log('[Analyzer odds] sim result', {
           simTeamsLen: simTeams.length, avgMu, oddsKeysLen: Object.keys(odds).length,
           sampleOdds: Object.values(odds).slice(0, 3),
@@ -1266,8 +1310,10 @@
     // Re-value next-year picks based on original team's playoff odds
     // (bad team → likely early pick → more valuable)
     const _nextSeason = String(parseInt(nflSeason) + 1);
+    // "Good team" proxy for pick re-valuation: playoff odds normally, or the
+    // top-3-points odds in a points-only league (where #1 odds are tiny for all).
     const _oddsMap = {};
-    for (const t of teams) _oddsMap[t.rosterId] = t.playoffOdds ?? null;
+    for (const t of teams) _oddsMap[t.rosterId] = (isPointsOnly ? t.top2Odds : t.playoffOdds) ?? null;
     for (const t of teams) {
       let _adj = 0;
       for (const pick of t.pickList) {
@@ -1332,6 +1378,7 @@
     isDynasty       = false; // ESPN leagues have no dynasty concept in this app
     isBB            = false;
     isBigPool       = false;
+    isPointsOnly    = false;
     if (sortKey === 'overall') sortKey = 'contender';
     const numTeams  = (espnRes?.teams || []).length;
     const playoffTeams = Math.floor(numTeams / 2);
@@ -1684,14 +1731,14 @@
     const rankCols = azNarrow()
       ? [
           { key: 'contender', label: 'Contender<br><span class="az-th-sub">' + crModeLbl + '</span>' },
-          { key: 'chances',   label: isBigPool ? 'Record' : 'Playoff' },
+          { key: 'chances',   label: isBigPool ? 'Record' : isPointsOnly ? 'Points' : 'Playoff' },
         ]
       : [
           ...(isDynasty ? [{ key: 'overall', label: 'Overall' }] : []),
           { key: 'contender', label: 'Contender<br><span class="az-th-sub">' + crModeLbl + '</span>' },
           ...posCols.map(p => ({ key: p, label: p === 'DL' ? 'DL/LB/DB' : p })),
           ...(isDynasty ? [{ key: 'draft', label: 'Draft' }] : []),
-          { key: 'chances',   label: isBigPool ? 'Record' : 'Playoff' },
+          { key: 'chances',   label: isBigPool ? 'Record' : isPointsOnly ? 'Points' : 'Playoff' },
         ];
 
     const headerHtml = `<div class="az-table-header" style="grid-template-columns:${tpl};">
@@ -1738,7 +1785,7 @@
             }
             const byePct = Math.round((team.top2Odds ?? 0) * 100);
             const byeLine = team.top2Odds != null
-              ? `<span class="az-bye-line">${byePct}% bye</span>` : '';
+              ? `<span class="az-bye-line">${byePct}% ${isPointsOnly ? 'top 3' : 'bye'}</span>` : '';
             let lastLine = '';
             if (team.lastPlaceOdds != null) {
               const lp = Math.round(team.lastPlaceOdds * 100);
@@ -1948,9 +1995,11 @@
     return result;
   }
 
-  // Classify another team as contender (>40% odds OR traded away own 1st next year)
+  // Classify another team as contender (>40% odds OR traded away own 1st next year).
+  // In a points-only league #1 odds are tiny for everyone, so use top-3 odds.
   function isContenderTeam(team) {
-    if ((team.playoffOdds ?? 0) > 0.40) return true;
+    if (isPointsOnly) { if ((team.top2Odds ?? 0) > 0.35) return true; }
+    else if ((team.playoffOdds ?? 0) > 0.40) return true;
     const nextSeason = (window._azMeta || {}).nextSeason;
     if (!nextSeason) return false;
     // If they no longer own their own 1st-round pick next year → win-now mode
@@ -2181,7 +2230,7 @@
             ? `<span class="az-tgt-arch az-tgt-arch-c" style="font-size:0.68rem;">Contender</span>`
             : `<span class="az-tgt-arch az-tgt-arch-r" style="font-size:0.68rem;">Rebuilder</span>`;
           const oddsLine = team.playoffOdds != null
-            ? `<div class="az-tgt-oddsline">${Math.round(team.playoffOdds * 100)}% playoff odds</div>` : '';
+            ? `<div class="az-tgt-oddsline">${Math.round(team.playoffOdds * 100)}% ${isPointsOnly ? 'most points' : 'playoff odds'}</div>` : '';
 
           const reasonsHtml = reasons.map(r => {
             const posCls = POS_CLS[r.pos] || '';
@@ -2203,7 +2252,7 @@
               <a class="az-tgt-analyze" href="/trade-analyzer?league=${encodeURIComponent(lgId)}&b=${team.rosterId}">Analyze ⇄</a>
             </div>
             <div class="az-tgt-reasons">${reasonsHtml}</div>
-            <div class="az-tgt-oddsline" style="margin-top:4px;">${tArchHtml}${team.playoffOdds != null ? ` · ${Math.round(team.playoffOdds * 100)}% playoff odds` : ''}</div>
+            <div class="az-tgt-oddsline" style="margin-top:4px;">${tArchHtml}${team.playoffOdds != null ? ` · ${Math.round(team.playoffOdds * 100)}% ${isPointsOnly ? 'most points' : 'playoff odds'}` : ''}</div>
           </div>`;
         }).join('');
 
