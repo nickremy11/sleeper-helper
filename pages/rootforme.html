@@ -266,6 +266,39 @@ details.pos-group[open] > summary .pos-group-toggle { transform: rotate(90deg); 
 .pos-group-count { font-family: 'Crimson Text', serif; font-size: 0.82rem; color: var(--brown-light); font-style: italic; }
 .pos-group-body { padding: 2px 12px 10px; }
 
+/* ── MOBILE ── */
+@media (max-width: 640px) {
+  .banner-inner { padding: 16px 16px 14px; gap: 10px; }
+  .main { padding: 18px 14px 60px; }
+  .section-head { gap: 10px; margin-bottom: 14px; }
+  .section-head h2,
+  .leagues-summary-head,
+  .players-summary-head { font-size: 0.85rem; }
+
+  details.leagues-details > summary,
+  details.players-outer > summary { flex-wrap: wrap; }
+  .leagues-summary-info,
+  .players-summary-info { white-space: normal; flex-basis: 100%; flex-shrink: 1; }
+
+  .setup-card { padding: 14px 16px; }
+  .setup-row { flex-wrap: wrap; }
+  .setup-row .setup-input { flex-basis: 100%; }
+  .setup-btn { padding: 10px 16px; }
+
+  .week-bar { flex-wrap: wrap; padding: 10px 12px; }
+  .load-btn { margin-left: 0; flex-basis: 100%; padding: 10px 18px; }
+
+  .league-table th,
+  .league-table td { padding: 6px 5px; }
+  .league-table th { font-size: 0.44rem; letter-spacing: 0.12em; }
+  .value-input { width: 60px; }
+
+  .game-header { padding: 11px 12px; gap: 8px; flex-wrap: wrap; }
+  .game-time { flex-basis: 100%; }
+  .game-col { padding: 10px 12px; }
+  .player-detail { margin: 0 6px 10px; padding: 10px 12px; }
+}
+
 </style>
 </head>
 <body>

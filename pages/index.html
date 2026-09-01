@@ -222,11 +222,30 @@ footer a:hover { color: var(--gold); }
 
 @media (max-width: 600px) {
   .banner-inner { padding: 20px 16px; }
-  .tab-group-btn { padding: 12px 13px; font-size: 0.5rem; letter-spacing: 0.1em; }
+  /* Nav: wrap the group row instead of breaking page width (overflow would
+     clip the absolutely-positioned dropdowns, so wrap rather than scroll) */
+  .tab-bar-inner { flex-wrap: wrap; }
+  .tab-group { flex: 1 0 auto; }
+  .tab-group-dropdown { min-width: max-content; }
+  .tab-group-btn { padding: 11px 12px; font-size: 0.5rem; letter-spacing: 0.08em; white-space: nowrap; justify-content: center; }
   .tab-btn { padding: 10px 14px; font-size: 0.5rem; letter-spacing: 0.1em; }
   .main { padding: 20px 16px 60px; }
   .setup-card { padding: 16px; }
+  .setup-row { flex-wrap: wrap; }
+  .setup-row .setup-input { flex-basis: 100%; }
+  .setup-btn { padding: 10px 16px; }
   .trade-sides { grid-template-columns: 1fr 18px 1fr; }
+
+  /* Section head + tab header stack */
+  .tab-header { flex-direction: column; align-items: stretch; gap: 12px; }
+  .tab-header .section-head { margin-bottom: 0; }
+
+  /* Lineup Checker */
+  .lineup-card summary { flex-wrap: wrap; gap: 6px; padding: 10px 12px; }
+  .lineup-card summary > span:first-child { margin-right: 0 !important; flex-shrink: 1 !important; }
+  [id^="lc-meta-"] { justify-content: flex-start !important; }
+  .diff-row { padding: 7px 12px; }
+  .diff-slot { width: 56px; }
 }
 
 /* ── ROSTERSHIP TAB ── */
