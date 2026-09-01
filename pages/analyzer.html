@@ -317,7 +317,15 @@
       }
       .az-controls-row { margin-bottom: 16px; }
       .az-card-body { grid-template-columns: 1fr; }
-      .az-card-row, .az-table-header { padding-left: 10px; padding-right: 10px; }
+
+      /* Ranking table fits the viewport (JS drops the position columns) —
+         no forced min-width, and the team name wraps instead of truncating. */
+      .az-table-wrap { overflow-x: visible; }
+      .az-table-header, .az-cards { min-width: 0; }
+      .az-card-row, .az-table-header { padding-left: 10px; padding-right: 10px; column-gap: 6px; }
+      .az-team-name { white-space: normal; overflow: visible; line-height: 1.2; }
+      .az-team-col { align-items: flex-start; }
+      .az-rank-num { margin-top: 2px; }
     }
   </style>
 </head>
@@ -406,9 +414,17 @@
   // Fallback starting lineup for ESPN leagues (no Sleeper roster_positions).
   const CR_ESPN_LINEUP = ['QB','RB','RB','WR','WR','WR','TE','FLEX','FLEX'];
 
+  // Below this viewport width the ranking table drops the per-position columns
+  // (still available by expanding a card) so the team name is fully readable
+  // without horizontal scrolling.
+  function azNarrow() {
+    return window.matchMedia('(max-width: 640px)').matches;
+  }
+
   // Column layout — same grid template applied to header and every card row.
   // Rebuilt after hasIDP is known. Includes: team | overall | contender | QB | RB | WR | TE | [DL] | draft | playoff | chevron
   function gridTpl() {
+    if (azNarrow()) return `minmax(0,1fr) 58px 112px 18px`;  // team | contender | playoff | chevron
     return `minmax(0,1fr)${isDynasty ? ' 68px' : ''} 78px 58px 58px 58px 58px${hasIDP ? ' 74px' : ''}${isDynasty ? ' 64px' : ''} 140px 22px`;
   }
 
@@ -1627,6 +1643,9 @@
 
     const SORT_KEYS = getSortKeys();
     const sortableKeys = new Set(SORT_KEYS.map(s => s.key));
+    // Narrow layout only shows Contender + Playoff columns — fall back to a
+    // sortable one if the active sort is a now-hidden position column.
+    if (azNarrow() && !['overall', 'contender', 'chances'].includes(sortKey)) sortKey = 'contender';
     const valOf = key => t =>
       key === 'overall'   ? t.overall              :
       key === 'contender' ? t.contender            :
@@ -1662,13 +1681,18 @@
     const posCols = ['QB','RB','WR','TE'];
     if (hasIDP) posCols.push('DL');
     const crModeLbl = crMode === 'adp' ? 'ADP' : crData.loading ? '…' : 'Proj';
-    const rankCols = [
-      ...(isDynasty ? [{ key: 'overall', label: 'Overall' }] : []),
-      { key: 'contender', label: 'Contender<br><span class="az-th-sub">' + crModeLbl + '</span>' },
-      ...posCols.map(p => ({ key: p, label: p === 'DL' ? 'DL/LB/DB' : p })),
-      ...(isDynasty ? [{ key: 'draft', label: 'Draft' }] : []),
-      { key: 'chances',   label: isBigPool ? 'Record' : 'Playoff' },
-    ];
+    const rankCols = azNarrow()
+      ? [
+          { key: 'contender', label: 'Contender<br><span class="az-th-sub">' + crModeLbl + '</span>' },
+          { key: 'chances',   label: isBigPool ? 'Record' : 'Playoff' },
+        ]
+      : [
+          ...(isDynasty ? [{ key: 'overall', label: 'Overall' }] : []),
+          { key: 'contender', label: 'Contender<br><span class="az-th-sub">' + crModeLbl + '</span>' },
+          ...posCols.map(p => ({ key: p, label: p === 'DL' ? 'DL/LB/DB' : p })),
+          ...(isDynasty ? [{ key: 'draft', label: 'Draft' }] : []),
+          { key: 'chances',   label: isBigPool ? 'Record' : 'Playoff' },
+        ];
 
     const headerHtml = `<div class="az-table-header" style="grid-template-columns:${tpl};">
       <div class="az-th-team">Team</div>
@@ -1846,6 +1870,15 @@
       else filterSwitcher('');
     }
   }
+
+  // Re-render only when the narrow/wide breakpoint is actually crossed (mobile
+  // browsers fire 'resize' on scroll as the URL bar hides — ignore those).
+  let _azWasNarrow = azNarrow();
+  window.addEventListener('resize', () => {
+    if (azNarrow() === _azWasNarrow) return;
+    _azWasNarrow = azNarrow();
+    if ((window._azTeams || []).length) renderAll();
+  });
 
   document.addEventListener('click', e => {
     const panel = document.getElementById('az-switcher-panel');

@@ -184,16 +184,19 @@
     }
 
     /* ── Rankings comparison table ── */
+    /* Content-width, not 100% — with only 2-3 team columns, stretching the table
+       just opens big gaps between the metric label and the team columns. */
     .ta-rank-wrap { overflow-x: auto; margin-bottom: 24px; }
-    .ta-rank-table { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 520px; }
+    .ta-rank-table { width: auto; border-collapse: separate; border-spacing: 0; }
     .ta-rank-table th {
       font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.15em;
-      text-transform: uppercase; padding: 8px 12px;
+      text-transform: uppercase; padding: 8px 10px;
       background: #1e0e05; border-bottom: 1px solid var(--brown-mid); white-space: nowrap;
     }
     .ta-rank-table th.ta-th-metric { text-align: left; color: var(--brown-light); }
     .ta-rank-table th.ta-th-side { text-align: center; }
-    .ta-rank-table td { padding: 7px 12px; border-bottom: 1px dashed rgba(255,255,255,0.05); vertical-align: middle; }
+    .ta-th-side span { display: inline-block; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+    .ta-rank-table td { padding: 7px 10px; border-bottom: 1px dashed rgba(255,255,255,0.05); vertical-align: middle; }
     .ta-rank-table tr:last-child td { border-bottom: none; }
     .ta-rank-table tr:hover td { background: rgba(255,255,255,0.02); }
     .ta-metric-lbl { font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brown-light); white-space: nowrap; }
@@ -1694,7 +1697,7 @@
         <table class="ta-rank-table">
           <thead><tr>
             <th class="ta-th-metric">Metric</th>
-            ${names.map((n, i) => `<th class="ta-th-side" style="color:${SIDE_COLORS[i]};">${n}</th>`).join('')}
+            ${names.map((n, i) => `<th class="ta-th-side" style="color:${SIDE_COLORS[i]};"><span title="${n}">${n}</span></th>`).join('')}
           </tr></thead>
           <tbody>${tableRows}</tbody>
         </table>
