@@ -303,6 +303,22 @@
       padding: 8px 13px; background: rgba(201,150,42,0.06); border-bottom: 1px solid var(--brown-mid);
       font-family: 'Crimson Text', serif; font-size: 0.8rem; color: var(--gold); font-style: italic;
     }
+
+    /* ── MOBILE ── */
+    @media (max-width: 640px) {
+      .az-wrap { padding: 16px 12px 60px; }
+      .banner > div { padding: 14px 14px !important; }
+      .banner h1 { font-size: clamp(1.1rem, 6vw, 1.6rem); }
+
+      .az-switcher-bar { flex-wrap: wrap; justify-content: flex-start; gap: 6px; }
+      /* Anchor dropdowns to the left and cap width so they never leave the viewport */
+      .az-trade-panel, .az-switcher-panel, .az-targets-panel {
+        left: 0; right: auto; width: min(92vw, 340px);
+      }
+      .az-controls-row { margin-bottom: 16px; }
+      .az-card-body { grid-template-columns: 1fr; }
+      .az-card-row, .az-table-header { padding-left: 10px; padding-right: 10px; }
+    }
   </style>
 </head>
 <body>

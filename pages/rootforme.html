@@ -333,6 +333,15 @@ details.pos-group[open] > summary .pos-group-toggle { transform: rotate(90deg); 
     </div>
   </div>
 
+  <div id="profile-hint-section" style="display:none;">
+    <div class="section-head"><h2>Setup</h2><div class="section-head-line"></div></div>
+    <div class="setup-card">
+      <div class="setup-status">
+        Add your Sleeper username in <a href="/myprofile" style="color:var(--gold-light);">your profile</a> to load your leagues.
+      </div>
+    </div>
+  </div>
+
   <!-- League Config -->
   <div id="leagues-section" style="display:none">
     <details id="leagues-details" class="leagues-details" open>
@@ -420,6 +429,7 @@ async function init() {
     chipContainerId: 'auth-chip',
     onLogin: async (u) => {
       S.auth = u;
+      updateSetupVisibility();
       if (u.sleeper_username && !S.username) {
         S.username = u.sleeper_username;
         document.getElementById('username-input').value = S.username;
@@ -429,15 +439,30 @@ async function init() {
         renderLeagueTable();
       }
     },
-    onLogout: () => { S.auth = null; },
+    onLogout: () => { S.auth = null; updateSetupVisibility(); },
   });
   S.auth = user;
   const stored   = localStorage.getItem('rfm_username');
   const fromAuth = S.auth?.sleeper_username;
-  S.username = fromAuth || stored || '';
+  // When signed in, the Sleeper username is tied to the account (changed on /myprofile).
+  S.username = S.auth ? (fromAuth || '') : (stored || '');
+  updateSetupVisibility();
   if (S.username) {
     document.getElementById('username-input').value = S.username;
     await loadLeagues();
+  }
+}
+
+function updateSetupVisibility() {
+  const setup = document.getElementById('setup-section');
+  const hint  = document.getElementById('profile-hint-section');
+  if (!setup || !hint) return;
+  if (S.auth) {
+    setup.style.display = 'none';
+    hint.style.display  = S.auth.sleeper_username ? 'none' : '';
+  } else {
+    setup.style.display = '';
+    hint.style.display  = 'none';
   }
 }
 
@@ -818,10 +843,25 @@ function renderGameCards() {
   const processed  = S.processedGames;
 
   if (!processed.length) {
-    container.innerHTML = `
-      <div class="empty-state">
-        <p>No players found in contending leagues for Week ${S.week}.<br>Make sure leagues are checked and you have active matchups.</p>
-      </div>`;
+    // Distinguish "ESPN has no NFL game schedule for this week yet" from
+    // "your leagues have no rostered starters this week".
+    const noNflSchedule = !S.nflGames.length;
+    const noMatchups = !S.matchupResults.length;
+    const noStarters = !noMatchups && S.matchupResults.every(r => {
+      const isBB = r.league?.settings?.best_ball === 1;
+      return !((isBB ? r.myMatchup?.players : r.myMatchup?.starters) || []).some(pid => pid && pid !== '0');
+    });
+    let msg;
+    if (noNflSchedule) {
+      msg = `ESPN isn't serving the NFL game schedule for Week ${S.week} of the ${S.season} season yet. Try again closer to kickoff.`;
+    } else if (noMatchups) {
+      msg = `None of your contending leagues have a Week ${S.week} matchup yet (schedules may not be posted). Check the league checkboxes above.`;
+    } else if (noStarters) {
+      msg = `Your contending leagues have no starters set for Week ${S.week} yet (rosters may not be drafted, or lineups aren't locked in).`;
+    } else {
+      msg = `No players found in contending leagues for Week ${S.week}. Make sure leagues are checked and you have active matchups.`;
+    }
+    container.innerHTML = `<div class="empty-state"><p>${esc(msg)}</p></div>`;
     return;
   }
 

@@ -246,6 +246,40 @@
 
     /* ── League picker ── */
     .ta-picker-wrap { max-width: 400px; }
+
+    /* Rankings table: freeze the Metric column while stats scroll sideways */
+    .ta-rank-table th.ta-th-metric,
+    .ta-rank-table td:first-child {
+      position: sticky; left: 0; z-index: 2;
+    }
+    .ta-rank-table th.ta-th-metric { background: #1e0e05; }
+    .ta-rank-table td:first-child {
+      background: var(--brown-dark);
+      box-shadow: 1px 0 0 var(--brown-mid);
+    }
+    .ta-rank-table tr:hover td:first-child { background: #33200f; }
+
+    /* ── MOBILE ── */
+    @media (max-width: 640px) {
+      .ta-wrap { padding: 18px 12px 60px; }
+      .banner > div { padding: 14px 14px !important; }
+      .banner h1 { font-size: clamp(1.1rem, 6vw, 1.6rem); }
+
+      .ta-btn { padding: 11px 16px; letter-spacing: 0.14em; }
+      .ta-btn-secondary { padding: 9px 12px; letter-spacing: 0.1em; }
+      .ta-btn-row { gap: 8px; }
+
+      .ta-addteam-panel { width: min(84vw, 260px); }
+      .ta-summary-box { min-height: 0; padding: 12px 14px; gap: 12px; }
+      .ta-summary-side { flex-basis: 100%; }
+
+      .ta-rank-table th,
+      .ta-rank-table td { padding: 7px 9px; }
+      .ta-odds-card { min-width: 0; flex-basis: 100%; }
+      .ta-odds-row { gap: 12px; }
+
+      .ta-picker-wrap { max-width: none; }
+    }
   </style>
 </head>
 <body>

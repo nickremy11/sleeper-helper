@@ -246,6 +246,22 @@ footer a:hover { color: var(--gold); }
   [id^="lc-meta-"] { justify-content: flex-start !important; }
   .diff-row { padding: 7px 12px; }
   .diff-slot { width: 56px; }
+
+  /* Rostership: freeze the Player column, drop Exp, tighten */
+  .rs-table { font-size: 0.86rem; }
+  .rs-table th, .rs-table td { padding: 6px 7px; }
+  .rs-table thead th:first-child,
+  .rs-table tbody tr:not(.rs-expand-row) td:first-child {
+    position: sticky; left: 0; z-index: 2;
+  }
+  .rs-table thead th:first-child { background: #1e0e05; }
+  .rs-table tbody tr:not(.rs-expand-row) td:first-child {
+    background: var(--brown-dark); box-shadow: 1px 0 0 var(--brown-mid);
+  }
+  .rs-table thead th:nth-child(4),
+  .rs-table tbody tr:not(.rs-expand-row) td:nth-child(4) { display: none; }
+  .rs-pct-bar { width: 40px; }
+  .rs-pct-txt { min-width: 38px; font-size: 0.8rem; }
 }
 
 /* ── ROSTERSHIP TAB ── */
@@ -414,14 +430,19 @@ a.row-link.ls-contender-name { color: var(--gold-light); font-weight: 700; }
 
   <main class="main">
 
-    <div class="setup-card">
-      <div style="margin-bottom:0;">
+    <div class="setup-card" id="setup-card">
+      <div id="username-section" style="margin-bottom:0;">
         <label class="setup-label-rye">Sleeper Username</label>
         <div class="setup-row">
           <input type="text" id="u-input" class="setup-input" placeholder="your sleeper username…" />
           <button class="setup-btn" id="load-btn" onclick="loadUser()">Load</button>
         </div>
         <div class="setup-status" id="u-status"></div>
+      </div>
+      <div id="profile-hint" style="display:none;">
+        <div class="setup-status">
+          Add your Sleeper username in <a href="/myprofile" style="color:var(--gold-light);">your profile</a> to load your leagues.
+        </div>
       </div>
       <div id="auth-token-section">
         <hr class="setup-divider" />
@@ -838,7 +859,9 @@ function renderHome() {
       </div>
       <div style="height: 1px; background: linear-gradient(to right, transparent, var(--brown-mid), transparent); margin-bottom: 24px;"></div>
       <p style="font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--brown-light); font-style: italic;">
-        Enter your Sleeper username above to load your leagues and get started.
+        ${S.auth
+          ? 'Add your Sleeper username in <a href="/myprofile" style="color:var(--gold);">your profile</a> to load your leagues and get started.'
+          : 'Enter your Sleeper username above to load your leagues and get started.'}
       </p>
     </div>
   `);
@@ -1684,7 +1707,13 @@ const LU = {
   valueMode: 'projections', // 'projections' | 'rankings'
   rankings: {},             // {pid: rank} — uploaded weekly ranks (lower = better)
   byGameTime: true,         // order interchangeable slots so flex never locks earlier than a position slot
+  _cache: null,             // { at, week, lineups, proj, kick } — see LU_CACHE_TTL
 };
+
+// How long a loaded lineup snapshot stays fresh before renderLineupCheck refetches.
+// Revisiting the tab (or setValueMode / rankings upload re-renders) within this
+// window skips the per-league rosters+matchups fetch entirely.
+const LU_CACHE_TTL = 5 * 60 * 1000;
 
 // Step-1 proof: re-write a league's CURRENT starters back (a no-op set).
 // Confirms the write pipe (proxy + token + mutation shape) works end-to-end
@@ -2104,7 +2133,23 @@ function clearRankings() {
   renderLineupCheck();
 }
 
-async function renderLineupCheck() {
+async function renderLineupCheck(force = false) {
+  // Serve from the in-memory snapshot when it's still fresh. This is what makes
+  // revisiting the tab instant — the slow part is the per-league fetch loop below.
+  const expectWeek = S.nflState
+    ? (S.nflState.season_type !== 'regular' ? 1 : (S.nflState.display_week || S.nflState.leg || 1))
+    : null;
+  if (!force && LU._cache && LU._cache.week === expectWeek
+      && Date.now() - LU._cache.at < LU_CACHE_TTL) {
+    LU.lineups = LU._cache.lineups;
+    LU.proj    = LU._cache.proj;
+    LU.kick    = LU._cache.kick;
+    LU.week    = LU._cache.week;
+    lsLoadRankings(LU.week);
+    lsRenderLineupCards();
+    return;
+  }
+
   setC(loading('Loading lineups'));
   try {
     await loadPlayers();
@@ -2112,17 +2157,17 @@ async function renderLineupCheck() {
     const isOffseason = nflState.season_type !== 'regular';
     const w           = isOffseason ? 1 : (nflState.display_week || nflState.leg || 1);
 
-    const lineups = [];
-
-    for (const lg of S.leagues) {
+    // Per-league fetches run in parallel — done sequentially this loop was the
+    // main source of the delay (2 round-trips × every league, one after another).
+    const settled = await Promise.all(S.leagues.map(async (lg) => {
       try {
         const detail          = S.leagueDetails[lg.league_id];
-        if (detail?.settings?.best_ball === 1) continue;
+        if (detail?.settings?.best_ball === 1) return null;
         const rosterPositions = (detail?.roster_positions || []).filter(p => p !== 'BN' && p !== 'IR' && p !== 'TAXI');
 
         const rosters = await api('/league/' + lg.league_id + '/rosters');
         const mine    = (rosters || []).find(r => r.owner_id === S.userId);
-        if (!mine) continue;
+        if (!mine) return null;
 
         // The week's matchup is the source of truth for what update_matchup_leg writes.
         // mine.starters (from /rosters) is the generic roster lineup and can lag a
@@ -2133,17 +2178,18 @@ async function renderLineupCheck() {
           const mm = matchups?.find(m => m.roster_id === mine.roster_id);
           if (mm?.starters?.length === rosterPositions.length) starters = mm.starters;
         } catch(_) {}
-        if (!starters.length || starters.length !== rosterPositions.length) continue;
+        if (!starters.length || starters.length !== rosterPositions.length) return null;
 
-        lineups.push({
+        return {
           leagueName: lg.name, leagueId: lg.league_id, rosterId: mine.roster_id,
           starters, rosterPositions,
           players: mine.players || [],
           excluded: new Set([...(mine.reserve || []), ...(mine.taxi || [])].map(String)),  // IR + taxi — never auto-start
           scoringSettings: detail?.scoring_settings || {},
-        });
-      } catch(_) {}
-    }
+        };
+      } catch(_) { return null; }
+    }));
+    const lineups = settled.filter(Boolean);
 
     if (!lineups.length) {
       setC('<div class="empty-state"><p>No active lineups found</p></div>');
@@ -2171,6 +2217,18 @@ async function renderLineupCheck() {
 
     LU.lineups = lineups;
     LU.week    = w;
+    LU._cache  = { at: Date.now(), week: w, lineups, proj: LU.proj, kick: LU.kick };
+
+    lsRenderLineupCards();
+  } catch(e) { setC(errHtml(e)); }
+}
+
+// Render the lineup cards + toolbar from whatever is currently in LU (fresh load
+// or a restored cache). Split out so the cache path renders without any fetching.
+function lsRenderLineupCards() {
+  try {
+    const lineups  = LU.lineups;
+    const w        = LU.week;
     const canWrite = !!(S.token || S.auth?.has_token);
     const canOpt   = lsCanOptimize();
 
@@ -2215,10 +2273,24 @@ async function renderLineupCheck() {
          </div>`
       : '';
 
+    const cachedAgo = LU._cache
+      ? (() => {
+          const m = Math.floor((Date.now() - LU._cache.at) / 60000);
+          return m < 1 ? 'just now' : `${m}m ago`;
+        })()
+      : '';
+    const refreshBar = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+        <span style="font-size:0.55rem;color:var(--brown-light);">Updated ${cachedAgo}</span>
+        <button class="ghost-btn" style="font-size:0.5rem;" onclick="renderLineupCheck(true)">↻ Refresh</button>
+      </div>`;
+
     setC(`<div>
       <div class="tab-header" style="margin-bottom:16px;align-items:flex-start;">
         <div class="section-head" style="margin-bottom:0;flex:1;"><h2>Lineup Check — Week ${w}</h2><div class="section-head-line"></div></div>
-        ${toolbar}
+        <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;">
+          ${refreshBar}
+          ${toolbar}
+        </div>
       </div>
       <div style="border:1px solid var(--brown-mid);border-radius:2px;overflow:hidden;background:var(--brown-dark);">${cardsHtml}</div>
     </div>`);
@@ -5459,6 +5531,26 @@ function updateTokenRow(user) {
   }
 }
 
+function updateSetupCard(user) {
+  // Sleeper username is tied to the account when signed in — managed on /myprofile,
+  // not entered here. Hide the input; show a hint if the account has no username yet.
+  const card  = document.getElementById('setup-card');
+  const uname = document.getElementById('username-section');
+  const hint  = document.getElementById('profile-hint');
+  if (user) {
+    if (uname) uname.style.display = 'none';
+    const needUsername = !user.sleeper_username;
+    if (hint) hint.style.display = needUsername ? '' : 'none';
+    // Token section is hidden for logged-in users (see updateTokenRow) — if the
+    // username is set too, there's nothing left to configure here.
+    if (card) card.style.display = needUsername ? '' : 'none';
+  } else {
+    if (uname) uname.style.display = '';
+    if (hint) hint.style.display = 'none';
+    if (card) card.style.display = '';
+  }
+}
+
 async function loadEspnSettings() {
   // Ensures S.espnSettings is populated — called from updateTokenRow on login
   if (!S.auth) return;
@@ -5500,6 +5592,7 @@ async function saveTokenToAccount() {
   function _applyAuth(user) {
     S.auth = user;
     updateTokenRow(user);
+    updateSetupCard(user);
     if (user.sleeper_username && !S.userId) {
       document.getElementById('u-input').value = user.sleeper_username;
       loadUser();
@@ -5509,7 +5602,7 @@ async function saveTokenToAccount() {
   const initUser = await SharedAuth.init({
     chipContainerId: 'auth-chip',
     onLogin:  (user) => { _applyAuth(user); },
-    onLogout: ()     => { S.auth = null; updateTokenRow(null); },
+    onLogout: ()     => { S.auth = null; updateTokenRow(null); updateSetupCard(null); if (S.tab === 'home') render('home'); },
   });
 
   // onLogin only fires when signing in via the modal — handle the
