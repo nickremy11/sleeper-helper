@@ -1504,7 +1504,7 @@ async function wvLoadLeagueRosters(lg) {
       const rostered = new Set();
       for (const team of (d.teams || [])) {
         for (const entry of (team.roster?.entries || [])) {
-          const pData = entry.playerPoolEntry?.playerPoolEntry?.player;
+          const pData = entry.playerPoolEntry?.playerPoolEntry?.player || entry.playerPoolEntry?.player;
           if (!pData) continue;
           const fullName = pData.fullName || `${pData.firstName||''} ${pData.lastName||''}`.trim();
           const pid = S._playersByName[normName(fullName)];
@@ -3081,13 +3081,13 @@ async function selectEspnDraft(espnId) {
 // payload already fetched by the caller (selectEspnDraft or syncEspnPicks).
 // Reading who's picked off team rosters (rather than the picks[] array's
 // player nesting, which is less consistently shaped) reuses the same
-// entry.playerPoolEntry.playerPoolEntry.player path already verified for
-// Rostership's ESPN support.
+// entry.playerPoolEntry(.playerPoolEntry)?.player path Rostership uses — the
+// mRoster view nests it one level shallower than mDraftDetail, so try both.
 function applyEspnRosterPicks(d) {
   const picked = new Set();
   for (const team of (d.teams || [])) {
     for (const entry of (team.roster?.entries || [])) {
-      const pData = entry.playerPoolEntry?.playerPoolEntry?.player;
+      const pData = entry.playerPoolEntry?.playerPoolEntry?.player || entry.playerPoolEntry?.player;
       if (!pData) continue;
       const fullName = pData.fullName || `${pData.firstName || ''} ${pData.lastName || ''}`.trim();
       const sid = S._playersByName[normName(fullName)];
@@ -3943,7 +3943,7 @@ function rsBuildRows() {
     if (myRoster._isEspn) {
       // ESPN league: resolve players by name lookup into Sleeper player data
       for (const entry of (myRoster._espnEntries || [])) {
-        const pData    = entry.playerPoolEntry?.playerPoolEntry?.player;
+        const pData    = entry.playerPoolEntry?.playerPoolEntry?.player || entry.playerPoolEntry?.player;
         if (!pData) continue;
         const fullName = pData.fullName || `${pData.firstName || ''} ${pData.lastName || ''}`.trim();
         const espnPos  = ESPN_POS_MAP[pData.defaultPositionId];
