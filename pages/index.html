@@ -406,6 +406,7 @@ a.row-link.ls-contender-name { color: var(--gold-light); font-weight: 700; }
         <div class="tab-group-dropdown">
           <button class="tab-btn" id="tab-trades"   onclick="sw('trades')">Open Trades</button>
           <button class="tab-btn" id="tab-partners" onclick="sw('partners')">Trade Partners</button>
+          <button class="tab-btn" id="tab-scout"    onclick="sw('scout')">Scout</button>
           <a class="tab-btn" href="/trade-analyzer" style="text-decoration:none;">Trade Analyzer</a>
         </div>
       </div>
@@ -788,7 +789,7 @@ const TAB_GROUP_MAP = {
   home: 'grp-home',
   leagues: 'grp-my-leagues', rostership: 'grp-my-leagues',
   lineups: 'grp-my-leagues', player: 'grp-my-leagues', waivers: 'grp-my-leagues',
-  trades: 'grp-trades', partners: 'grp-trades',
+  trades: 'grp-trades', partners: 'grp-trades', scout: 'grp-trades',
   drafts: 'grp-drafts', tracker: 'grp-drafts',
 };
 function toggleGrp(id) {
@@ -815,7 +816,7 @@ function sw(tab) {
 }
 function render(tab) {
   if (!S.userId && tab !== 'partners' && tab !== 'home') { setC('<div class="empty-state"><p>Enter your username above to get started</p></div>'); return; }
-  ({ home: renderHome, leagues: renderLeagueSummaries, trades: renderTrades, player: renderPlayerSearch, lineups: renderLineupCheck, drafts: renderDraftQueue, tracker: renderDraftTracker, rostership: renderRostership, partners: renderTradePartners, waivers: renderWaivers })[tab]?.();
+  ({ home: renderHome, leagues: renderLeagueSummaries, trades: renderTrades, player: renderPlayerSearch, lineups: renderLineupCheck, drafts: renderDraftQueue, tracker: renderDraftTracker, rostership: renderRostership, partners: renderTradePartners, waivers: renderWaivers, scout: renderScout })[tab]?.();
 }
 function setC(html) { document.getElementById('content').innerHTML = html; }
 
@@ -4386,9 +4387,10 @@ async function lsLoadData() {
         return pfB - pfA;
       });
       const standing = sorted.findIndex(r => r.roster_id === mine.roster_id) + 1;
-      const rosterPlayers = {}, rosterStats = {};
+      const rosterPlayers = {}, rosterStats = {}, rosterOwners = {};
       for (const r of rosters) {
         rosterPlayers[r.roster_id] = r.players || [];
+        rosterOwners[r.roster_id]  = r.owner_id || null;
         rosterStats[r.roster_id]   = {
           wins: r.settings?.wins  || 0,
           fpts: (r.settings?.fpts || 0) + (r.settings?.fpts_decimal || 0) / 100,
@@ -4400,7 +4402,7 @@ async function lsLoadData() {
         losses: mine.settings?.losses || 0,
         myRosterId: mine.roster_id,
         apWins: null, apLosses: null,
-        rosterPlayers, rosterStats,
+        rosterPlayers, rosterStats, rosterOwners,
       };
     } catch(_) {}
   }));
@@ -4610,6 +4612,18 @@ function lsRunSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, pl
   return { odds, top2 };
 }
 
+// Season-over fallback: rank every roster by wins → points-for and mark the top
+// `playoffTeams` as 100% (the rest 0%). Same shape lsRunSimulation's odds map
+// has, so the Scout tab can classify teams without a live simulation.
+function lsFinalStandingsOdds(d) {
+  const ranked = Object.entries(d.rosterStats || {})
+    .map(([rid, s]) => ({ rid: Number(rid), wins: s.wins || 0, fpts: s.fpts || 0 }))
+    .sort((a, b) => (b.wins - a.wins) || (b.fpts - a.fpts));
+  const out = {};
+  ranked.forEach((t, i) => { out[t.rid] = i < d.playoffTeams ? 1 : 0; });
+  return out;
+}
+
 // Regular-season-length lookup shared by lsRestoreOddsCache/lsSimulateAllLeagues —
 // Sleeper: detail.settings.playoff_week_start - 1. ESPN: settings.scheduleSettings.
 // matchupPeriodCount is already the regular-season week count directly (no -1).
@@ -4633,6 +4647,7 @@ function lsRestoreOddsCache() {
       if (cached && Date.now() - cached.ts < 24 * 3600 * 1000) {
         d.playoffOdds = cached.odds;
         d.top2Odds    = cached.top2Odds;
+        if (cached.allOdds) { d.allPlayoffOdds = cached.allOdds; d.allTop2Odds = cached.allTop2 || null; }
         anyRestored = true;
       }
     } catch (_) {}
@@ -4690,9 +4705,13 @@ async function lsSimulateAllLeagues() {
         const cacheKey = `ls_odds_${lgId}_${nflSeason}_w${regularSeasonWeeks}`;
         try {
           const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
-          if (cached && Date.now() - cached.ts < 24 * 3600 * 1000) {
-            d.playoffOdds = cached.odds;
-            d.top2Odds    = cached.top2Odds;
+          // Require cached.allOdds (per-roster map, added for the Scout tab) — an
+          // older cache without it is treated as a miss so it gets recomputed.
+          if (cached && Date.now() - cached.ts < 24 * 3600 * 1000 && cached.allOdds) {
+            d.playoffOdds     = cached.odds;
+            d.top2Odds        = cached.top2Odds;
+            d.allPlayoffOdds  = cached.allOdds;
+            d.allTop2Odds     = cached.allTop2 || null;
             return;
           }
         } catch (_) {}
@@ -4701,6 +4720,7 @@ async function lsSimulateAllLeagues() {
           // Season is over — standings are final
           d.playoffOdds = d.standing <= d.playoffTeams ? 1.0 : 0.0;
           d.top2Odds    = d.standing <= 2 ? 1.0 : 0.0;
+          d.allPlayoffOdds = lsFinalStandingsOdds(d);
           return;
         }
 
@@ -4755,11 +4775,16 @@ async function lsSimulateAllLeagues() {
         if (avgMu < 20) throw new Error('Projection data empty for this league');
 
         const { odds, top2 } = lsRunSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, d.playoffTeams);
-        d.playoffOdds = odds[d.myRosterId] ?? null;
-        d.top2Odds    = top2[d.myRosterId] ?? null;
+        d.playoffOdds    = odds[d.myRosterId] ?? null;
+        d.top2Odds       = top2[d.myRosterId] ?? null;
+        d.allPlayoffOdds = odds;   // {rosterId: frac} — every team, for the Scout tab
+        d.allTop2Odds    = top2;
 
         try {
-          localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), odds: d.playoffOdds, top2Odds: d.top2Odds }));
+          localStorage.setItem(cacheKey, JSON.stringify({
+            ts: Date.now(), odds: d.playoffOdds, top2Odds: d.top2Odds,
+            allOdds: odds, allTop2: top2,
+          }));
         } catch (_) {}
       } catch (e) {
         d.playoffOddsError = e.message;
@@ -5173,6 +5198,9 @@ function lsSort(col) {
 }
 
 function lsDrawTable() {
+  // lsSimulateAllLeagues() / the contender-score helpers redraw as they progress;
+  // when the Scout tab drives the simulation there is no Summaries table on screen.
+  if (S.tab !== 'leagues') return;
   const hasPrefs = S.leagues.some(lg => RS.prefs[lg.league_id] !== null);
   const cd = LS.contenderData;
   const crLoading = cd.mode === 'projections' && cd.loading;
@@ -5511,6 +5539,393 @@ async function tpSelectPlayer(pid) {
       </div>
     </div>`;
   } catch(e) { r.innerHTML = errHtml(e); }
+}
+
+// ── 9. Scout — cross-league trade-opportunity finder ──────────────────────────
+// Ask one question across every Sleeper league: "where's a rebuilding opponent
+// sitting on an aging top-N WR I could buy?" (or the mirror, for selling).
+// Reuses League Summaries' roster load + playoff-odds sim, and shared-utils'
+// crPlayerPpg for per-league positional projection ranks.
+
+const SCOUT_DEFAULT_SETTINGS = {
+  vetAge:     { QB: 30, RB: 27, WR: 28, TE: 29 },
+  contendPct: 40,   // playoff odds ≥ this % ⇒ contender
+  rebuildPct: 20,   // playoff odds ≤ this % ⇒ rebuilder
+};
+
+const SC = {
+  mode:     'buy',          // 'buy' | 'sell'
+  myStatus: 'contending',   // 'contending' | 'rebuilding'
+  pos:      'WR',           // QB | RB | WR | TE
+  topN:     36,             // 12 | 24 | 36 | 48
+  age:      'vet',          // 'young' | 'vet'
+  opp:      'either',       // 'rebuilder' | 'contender' | 'either'
+  settings: scoutLoadSettings(),
+  showSettings: false,
+  results:  null,           // [{lgId,name,myOdds,myClass,teams:[...],myPlayers:[...]}]
+  skipNote: '',
+  running:  false,
+  progress: '',
+  error:    null,
+  rosterMeta: {},           // {lgId: {rid: teamName}}
+};
+
+function scoutLoadSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem('scout_settings') || 'null');
+    if (s && s.vetAge) return { ...SCOUT_DEFAULT_SETTINGS, ...s, vetAge: { ...SCOUT_DEFAULT_SETTINGS.vetAge, ...s.vetAge } };
+  } catch (_) {}
+  return JSON.parse(JSON.stringify(SCOUT_DEFAULT_SETTINGS));
+}
+function scoutSaveSettings() {
+  try { localStorage.setItem('scout_settings', JSON.stringify(SC.settings)); } catch (_) {}
+}
+
+function scoutSet(key, val) { SC[key] = val; renderScout(); }
+function scoutToggleSettings() { SC.showSettings = !SC.showSettings; renderScout(); }
+
+function scoutSetVetAge(pos, val) {
+  const n = parseInt(val, 10);
+  if (!Number.isNaN(n) && n > 0) { SC.settings.vetAge[pos] = n; scoutSaveSettings(); }
+}
+function scoutSetThreshold(key, val) {
+  const n = parseInt(val, 10);
+  if (!Number.isNaN(n) && n >= 0 && n <= 100) { SC.settings[key] = n; scoutSaveSettings(); }
+}
+
+// playoff-odds fraction (0-1) → 'contender' | 'rebuilder' | 'middle'
+function scoutClassify(frac, lgId) {
+  const s = SC.settings;
+  if (frac != null && !Number.isNaN(frac)) {
+    if (frac * 100 >= s.contendPct) return 'contender';
+    if (frac * 100 <= s.rebuildPct) return 'rebuilder';
+    return 'middle';
+  }
+  const pref = RS.prefs?.[lgId];
+  if (pref) return pref.contender ? 'contender' : 'rebuilder';
+  return 'middle';
+}
+function scoutOppMatches(cls) {
+  if (cls === 'middle') return false;
+  if (SC.opp === 'either') return true;
+  return SC.opp === 'contender' ? cls === 'contender' : cls === 'rebuilder';
+}
+
+// age → 'young' | 'vet' | null (null = unknown age, excluded from matches)
+function scoutAgeBucket(pid, pos) {
+  const age = S.players[pid]?.age;
+  if (age == null) return null;
+  return age >= (SC.settings.vetAge[pos] ?? 99) ? 'vet' : 'young';
+}
+
+// Per-league positional projection ranks: {pid: {rank, ppg}} for QB/RB/WR/TE,
+// scored under this league's own scoring_settings. Mirrors analyzer.html's
+// buildGlobalPosRanks() using the shared crPlayerPpg().
+function scoutPosRanks(scoring, projCtx, mode) {
+  const ctx = { ...projCtx, mode, scoring: scoring || {}, players: S.players };
+  const byPos = { QB: [], RB: [], WR: [], TE: [] };
+  for (const [pid, p] of Object.entries(S.players)) {
+    const pos = (p.position || '').toUpperCase();
+    if (!byPos[pos]) continue;
+    const ppg = crPlayerPpg(pid, ctx);
+    if (!(ppg > 0)) continue;
+    byPos[pos].push({ pid, ppg });
+  }
+  const rank = {};
+  for (const pos of ['QB', 'RB', 'WR', 'TE']) {
+    byPos[pos].sort((a, b) => b.ppg - a.ppg);
+    byPos[pos].forEach((e, i) => { rank[e.pid] = { rank: i + 1, ppg: e.ppg }; });
+  }
+  return rank;
+}
+
+async function renderScout() {
+  if (!S.leagues.length) { setC('<div class="empty-state"><p>No leagues found for this user</p></div>'); return; }
+
+  const modeLbl = SC.mode === 'buy' ? 'looking to buy' : 'trying to sell';
+  const pill = (cur, val, txt, onclick) =>
+    `<button class="ls-mode-pill${cur === val ? ' active' : ''}" onclick="${onclick}">${txt}</button>`;
+
+  const grp = (label, html) => `
+    <div style="margin-bottom:14px;">
+      <div class="setup-label-rye" style="margin-bottom:6px;">${label}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">${html}</div>
+    </div>`;
+
+  const posGrp = grp(
+    SC.mode === 'buy' ? 'Position you want' : 'Position you’re selling',
+    ['QB', 'RB', 'WR', 'TE'].map(p => pill(SC.pos, p, p, `scoutSet('pos','${p}')`)).join('')
+  );
+  const topGrp = grp('Top in PPG projections',
+    [12, 24, 36, 48].map(n => pill(SC.topN, n, 'Top ' + n, `scoutSet('topN',${n})`)).join('')
+  );
+  const ageGrp = grp('Player age',
+    pill(SC.age, 'young', 'Young', "scoutSet('age','young')") +
+    pill(SC.age, 'vet', 'Veteran', "scoutSet('age','vet')")
+  );
+  const myGrp = grp('Your situation (which leagues to search)',
+    pill(SC.myStatus, 'contending', 'Contending', "scoutSet('myStatus','contending')") +
+    pill(SC.myStatus, 'rebuilding', 'Rebuilding', "scoutSet('myStatus','rebuilding')")
+  );
+  const oppGrp = grp(SC.mode === 'buy' ? 'From an opponent who is' : 'To an opponent who is',
+    pill(SC.opp, 'rebuilder', 'Rebuilder', "scoutSet('opp','rebuilder')") +
+    pill(SC.opp, 'contender', 'Contender', "scoutSet('opp','contender')") +
+    pill(SC.opp, 'either', 'Either', "scoutSet('opp','either')")
+  );
+
+  const subTabs = `
+    <div style="display:flex;gap:8px;margin-bottom:18px;">
+      <button class="ghost-btn${SC.mode === 'buy' ? ' active' : ''}" style="${SC.mode === 'buy' ? 'border-color:var(--gold);color:var(--gold);' : ''}" onclick="scoutSet('mode','buy')">Buying</button>
+      <button class="ghost-btn${SC.mode === 'sell' ? ' active' : ''}" style="${SC.mode === 'sell' ? 'border-color:var(--gold);color:var(--gold);' : ''}" onclick="scoutSet('mode','sell')">Selling</button>
+    </div>`;
+
+  const s = SC.settings;
+  const numInput = (val, oninput, w = 52) =>
+    `<input type="number" value="${val}" oninput="${oninput}" style="width:${w}px;background:rgba(255,255,255,0.06);border:1px solid var(--brown-mid);color:var(--cream);font-family:'Crimson Text',serif;font-size:0.9rem;padding:4px 6px;border-radius:2px;" />`;
+  const settingsPanel = SC.showSettings ? `
+    <div style="background:var(--brown-dark);border:1px solid var(--brown-mid);border-radius:2px;padding:14px 18px;margin-bottom:18px;">
+      <div class="setup-label-rye" style="margin-bottom:10px;">Veteran age cutoff (age ≥ value = veteran)</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;">
+        ${['QB', 'RB', 'WR', 'TE'].map(p => `<label style="font-family:'Crimson Text',serif;color:var(--parchment);font-size:0.9rem;">${p} ${numInput(s.vetAge[p], `scoutSetVetAge('${p}',this.value)`)}</label>`).join('')}
+      </div>
+      <div class="setup-label-rye" style="margin-bottom:10px;">Playoff-odds thresholds</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;">
+        <label style="font-family:'Crimson Text',serif;color:var(--parchment);font-size:0.9rem;">Contending ≥ ${numInput(s.contendPct, "scoutSetThreshold('contendPct',this.value)")}%</label>
+        <label style="font-family:'Crimson Text',serif;color:var(--parchment);font-size:0.9rem;">Rebuilding ≤ ${numInput(s.rebuildPct, "scoutSetThreshold('rebuildPct',this.value)")}%</label>
+      </div>
+      <div style="font-family:'Crimson Text',serif;font-style:italic;color:var(--brown-light);font-size:0.82rem;margin-top:10px;">Teams between the two thresholds count as neither and are skipped.</div>
+    </div>` : '';
+
+  const runBtn = SC.running
+    ? `<button class="setup-btn" disabled style="opacity:0.6;">Working…</button>`
+    : `<button class="setup-btn" onclick="scoutRun()">Run</button>`;
+
+  setC(`
+    <div class="section-head"><h2>Scout</h2><div class="section-head-line"></div></div>
+    <div style="font-family:'Crimson Text',serif;font-style:italic;color:var(--brown-light);font-size:0.9rem;margin-bottom:16px;">
+      Find leagues where you are <strong>${SC.myStatus}</strong> and, ${modeLbl}, there’s a
+      top-${SC.topN} ${SC.age === 'vet' ? 'veteran' : 'young'} ${SC.pos}
+      ${SC.mode === 'buy' ? 'on' : 'you could move to'} a ${SC.opp === 'either' ? 'rebuilding or contending' : SC.opp} opponent.
+    </div>
+    ${subTabs}
+    ${myGrp}${posGrp}${topGrp}${ageGrp}${oppGrp}
+    <div style="display:flex;gap:12px;align-items:center;margin:6px 0 4px;">
+      ${runBtn}
+      <button class="ghost-btn" onclick="scoutToggleSettings()">${SC.showSettings ? 'Hide' : 'Settings'}</button>
+      ${SC.progress ? `<span style="font-family:'Crimson Text',serif;font-style:italic;color:var(--brown-light);font-size:0.85rem;">${esc(SC.progress)}</span>` : ''}
+    </div>
+    ${settingsPanel}
+    ${SC.error ? errHtml(new Error(SC.error)) : ''}
+    <div id="scout-results" style="margin-top:18px;"></div>
+  `);
+  scoutDrawResults();
+}
+
+async function scoutRun() {
+  if (SC.running) return;
+  SC.running = true;
+  SC.error = null;
+  SC.progress = 'Loading leagues & rosters…';
+  renderScout();
+
+  try {
+    await getNflState();
+    if (!LS.loaded) {
+      if (RS.selectedLeagues === null) {
+        RS.selectedLeagues = new Set(S.leagues.map(lg => lg.league_id));
+        await rsLoadPrefs();
+      } else if (!Object.keys(RS.prefs).length) {
+        await rsLoadPrefs();
+      }
+      await Promise.all([lsLoadData(), loadPlayers()]);
+      LS.loaded = true;
+      lsRestoreOddsCache();
+    } else {
+      await loadPlayers();
+    }
+
+    // Playoff odds — run the shared sim if any Sleeper league still lacks a
+    // per-roster odds map (lsDrawTable is a no-op while this tab is active).
+    const needsOdds = S.leagues.some(lg =>
+      lg.source !== 'espn' && LS.leagueData[lg.league_id] && !LS.leagueData[lg.league_id].allPlayoffOdds
+    );
+    if (needsOdds) {
+      SC.progress = 'Simulating playoff odds — up to a minute the first time, instant afterward…';
+      renderScout();
+      await lsSimulateAllLeagues();
+    }
+
+    SC.progress = 'Ranking players by projection…';
+    renderScout();
+
+    const season = S.nflState?.season || String(new Date().getFullYear());
+    const projCtx = await crLoadProjectionData({
+      apiBase: IS_LOCAL ? 'https://helper.ffhistorian.com/api' : '/api',
+      season, authed: !!S.auth, byName: S._playersByName,
+    });
+    let mode = 'projections';
+    const anyProj = Object.keys(projCtx.clayMap).length || Object.keys(projCtx.sleeperProjMap).length || Object.keys(projCtx.userProjMap).length;
+    if (!anyProj) {
+      mode = 'adp';
+      projCtx.aggAdpMap = await crLoadAggregateAdp({
+        apiBase: IS_LOCAL ? 'https://helper.ffhistorian.com/api' : '/api',
+        byName: S._playersByName,
+      }).catch(() => ({}));
+    }
+
+    const results = [];
+    const ranksCache = {};   // stringified scoring_settings → pos-rank map (many leagues share a config)
+    let noOddsCount = 0, espnCount = 0;
+    for (const lg of S.leagues) {
+      if (lg.source === 'espn') { espnCount++; continue; }   // Sleeper only for v1
+      const d = LS.leagueData[lg.league_id];
+      if (!d || !d.rosterPlayers) continue;
+
+      const myOdds  = d.allPlayoffOdds?.[d.myRosterId];
+      if (myOdds == null && !RS.prefs?.[lg.league_id]) noOddsCount++;
+      const myClass = scoutClassify(myOdds, lg.league_id);
+      const want    = SC.myStatus === 'contending' ? 'contender' : 'rebuilder';
+      if (myClass !== want) continue;
+
+      const scoring = S.leagueDetails[lg.league_id]?.scoring_settings || {};
+      const ckey    = mode + '|' + JSON.stringify(scoring);
+      const ranks   = ranksCache[ckey] || (ranksCache[ckey] = scoutPosRanks(scoring, projCtx, mode));
+      const matchPlayer = pid => {
+        const r = ranks[pid];
+        return r && r.rank <= SC.topN && scoutAgeBucket(pid, SC.pos) === SC.age;
+      };
+      const mkPlayer = pid => ({
+        pid, name: S.players[pid]?.full_name || pid,
+        rank: ranks[pid].rank, ppg: ranks[pid].ppg,
+        age: S.players[pid]?.age ?? null, team: S.players[pid]?.team || 'FA',
+      });
+
+      const posOf = pid => (S.players[pid]?.position || '').toUpperCase();
+
+      if (SC.mode === 'buy') {
+        const teams = [];
+        for (const [ridStr, pids] of Object.entries(d.rosterPlayers)) {
+          const rid = Number(ridStr);
+          if (rid === d.myRosterId) continue;
+          const cls = scoutClassify(d.allPlayoffOdds?.[rid], lg.league_id);
+          if (!scoutOppMatches(cls)) continue;
+          const hits = (pids || []).filter(pid => posOf(pid) === SC.pos && matchPlayer(pid));
+          if (hits.length) teams.push({ rid, cls, odds: d.allPlayoffOdds?.[rid] ?? null, players: hits.map(mkPlayer) });
+        }
+        if (teams.length) results.push({ lgId: lg.league_id, name: lg.name || 'Unnamed', myOdds, myClass, teams, myPlayers: [] });
+      } else {
+        const mine = (d.rosterPlayers[d.myRosterId] || []).filter(pid => posOf(pid) === SC.pos && matchPlayer(pid));
+        if (!mine.length) continue;
+        const teams = [];
+        for (const [ridStr] of Object.entries(d.rosterPlayers)) {
+          const rid = Number(ridStr);
+          if (rid === d.myRosterId) continue;
+          const cls = scoutClassify(d.allPlayoffOdds?.[rid], lg.league_id);
+          if (!scoutOppMatches(cls)) continue;
+          teams.push({ rid, cls, odds: d.allPlayoffOdds?.[rid] ?? null, players: [] });
+        }
+        if (teams.length) results.push({ lgId: lg.league_id, name: lg.name || 'Unnamed', myOdds, myClass, teams, myPlayers: mine.map(mkPlayer) });
+      }
+    }
+
+    // Team names for just the leagues we're showing.
+    SC.progress = 'Fetching team names…';
+    renderScout();
+    await Promise.all(results.map(async res => {
+      if (SC.rosterMeta[res.lgId]) return;
+      try {
+        const users = await api('/league/' + res.lgId + '/users') || [];
+        const byUser = {};
+        for (const u of users) byUser[u.user_id] = u.metadata?.team_name || u.display_name || 'Team';
+        const owners = LS.leagueData[res.lgId]?.rosterOwners || {};
+        const map = {};
+        for (const [rid, oid] of Object.entries(owners)) map[rid] = byUser[oid] || ('Roster ' + rid);
+        SC.rosterMeta[res.lgId] = map;
+      } catch (_) { SC.rosterMeta[res.lgId] = {}; }
+    }));
+
+    SC.results = results;
+    SC.skipNote = [
+      noOddsCount ? `${noOddsCount} league${noOddsCount !== 1 ? 's' : ''} skipped (no playoff odds yet — set a Root For Me pref or wait for projections)` : '',
+      espnCount ? `${espnCount} ESPN league${espnCount !== 1 ? 's' : ''} not searched (Sleeper only for now)` : '',
+    ].filter(Boolean).join(' · ');
+    SC.progress = '';
+  } catch (e) {
+    SC.error = e.message || String(e);
+    console.error('[scout]', e);
+  }
+  SC.running = false;
+  renderScout();
+}
+
+function scoutClassBadge(cls, odds) {
+  const pct = odds != null ? Math.round(odds * 100) + '%' : '—';
+  if (cls === 'contender') return `<span class="badge badge-green">Contender ${pct}</span>`;
+  if (cls === 'rebuilder') return `<span class="badge badge-red">Rebuilder ${pct}</span>`;
+  return `<span class="badge badge-outline">Middle ${pct}</span>`;
+}
+
+function scoutPlayerLine(p) {
+  const bits = [`${SC.pos}${p.rank}`];
+  if (p.age != null) bits.push('age ' + p.age);
+  bits.push(p.team);
+  return `<span style="font-family:'Crimson Text',serif;color:var(--parchment);font-size:0.92rem;">
+    <strong>${esc(p.name)}</strong>
+    <span style="color:var(--brown-light);font-style:italic;"> — ${bits.join(' · ')}</span>
+  </span>`;
+}
+
+function scoutDrawResults() {
+  const el = document.getElementById('scout-results');
+  if (!el) return;
+  if (SC.running && !SC.results) { el.innerHTML = loading(SC.progress || 'Working…'); return; }
+  if (!SC.results) { el.innerHTML = ''; return; }
+  const skip = SC.skipNote
+    ? `<div style="font-family:'Crimson Text',serif;color:var(--brown-light);font-style:italic;font-size:0.8rem;margin-bottom:10px;">${esc(SC.skipNote)}</div>`
+    : '';
+  if (!SC.results.length) {
+    el.innerHTML = skip + '<div class="empty-state"><p>No leagues matched — try loosening the filters or adjusting the thresholds in Settings.</p></div>';
+    return;
+  }
+
+  const cards = SC.results.map(res => {
+    const names = SC.rosterMeta[res.lgId] || {};
+    const teamName = rid => names[rid] || ('Roster ' + rid);
+    const head = `
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+        <a href="/analyzer?league=${encodeURIComponent(res.lgId)}" class="card-link">${esc(res.name)}</a>
+        ${scoutClassBadge(res.myClass, res.myOdds)}
+      </div>`;
+
+    let body;
+    if (SC.mode === 'sell') {
+      const selling = res.myPlayers.map(p => scoutPlayerLine(p)).join('<br>');
+      body = `
+        <div class="sect">You could sell</div>
+        <div style="margin-bottom:10px;">${selling}</div>
+        <div class="sect">Buyers</div>
+        ${res.teams.map(t => `
+          <div class="data-row" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <span style="font-family:'Crimson Text',serif;color:var(--parchment);font-size:0.92rem;font-weight:600;">${esc(teamName(t.rid))}</span>
+            ${scoutClassBadge(t.cls, t.odds)}
+            <a class="ghost-btn" style="text-decoration:none;" href="/trade-analyzer?league=${encodeURIComponent(res.lgId)}&b=${t.rid}">Analyze ⇄</a>
+          </div>`).join('')}`;
+    } else {
+      body = res.teams.map(t => `
+        <div class="data-row" style="padding:8px 0;">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px;">
+            <span style="font-family:'Crimson Text',serif;color:var(--parchment);font-size:0.92rem;font-weight:600;">${esc(teamName(t.rid))}</span>
+            ${scoutClassBadge(t.cls, t.odds)}
+            <a class="ghost-btn" style="text-decoration:none;" href="/trade-analyzer?league=${encodeURIComponent(res.lgId)}&b=${t.rid}">Analyze ⇄</a>
+          </div>
+          <div>${t.players.map(p => scoutPlayerLine(p)).join('<br>')}</div>
+        </div>`).join('');
+    }
+
+    return `<div style="background:var(--brown-dark);border:1px solid var(--brown-mid);border-radius:2px;padding:14px 18px;margin-bottom:10px;">${head}${body}</div>`;
+  }).join('');
+
+  el.innerHTML = skip + `<div style="font-family:'Crimson Text',serif;color:var(--brown-light);font-style:italic;font-size:0.85rem;margin-bottom:10px;">${SC.results.length} league${SC.results.length !== 1 ? 's' : ''} matched</div>${cards}`;
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
