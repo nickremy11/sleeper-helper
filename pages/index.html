@@ -5542,8 +5542,12 @@ async function tpSelectPlayer(pid) {
 }
 
 // ── 9. Scout — cross-league trade-opportunity finder ──────────────────────────
-// Ask one question across every Sleeper league: "where's a rebuilding opponent
-// sitting on an aging top-N WR I could buy?" (or the mirror, for selling).
+// Ask one question across your leagues. Two formats:
+//   Dynasty  — "where's a rebuilding opponent sitting on an aging top-N WR I
+//              could buy?" (top-N positional rank + young/veteran age bucket)
+//   Redraft  — "which opponents are stacked at a position?" (≥K players inside
+//              the top-N PPG at that position — a depth surplus to buy from / a
+//              surplus of my own to sell)
 // Reuses League Summaries' roster load + playoff-odds sim, and shared-utils'
 // crPlayerPpg for per-league positional projection ranks.
 
@@ -5551,17 +5555,26 @@ const SCOUT_DEFAULT_SETTINGS = {
   vetAge:     { QB: 30, RB: 27, WR: 28, TE: 29 },
   contendPct: 40,   // playoff odds ≥ this % ⇒ contender
   rebuildPct: 20,   // playoff odds ≤ this % ⇒ rebuilder
+  // Redraft "positional surplus": a team needs ≥ count players inside top rank.
+  redraft: {
+    QB: { rank: 10, count: 2 },
+    RB: { rank: 24, count: 3 },
+    WR: { rank: 30, count: 4 },
+    TE: { rank: 10, count: 2 },
+  },
 };
 
 const SC = {
+  format:   'dynasty',      // 'dynasty' | 'redraft'
   mode:     'buy',          // 'buy' | 'sell'
   myStatus: 'contending',   // 'contending' | 'rebuilding'
   pos:      'WR',           // QB | RB | WR | TE
-  topN:     36,             // 12 | 24 | 36 | 48
-  age:      'vet',          // 'young' | 'vet'
+  topN:     36,             // 12 | 24 | 36 | 48  (dynasty only)
+  age:      'vet',          // 'young' | 'vet'    (dynasty only)
   opp:      'either',       // 'rebuilder' | 'contender' | 'either'
   settings: scoutLoadSettings(),
   showSettings: false,
+  projMode: 'projections', // 'projections' | 'adp' — set by scoutRun, drives the PPG display
   results:  null,           // [{lgId,name,myOdds,myClass,teams:[...],myPlayers:[...]}]
   skipNote: '',
   running:  false,
@@ -5573,7 +5586,16 @@ const SC = {
 function scoutLoadSettings() {
   try {
     const s = JSON.parse(localStorage.getItem('scout_settings') || 'null');
-    if (s && s.vetAge) return { ...SCOUT_DEFAULT_SETTINGS, ...s, vetAge: { ...SCOUT_DEFAULT_SETTINGS.vetAge, ...s.vetAge } };
+    if (s && s.vetAge) return {
+      ...SCOUT_DEFAULT_SETTINGS, ...s,
+      vetAge:  { ...SCOUT_DEFAULT_SETTINGS.vetAge, ...s.vetAge },
+      redraft: {
+        QB: { ...SCOUT_DEFAULT_SETTINGS.redraft.QB, ...s.redraft?.QB },
+        RB: { ...SCOUT_DEFAULT_SETTINGS.redraft.RB, ...s.redraft?.RB },
+        WR: { ...SCOUT_DEFAULT_SETTINGS.redraft.WR, ...s.redraft?.WR },
+        TE: { ...SCOUT_DEFAULT_SETTINGS.redraft.TE, ...s.redraft?.TE },
+      },
+    };
   } catch (_) {}
   return JSON.parse(JSON.stringify(SCOUT_DEFAULT_SETTINGS));
 }
@@ -5591,6 +5613,15 @@ function scoutSetVetAge(pos, val) {
 function scoutSetThreshold(key, val) {
   const n = parseInt(val, 10);
   if (!Number.isNaN(n) && n >= 0 && n <= 100) { SC.settings[key] = n; scoutSaveSettings(); }
+}
+function scoutSetRedraft(pos, field, val) {
+  const n = parseInt(val, 10);
+  if (!Number.isNaN(n) && n > 0) { SC.settings.redraft[pos][field] = n; scoutSaveSettings(); }
+}
+
+// Sleeper league type 2 = dynasty/keeper; everything else (redraft, best-ball) = redraft.
+function scoutLeagueFormat(lgId) {
+  return S.leagueDetails[lgId]?.settings?.type === 2 ? 'dynasty' : 'redraft';
 }
 
 // playoff-odds fraction (0-1) → 'contender' | 'rebuilder' | 'middle'
@@ -5673,6 +5704,12 @@ async function renderScout() {
     pill(SC.opp, 'either', 'Either', "scoutSet('opp','either')")
   );
 
+  const rd = SC.settings.redraft[SC.pos];
+  const formatTabs = `
+    <div style="display:flex;gap:8px;margin-bottom:14px;">
+      <button class="ghost-btn${SC.format === 'dynasty' ? ' active' : ''}" style="${SC.format === 'dynasty' ? 'border-color:var(--gold);color:var(--gold);' : ''}" onclick="scoutSet('format','dynasty')">Dynasty</button>
+      <button class="ghost-btn${SC.format === 'redraft' ? ' active' : ''}" style="${SC.format === 'redraft' ? 'border-color:var(--gold);color:var(--gold);' : ''}" onclick="scoutSet('format','redraft')">Redraft</button>
+    </div>`;
   const subTabs = `
     <div style="display:flex;gap:8px;margin-bottom:18px;">
       <button class="ghost-btn${SC.mode === 'buy' ? ' active' : ''}" style="${SC.mode === 'buy' ? 'border-color:var(--gold);color:var(--gold);' : ''}" onclick="scoutSet('mode','buy')">Buying</button>
@@ -5682,12 +5719,20 @@ async function renderScout() {
   const s = SC.settings;
   const numInput = (val, oninput, w = 52) =>
     `<input type="number" value="${val}" oninput="${oninput}" style="width:${w}px;background:rgba(255,255,255,0.06);border:1px solid var(--brown-mid);color:var(--cream);font-family:'Crimson Text',serif;font-size:0.9rem;padding:4px 6px;border-radius:2px;" />`;
-  const settingsPanel = SC.showSettings ? `
-    <div style="background:var(--brown-dark);border:1px solid var(--brown-mid);border-radius:2px;padding:14px 18px;margin-bottom:18px;">
-      <div class="setup-label-rye" style="margin-bottom:10px;">Veteran age cutoff (age ≥ value = veteran)</div>
+
+  const dynSettings = `
+      <div class="setup-label-rye" style="margin-bottom:10px;">Dynasty — veteran age cutoff (age ≥ value = veteran)</div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;">
         ${['QB', 'RB', 'WR', 'TE'].map(p => `<label style="font-family:'Crimson Text',serif;color:var(--parchment);font-size:0.9rem;">${p} ${numInput(s.vetAge[p], `scoutSetVetAge('${p}',this.value)`)}</label>`).join('')}
-      </div>
+      </div>`;
+  const rdSettings = `
+      <div class="setup-label-rye" style="margin-bottom:10px;">Redraft — positional surplus (≥ count players inside top rank by PPG)</div>
+      <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:16px;">
+        ${['QB', 'RB', 'WR', 'TE'].map(p => `<label style="font-family:'Crimson Text',serif;color:var(--parchment);font-size:0.9rem;">${p}: ≥ ${numInput(s.redraft[p].count, `scoutSetRedraft('${p}','count',this.value)`, 44)} in top ${numInput(s.redraft[p].rank, `scoutSetRedraft('${p}','rank',this.value)`, 48)}</label>`).join('')}
+      </div>`;
+  const settingsPanel = SC.showSettings ? `
+    <div style="background:var(--brown-dark);border:1px solid var(--brown-mid);border-radius:2px;padding:14px 18px;margin-bottom:18px;">
+      ${dynSettings}${rdSettings}
       <div class="setup-label-rye" style="margin-bottom:10px;">Playoff-odds thresholds</div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;">
         <label style="font-family:'Crimson Text',serif;color:var(--parchment);font-size:0.9rem;">Contending ≥ ${numInput(s.contendPct, "scoutSetThreshold('contendPct',this.value)")}%</label>
@@ -5700,15 +5745,21 @@ async function renderScout() {
     ? `<button class="setup-btn" disabled style="opacity:0.6;">Working…</button>`
     : `<button class="setup-btn" onclick="scoutRun()">Run</button>`;
 
+  const summary = SC.format === 'dynasty'
+    ? `Find <strong>dynasty</strong> leagues where you are <strong>${SC.myStatus}</strong> and, ${modeLbl}, there’s a
+       top-${SC.topN} ${SC.age === 'vet' ? 'veteran' : 'young'} ${SC.pos}
+       ${SC.mode === 'buy' ? 'on' : 'you could move to'} a ${SC.opp === 'either' ? 'rebuilding or contending' : SC.opp} opponent.`
+    : `Find <strong>redraft</strong> leagues where you are <strong>${SC.myStatus}</strong> and
+       ${SC.mode === 'buy'
+         ? `a ${SC.opp === 'either' ? 'rebuilding or contending' : SC.opp} opponent is stacked at ${SC.pos} (≥ ${rd.count} in the top ${rd.rank} PPG) — a surplus to buy from.`
+         : `you are stacked at ${SC.pos} (≥ ${rd.count} in the top ${rd.rank} PPG) and could sell to a ${SC.opp === 'either' ? 'rebuilding or contending' : SC.opp} opponent.`}`;
+
   setC(`
     <div class="section-head"><h2>Scout</h2><div class="section-head-line"></div></div>
-    <div style="font-family:'Crimson Text',serif;font-style:italic;color:var(--brown-light);font-size:0.9rem;margin-bottom:16px;">
-      Find leagues where you are <strong>${SC.myStatus}</strong> and, ${modeLbl}, there’s a
-      top-${SC.topN} ${SC.age === 'vet' ? 'veteran' : 'young'} ${SC.pos}
-      ${SC.mode === 'buy' ? 'on' : 'you could move to'} a ${SC.opp === 'either' ? 'rebuilding or contending' : SC.opp} opponent.
-    </div>
+    ${formatTabs}
+    <div style="font-family:'Crimson Text',serif;font-style:italic;color:var(--brown-light);font-size:0.9rem;margin-bottom:16px;">${summary}</div>
     ${subTabs}
-    ${myGrp}${posGrp}${topGrp}${ageGrp}${oppGrp}
+    ${myGrp}${posGrp}${SC.format === 'dynasty' ? topGrp + ageGrp : ''}${oppGrp}
     <div style="display:flex;gap:12px;align-items:center;margin:6px 0 4px;">
       ${runBtn}
       <button class="ghost-btn" onclick="scoutToggleSettings()">${SC.showSettings ? 'Hide' : 'Settings'}</button>
@@ -5744,6 +5795,13 @@ async function scoutRun() {
       await loadPlayers();
     }
 
+    // Ensure league_details (scoring + settings.type) are in for every Sleeper
+    // league — the initial load fires these off without awaiting, and Scout needs
+    // settings.type to tell dynasty from redraft.
+    await Promise.all(S.leagues
+      .filter(lg => lg.source !== 'espn' && !S.leagueDetails[lg.league_id])
+      .map(lg => api('/league/' + lg.league_id).then(dd => { if (dd) S.leagueDetails[lg.league_id] = dd; }).catch(() => {})));
+
     // Playoff odds — run the shared sim if any Sleeper league still lacks a
     // per-roster odds map (lsDrawTable is a no-op while this tab is active).
     const needsOdds = S.leagues.some(lg =>
@@ -5767,19 +5825,24 @@ async function scoutRun() {
     const anyProj = Object.keys(projCtx.clayMap).length || Object.keys(projCtx.sleeperProjMap).length || Object.keys(projCtx.userProjMap).length;
     if (!anyProj) {
       mode = 'adp';
+      SC.progress = 'Projections unavailable — ranking by ADP…';
+      renderScout();
       projCtx.aggAdpMap = await crLoadAggregateAdp({
         apiBase: IS_LOCAL ? 'https://helper.ffhistorian.com/api' : '/api',
         byName: S._playersByName,
       }).catch(() => ({}));
     }
 
+    SC.projMode = mode;
     const results = [];
     const ranksCache = {};   // stringified scoring_settings → pos-rank map (many leagues share a config)
-    let noOddsCount = 0, espnCount = 0;
+    let noOddsCount = 0, espnCount = 0, otherFormatCount = 0;
+    const rdCfg = SC.settings.redraft[SC.pos];   // redraft surplus config for the chosen position
     for (const lg of S.leagues) {
       if (lg.source === 'espn') { espnCount++; continue; }   // Sleeper only for v1
       const d = LS.leagueData[lg.league_id];
       if (!d || !d.rosterPlayers) continue;
+      if (scoutLeagueFormat(lg.league_id) !== SC.format) { otherFormatCount++; continue; }
 
       const myOdds  = d.allPlayoffOdds?.[d.myRosterId];
       if (myOdds == null && !RS.prefs?.[lg.league_id]) noOddsCount++;
@@ -5790,17 +5853,25 @@ async function scoutRun() {
       const scoring = S.leagueDetails[lg.league_id]?.scoring_settings || {};
       const ckey    = mode + '|' + JSON.stringify(scoring);
       const ranks   = ranksCache[ckey] || (ranksCache[ckey] = scoutPosRanks(scoring, projCtx, mode));
-      const matchPlayer = pid => {
-        const r = ranks[pid];
-        return r && r.rank <= SC.topN && scoutAgeBucket(pid, SC.pos) === SC.age;
-      };
+      const posOf   = pid => (S.players[pid]?.position || '').toUpperCase();
       const mkPlayer = pid => ({
         pid, name: S.players[pid]?.full_name || pid,
         rank: ranks[pid].rank, ppg: ranks[pid].ppg,
         age: S.players[pid]?.age ?? null, team: S.players[pid]?.team || 'FA',
       });
 
-      const posOf = pid => (S.players[pid]?.position || '').toUpperCase();
+      // Which of a roster's players at the chosen position count as a "hit".
+      // Dynasty: top-N rank + young/veteran age bucket. Redraft: inside top rank
+      // by PPG (the count threshold is applied per-team below).
+      const hitsFor = pids => (pids || []).filter(pid => {
+        if (posOf(pid) !== SC.pos) return false;
+        const r = ranks[pid];
+        if (!r) return false;
+        return SC.format === 'dynasty'
+          ? (r.rank <= SC.topN && scoutAgeBucket(pid, SC.pos) === SC.age)
+          : (r.rank <= rdCfg.rank);
+      });
+      const teamQualifies = hits => SC.format === 'dynasty' ? hits.length > 0 : hits.length >= rdCfg.count;
 
       if (SC.mode === 'buy') {
         const teams = [];
@@ -5809,13 +5880,13 @@ async function scoutRun() {
           if (rid === d.myRosterId) continue;
           const cls = scoutClassify(d.allPlayoffOdds?.[rid], lg.league_id);
           if (!scoutOppMatches(cls)) continue;
-          const hits = (pids || []).filter(pid => posOf(pid) === SC.pos && matchPlayer(pid));
-          if (hits.length) teams.push({ rid, cls, odds: d.allPlayoffOdds?.[rid] ?? null, players: hits.map(mkPlayer) });
+          const hits = hitsFor(pids);
+          if (teamQualifies(hits)) teams.push({ rid, cls, odds: d.allPlayoffOdds?.[rid] ?? null, players: hits.map(mkPlayer).sort((a, b) => a.rank - b.rank) });
         }
         if (teams.length) results.push({ lgId: lg.league_id, name: lg.name || 'Unnamed', myOdds, myClass, teams, myPlayers: [] });
       } else {
-        const mine = (d.rosterPlayers[d.myRosterId] || []).filter(pid => posOf(pid) === SC.pos && matchPlayer(pid));
-        if (!mine.length) continue;
+        const mine = hitsFor(d.rosterPlayers[d.myRosterId]);
+        if (!teamQualifies(mine)) continue;
         const teams = [];
         for (const [ridStr] of Object.entries(d.rosterPlayers)) {
           const rid = Number(ridStr);
@@ -5824,7 +5895,7 @@ async function scoutRun() {
           if (!scoutOppMatches(cls)) continue;
           teams.push({ rid, cls, odds: d.allPlayoffOdds?.[rid] ?? null, players: [] });
         }
-        if (teams.length) results.push({ lgId: lg.league_id, name: lg.name || 'Unnamed', myOdds, myClass, teams, myPlayers: mine.map(mkPlayer) });
+        if (teams.length) results.push({ lgId: lg.league_id, name: lg.name || 'Unnamed', myOdds, myClass, teams, myPlayers: mine.map(mkPlayer).sort((a, b) => a.rank - b.rank) });
       }
     }
 
@@ -5846,6 +5917,7 @@ async function scoutRun() {
 
     SC.results = results;
     SC.skipNote = [
+      otherFormatCount ? `${otherFormatCount} ${SC.format === 'dynasty' ? 'redraft' : 'dynasty'} league${otherFormatCount !== 1 ? 's' : ''} not searched (switch format above)` : '',
       noOddsCount ? `${noOddsCount} league${noOddsCount !== 1 ? 's' : ''} skipped (no playoff odds yet — set a Root For Me pref or wait for projections)` : '',
       espnCount ? `${espnCount} ESPN league${espnCount !== 1 ? 's' : ''} not searched (Sleeper only for now)` : '',
     ].filter(Boolean).join(' · ');
@@ -5867,7 +5939,8 @@ function scoutClassBadge(cls, odds) {
 
 function scoutPlayerLine(p) {
   const bits = [`${SC.pos}${p.rank}`];
-  if (p.age != null) bits.push('age ' + p.age);
+  if (SC.format === 'dynasty' && p.age != null) bits.push('age ' + p.age);
+  if (SC.projMode === 'projections' && p.ppg > 0) bits.push(p.ppg.toFixed(1) + ' PPG');
   bits.push(p.team);
   return `<span style="font-family:'Crimson Text',serif;color:var(--parchment);font-size:0.92rem;">
     <strong>${esc(p.name)}</strong>
@@ -5900,8 +5973,11 @@ function scoutDrawResults() {
     let body;
     if (SC.mode === 'sell') {
       const selling = res.myPlayers.map(p => scoutPlayerLine(p)).join('<br>');
+      const sellLbl = SC.format === 'redraft'
+        ? `Your ${SC.pos} surplus (${res.myPlayers.length})`
+        : 'You could sell';
       body = `
-        <div class="sect">You could sell</div>
+        <div class="sect">${sellLbl}</div>
         <div style="margin-bottom:10px;">${selling}</div>
         <div class="sect">Buyers</div>
         ${res.teams.map(t => `
@@ -5916,6 +5992,7 @@ function scoutDrawResults() {
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px;">
             <span style="font-family:'Crimson Text',serif;color:var(--parchment);font-size:0.92rem;font-weight:600;">${esc(teamName(t.rid))}</span>
             ${scoutClassBadge(t.cls, t.odds)}
+            ${SC.format === 'redraft' ? `<span class="badge badge-outline">${t.players.length} ${SC.pos} surplus</span>` : ''}
             <a class="ghost-btn" style="text-decoration:none;" href="/trade-analyzer?league=${encodeURIComponent(res.lgId)}&b=${t.rid}">Analyze ⇄</a>
           </div>
           <div>${t.players.map(p => scoutPlayerLine(p)).join('<br>')}</div>
