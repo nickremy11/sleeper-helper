@@ -296,6 +296,48 @@ function parseCsvLine(line) {
 // Sleeper → ESPN abbreviation overrides for teams that differ between the two
 const ESPN_TO_SLEEPER = { WSH: 'WAS' };
 
+// ESPN's WAF blocks unrecognized User-Agents outright (a custom
+// "sleeper-helper/1.0" UA started returning 403 — as does an empty UA, and,
+// oddly, a spoofed browser one). Known-client UAs are let through, so send a
+// plain curl UA. Confirmed by probe: curl/*, okhttp/*, python-requests/*,
+// Go-http-client/* all 200; sleeper-helper/1.0, node-fetch/1.0, Mozilla/* 403.
+const ESPN_UA = 'curl/8.7.1';
+
+// Both ESPN routes below need the same week's scoreboard events, so fetch them
+// once here with a fallback source. site.api is the primary; cdn.espn.com's
+// core scoreboard serves the identical event objects under content.sbData and
+// sits behind different edge rules, so it covers us if site.api blocks again.
+async function fetchEspnEvents(week, season) {
+  const sources = [
+    {
+      name: 'site.api',
+      url: `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?week=${week}&seasontype=2&dates=${season}`,
+      pick: d => d?.events,
+    },
+    {
+      name: 'cdn.espn',
+      url: `https://cdn.espn.com/core/nfl/scoreboard?xhr=1&week=${week}&year=${season}&seasontype=2`,
+      pick: d => d?.content?.sbData?.events,
+    },
+  ];
+
+  const problems = [];
+  for (const src of sources) {
+    try {
+      const res = await fetch(src.url, {
+        headers: { 'User-Agent': ESPN_UA, 'Accept': 'application/json' },
+      });
+      if (!res.ok) { problems.push(`${src.name} ${res.status}`); continue; }
+      const events = src.pick(await res.json());
+      if (Array.isArray(events) && events.length) return { events };
+      problems.push(`${src.name} empty`);
+    } catch (err) {
+      problems.push(`${src.name} ${err.message}`);
+    }
+  }
+  return { events: null, error: problems.join('; ') };
+}
+
 async function handleESPNScoreboard(request, env, url) {
   const week   = url.searchParams.get('week')   || '1';
   const season = url.searchParams.get('season') || '2025';
@@ -306,17 +348,14 @@ async function handleESPNScoreboard(request, env, url) {
     return jsonRes(cached.value, { 'X-Cache': 'HIT' });
   }
 
-  const espnUrl = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?week=${week}&seasontype=2&dates=${season}`;
-  const upstream = await fetch(espnUrl, { headers: { 'User-Agent': 'sleeper-helper/1.0' } });
-  if (!upstream.ok) {
-    return new Response('ESPN upstream error', { status: 502, headers: CORS });
+  const { events, error } = await fetchEspnEvents(week, season);
+  if (!events) {
+    return new Response(`ESPN upstream error (${error})`, { status: 502, headers: CORS });
   }
-
-  const data = await upstream.json();
 
   // Reduce to { SLEEPER_ABBR: isoKickoffString } — all we need client-side
   const games = {};
-  for (const event of (data.events || [])) {
+  for (const event of events) {
     const kickoff = event.date; // ISO 8601 UTC
     for (const competition of (event.competitions || [])) {
       for (const competitor of (competition.competitors || [])) {
@@ -349,16 +388,14 @@ async function handleESPNGames(request, env, url) {
     return jsonRes(cached.value, { 'X-Cache': 'HIT' });
   }
 
-  const espnUrl = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?week=${week}&seasontype=2&dates=${season}`;
-  const upstream = await fetch(espnUrl, { headers: { 'User-Agent': 'sleeper-helper/1.0' } });
-  if (!upstream.ok) {
-    return new Response('ESPN upstream error', { status: 502, headers: CORS });
+  const { events, error } = await fetchEspnEvents(week, season);
+  if (!events) {
+    return new Response(`ESPN upstream error (${error})`, { status: 502, headers: CORS });
   }
 
-  const data  = await upstream.json();
   const games = [];
 
-  for (const event of (data.events || [])) {
+  for (const event of events) {
     const kickoff = event.date;
     for (const competition of (event.competitions || [])) {
       const teams = (competition.competitors || []).map(c => {
