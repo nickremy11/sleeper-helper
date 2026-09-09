@@ -220,6 +220,42 @@ footer a:hover { color: var(--gold); }
 .diff-arrow { color: var(--brown-light); margin: 0 4px; flex-shrink: 0; }
 .diff-proj { color: var(--brown-light); font-style: italic; font-size: 0.82rem; }
 
+/* ── FIELD GUIDE ── */
+/* Ledger rows: slug gutter, name + one line, platform tags. */
+.gd-lede { font-size: 1.02rem; color: var(--brown-mid); max-width: 34rem;
+           border-left: 3px solid var(--gold); padding-left: 14px; margin-bottom: 28px; }
+.gd-note { font-style: italic; color: var(--brown-light); font-size: 0.9rem; margin: -14px 0 6px; }
+.gd-sec + .gd-sec { margin-top: 34px; }
+.gd-row { display: grid; grid-template-columns: 9.5rem minmax(0,1fr) auto; gap: 4px 18px;
+          align-items: baseline; padding: 13px 0; border-bottom: 1px solid rgba(92,61,30,0.28); }
+.gd-row:first-of-type { border-top: 1px solid rgba(92,61,30,0.28); }
+.gd-slug { font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.12em;
+           text-transform: uppercase; color: var(--brown-light); line-height: 1.7; word-break: break-word; }
+.gd-name { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 1.08rem;
+           color: var(--brown-dark); line-height: 1.25; background: none; border: none; padding: 0;
+           text-align: left; cursor: pointer; text-decoration: none; display: inline-block; }
+.gd-name:hover, .gd-name:focus-visible { color: var(--brown-light); text-decoration: underline; }
+.gd-desc { color: var(--ink); max-width: 46ch; margin-top: 2px; }
+.gd-tags { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.gd-tag { font-family: 'Rye', serif; font-size: 0.44rem; letter-spacing: 0.12em; text-transform: uppercase;
+          padding: 3px 7px; border-radius: 2px; white-space: nowrap; line-height: 1.4; }
+.gd-tag-espn  { color: var(--brown-dark); background: var(--parchment); border: 1px solid var(--brown-light); }
+.gd-tag-write { color: var(--cream); background: var(--green); border: 1px solid var(--green); }
+.gd-legend { margin-top: 34px; background: var(--brown-dark); border: 2px solid var(--brown-mid);
+             box-shadow: 4px 4px 0 var(--brown-mid); border-radius: 2px; padding: 18px 22px; }
+.gd-legend h3 { font-family: 'Rye', serif; font-size: 0.55rem; letter-spacing: 0.22em;
+                text-transform: uppercase; color: var(--gold); margin-bottom: 12px; }
+.gd-legend dl { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 9px 14px; align-items: baseline; }
+.gd-legend dd { color: var(--parchment); font-size: 0.95rem; }
+.gd-legend-foot { margin-top: 13px; padding-top: 12px; border-top: 1px solid var(--brown-mid);
+                  color: var(--parchment); font-style: italic; font-size: 0.9rem; opacity: 0.85; }
+@media (max-width: 640px) {
+  .gd-row { grid-template-columns: minmax(0,1fr); gap: 3px; }
+  .gd-slug { order: -1; line-height: 1.4; }
+  .gd-tags { justify-content: flex-start; margin-top: 5px; }
+  .gd-legend dl { grid-template-columns: minmax(0,1fr); }
+}
+
 /* ── WEEKLY RANKS GRID ── */
 /* The grid is seven independent ranked lists side by side, not a table: the
    blocks have different lengths (FLEX runs to 100 while QB stops at 25), so each
@@ -415,6 +451,9 @@ a.row-link.ls-contender-name { color: var(--gold-light); font-weight: 700; }
     <div class="tab-bar-inner">
       <div class="tab-group active" id="grp-home">
         <button class="tab-group-btn tab-btn active" id="tab-home" onclick="sw('home')">Home</button>
+      </div>
+      <div class="tab-group" id="grp-guide">
+        <button class="tab-group-btn tab-btn" id="tab-guide" onclick="sw('guide')">Guide</button>
       </div>
       <div class="tab-group" id="grp-my-leagues">
         <button class="tab-group-btn" onclick="toggleGrp('grp-my-leagues')">My Leagues <span class="tab-group-arrow">▾</span></button>
@@ -827,7 +866,7 @@ async function loadOneEspnLeague(leagueId, season) {
 }
 
 const TAB_GROUP_MAP = {
-  home: 'grp-home',
+  home: 'grp-home', guide: 'grp-guide',
   leagues: 'grp-my-leagues', rostership: 'grp-my-leagues',
   lineups: 'grp-my-leagues', player: 'grp-my-leagues', waivers: 'grp-my-leagues',
   ranksgrid: 'grp-my-leagues',
@@ -859,9 +898,9 @@ function sw(tab) {
   render(tab);
 }
 function render(tab) {
-  if (!S.userId && tab !== 'partners' && tab !== 'home') { setC('<div class="empty-state"><p>Enter your username above to get started</p></div>'); return; }
+  if (!S.userId && tab !== 'partners' && tab !== 'home' && tab !== 'guide') { setC('<div class="empty-state"><p>Enter your username above to get started</p></div>'); return; }
   ({ home: renderHome, leagues: renderLeagueSummaries, trades: renderTrades, player: renderPlayerSearch, lineups: renderLineupCheck, drafts: renderDraftQueue, tracker: renderDraftTracker, rostership: renderRostership, partners: renderTradePartners, waivers: renderWaivers, scout: renderScout,
-    ranksgrid: renderRanksGrid })[tab]?.();
+    ranksgrid: renderRanksGrid, guide: renderGuide })[tab]?.();
 }
 function setC(html) { document.getElementById('content').innerHTML = html; }
 
@@ -2738,9 +2777,9 @@ function lsRenderLineupCards() {
 // lineup, red where he's rostered but doesn't. Which lineup "starting" means is
 // the mode toggle — the point is to flip between ranks and projections and see
 // where the two disagree.
-const RG = { leagueIdx: 0, mode: 'ranks' };            // mode: ranks | projections | current
+const RG = { leagueIdx: 0, mode: 'current' };          // mode: current | ranks | projections
 const RG_COLS = [['QB','QB'], ['RB','RB'], ['WR','WR'], ['TE','TE'], ['FLEX','FLEX'], ['DEF','D'], ['K','K']];
-const RG_MODES = [['ranks','Ranked optimal'], ['projections','Projection optimal'], ['current','Current lineup']];
+const RG_MODES = [['current','Current lineup'], ['ranks','Ranked optimal'], ['projections','Projection optimal']];
 
 async function renderRanksGrid(force = false) {
   if (force || !lsCacheFresh()) setC(loading('Loading ranks grid'));
@@ -2831,6 +2870,94 @@ function rgDraw() {
   }).join('')}</div>`;
 
   setC(`<div>${head}${controls}${grid}</div>`);
+}
+
+// ── 4c. Field Guide ──────────────────────────────────────────────────────────
+// A one-line index of everything on the site. Data-driven rather than 17 blocks
+// of markup so it stays in step with the nav — and because every entry doubles
+// as a link, the guide works as navigation, not just documentation.
+//   tab:  switches to that dashboard tab      href: a standalone page
+//   espn: has a real ESPN code path (not just Sleeper)
+//   write: writes back to Sleeper — the Lineup Checker is the only one
+const GUIDE = [
+  { title: 'In the dashboard', note: 'Tabs across the top of this app.', items: [
+    { name:'League Summaries', tab:'leagues',    espn:true,
+      desc:'Standings, record, all-play record and simulated playoff odds for every league on one screen.' },
+    { name:'Rostership',       tab:'rostership', espn:true,
+      desc:'How many of your leagues each player is on, so you can see your real exposure at a glance.' },
+    { name:'Lineup Checker',   tab:'lineups',    espn:true, write:true,
+      desc:'Flags empty slots and hurt starters everywhere, builds the best lineup, and sets it in Sleeper in one click.' },
+    { name:'Weekly Ranks Grid',tab:'ranksgrid',  espn:true,
+      desc:"Your own ranking sheet as seven position columns, with one league's roster painted on it — green starting, red benched." },
+    { name:'Player Finder',    tab:'player',
+      desc:'Look up any player for his dynasty value and every roster in your leagues he sits on.' },
+    { name:'Waivers',          tab:'waivers',    espn:true,
+      desc:'The best free agents left across all your leagues, ranked by dynasty value or by weekly ranks you upload.' },
+    { name:'Open Trades',      tab:'trades',
+      desc:'Every pending trade offer across every league in one list, with real player names instead of ID numbers.' },
+    { name:'Trade Partners',   tab:'partners',
+      desc:"Type another manager's name and see every league you share with them." },
+    { name:'Scout',            tab:'scout',
+      desc:"Hunts for trade openings — where you're contending and someone's rebuilding, or who's stacked at a position." },
+    { name:'Draft Queue',      tab:'drafts',
+      desc:'Every draft you have running right now, and how many picks until your turn in each.' },
+    { name:'In-Draft Tracker', tab:'tracker',    espn:true,
+      desc:"A live board with ADP, tiers and your starred targets while you're on the clock." },
+  ]},
+  { title: 'Standalone tools', note: 'Their own pages — shareable links you can send to a leaguemate.', items: [
+    { name:'League Analyzer',      href:'/analyzer',        espn:true,
+      desc:'Every team in one league ranked by roster value, positional strength, draft capital and starter strength.' },
+    { name:'Trade Analyzer',       href:'/trade-analyzer',  espn:true,
+      desc:"Build a two- or three-team trade and see what it does to each roster's rank and playoff odds." },
+    { name:'Auction Draft Tracker',href:'/auction',         espn:true,
+      desc:'Live budgets, inflation and position scarcity while an auction runs, synced to the draft or tracked by hand.' },
+    { name:'Dispersal',            href:'/dispersal',
+      desc:'A shared realtime draft room for splitting up an abandoned dynasty roster.' },
+    { name:'Root For Me',          href:'/rootforme',       espn:true,
+      desc:"Which way to root in each NFL game, weighted by whether you're contending or rebuilding in each league." },
+    { name:'My Ranks',             href:'https://myranks.ffhistorian.com',
+      desc:'Your own player and pick tiers, kept in one place and shareable with other managers.' },
+    { name:'My Profile',           href:'/myprofile',
+      desc:'Your account, your Sleeper auth token and your ESPN league credentials.' },
+  ]},
+];
+
+function renderGuide() {
+  const count = GUIDE.reduce((n, sec) => n + sec.items.length, 0);
+  const tagEspn  = '<span class="gd-tag gd-tag-espn">ESPN</span>';
+  const tagWrite = '<span class="gd-tag gd-tag-write">Sets lineups</span>';
+
+  const rows = sec => sec.items.map(it => {
+    const target = it.tab
+      ? `<button class="gd-name" onclick="sw('${esc(it.tab)}')">${esc(it.name)}</button>`
+      : `<a class="gd-name" href="${esc(it.href)}">${esc(it.name)}</a>`;
+    const slug = it.tab ? esc(it.name) : esc(it.href.replace(/^https?:\/\//, ''));
+    return `<div class="gd-row">
+      <div class="gd-slug">${slug}</div>
+      <div>${target}<div class="gd-desc">${esc(it.desc)}</div></div>
+      <div class="gd-tags">${it.espn ? tagEspn : ''}${it.write ? tagWrite : ''}</div>
+    </div>`;
+  }).join('');
+
+  setC(`<div>
+    <div class="section-head"><h2>Field Guide</h2><div class="section-head-line"></div></div>
+    <p class="gd-lede">${count} tools for running a lot of fantasy teams at once. Everything here reads your live leagues — nothing is a mock-up or a spreadsheet you have to keep up by hand.</p>
+    ${GUIDE.map(sec => `<div class="gd-sec">
+      <div class="section-head" style="margin-bottom:14px;"><h2>${esc(sec.title)}</h2><div class="section-head-line"></div></div>
+      <p class="gd-note">${esc(sec.note)}</p>
+      ${rows(sec)}
+    </div>`).join('')}
+    <div class="gd-legend">
+      <h3>Reading the tags</h3>
+      <dl>
+        <dt>${tagEspn}</dt>
+        <dd>Works with your ESPN leagues as well as Sleeper. Untagged tools are Sleeper only.</dd>
+        <dt>${tagWrite}</dt>
+        <dd>Writes back to Sleeper. Everything else only ever reads. ESPN leagues are always read-only — you'll still set those lineups in ESPN.</dd>
+      </dl>
+      <div class="gd-legend-foot">Browsing works without an account. Signing in is what saves your settings and lets you connect ESPN leagues.</div>
+    </div>
+  </div>`);
 }
 
 // ── 5. Draft Queue ────────────────────────────────────────────────────────────

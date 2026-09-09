@@ -1,25 +1,56 @@
 # sleeper-helper
 
-Read-only Sleeper fantasy dashboard at [helper.ffhistorian.com](https://helper.ffhistorian.com).
+Fantasy football toolset at [helper.ffhistorian.com](https://helper.ffhistorian.com). Static
+single-page apps (no build step, no frameworks) backed by a Cloudflare Worker API. Works with
+**Sleeper** leagues throughout and **ESPN** leagues where noted.
 
 ## Features
 
-- **Trades** — pending trades across all your leagues with player names resolved
-- **Player finder** — search any player, see every roster they're on + injury status
-- **Lineup check** — scan all starting lineups for empty slots or injured starters
-- **Availability** — search a player and see which leagues they're a free agent in
-- **Draft queue** — active drafts with "X picks until your turn" + manual refresh
-- **League settings** — scoring, roster spots, IR/taxi, waiver type, and more
+### Main app (`/`)
+- **Guide** — a one-line index of every tool on the site, each entry linking to the thing it describes
+- **League Summaries** — standings, record, all-play record and simulated playoff odds for every league at once
+- **Rostership** — how many of your leagues each player is on, across Sleeper and ESPN, filterable by position, value, team and league type
+- **Lineup Checker** — flags empty slots and injured starters in every league, then builds the optimal lineup and writes it back to Sleeper in one click
+- **Weekly Ranks Grid** — your uploaded ranking sheet as seven position columns, with one league's roster painted onto it in green (starting) and red (benched)
+- **Player Finder** — search any player for dynasty value plus every roster they're on
+- **Waivers** — best available free agents across all leagues, by dynasty value or your own uploaded redraft ranks
+- **Open Trades** — every pending trade across your leagues, with player names resolved
+- **Trade Partners** — find which leagues you share with another manager
+- **Scout** — cross-league trade-opportunity finder: where you're contending and an opponent is rebuilding, or who's stacked at a position
+- **Draft Queue** — active drafts with "X picks until your turn"
+- **In-Draft Tracker** — live draft board with ADP comparison and targets, for Sleeper and ESPN snake drafts
+
+### Standalone tools
+- **League Analyzer** (`/analyzer`) — every team in a league ranked by roster value, positional strength, draft capital and starter strength
+- **Trade Analyzer** (`/trade-analyzer`) — build a 2- or 3-team trade and see the before/after effect on roster ranks and playoff odds
+- **Auction Draft Tracker** (`/auction`) — live budget, inflation and position scarcity for auction drafts, with ESPN/Sleeper sync or manual/CSV
+- **Dispersal** (`/dispersal`) — realtime shared snake draft room for dispersing dynasty rosters
+- **Root For Me** (`/rootforme`) — which NFL outcomes help you, based on your contender/rebuilder stance per league
+- **My Profile** (`/myprofile`) — account settings, Sleeper auth token, ESPN league credentials
+
+Accounts are optional for read-only browsing but required for ESPN leagues, saved preferences
+and stored tokens.
 
 ## Structure
 
 ```
 sleeper-helper/
-├── pages/
-│   └── index.html          ← full single-page app (static, no build step)
+├── pages/                  ← static, served by Cloudflare Pages (no build step)
+│   ├── index.html              ← main app (all tabs)
+│   ├── analyzer.html           ← League Analyzer
+│   ├── trade-analyzer.html     ← Trade Analyzer
+│   ├── auction.html            ← Auction Draft Tracker
+│   ├── dispersal.html          ← Dispersal draft rooms
+│   ├── rootforme.html          ← Root For Me
+│   ├── myprofile.html          ← account + ESPN settings
+│   ├── admin.html              ← Site Lead dashboard
+│   ├── shared-auth.js          ← auth chip + sign-in modal
+│   └── shared-utils.js         ← shared helpers + contender scoring
 ├── worker/
-│   ├── src/index.js        ← Cloudflare Worker (KV cache + Sleeper proxy)
-│   └── wrangler.toml       ← Worker config (fill in KV namespace IDs here)
+│   ├── src/index.js        ← Cloudflare Worker (API routes, KV cache, proxies)
+│   ├── src/auth.js         ← accounts, sessions, OTP email
+│   ├── src/dispersal.js    ← Durable Object for dispersal rooms
+│   └── schema.sql          ← D1 schema
 └── .github/workflows/
     └── deploy.yml          ← deploys Worker then Pages on push to main
 ```
