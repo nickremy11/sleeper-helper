@@ -1846,8 +1846,20 @@ const LU_FLEX_ELIG = {
   IDP_FLEX:   ['DL', 'LB', 'DB'],
 };
 
-function lsPlayerPts(pid, scoringSettings) {
-  return lsComputeProjPts(LU.proj[pid], scoringSettings || {});
+// The projection context for one fixture. ESPN leagues can carry ESPN's OWN
+// weekly projections (`_espnProj`), which arrive already scored with that
+// league's real settings; everything else scores Sleeper's stat line with the
+// league's scoring_settings. Passed around in place of the bare scoring object
+// so every consumer (lsSortKey, the diff rows, the swap panel) prices a player
+// the same way without any of them branching on ESPN.
+function lsPtsCtx(fix) {
+  return { scoring: fix?.scoringSettings || {}, espnProj: fix?._espnProj || null };
+}
+
+function lsPlayerPts(pid, pc) {
+  const own = pc?.espnProj?.[String(pid)];
+  if (typeof own === 'number') return own;
+  return lsComputeProjPts(LU.proj[pid], pc?.scoring || {});
 }
 
 // Positions the lineup optimizer understands. rsNormPos deliberately drops K and
@@ -1886,8 +1898,8 @@ function lsSlotKind(slot) {
 // Anyone the sheet doesn't cover lands in the last band ordered by projected
 // points: below every ranked player, but still sensibly ordered among themselves.
 // That last part is what quietly keeps IDP slots running on projections.
-function lsSortKey(pid, kind, ss, src) {
-  const pts = lsPlayerPts(pid, ss);
+function lsSortKey(pid, kind, pc, src) {
+  const pts = lsPlayerPts(pid, pc);
   if (src !== 'ranks') return [0, 0, -pts];
   const r = lsRankInfo(pid);
   if (r) {
@@ -2112,7 +2124,12 @@ function lsLoadRankings(week) {
   }
 }
 
-function lsHaveProj() { return !!(LU.proj && Object.keys(LU.proj).length); }
+// ESPN fixtures can carry their own projections even when Sleeper's weekly pull
+// came back empty, so either source counts as "we have projections".
+function lsHaveProj() {
+  if (LU.proj && Object.keys(LU.proj).length) return true;
+  return (LU.lineups || []).some(f => f?._espnProj);
+}
 
 // A Sleeper token is needed to WRITE a lineup — nothing else. Previewing an
 // optimal lineup, uploading a ranking sheet and the ranks grid are all read-only
@@ -2138,7 +2155,7 @@ function lsSlotElig(slot) {
 // below are identical either way.
 function lsBuildOptimalStarters(fix, src) {
   const slots = fix.rosterPositions;       // BN/IR/TAXI already removed, in order
-  const ss    = fix.scoringSettings || {};
+  const pc    = lsPtsCtx(fix);
 
   const excluded = fix.excluded || new Set();
   const startSet = new Set(fix.starters.map(String));
@@ -2173,7 +2190,7 @@ function lsBuildOptimalStarters(fix, src) {
     let best = null, bestKey = null;
     for (const p of pool) {
       if (used.has(p.pid) || !elig.includes(p.pos)) continue;
-      const k = lsSortKey(p.pid, kind, ss, src);
+      const k = lsSortKey(p.pid, kind, pc, src);
       if (!bestKey || lsCmpKey(k, bestKey) < 0) { best = p; bestKey = k; }
     }
     if (best) { used.add(best.pid); return best.pid; }
@@ -2236,11 +2253,11 @@ function lsBadInj(status) { return !!LS_BAD_INJ[String(status || '').toUpperCase
 
 // Per-league lineup health, used for the collapsed summary badge.
 function lsLineupStatus(fix) {
-  const ss   = fix.scoringSettings || {};
+  const pc   = lsPtsCtx(fix);
   const have = lsHaveProj();
   const prop = lsProposal(fix, 'projections') || fix.starters;
-  const cur  = have ? fix.starters.reduce((s, p) => s + lsPlayerPts(p, ss), 0) : null;
-  const opt  = have ? prop.reduce((s, p) => s + lsPlayerPts(p, ss), 0) : null;
+  const cur  = have ? fix.starters.reduce((s, p) => s + lsPlayerPts(p, pc), 0) : null;
+  const opt  = have ? prop.reduce((s, p) => s + lsPlayerPts(p, pc), 0) : null;
   const gain = have ? opt - cur : 0;
 
   const empty   = fix.starters.filter(p => !p || p === '0').length;
@@ -2281,10 +2298,10 @@ function lsSummaryMeta(fix, idx) {
 // Render the slot rows for a card. mode 'current' shows live starters with proj
 // points; mode 'diff' shows each change inline (strikethrough → replacement).
 function lsBodyRows(fix, mode) {
-  const ss   = fix.scoringSettings || {};
+  const pc   = lsPtsCtx(fix);
   const prop = (fix._shown && lsProposal(fix, fix._shown)) || fix.starters;
   const have = lsHaveProj();
-  const ptsCell = pid => `<span style="color:var(--brown-light);font-size:0.8rem;min-width:36px;text-align:right;flex-shrink:0;">${have ? lsPlayerPts(pid, ss).toFixed(1) : '–'}</span>`;
+  const ptsCell = pid => `<span style="color:var(--brown-light);font-size:0.8rem;min-width:36px;text-align:right;flex-shrink:0;">${have ? lsPlayerPts(pid, pc).toFixed(1) : '–'}</span>`;
 
   return fix.rosterPositions.map((slot, i) => {
     const cur = String(fix.starters[i] || '0');
@@ -2297,7 +2314,7 @@ function lsBodyRows(fix, mode) {
           <span style="color:var(--brown-light);"> → </span>
           <span style="color:#5fae5f;">${esc(lsPlayerName(pr))}</span>
         </span>
-        <span style="color:var(--brown-light);font-size:0.8rem;white-space:nowrap;flex-shrink:0;">${have ? lsPlayerPts(cur, ss).toFixed(1) : '–'} <span style="color:#5fae5f;">→ ${have ? lsPlayerPts(pr, ss).toFixed(1) : '–'}</span></span>
+        <span style="color:var(--brown-light);font-size:0.8rem;white-space:nowrap;flex-shrink:0;">${have ? lsPlayerPts(cur, pc).toFixed(1) : '–'} <span style="color:#5fae5f;">→ ${have ? lsPlayerPts(pr, pc).toFixed(1) : '–'}</span></span>
       </div>`;
     }
     const pid = mode === 'diff' ? pr : cur;
@@ -2328,9 +2345,9 @@ function optimizeLineup(idx, src) {
 
   fix._shown = src;
   const prop    = lsProposal(fix, src);
-  const ss      = fix.scoringSettings || {};
-  const cur     = fix.starters.reduce((t, p) => t + lsPlayerPts(p, ss), 0);
-  const opt     = prop.reduce((t, p) => t + lsPlayerPts(p, ss), 0);
+  const pc      = lsPtsCtx(fix);
+  const cur     = fix.starters.reduce((t, p) => t + lsPlayerPts(p, pc), 0);
+  const opt     = prop.reduce((t, p) => t + lsPlayerPts(p, pc), 0);
   const changed = prop.some((p, i) => String(p) !== String(fix.starters[i]));
   const label   = src === 'ranks' ? 'ranking sheet' : 'projections';
 
@@ -2530,7 +2547,7 @@ function lswCandidates(fix, slotIdx) {
   if (!elig) return [];
   const starting = new Set((fix.starters || []).map(String));
   const excluded = fix.excluded || new Set();
-  const ss   = fix.scoringSettings || {};
+  const pc   = lsPtsCtx(fix);
   const kind = lsSlotKind(slots[slotIdx]);
 
   const benchFor = eligList => (fix.players || []).map(String).filter(pid => {
@@ -2566,14 +2583,14 @@ function lswCandidates(fix, slotIdx) {
     if (!elig.includes(lsNormPos(p.position))) return;
     const openElig = lsSlotElig(slot);
     if (!openElig) return;
-    const promoteKey = lsSortKey(cur, kind, ss, 'ranks');
+    const promoteKey = lsSortKey(cur, kind, pc, 'ranks');
     benchFor(openElig).forEach(pid =>
       offer(pid, { pid: cur, fromIdx: j, slot }, [[slotIdx, cur], [j, pid]], promoteKey));
   });
 
   const out = Object.values(best).map(c => ({
     pid: c.pid, via: c.via, moves: c.moves,
-    pts: lsPlayerPts(c.pid, ss),
+    pts: lsPlayerPts(c.pid, pc),
     ranked: !!lsRankInfo(c.pid),
     // The slot this candidate actually lands in — the vacated flex on a hop, not
     // the injured player's slot.
@@ -2586,14 +2603,14 @@ function lswCandidates(fix, slotIdx) {
   // single-position list still sorts by that position's own rank, which is what
   // this did before hops existed.
   const mixed = new Set(out.map(c => lsNormPos(S.players[c.pid]?.position))).size > 1;
-  out.forEach(c => { c.mixed = mixed; c.rankKey = lswCandKey(c, mixed, ss); });
+  out.forEach(c => { c.mixed = mixed; c.rankKey = lswCandKey(c, mixed, pc); });
   return out.sort((a, b) => lsCmpKey(a.rankKey, b.rankKey) || b.pts - a.pts);
 }
 
-function lswCandKey(c, mixed, ss) {
+function lswCandKey(c, mixed, pc) {
   const r = lsRankInfo(c.pid);
   if (mixed) return (r && r.flexRank != null) ? [0, r.flexRank, 0] : [1, 0, -c.pts];
-  return lsSortKey(c.pid, c.landKind, ss, 'ranks');
+  return lsSortKey(c.pid, c.landKind, pc, 'ranks');
 }
 
 // The plan for a chosen replacement, recomputed against the CURRENT lineup rather
@@ -2820,7 +2837,7 @@ function lswCandRow(t, c, chosen) {
 
 function lswLeagueBlock(t) {
   const fix    = t.fix;
-  const ss     = fix.scoringSettings || {};
+  const pc     = lsPtsCtx(fix);
   const cands  = lswCandidates(fix, t.slotIdx);
   const pick   = LSW.picks[t.leagueId];
   const state  = LSW.done[t.leagueId];
@@ -2870,7 +2887,7 @@ function lswLeagueBlock(t) {
            <span style="color:#5fae5f;">${esc(lsPlayerName(into))}</span>
            ${lswRankLabel(into, fix.rosterPositions[k]) ? `<span style="color:var(--gold-light);font-size:0.65rem;"> ${esc(lswRankLabel(into, fix.rosterPositions[k]))}</span>` : ''}
          </span>
-         <span style="color:var(--brown-light);font-size:0.8rem;white-space:nowrap;flex-shrink:0;">${lsHaveProj() ? lsPlayerPts(fix.starters[k], ss).toFixed(1) : '–'} <span style="color:#5fae5f;">→ ${lsHaveProj() ? lsPlayerPts(into, ss).toFixed(1) : '–'}</span></span>
+         <span style="color:var(--brown-light);font-size:0.8rem;white-space:nowrap;flex-shrink:0;">${lsHaveProj() ? lsPlayerPts(fix.starters[k], pc).toFixed(1) : '–'} <span style="color:#5fae5f;">→ ${lsHaveProj() ? lsPlayerPts(into, pc).toFixed(1) : '–'}</span></span>
        </div>`).join('')
     : `<div style="padding:6px 12px;font-size:0.68rem;color:var(--brown-light);">${cands.length} eligible bench player${cands.length === 1 ? '' : 's'} — pick a replacement.</div>`;
 
@@ -3077,12 +3094,58 @@ const LU_ESPN_SLOT = {
   20:'BN', 21:'IR', 24:'IR',
 };
 
-// ESPN's scoring settings aren't in Sleeper's shape and mapping their statIds is
-// guesswork, so ESPN fixtures carry a generic PPR scoring. It only affects the
-// projected-points column and the ordering of players the sheet doesn't rank —
-// ranked players are ordered by the sheet, which needs no scoring at all.
+// Last-resort scoring for an ESPN league whose settings we couldn't parse. The
+// real path is crParseEspnScoring() below; this generic full-PPR table is only
+// reached when scoringItems comes back empty, and is wrong for any league that
+// isn't full PPR / 4pt-pass-TD — so it exists to keep the card rendering, not to
+// be trusted.
 const LU_ESPN_SCORING = { pass_yd:0.04, pass_td:4, pass_int:-2, rush_yd:0.1, rush_td:6,
                           rec:1, rec_yd:0.1, rec_td:6, fum_lost:-2 };
+
+// ESPN publishes its OWN weekly projections, and — because kona_player_info is
+// requested in the league's context — the `appliedTotal` on each projected stat
+// line is already scored with that league's real settings. That's strictly
+// better than re-deriving points from Sleeper's stat line through a mapped
+// scoring table (it needs no statId mapping at all, and it covers K and D/ST,
+// which the mapping deliberately skips), so ESPN fixtures prefer it and fall
+// back to the mapped path only if this pull fails or comes back empty.
+//
+// statSourceId 1 = projected (0 = actual); statSplitTypeId 1 = a single week (0
+// would be the season line, which rides along in the same stats array).
+// filterIds keeps the response to just this roster instead of ESPN's whole
+// ~4000-player pool.
+// espnIdToPid maps ESPN's player id → the Sleeper id the rest of the tab uses.
+//
+// Returns null unless nearly the whole roster came back. A PARTIAL map would be
+// worse than none: the card would price some players on ESPN's appliedTotal and
+// the rest on Sleeper's mapped stat line, and comparing two different scales is
+// exactly how the optimizer picks the wrong starter. All-or-nothing keeps every
+// number on one card mutually comparable. (It also catches the case where ESPN
+// ignores filterIds and hands back its default top-N slice instead.)
+const LU_ESPN_PROJ_COVERAGE = 0.8;
+
+async function lsFetchEspnProjections(espnId, season, week, espnIdToPid) {
+  const ids = Object.keys(espnIdToPid).map(Number).filter(n => !Number.isNaN(n));
+  if (!ids.length) return null;
+  try {
+    const filter = JSON.stringify({ players: { filterIds: { value: ids }, limit: ids.length } });
+    const r = await fetch(`/api/espn/fantasy/${espnId}?view=kona_player_info&scoringPeriodId=${week}&seasonId=${season}`,
+                          { credentials: 'include', headers: { 'X-Fantasy-Filter': filter } });
+    if (!r.ok) return null;
+    const d = await r.json();
+    const out = {};
+    for (const entry of (d.players || [])) {
+      const pl  = entry.player || entry;
+      const pid = espnIdToPid[String(pl.id)];
+      if (!pid) continue;
+      const line = (pl.stats || []).find(st =>
+        st.statSourceId === 1 && st.statSplitTypeId === 1 &&
+        Number(st.scoringPeriodId) === Number(week));
+      if (line && typeof line.appliedTotal === 'number') out[String(pid)] = line.appliedTotal;
+    }
+    return Object.keys(out).length >= ids.length * LU_ESPN_PROJ_COVERAGE ? out : null;
+  } catch (_) { return null; }
+}
 
 function lsEspnRosterPositions(lineupSlotCounts) {
   const out = [];
@@ -3106,7 +3169,7 @@ function lsEspnPid(pl) {
   return S._playersByName[normName(pl.fullName || '')] || null;
 }
 
-async function lsLoadEspnLineup(lg) {
+async function lsLoadEspnLineup(lg, week) {
   const espnId = S.leagueDetails[lg.league_id]?._espnId;
   if (!espnId) return null;
   const season = S.nflState?.season || new Date().getFullYear().toString();
@@ -3120,12 +3183,13 @@ async function lsLoadEspnLineup(lg) {
   const rosterPositions = lsEspnRosterPositions(d.settings?.rosterSettings?.lineupSlotCounts);
   if (!rosterPositions.length) return null;
 
-  const players = [], inSlot = [];
+  const players = [], inSlot = [], espnIdToPid = {};
   for (const e of (myTeam.roster?.entries || [])) {
     const pl  = e.playerPoolEntry?.playerPoolEntry?.player || e.playerPoolEntry?.player;
     const pid = lsEspnPid(pl);
     if (!pid) continue;
     players.push(String(pid));
+    if (pl?.id != null) espnIdToPid[String(pl.id)] = String(pid);
     const slot = LU_ESPN_SLOT[e.lineupSlotId];
     if (slot && slot !== 'BN' && slot !== 'IR') inSlot.push({ slot, pid: String(pid) });
   }
@@ -3146,11 +3210,18 @@ async function lsLoadEspnLineup(lg) {
   };
   inSlot.forEach(({ slot, pid }) => place(pid, slot));
 
+  // The league's REAL scoring, via the same shared parser the playoff-odds sim,
+  // the analyzer and the trade analyzer already use — TE premium included (see
+  // crParseEspnScoring). Only used when ESPN's own projections aren't available.
+  const parsedScoring = crParseEspnScoring(d.settings).scoring;
+  const scoringSettings = Object.keys(parsedScoring).length ? parsedScoring : LU_ESPN_SCORING;
+
   return {
     leagueName: lg.name, leagueId: lg.league_id, rosterId: myTeam.id,
     starters, rosterPositions, players,
     excluded: new Set(),
-    scoringSettings: LU_ESPN_SCORING,
+    scoringSettings,
+    _espnProj: await lsFetchEspnProjections(espnId, season, week, espnIdToPid),
     _espn: true,               // read-only: never written back, never bulk-applied
   };
 }
@@ -3185,7 +3256,7 @@ async function lsEnsureLineupData(force = false) {
   // main source of the delay (2 round-trips × every league, one after another).
   const settled = await Promise.all(S.leagues.map(async (lg) => {
     try {
-      if (lg.source === 'espn') return await lsLoadEspnLineup(lg);
+      if (lg.source === 'espn') return await lsLoadEspnLineup(lg, w);
       const detail          = S.leagueDetails[lg.league_id];
       if (detail?.settings?.best_ball === 1) return null;
       const rosterPositions = (detail?.roster_positions || []).filter(p => p !== 'BN' && p !== 'IR' && p !== 'TAXI');

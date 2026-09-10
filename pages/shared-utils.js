@@ -278,6 +278,16 @@ function crParseEspnScoring(settings) {
   const lineupSlots = settings?.rosterSettings?.lineupSlotCounts || {};
   const numQbs = ((lineupSlots['0'] ?? 0) >= 2 || (lineupSlots['7'] ?? 0) > 0) ? 2 : 1;
 
+  // ESPN models TE premium as a pointsOverride on the reception category rather
+  // than a stat of its own, so it falls out of the statId loop above as a bare
+  // number. Sleeper's own scoring_settings AND its projection stat lines both use
+  // a `bonus_rec_te` key, so putting it back into `scoring` under that name is
+  // all any consumer needs — crScoreSleeper already reads it, and
+  // lsComputeProjPts is a plain dot product over the stat line. Still returned
+  // separately as well, since the FantasyCalc value multipliers in analyzer.html
+  // / trade-analyzer.html want the raw bonus, not a scoring key.
+  if (bonusRecTe) scoring.bonus_rec_te = bonusRecTe;
+
   return { scoring, numQbs, ppr: scoring.rec ?? 1, bonusRecTe };
 }
 
