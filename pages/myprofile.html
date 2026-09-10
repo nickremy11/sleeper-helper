@@ -57,6 +57,13 @@
 .field-status.ok  { color: var(--green-light); }
 .field-status.err { color: var(--red); }
 .field-divider { border: none; border-top: 1px solid var(--brown-mid); margin: 16px 0; }
+.field-hint { font-family: 'Crimson Text', serif; font-size: 0.85rem; font-style: italic; color: var(--brown-light); line-height: 1.6; margin: 2px 0 8px; }
+.field-hint a { color: var(--gold-light); text-decoration: none; border-bottom: 1px dotted var(--gold); }
+.field-hint code {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.85em; font-style: normal;
+  background: rgba(255,255,255,0.08); border: 1px solid var(--brown-mid); color: var(--gold-light);
+  border-radius: 2px; padding: 1px 5px;
+}
 .token-saved-row { margin-bottom: 8px; }
 .token-saved-msg {
   font-family: 'Crimson Text', serif; font-size: 0.88rem; font-style: italic;
@@ -187,14 +194,17 @@ footer a:hover { color: var(--gold-light); }
         </div>
         <div class="field-status" id="username-status"></div>
         <hr class="field-divider" />
-        <label class="field-label">Auth Token <span class="field-label-sub">— enables pending trades across all pages</span></label>
+        <label class="field-label">Auth Token <span class="field-label-sub">&mdash; enables pending trades, and applying lineups from the Lineup Checker</span></label>
         <div id="token-saved-row" class="token-saved-row" style="display:none;">
           <div class="token-saved-msg">&#x2714; Token saved to your account</div>
           <button class="ghost-btn" onclick="showReplaceToken()">Replace token</button>
         </div>
         <div id="token-input-row">
+          <div class="field-hint">
+            Signed in to <a href="https://sleeper.com" target="_blank" rel="noopener">sleeper.com</a> on a computer, press <code>F12</code> &rarr; <strong>Network</strong> tab &rarr; filter for <code>graphql</code> &rarr; click any request and copy the whole <code>authorization</code> value under Request Headers.
+          </div>
           <div class="field-row">
-            <input type="password" id="field-token" class="field-input" placeholder="sleeper.com → DevTools → Network → any graphql request → Authorization header…" />
+            <input type="password" id="field-token" class="field-input" placeholder="paste your token here&hellip;" />
             <button class="field-btn" onclick="saveToken()">Save</button>
           </div>
           <div class="field-status" id="token-status"></div>
