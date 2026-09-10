@@ -3120,31 +3120,67 @@ const LU_ESPN_SCORING = { pass_yd:0.04, pass_td:4, pass_int:-2, rush_yd:0.1, rus
 // worse than none: the card would price some players on ESPN's appliedTotal and
 // the rest on Sleeper's mapped stat line, and comparing two different scales is
 // exactly how the optimizer picks the wrong starter. All-or-nothing keeps every
-// number on one card mutually comparable. (It also catches the case where ESPN
-// ignores filterIds and hands back its default top-N slice instead.)
+// number on one card mutually comparable.
 const LU_ESPN_PROJ_COVERAGE = 0.8;
+
+// Two filter shapes are tried in order. `filterIds` is the cheap precise pull
+// (espn-api drives this same view with it), but it is undocumented — if ESPN
+// ignores it we silently get its default top-N slice instead, which the coverage
+// gate then rejects. So a thin first attempt retries with the whole-pool shape
+// auction.html already depends on, sorted by ownership so every rostered player
+// is inside the limit.
+const LU_ESPN_PROJ_FILTERS = [
+  ids => ({ players: { filterIds: { value: ids }, limit: Math.max(ids.length, 50) } }),
+  ()  => ({ players: { limit: 1200, sortPercOwned: { sortPriority: 1, sortAsc: false } } }),
+];
+
+// Diagnostics for the most recent attempt per league. Read `lsEspnProjDebug` in
+// the browser console when an ESPN card's points look like Sleeper's rather than
+// ESPN's — the tell is K and D/ST showing 0.0, which only the mapped path can
+// produce (ESPN_STAT_TO_FIELD deliberately maps no kicking/defense categories).
+window.lsEspnProjDebug = {};
 
 async function lsFetchEspnProjections(espnId, season, week, espnIdToPid) {
   const ids = Object.keys(espnIdToPid).map(Number).filter(n => !Number.isNaN(n));
+  const dbg = { espnId, season, week, wanted: ids.length, attempts: [] };
+  window.lsEspnProjDebug[espnId] = dbg;
   if (!ids.length) return null;
-  try {
-    const filter = JSON.stringify({ players: { filterIds: { value: ids }, limit: ids.length } });
-    const r = await fetch(`/api/espn/fantasy/${espnId}?view=kona_player_info&scoringPeriodId=${week}&seasonId=${season}`,
-                          { credentials: 'include', headers: { 'X-Fantasy-Filter': filter } });
-    if (!r.ok) return null;
-    const d = await r.json();
-    const out = {};
-    for (const entry of (d.players || [])) {
-      const pl  = entry.player || entry;
-      const pid = espnIdToPid[String(pl.id)];
-      if (!pid) continue;
-      const line = (pl.stats || []).find(st =>
-        st.statSourceId === 1 && st.statSplitTypeId === 1 &&
-        Number(st.scoringPeriodId) === Number(week));
-      if (line && typeof line.appliedTotal === 'number') out[String(pid)] = line.appliedTotal;
-    }
-    return Object.keys(out).length >= ids.length * LU_ESPN_PROJ_COVERAGE ? out : null;
-  } catch (_) { return null; }
+
+  for (const build of LU_ESPN_PROJ_FILTERS) {
+    const filter = build(ids);
+    const a = { filter: Object.keys(filter.players).join('+') };
+    dbg.attempts.push(a);
+    try {
+      const r = await fetch(`/api/espn/fantasy/${espnId}?view=kona_player_info&scoringPeriodId=${week}&seasonId=${season}`,
+                            { credentials: 'include', headers: { 'X-Fantasy-Filter': JSON.stringify(filter) } });
+      a.status = r.status;
+      if (!r.ok) { a.body = (await r.text()).slice(0, 200); continue; }
+      const d = await r.json();
+      const list = d.players || [];
+      a.returned = list.length;
+
+      const out = {}, noLine = [];
+      for (const entry of list) {
+        const pl  = entry.player || entry;
+        const pid = espnIdToPid[String(pl.id)];
+        if (!pid) continue;
+        // The stats array carries several splits at once. Take the projected
+        // (statSourceId 1) line for THIS week, preferring the single-week split
+        // (statSplitTypeId 1) over anything else that shares the period.
+        const proj = (pl.stats || []).filter(st =>
+          st.statSourceId === 1 && Number(st.scoringPeriodId) === Number(week));
+        const line = proj.find(st => st.statSplitTypeId === 1) || proj[0];
+        if (line && typeof line.appliedTotal === 'number') out[String(pid)] = line.appliedTotal;
+        else noLine.push({ name: pl.fullName, splits: (pl.stats || []).map(st =>
+               `src${st.statSourceId}/split${st.statSplitTypeId}/wk${st.scoringPeriodId}`) });
+      }
+      a.matched = Object.keys(out).length;
+      if (noLine.length) a.noStatLine = noLine.slice(0, 3);
+      if (a.matched >= ids.length * LU_ESPN_PROJ_COVERAGE) { dbg.used = a.filter; return out; }
+    } catch (e) { a.error = String((e && e.message) || e); }
+  }
+  console.warn(`[lineups] ESPN ${espnId}: no usable ESPN projections, using Sleeper's — lsEspnProjDebug[${espnId}]`, dbg);
+  return null;
 }
 
 function lsEspnRosterPositions(lineupSlotCounts) {
