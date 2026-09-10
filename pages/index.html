@@ -2449,6 +2449,8 @@ const LSW = {
   targets: [],      // [{leagueId, idx, slotIdx, slot}] — snapshotted at pick time
   picks: {},        // {leagueId: replacementPid}
   done: {},         // {leagueId: 'ok' | 'fail'} — applied this session
+  applied: {},      // {leagueId: [{slot, from, to}]} — what was actually sent, captured
+                    // pre-write because the write overwrites fix.starters
   msg: '',          // status line under the mode buttons
   msgColor: 'var(--brown-light)',
 };
@@ -2498,31 +2500,100 @@ function lswTargets() {
 // says won't play is dropped outright — swapping one Out player for another is
 // never the answer — as are IR/taxi players, which lsBuildOptimalStarters skips
 // for the same reason.
+// Bench players who could take over that slot — directly, or by promoting someone.
+//
+// The direct path alone is too narrow: a TE slot would only ever offer bench TEs.
+// But if another TE is sitting in a FLEX slot he can slide up into the vacated TE
+// slot, and the FLEX he leaves behind opens to any flex-eligible bench player. So
+// replacing Bowers can legitimately hand you an RB — Kincaid moves FLEX→TE, the RB
+// lands in the FLEX Kincaid left. That two-step is generated here as a `moves` plan
+// rather than being reconstructed at apply time.
+//
+// Only one hop is generated, which is all the roster shapes need: the promoted
+// player must himself be eligible for the vacated slot, and the only slot type more
+// permissive than a dedicated one is a flex, so a second hop can never widen the
+// pool further.
+//
+// Returns [{pid, pts, rankKey, ranked, via, moves}] where `moves` is the full list
+// of [slotIndex, playerId] placements to write, and `via` names the promoted
+// starter (null for a direct swap).
 function lswCandidates(fix, slotIdx) {
-  const slot = fix.rosterPositions[slotIdx];
-  const elig = lsSlotElig(slot);
+  const slots = fix.rosterPositions;
+  const elig  = lsSlotElig(slots[slotIdx]);
   if (!elig) return [];
   const starting = new Set((fix.starters || []).map(String));
   const excluded = fix.excluded || new Set();
-  const ss = fix.scoringSettings || {};
-  const kind = lsSlotKind(slot);
-  return (fix.players || [])
-    .map(String)
-    .filter(pid => {
-      if (starting.has(pid) || excluded.has(pid)) return false;
-      const p = S.players[pid];
-      if (!p || lsBadInj(p.injury_status)) return false;
-      return elig.includes(lsNormPos(p.position));
-    })
-    .map(pid => ({
-      pid,
-      pts: lsPlayerPts(pid, ss),
-      rankKey: lsSortKey(pid, kind, ss, 'ranks'),
-      ranked: !!lsRankInfo(pid),
-    }))
-    // Rank order is the display order the chooser asks for; unranked players fall
-    // to the bottom band ordered by projection, exactly as in the optimizer.
-    .sort((a, b) => lsCmpKey(a.rankKey, b.rankKey) || b.pts - a.pts);
+  const ss   = fix.scoringSettings || {};
+  const kind = lsSlotKind(slots[slotIdx]);
+
+  const benchFor = eligList => (fix.players || []).map(String).filter(pid => {
+    if (starting.has(pid) || excluded.has(pid)) return false;
+    const p = S.players[pid];
+    if (!p || lsBadInj(p.injury_status)) return false;
+    return eligList.includes(lsNormPos(p.position));
+  });
+
+  // pid → best plan found for him. Direct always wins over a hop (one slot moves
+  // instead of two); between two hops, prefer the one that promotes the better
+  // player into the vacated slot, since that half of the swap is a real upgrade too.
+  const best = {};
+  const offer = (pid, via, moves, promoteKey) => {
+    const prev = best[pid];
+    if (prev) {
+      if (!prev.via) return;                                   // direct already found
+      if (via && lsCmpKey(promoteKey, prev.promoteKey) >= 0) return;
+    }
+    best[pid] = { pid, via, moves, promoteKey };
+  };
+
+  benchFor(elig).forEach(pid => offer(pid, null, [[slotIdx, pid]], null));
+
+  slots.forEach((slot, j) => {
+    if (j === slotIdx) return;
+    const cur = String(fix.starters[j] || '0');
+    if (cur === '0') return;
+    const p = S.players[cur];
+    // The promoted player has to be able to play the vacated slot, and has to be
+    // someone worth promoting — never slide an already-ruled-out starter upward.
+    if (!p || lsBadInj(p.injury_status)) return;
+    if (!elig.includes(lsNormPos(p.position))) return;
+    const openElig = lsSlotElig(slot);
+    if (!openElig) return;
+    const promoteKey = lsSortKey(cur, kind, ss, 'ranks');
+    benchFor(openElig).forEach(pid =>
+      offer(pid, { pid: cur, fromIdx: j, slot }, [[slotIdx, cur], [j, pid]], promoteKey));
+  });
+
+  const out = Object.values(best).map(c => ({
+    pid: c.pid, via: c.via, moves: c.moves,
+    pts: lsPlayerPts(c.pid, ss),
+    ranked: !!lsRankInfo(c.pid),
+    // The slot this candidate actually lands in — the vacated flex on a hop, not
+    // the injured player's slot.
+    landKind: lsSlotKind(slots[c.moves[c.moves.length - 1][0]]),
+  }));
+
+  // Once promotions are in play the list spans positions, and a positional rank
+  // can't order it — TE12 and RB30 aren't the same scale. The sheet's FLEX block
+  // IS a cross-position ordering, so that's what a mixed list sorts by; a
+  // single-position list still sorts by that position's own rank, which is what
+  // this did before hops existed.
+  const mixed = new Set(out.map(c => lsNormPos(S.players[c.pid]?.position))).size > 1;
+  out.forEach(c => { c.mixed = mixed; c.rankKey = lswCandKey(c, mixed, ss); });
+  return out.sort((a, b) => lsCmpKey(a.rankKey, b.rankKey) || b.pts - a.pts);
+}
+
+function lswCandKey(c, mixed, ss) {
+  const r = lsRankInfo(c.pid);
+  if (mixed) return (r && r.flexRank != null) ? [0, r.flexRank, 0] : [1, 0, -c.pts];
+  return lsSortKey(c.pid, c.landKind, ss, 'ranks');
+}
+
+// The plan for a chosen replacement, recomputed against the CURRENT lineup rather
+// than stored — so a card Apply that reshuffled the lineup since can't leave a
+// stale set of slot indices behind.
+function lswPlanFor(fix, slotIdx, replPid) {
+  return lswCandidates(fix, slotIdx).find(c => c.pid === String(replPid)) || null;
 }
 
 // A target still worth writing: writable, has a replacement chosen, and hasn't
@@ -2532,9 +2603,13 @@ function lswPending(t) {
 }
 
 // How the sheet labels a candidate for this slot — "RB14", "FLEX23", "—".
-function lswRankLabel(pid, slot) {
+// `mixed` says the surrounding list spans positions and is therefore ordered by
+// FLEX rank; the label has to follow that or the Rank column stops running in
+// order and reads as a bug (a direct TE21 sitting below a promoted FLEX28).
+function lswRankLabel(pid, slot, mixed) {
   const r = lsRankInfo(pid);
   if (!r) return '';
+  if (mixed && r.flexRank != null) return 'FLEX' + r.flexRank;
   const kind = lsSlotKind(slot);
   if (kind === 'flex' && r.flexRank != null) return 'FLEX' + r.flexRank;
   if (kind === 'superflex' && r.pos !== 'QB' && r.flexRank != null) return 'FLEX' + r.flexRank;
@@ -2582,6 +2657,7 @@ function lswPick(pid) {
   LSW.targets = lswSnapshotTargets(pid);
   LSW.picks   = {};
   LSW.done    = {};
+  LSW.applied = {};
   LSW.msg     = '';
   LSW.q       = lsPlayerName(pid);
   const box = document.getElementById('lu-swap-sug');
@@ -2592,7 +2668,7 @@ function lswPick(pid) {
 }
 
 function lswClear() {
-  LSW.pid = null; LSW.mode = null; LSW.targets = []; LSW.picks = {}; LSW.done = {}; LSW.msg = ''; LSW.q = '';
+  LSW.pid = null; LSW.mode = null; LSW.targets = []; LSW.picks = {}; LSW.done = {}; LSW.applied = {}; LSW.msg = ''; LSW.q = '';
   const inp = document.getElementById('lu-swap-q'); if (inp) inp.value = '';
   const box = document.getElementById('lu-swap-sug'); if (box) { box.innerHTML = ''; box.style.display = 'none'; }
   lswDraw();
@@ -2652,10 +2728,23 @@ async function lswApplyOne(idx, slotIdx) {
     si = next.indexOf(String(LSW.pid));
     if (si < 0) {
       LSW.done[fix.leagueId] = 'ok';   // already out of this lineup — nothing to do
+      LSW.applied[fix.leagueId] = LSW.applied[fix.leagueId] || [];
       return true;
     }
   }
-  next[si] = String(repl);
+  // A promotion moves two slots, so the plan is applied wholesale. Recomputed here
+  // against the live lineup, which is also what re-validates the choice.
+  const plan = lswPlanFor(fix, si, repl);
+  if (!plan) {
+    LSW.done[fix.leagueId] = 'fail';
+    LSW.msg = '✗ ' + fix.leagueName + ': ' + lsPlayerName(repl) + ' is no longer an option here';
+    LSW.msgColor = '#c0504d';
+    return false;
+  }
+  LSW.applied[fix.leagueId] = plan.moves.map(([k, pid]) => ({
+    slot: fix.rosterPositions[k], from: lsPlayerName(fix.starters[k]), to: lsPlayerName(pid),
+  }));
+  plan.moves.forEach(([k, pid]) => { next[k] = String(pid); });
   try {
     const ok = await lsPutStarters(fix, next);
     LSW.done[fix.leagueId] = ok ? 'ok' : 'fail';
@@ -2705,11 +2794,17 @@ async function lswApplySingle(idx, slotIdx) {
 // ── render ──
 function lswCandRow(t, c, chosen) {
   const p    = S.players[c.pid] || {};
-  const lbl  = lswRankLabel(c.pid, t.slot);
+  // Label him against the slot he'd actually land in — a promotion puts him in the
+  // vacated flex, so his FLEX rank is the honest one to show.
+  const land = t.fix.rosterPositions[c.moves[c.moves.length - 1][0]];
+  const lbl  = lswRankLabel(c.pid, land, c.mixed);
   const inj  = injuryBadge(p.injury_status);
+  const via  = c.via
+    ? `<span style="display:block;font-size:0.6rem;color:var(--gold-light);">↳ ${esc(lsPlayerName(c.via.pid))} moves ${esc(c.via.slot)} → ${esc(t.slot)}</span>`
+    : '';
   return `<div class="lsw-cand${chosen ? ' chosen' : ''}" onclick="lswChoose('${t.leagueId}','${c.pid}')">
     <span style="width:14px;flex-shrink:0;color:#5fae5f;">${chosen ? '✓' : ''}</span>
-    <span style="color:var(--parchment);flex:1;">${esc(lsPlayerName(c.pid))}${inj ? ' ' + inj : ''}</span>
+    <span style="color:var(--parchment);flex:1;">${esc(lsPlayerName(c.pid))}${inj ? ' ' + inj : ''}${via}</span>
     <span style="color:var(--brown-light);font-size:0.65rem;width:52px;flex-shrink:0;">${esc(lsNormPos(p.position) || '')}${p.team ? ' ' + esc(p.team) : ''}</span>
     <span style="color:${lbl ? 'var(--gold-light)' : 'var(--brown-light)'};font-size:0.68rem;width:56px;text-align:right;flex-shrink:0;">${lbl ? esc(lbl) : '—'}</span>
     <span style="color:var(--brown-light);font-size:0.7rem;width:44px;text-align:right;flex-shrink:0;">${lsHaveProj() ? c.pts.toFixed(1) : '–'}</span>
@@ -2722,7 +2817,6 @@ function lswLeagueBlock(t) {
   const cands  = lswCandidates(fix, t.slotIdx);
   const pick   = LSW.picks[t.leagueId];
   const state  = LSW.done[t.leagueId];
-  const outPts = lsHaveProj() ? lsPlayerPts(LSW.pid, ss).toFixed(1) : '–';
   const applied = state === 'ok';
 
   const head = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 12px;background:var(--brown-mid);">
@@ -2739,11 +2833,14 @@ function lswLeagueBlock(t) {
     </div>`;
 
   if (applied) {
+    // Post-write, fix.starters already holds the result, so the plan can't be
+    // recomputed — LSW.applied keeps the human-readable summary of what was sent.
+    const summary = LSW.applied[t.leagueId] || [];
     return `<div class="lsw-league">${head}
-      <div class="diff-row"><span class="diff-slot">${esc(t.slot)}</span>
-        <span style="color:var(--parchment);flex:1;"><span style="color:#c0504d;text-decoration:line-through;">${esc(lsPlayerName(LSW.pid))}</span>
-        <span style="color:var(--brown-light);"> → </span><span style="color:#5fae5f;">${esc(lsPlayerName(pick))}</span></span>
-      </div>
+      ${summary.map(m => `<div class="diff-row"><span class="diff-slot">${esc(m.slot)}</span>
+        <span style="color:var(--parchment);flex:1;"><span style="color:#c0504d;text-decoration:line-through;">${esc(m.from)}</span>
+        <span style="color:var(--brown-light);"> → </span><span style="color:#5fae5f;">${esc(m.to)}</span></span>
+      </div>`).join('')}
     </div>`;
   }
 
@@ -2753,18 +2850,21 @@ function lswLeagueBlock(t) {
     </div>`;
   }
 
-  // The chosen swap, always shown, so options 1 and 2 read as a plain diff.
-  const chosenRow = pick
-    ? `<div class="diff-row" style="background:rgba(95,174,95,0.07);">
-         <span class="diff-slot">${esc(t.slot)}</span>
+  // The chosen swap, always shown, so options 1 and 2 read as a plain diff. A
+  // promotion touches two slots, so it renders as two rows — the same old → new
+  // shape the lineup cards use, which keeps the second move from reading as magic.
+  const plan = pick ? cands.find(c => c.pid === String(pick)) : null;
+  const chosenRow = plan
+    ? plan.moves.map(([k, into]) => `<div class="diff-row" style="background:rgba(95,174,95,0.07);">
+         <span class="diff-slot">${esc(fix.rosterPositions[k])}</span>
          <span style="color:var(--parchment);flex:1;">
-           <span style="color:#c0504d;text-decoration:line-through;">${esc(lsPlayerName(LSW.pid))}</span>
+           <span style="color:#c0504d;text-decoration:line-through;">${esc(lsPlayerName(fix.starters[k]))}</span>
            <span style="color:var(--brown-light);"> → </span>
-           <span style="color:#5fae5f;">${esc(lsPlayerName(pick))}</span>
-           ${lswRankLabel(pick, t.slot) ? `<span style="color:var(--gold-light);font-size:0.65rem;"> ${esc(lswRankLabel(pick, t.slot))}</span>` : ''}
+           <span style="color:#5fae5f;">${esc(lsPlayerName(into))}</span>
+           ${lswRankLabel(into, fix.rosterPositions[k]) ? `<span style="color:var(--gold-light);font-size:0.65rem;"> ${esc(lswRankLabel(into, fix.rosterPositions[k]))}</span>` : ''}
          </span>
-         <span style="color:var(--brown-light);font-size:0.8rem;white-space:nowrap;flex-shrink:0;">${outPts} <span style="color:#5fae5f;">→ ${lsHaveProj() ? lsPlayerPts(pick, ss).toFixed(1) : '–'}</span></span>
-       </div>`
+         <span style="color:var(--brown-light);font-size:0.8rem;white-space:nowrap;flex-shrink:0;">${lsHaveProj() ? lsPlayerPts(fix.starters[k], ss).toFixed(1) : '–'} <span style="color:#5fae5f;">→ ${lsHaveProj() ? lsPlayerPts(into, ss).toFixed(1) : '–'}</span></span>
+       </div>`).join('')
     : `<div style="padding:6px 12px;font-size:0.68rem;color:var(--brown-light);">${cands.length} eligible bench player${cands.length === 1 ? '' : 's'} — pick a replacement.</div>`;
 
   // Manual mode opens every league's chooser; the bulk modes keep them closed but
