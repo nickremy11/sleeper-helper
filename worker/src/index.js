@@ -132,6 +132,10 @@ export default {
       return handleEspnSettings(request, env);
     }
 
+    if (url.pathname === '/api/espn/discover' && request.method === 'POST') {
+      return handleEspnDiscover(request, env, url);
+    }
+
     if (url.pathname.startsWith('/api/espn/fantasy/') && request.method === 'GET') {
       return handleEspnFantasy(request, env, url);
     }
@@ -1434,6 +1438,129 @@ async function handleEspnSettings(request, env) {
 
   return new Response('Method not allowed', { status: 405, headers: cors });
 }
+
+// ── ESPN League Discovery (auto-pull the user's leagues) ──────────────────────
+//
+// ESPN has no documented "list my leagues" endpoint, but the site's own Fan API
+// (fan.api.espn.com/apis/v2/fans/{SWID}) returns every fantasy entry the account
+// follows — that's what powers the "My Teams" rail on espn.com. Its response
+// shape is undocumented and has changed before, so we don't parse it strictly:
+// we scrape every numeric `groupId` out of the JSON (that's the league id), then
+// VALIDATE each candidate against the real football endpoint. Anything that
+// isn't an FFL league for this season, or that these cookies can't read, drops
+// out — which also filters basketball/baseball entries for free.
+//
+// POST /api/espn/discover        body: {espn_s2?, swid?}   ?season=YYYY
+//   Credentials come from the body when present (so the profile page can test a
+//   freshly pasted pair before saving), else from the stored row.
+// → { season, leagues: [{id, name, size, scoringType}], candidates, verified }
+
+async function handleEspnDiscover(request, env, url) {
+  const cors = getCors(request);
+  const jres = (obj, status = 200) => new Response(JSON.stringify(obj), {
+    status, headers: { ...cors, 'Content-Type': 'application/json;charset=UTF-8' },
+  });
+
+  const user = await getAuthUser(request, env);
+  if (!user) return jres({ error: 'Not authenticated' }, 401);
+
+  let body = {};
+  try { body = await request.json(); } catch {}
+
+  let s2   = (body.espn_s2 || '').trim();
+  let swid = (body.swid    || '').trim();
+  if (!s2 || !swid) {
+    const row = await env.DB.prepare(
+      'SELECT espn_s2, swid FROM espn_settings WHERE user_id = ?'
+    ).bind(user.user_id).first();
+    s2   = s2   || row?.espn_s2 || '';
+    swid = swid || row?.swid    || '';
+  }
+  if (!s2 || !swid) return jres({ error: 'ESPN credentials not configured' }, 400);
+
+  // ESPN writes SWID with braces; people paste it both ways.
+  const braced = swid.startsWith('{') ? swid : `{${swid}}`;
+  const season = Number(url.searchParams.get('season')) || espnSeason();
+  const cookie = `espn_s2=${s2}; SWID=${braced}`;
+
+  // 1. Ask the Fan API what this account follows.
+  const fanUrl = `https://fan.api.espn.com/apis/v2/fans/${encodeURIComponent(braced)}`
+    + '?featureFlags=expandAthlete&displayEvents=false&displayNow=false&recLimit=0';
+
+  let fan;
+  try {
+    const r = await fetch(fanUrl, { headers: { Cookie: cookie, Accept: 'application/json' } });
+    if (!r.ok) {
+      // 404 here is ESPN's "fan not found" — a syntactically fine SWID it has
+      // never seen, i.e. almost always a mistyped or partially copied value.
+      const msg =
+        (r.status === 401 || r.status === 403)
+          ? 'ESPN rejected these cookies — they may be expired. Grab a fresh espn_s2 and SWID.'
+        : r.status === 404
+          ? 'ESPN does not recognize that SWID. Recopy it (braces included) from your browser cookies.'
+        : `ESPN returned ${r.status} while listing your leagues.`;
+      return jres({ error: msg, status: r.status }, 502);
+    }
+    fan = await r.json();
+  } catch {
+    return jres({ error: 'Could not reach ESPN to list your leagues.' }, 502);
+  }
+
+  const candidates = [...collectEspnGroupIds(fan)].slice(0, 60);
+  if (!candidates.length) return jres({ season, leagues: [], candidates: 0, verified: 0 });
+
+  // 2. Keep only the ones that are readable FFL leagues this season.
+  const checks = await Promise.all(candidates.map(async id => {
+    try {
+      const r = await fetch(
+        `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${season}`
+        + `/segments/0/leagues/${id}?view=mSettings`,
+        { headers: { Cookie: cookie, 'User-Agent': 'sleeper-helper/1.0' } }
+      );
+      if (!r.ok) return null;
+      const d = await r.json();
+      const name = d?.settings?.name;
+      if (!name) return null;
+      return {
+        id:          String(id),
+        name,
+        size:        d?.settings?.size ?? null,
+        scoringType: d?.settings?.scoringSettings?.scoringType || null,
+      };
+    } catch { return null; }
+  }));
+
+  const leagues = checks.filter(Boolean).sort((a, b) => a.name.localeCompare(b.name));
+  return jres({ season, leagues, candidates: candidates.length, verified: leagues.length });
+}
+
+// Recursively pull every plausible league id out of the Fan API blob, without
+// depending on where ESPN nests it this month. Bounded depth/size so a cyclic or
+// pathological payload can't spin the worker.
+function collectEspnGroupIds(node, out = new Set(), depth = 0) {
+  if (!node || depth > 8 || out.size > 200) return out;
+  if (Array.isArray(node)) {
+    for (const v of node) collectEspnGroupIds(v, out, depth + 1);
+    return out;
+  }
+  if (typeof node !== 'object') return out;
+  for (const [k, v] of Object.entries(node)) {
+    if ((k === 'groupId' || k === 'leagueId') && (typeof v === 'number' || typeof v === 'string')) {
+      const n = Number(v);
+      if (Number.isInteger(n) && n > 0) out.add(n);
+    } else if (v && typeof v === 'object') {
+      collectEspnGroupIds(v, out, depth + 1);
+    }
+  }
+  return out;
+}
+
+// ESPN's fantasy football season rolls over with the NFL year, not the calendar
+// year — January through May still belongs to the previous season's leagues.
+function espnSeason(now = new Date()) {
+  return now.getMonth() < 5 ? now.getFullYear() - 1 : now.getFullYear();
+}
+
 
 // ── ESPN Fantasy Proxy (uses stored credentials) ───────────────────────────────
 

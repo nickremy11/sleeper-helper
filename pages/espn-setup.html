@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Connecting ESPN — FF Historian</title>
+<link href="https://fonts.googleapis.com/css2?family=Rye&family=Playfair+Display:ital,wght@0,700;1,400&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/shared-styles.css" />
+<style>
+.banner-inner {
+  position: relative; z-index: 1;
+  max-width: 820px; margin: 0 auto;
+  padding: 24px 32px 20px;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+}
+.main { max-width: 820px; margin: 0 auto; padding: 32px 32px 80px; }
+
+.section-head { display: flex; align-items: center; gap: 16px; margin: 40px 0 18px; }
+.section-head:first-child { margin-top: 0; }
+.section-head h2 { font-family: 'Rye', serif; font-size: 1rem; color: var(--brown-dark); white-space: nowrap; }
+.section-head-line { flex: 1; height: 1px; background: linear-gradient(to right, var(--gold), transparent); }
+
+.lede {
+  font-family: 'Playfair Display', serif; font-style: italic; font-size: 1.05rem;
+  color: var(--brown-mid); line-height: 1.6; margin-bottom: 8px;
+}
+p, li { font-family: 'Crimson Text', serif; font-size: 1rem; line-height: 1.65; color: var(--ink); }
+p { margin-bottom: 12px; }
+a { color: var(--brown-mid); }
+a:hover { color: var(--gold); }
+code {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.86em;
+  background: rgba(92,61,30,0.1); border: 1px solid rgba(92,61,30,0.25);
+  border-radius: 2px; padding: 1px 5px; word-break: break-all;
+}
+
+/* ── STEPS ── */
+.step {
+  position: relative; border-left: 2px solid var(--brown-mid);
+  padding: 0 0 26px 26px; margin-left: 13px;
+}
+.step:last-child { border-left-color: transparent; padding-bottom: 4px; }
+.step-num {
+  position: absolute; left: -14px; top: 0;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--green); border: 2px solid var(--gold); color: var(--gold-light);
+  font-family: 'Rye', serif; font-size: 0.6rem;
+  display: flex; align-items: center; justify-content: center;
+}
+.step h3 {
+  font-family: 'Playfair Display', serif; font-size: 1.1rem; color: var(--brown-dark);
+  margin: 2px 0 8px;
+}
+.step ul, .step ol { margin: 0 0 12px 20px; }
+.step li { margin-bottom: 5px; }
+
+/* ── CARDS ── */
+.card {
+  background: var(--brown-dark); border: 2px solid var(--brown-mid); border-radius: 2px;
+  padding: 18px 22px; margin-bottom: 16px; box-shadow: 4px 4px 0 var(--brown-mid);
+}
+.card, .card p, .card li { color: var(--parchment); }
+.card code { background: rgba(255,255,255,0.08); border-color: var(--brown-mid); color: var(--gold-light); }
+.card h3 {
+  font-family: 'Rye', serif; font-size: 0.6rem; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--gold); margin-bottom: 10px;
+}
+.card ul { margin-left: 20px; }
+.card li { margin-bottom: 6px; }
+.card p:last-child, .card ul:last-child { margin-bottom: 0; }
+.card a { color: var(--gold-light); }
+
+.note {
+  border-left: 3px solid var(--gold); background: rgba(201,150,42,0.12);
+  padding: 12px 16px; margin: 0 0 16px;
+}
+.note p:last-child { margin-bottom: 0; }
+.note strong { font-family: 'Playfair Display', serif; }
+
+/* ── BROWSER TABS ── */
+.tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+.tab-pill {
+  background: none; border: 1px solid var(--brown-mid); color: var(--brown-mid);
+  font-family: 'Rye', serif; font-size: 0.55rem; letter-spacing: 0.16em;
+  text-transform: uppercase; padding: 7px 14px; cursor: pointer; border-radius: 2px;
+  transition: background 0.2s, color 0.2s;
+}
+.tab-pill:hover { border-color: var(--gold); }
+.tab-pill.on { background: var(--green); border-color: var(--gold); color: var(--gold-light); }
+.tab-body { display: none; }
+.tab-body.on { display: block; }
+
+/* ── TABLE ── */
+.tbl { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+.tbl th {
+  font-family: 'Rye', serif; font-size: 0.52rem; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--gold); background: var(--brown-dark);
+  text-align: left; padding: 9px 12px; border: 1px solid var(--brown-mid);
+}
+.tbl td {
+  font-family: 'Crimson Text', serif; font-size: 0.95rem; line-height: 1.5;
+  padding: 9px 12px; border: 1px solid rgba(92,61,30,0.35); vertical-align: top;
+}
+.tbl tr:nth-child(even) td { background: rgba(92,61,30,0.06); }
+.tbl-wrap { overflow-x: auto; }
+
+.cta {
+  display: inline-block; background: var(--green); border: 2px solid var(--gold);
+  color: var(--gold-light); font-family: 'Rye', serif; font-size: 0.6rem;
+  letter-spacing: 0.18em; text-transform: uppercase; padding: 12px 24px;
+  text-decoration: none; border-radius: 2px; transition: background 0.2s, color 0.2s;
+}
+.cta:hover { background: var(--gold); color: var(--brown-dark); }
+
+footer {
+  text-align: center; padding: 40px 0 20px;
+  font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--brown-light); opacity: 0.7;
+}
+footer a { color: var(--brown-light); text-decoration: none; }
+footer a:hover { color: var(--gold-light); }
+</style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <header class="banner">
+    <div class="banner-inner">
+      <div class="banner-text">
+        <a href="https://helper.ffhistorian.com" class="banner-back">&larr; Sleeper Helper</a>
+        <h1>Connecting <span>ESPN</span></h1>
+        <div class="banner-sub">What you need, where to find it, and what works once it's connected</div>
+        <div class="banner-divider"></div>
+      </div>
+      <div id="auth-chip" style="flex-shrink:0;"></div>
+    </div>
+  </header>
+
+  <div class="main">
+
+    <p class="lede">Sleeper leagues connect with nothing but your username. ESPN has no public API and no read-only tokens, so connecting an ESPN league means handing this site the same two browser cookies your own browser uses to read the league &mdash; <code>espn_s2</code> and <code>SWID</code>. That takes about two minutes, once.</p>
+
+    <div class="section-head"><h2>Before You Start</h2><div class="section-head-line"></div></div>
+    <div class="card">
+      <h3>You need three things</h3>
+      <ul>
+        <li><strong>An account here</strong> &mdash; ESPN credentials are stored against your account, so this only works signed in. Signing up is open: email, password, six-digit code.</li>
+        <li><strong>Your two ESPN cookies</strong> &mdash; <code>espn_s2</code> and <code>SWID</code>, copied out of a browser that's logged into ESPN. Step 2 below.</li>
+        <li><strong>Your league IDs</strong> &mdash; you don't have to find these yourself. Save the cookies, click <strong>Find my leagues</strong>, and the site pulls the list from ESPN for you.</li>
+      </ul>
+    </div>
+
+    <div class="section-head"><h2>Step by Step</h2><div class="section-head-line"></div></div>
+
+    <div class="step">
+      <div class="step-num">1</div>
+      <h3>Sign in here, then open My Profile</h3>
+      <p>Use the chip in the top-right of any page to sign in, then go to <a href="/myprofile">My Profile</a> and scroll to <strong>ESPN Integration</strong>.</p>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <h3>Copy your two cookies out of ESPN</h3>
+      <p>In a browser where you're <strong>already logged into ESPN</strong>, open any fantasy football page &mdash; <code>fantasy.espn.com/football/league?leagueId=&hellip;</code> &mdash; and then:</p>
+      <div class="tabs">
+        <button class="tab-pill on" data-tab="chrome" onclick="pickTab('chrome')">Chrome / Edge / Brave</button>
+        <button class="tab-pill" data-tab="firefox" onclick="pickTab('firefox')">Firefox</button>
+        <button class="tab-pill" data-tab="safari" onclick="pickTab('safari')">Safari</button>
+      </div>
+
+      <div class="tab-body on" id="tab-chrome">
+        <ol>
+          <li>Press <code>F12</code> (or <code>&#8984;&#8997;I</code> on a Mac) to open DevTools.</li>
+          <li>Go to the <strong>Application</strong> tab.</li>
+          <li>In the left sidebar, expand <strong>Storage &rarr; Cookies</strong> and click <code>https://fantasy.espn.com</code>.</li>
+          <li>Find the row named <code>espn_s2</code>. Double-click its <strong>Value</strong> cell, select all, copy.</li>
+          <li>Do the same for the row named <code>SWID</code>.</li>
+        </ol>
+      </div>
+
+      <div class="tab-body" id="tab-firefox">
+        <ol>
+          <li>Press <code>F12</code> to open DevTools.</li>
+          <li>Go to the <strong>Storage</strong> tab.</li>
+          <li>Expand <strong>Cookies</strong> and click <code>https://fantasy.espn.com</code>.</li>
+          <li>Copy the values of <code>espn_s2</code> and <code>SWID</code>.</li>
+        </ol>
+      </div>
+
+      <div class="tab-body" id="tab-safari">
+        <ol>
+          <li>Enable the developer menu first: <strong>Safari &rarr; Settings &rarr; Advanced &rarr; Show features for web developers</strong>.</li>
+          <li>Press <code>&#8984;&#8997;I</code> to open the Web Inspector.</li>
+          <li>Go to the <strong>Storage</strong> tab, then <strong>Cookies &rarr; fantasy.espn.com</strong>.</li>
+          <li>Copy the values of <code>espn_s2</code> and <code>SWID</code>.</li>
+        </ol>
+      </div>
+
+      <div class="note">
+        <p><strong>What they should look like.</strong> <code>espn_s2</code> is very long &mdash; 300+ characters of letters, numbers and <code>%</code> escapes. Copy the whole thing; a truncated value fails silently. <code>SWID</code> is a UUID <em>including the curly braces</em>: <code>{1A2B3C4D-5E6F-&hellip;}</code>. Braces are optional here &mdash; the server adds them if you leave them off &mdash; but paste them if your browser shows them.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <h3>Paste both into My Profile and save</h3>
+      <p>Put them in the <strong>espn_s2 Cookie</strong> and <strong>SWID Cookie</strong> fields and hit <strong>Save</strong>. Leave <strong>League IDs</strong> empty for now.</p>
+      <p>After saving, both boxes clear themselves and the status line reads &ldquo;ESPN credentials saved.&rdquo; That's expected &mdash; <code>espn_s2</code> is never sent back to your browser again, so there is nothing to redisplay.</p>
+    </div>
+
+    <div class="step">
+      <div class="step-num">4</div>
+      <h3>Click &ldquo;Find my leagues&rdquo;</h3>
+      <p>The button next to the League IDs field asks ESPN which football leagues your account can see this season, verifies each one against the real league endpoint, and lists them by name with their IDs. Check the ones you want and hit <strong>Add checked &amp; save</strong>.</p>
+      <p>It doubles as a credential test: if it comes back with your leagues, your cookies are good. If it says ESPN rejected them, they're wrong or expired &mdash; redo step 2.</p>
+      <p>You can still type IDs by hand if you'd rather, or add a league the finder missed. The ID is the <code>leagueId</code> in any ESPN league URL: <code>fantasy.espn.com/football/league?leagueId=<strong>330437</strong></code>.</p>
+    </div>
+
+    <div class="step">
+      <div class="step-num">5</div>
+      <h3>Check that they showed up</h3>
+      <p>Open <a href="/?tab=leagues">League Summaries</a>. Your ESPN leagues load a moment after the Sleeper ones and sit in the same list. If a league is there but your team isn't highlighted as yours, see troubleshooting below.</p>
+    </div>
+
+    <p style="text-align:center;margin:28px 0 8px;"><a class="cta" href="/myprofile">Open My Profile &rarr;</a></p>
+
+    <div class="section-head"><h2>Do I Have To Enter League IDs?</h2><div class="section-head-line"></div></div>
+    <p>No &mdash; that's what <strong>Find my leagues</strong> is for. ESPN publishes no official &ldquo;list my leagues&rdquo; endpoint, but the site's own Fan API knows every fantasy team your account follows, and that's what the button reads. Every league it finds is then verified against the real football endpoint before it's offered to you, so basketball and baseball entries, leagues from past seasons, and anything your cookies can't actually read all drop out on their own.</p>
+    <p>The saved list stays a list, on purpose. It's what tells the app which leagues to load, so you can leave a dead league out, and adding a new league mid-season is one more click of the same button rather than a re-setup.</p>
+
+    <div class="section-head"><h2>What You Get</h2><div class="section-head-line"></div></div>
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr><th>Tool</th><th>ESPN support</th></tr></thead>
+        <tbody>
+          <tr><td>League Summaries</td><td>Full &mdash; standings, records, simulated playoff odds off the real ESPN schedule</td></tr>
+          <tr><td>Rostership</td><td>Players yes; draft picks no &mdash; ESPN doesn't expose future pick ownership</td></tr>
+          <tr><td>Lineup Checker</td><td>Read-only &mdash; it flags problems and builds the optimal lineup, but you set it in ESPN</td></tr>
+          <tr><td>Weekly Ranks Grid</td><td>Full</td></tr>
+          <tr><td>Waivers</td><td>Full</td></tr>
+          <tr><td>League Analyzer</td><td>Full &mdash; at <code>/analyzer?league=espn_330437</code></td></tr>
+          <tr><td>Trade Analyzer</td><td>Full, minus the Picks row (every ESPN team ties at zero)</td></tr>
+          <tr><td>Auction Draft Tracker</td><td>Full, with live pick sync during the draft</td></tr>
+          <tr><td>In-Draft Tracker</td><td>Snake and linear drafts; ESPN auctions belong on <a href="/auction">/auction</a></td></tr>
+          <tr><td>Root For Me</td><td>Full</td></tr>
+          <tr><td>Open Trades, Trade Partners, Scout, Player Finder, Draft Queue</td><td>Sleeper only</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">
+      <p><strong>Everything ESPN is read-only.</strong> Nothing here ever writes to your ESPN league &mdash; no lineup changes, no waiver claims, no trade offers. The one write-back feature in the whole app, &ldquo;Apply lineup,&rdquo; is Sleeper-only and is hidden on ESPN cards.</p>
+    </div>
+
+    <div class="section-head"><h2>Where Your Cookies Live</h2><div class="section-head-line"></div></div>
+    <div class="card">
+      <ul>
+        <li><code>espn_s2</code> is stored server-side and <strong>never sent back to any browser</strong>, including yours. The profile page can only ever tell you whether one is on file.</li>
+        <li>Requests to ESPN are made <strong>by the server</strong>, attaching your cookies. Your browser never talks to ESPN directly.</li>
+        <li><code>SWID</code> <em>is</em> returned to you when you're signed in &mdash; it's just an account identifier, and the pages need it to work out which team in a league is yours.</li>
+        <li>They're worth guarding: together they are a logged-in ESPN session for your whole account, not just fantasy. Only paste them into sites you trust.</li>
+        <li><strong>To revoke:</strong> log out of ESPN everywhere (or change your ESPN password) and the cookies stop working immediately. To remove them from here, delete your account under <a href="/myprofile">My Profile &rarr; Danger Zone</a>, which wipes the stored credentials along with everything else.</li>
+      </ul>
+    </div>
+
+    <div class="section-head"><h2>When It Doesn't Work</h2><div class="section-head-line"></div></div>
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr><th>What you see</th><th>What's usually wrong</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>&ldquo;ESPN credentials not configured&rdquo;</td>
+            <td>Saved league IDs but not the cookies, or the save didn't take because only one of the two boxes was filled. Both must be pasted together.</td>
+          </tr>
+          <tr>
+            <td>&ldquo;ESPN rejected these cookies&rdquo;</td>
+            <td>Expired or truncated. ESPN cookies die on logout, on a password change, and on their own after a while. Redo step 2 &mdash; and check you copied the entire <code>espn_s2</code>.</td>
+          </tr>
+          <tr>
+            <td>Find my leagues returns nothing</td>
+            <td>Usually the season boundary: ESPN's football year rolls over around June, so a league that hasn't started its new season won't appear. Add the ID by hand in the meantime.</td>
+          </tr>
+          <tr>
+            <td>League loads, but no team is marked as mine</td>
+            <td>The <code>SWID</code> doesn't match the account that owns the team &mdash; usually cookies copied from a different ESPN login, or a league where a co-manager (not you) is the primary owner. ESPN matches on primary owner only.</td>
+          </tr>
+          <tr>
+            <td>One league works, another 401s</td>
+            <td>The one that fails is private and this ESPN account isn't in it. Public leagues need no cookies at all; private ones need an account that's actually a member.</td>
+          </tr>
+          <tr>
+            <td>Everything ESPN broke at once, mid-season</td>
+            <td>You logged out of ESPN, or changed your ESPN password. Both invalidate <code>espn_s2</code>. Paste a fresh pair.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section-head"><h2>Known Limits</h2><div class="section-head-line"></div></div>
+    <div class="card">
+      <ul>
+        <li><strong>No draft picks.</strong> ESPN doesn't publish future pick ownership, so ESPN leagues have no pick rows in Rostership and no Picks row in the Trade Analyzer.</li>
+        <li><strong>Generic PPR scoring in lineup projections.</strong> ESPN's scoring settings use a different shape from Sleeper's and aren't mapped, so projected-points figures on ESPN lineup cards assume standard PPR. Ranked players are ordered by your uploaded sheet, which needs no scoring at all &mdash; so ranks mode is unaffected.</li>
+        <li><strong>Last-place odds are less precise.</strong> The Trade Analyzer's simulation uses your real ESPN schedule and real banked record, but there's no per-week realized-points feed wired up, so already-played weeks don't feed the last-place calculation the way they do for Sleeper.</li>
+        <li><strong>One ESPN account.</strong> One credential pair per profile &mdash; leagues spread across two ESPN logins can't both be connected at once.</li>
+      </ul>
+    </div>
+
+    <p style="text-align:center;margin:32px 0 8px;"><a class="cta" href="/myprofile">Open My Profile &rarr;</a></p>
+
+    <footer>
+      <a href="https://ffhistorian.com">ffhistorian.com</a>
+    </footer>
+  </div>
+</div>
+
+<script src="/shared-auth.js"></script>
+<script>
+function pickTab(id) {
+  document.querySelectorAll('.tab-pill').forEach(b => b.classList.toggle('on', b.dataset.tab === id));
+  document.querySelectorAll('.tab-body').forEach(b => b.classList.toggle('on', b.id === 'tab-' + id));
+}
+SharedAuth.init({ chipContainerId: 'auth-chip' });
+</script>
+</body>
+</html>

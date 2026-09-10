@@ -69,6 +69,30 @@
 }
 .ghost-btn:hover { border-color: var(--gold); color: var(--gold-light); }
 
+/* ── ESPN DISCOVERY ── */
+.head-help {
+  font-family: 'Crimson Text', serif; font-size: 0.85rem; font-style: italic;
+  color: var(--brown-light); text-decoration: none; white-space: nowrap;
+  border-bottom: 1px dotted var(--brown-light);
+}
+.head-help:hover { color: var(--brown-dark); border-bottom-color: var(--gold); }
+.card-hint { font-family: 'Crimson Text', serif; font-size: 0.85rem; font-style: italic; color: var(--brown-light); margin: -8px 0 14px; }
+.card-hint a { color: var(--gold-light); text-decoration: none; border-bottom: 1px dotted var(--gold); }
+.card-hint a:hover { color: var(--gold); }
+.disc-box { border: 1px solid var(--brown-mid); border-radius: 2px; padding: 12px 14px; margin-bottom: 16px; }
+.disc-head {
+  font-family: 'Rye', serif; font-size: 0.55rem; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--gold); margin-bottom: 10px;
+}
+.disc-row {
+  display: flex; align-items: center; gap: 10px; padding: 5px 0;
+  font-family: 'Crimson Text', serif; font-size: 0.95rem; color: var(--cream);
+}
+.disc-row input { accent-color: var(--gold); width: 15px; height: 15px; cursor: pointer; }
+.disc-row label { cursor: pointer; flex: 1; }
+.disc-meta { color: var(--brown-light); font-style: italic; font-size: 0.85rem; }
+.disc-actions { display: flex; gap: 8px; margin-top: 12px; }
+
 /* ── DANGER ZONE ── */
 .danger-card { border-color: var(--red) !important; }
 .danger-btn {
@@ -180,12 +204,16 @@ footer a:hover { color: var(--gold-light); }
       <div class="section-head">
         <h2>ESPN Integration</h2>
         <div class="section-head-line"></div>
+        <a class="head-help" href="/espn-setup">How to connect ESPN &rarr;</a>
       </div>
       <div class="profile-card">
-        <label class="field-label">League IDs <span class="field-label-sub">— comma-separated ESPN league IDs</span></label>
+        <div class="card-hint">Paste your two ESPN cookies, hit <strong>Save</strong>, then <strong>Find my leagues</strong> — the league IDs fill themselves in. <a href="/espn-setup">Step-by-step instructions &rarr;</a></div>
+        <label class="field-label">League IDs <span class="field-label-sub">— comma-separated; use Find my leagues below instead of typing them</span></label>
         <div class="field-row">
           <input type="text" id="field-espn-ids" class="field-input" placeholder="e.g. 12345, 67890…" />
+          <button class="field-btn" id="btn-espn-discover" onclick="discoverEspnLeagues()">Find my leagues</button>
         </div>
+        <div id="espn-discovered"></div>
         <label class="field-label">espn_s2 Cookie</label>
         <div class="field-row">
           <input type="password" id="field-espn-s2" class="field-input" placeholder="espn_s2 cookie value from browser DevTools…" />
@@ -286,6 +314,71 @@ async function saveEspnSettings() {
     setStatus('espn-status', 'Saved', true);
     loadEspnSettings();
   } catch(e) { setStatus('espn-status', e.message, false); }
+}
+
+// ── ESPN league discovery ─────────────────────────────────────────────────────
+// Asks the worker to list every football league this ESPN account can read, so
+// nobody has to dig league IDs out of URLs. Cookies typed but not yet saved are
+// sent along, so "Find my leagues" doubles as a credential test.
+async function discoverEspnLeagues() {
+  const btn = document.getElementById('btn-espn-discover');
+  const box = document.getElementById('espn-discovered');
+  const s2   = document.getElementById('field-espn-s2')?.value.trim()   || '';
+  const swid = document.getElementById('field-espn-swid')?.value.trim() || '';
+
+  box.innerHTML = '';
+  btn.disabled = true;
+  setStatus('espn-status', 'Asking ESPN which leagues you are in…', true);
+  try {
+    const r = await fetch(API_BASE + '/espn/discover', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(s2 && swid ? { espn_s2: s2, swid } : {}),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || 'Could not reach ESPN');
+
+    if (!d.leagues?.length) {
+      setStatus('espn-status',
+        'No ESPN football leagues found for ' + d.season + '. Add the league IDs by hand — see the setup guide.', false);
+      return;
+    }
+
+    const have = new Set((document.getElementById('field-espn-ids').value || '')
+      .split(',').map(x => x.trim()).filter(Boolean));
+
+    box.innerHTML = `<div class="disc-box">
+      <div class="disc-head">Found ${d.leagues.length} league${d.leagues.length === 1 ? '' : 's'} &middot; ${d.season}</div>
+      ${d.leagues.map(lg => `<div class="disc-row">
+        <input type="checkbox" id="disc-${lg.id}" value="${lg.id}" checked />
+        <label for="disc-${lg.id}">${esc(lg.name)}
+          <span class="disc-meta">&mdash; ${lg.size ? lg.size + ' teams &middot; ' : ''}ID ${lg.id}${have.has(lg.id) ? ' &middot; already added' : ''}</span>
+        </label>
+      </div>`).join('')}
+      <div class="disc-actions">
+        <button class="field-btn" onclick="applyDiscovered()">Add checked &amp; save</button>
+        <button class="ghost-btn" onclick="document.getElementById('espn-discovered').innerHTML=''">Dismiss</button>
+      </div>
+    </div>`;
+    setStatus('espn-status', 'Pick the leagues you want, then Add checked & save.', true);
+  } catch (e) {
+    setStatus('espn-status', e.message, false);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// Merge the checked leagues into the ID field (keeping any manual ones already
+// there) and persist. Credentials are left out of the POST body so the worker
+// keeps the pair it already has.
+function applyDiscovered() {
+  const picked = [...document.querySelectorAll('#espn-discovered input[type=checkbox]:checked')]
+    .map(c => c.value);
+  const cur = (document.getElementById('field-espn-ids').value || '')
+    .split(',').map(x => x.trim()).filter(Boolean);
+  document.getElementById('field-espn-ids').value = [...new Set([...cur, ...picked])].join(', ');
+  document.getElementById('espn-discovered').innerHTML = '';
+  saveEspnSettings();
 }
 
 function updateTokenRow(hasToken) {
