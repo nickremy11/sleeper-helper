@@ -2114,6 +2114,12 @@ function lsLoadRankings(week) {
 
 function lsHaveProj() { return !!(LU.proj && Object.keys(LU.proj).length); }
 
+// A Sleeper token is needed to WRITE a lineup — nothing else. Previewing an
+// optimal lineup, uploading a ranking sheet and the ranks grid are all read-only
+// and must stay available without one (the ESPN cards have always proved the
+// preview path works tokenless).
+function lsCanWrite() { return !!(S.token || S.auth?.has_token); }
+
 function lsSlotElig(slot) {
   if (LU_FLEX_ELIG[slot]) return LU_FLEX_ELIG[slot];
   const pos = lsNormPos(slot);
@@ -2341,7 +2347,8 @@ function optimizeLineup(idx, src) {
   box.innerHTML = `<div style="padding:6px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--brown-mid);">
     <span style="font-size:0.72rem;color:var(--gold-light);">by ${label} · ${cur.toFixed(1)} → <span style="color:${dc};">${opt.toFixed(1)}</span> proj pts (<span style="color:${dc};">${d >= 0 ? '+' : ''}${d.toFixed(1)}</span>)</span>
     ${fix._espn ? '<span style="font-size:0.65rem;color:var(--brown-light);">set it in ESPN</span>'
-                : `<button class="setup-btn" onclick="applyLineup(${idx})">Apply this lineup</button>`}
+                : lsCanWrite() ? `<button class="setup-btn" onclick="applyLineup(${idx})">Apply this lineup</button>`
+                : '<span style="font-size:0.65rem;color:var(--brown-light);">preview only — add a Sleeper token to apply</span>'}
     <button class="ghost-btn" style="font-size:0.5rem;" onclick="revertLineupView(${idx})">Cancel</button>
   </div>`;
 }
@@ -2599,7 +2606,7 @@ function lswPlanFor(fix, slotIdx, replPid) {
 // A target still worth writing: writable, has a replacement chosen, and hasn't
 // already been applied successfully (re-sending it would just be a no-op write).
 function lswPending(t) {
-  return !t.fix._espn && !!LSW.picks[t.leagueId] && LSW.done[t.leagueId] !== 'ok';
+  return lsCanWrite() && !t.fix._espn && !!LSW.picks[t.leagueId] && LSW.done[t.leagueId] !== 'ok';
 }
 
 // How the sheet labels a candidate for this slot — "RB14", "FLEX23", "—".
@@ -2905,7 +2912,7 @@ function lswDraw() {
   const writable  = rows.filter(t => !t.fix._espn).length;
   const canRank   = lsHaveRankings();
   const canProj   = lsHaveProj();
-  const canWrite  = !!(S.token || S.auth?.has_token);
+  const canWrite  = lsCanWrite();
   const doneCount = Object.values(LSW.done).filter(v => v === 'ok').length;
 
   // .setup-btn already carries a gold border, so the active mode has to be marked
@@ -3248,7 +3255,7 @@ async function renderLineupCheck(force = false) {
 // box the user is standing in).
 function lsCardsHtml() {
   const lineups  = LU.lineups;
-  const canWrite = !!(S.token || S.auth?.has_token);
+  const canWrite = lsCanWrite();
   const canProj  = lsCanOptimize('projections');
   const canRank  = lsCanOptimize('ranks');
 
@@ -3260,22 +3267,20 @@ function lsCardsHtml() {
   return lineups.map((fix, idx) => {
       const optBtns = `<button class="setup-btn" ${canProj ? '' : 'disabled title="No projections for this week"'} onclick="event.preventDefault();optimizeLineup(${idx},'projections')">⚡ Optimize with Projections</button>
              <button class="setup-btn" ${canRank ? '' : 'disabled title="Upload a ranking sheet first"'} onclick="event.preventDefault();optimizeLineup(${idx},'ranks')">⚡ Optimize with Ranks</button>`;
-      // ESPN cards preview but never write, so they don't need a Sleeper token
-      // and never offer Apply — you still set the lineup over in ESPN.
-      const actions = fix._espn
-        ? `<div style="margin:4px 0;padding:0 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-             ${optBtns}
-             <span style="font-size:0.55rem;color:var(--brown-light);">preview only — set this lineup in ESPN</span>
-           </div>
-           <div id="lc-opt-${idx}"></div>`
+      // Every card gets the Optimize buttons — they only ever preview. What varies
+      // is the trailing note: ESPN can't be written at all, and a Sleeper league
+      // without a token can be previewed but not applied.
+      const note = fix._espn
+        ? `<span style="font-size:0.55rem;color:var(--brown-light);">preview only — set this lineup in ESPN</span>`
         : canWrite
-        ? `<div style="margin:4px 0;padding:0 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        ? `<button class="ghost-btn" style="font-size:0.5rem;" onclick="event.preventDefault();testSetLineup(${idx})">↻ Re-set current (test)</button>
+           <span id="lc-result-test-${idx}" style="font-size:0.55rem;color:var(--brown-light);"></span>`
+        : `<span style="font-size:0.55rem;color:var(--brown-light);">preview only — <a href="/myprofile" style="color:var(--gold-light);">add a Sleeper token</a> to apply</span>`;
+      const actions = `<div style="margin:4px 0;padding:0 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
              ${optBtns}
-             <button class="ghost-btn" style="font-size:0.5rem;" onclick="event.preventDefault();testSetLineup(${idx})">↻ Re-set current (test)</button>
-             <span id="lc-result-test-${idx}" style="font-size:0.55rem;color:var(--brown-light);"></span>
+             ${note}
            </div>
-           <div id="lc-opt-${idx}"></div>`
-        : '';
+           <div id="lc-opt-${idx}"></div>`;
 
     return `<details class="lineup-card" id="lc-${idx}">
       <summary>
@@ -3293,25 +3298,26 @@ function lsCardsHtml() {
 function lsRenderLineupCards() {
   try {
     const w        = LU.week;
-    const canWrite = !!(S.token || S.auth?.has_token);
+    const canWrite = lsCanWrite();
     const canProj  = lsCanOptimize('projections');
     const canRank  = lsCanOptimize('ranks');
     const cardsHtml = lsCardsHtml();
 
     // "Optimize all" / "Apply all" are projections-only on purpose — see the
     // comment above optimizeAll().
-    const toolbar = canWrite
-      ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+    // Only "Apply all" is a write. Optimize all, the sheet upload and the ranks
+    // grid are read-only, so the whole toolbar used to vanish for tokenless users
+    // for no reason — including the upload they need before ranks work at all.
+    const toolbar = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
            <button class="setup-btn" ${canProj ? '' : 'disabled'} onclick="optimizeAll()">⚡ Optimize all</button>
-           <button class="setup-btn" ${canProj ? '' : 'disabled'} onclick="applyAll()">✓ Apply all</button>
+           ${canWrite ? `<button class="setup-btn" ${canProj ? '' : 'disabled'} onclick="applyAll()">✓ Apply all</button>` : ''}
            <button class="ghost-btn" id="lu-collapse-btn" style="font-size:0.5rem;" onclick="toggleCollapseAll()">Expand all</button>
            <span style="width:1px;height:18px;background:var(--brown-mid);"></span>
            <span style="font-size:0.55rem;color:${canRank ? 'var(--gold-light)' : 'var(--brown-light)'};">${esc(lsRanksSummary())}</span>
            <button class="ghost-btn" style="font-size:0.5rem;" onclick="openRankingsUpload()">⬆ Upload rankings</button>
            <button class="ghost-btn" style="font-size:0.5rem;" onclick="sw('ranksgrid')">▦ View as ranks grid</button>
            <span id="lu-allstatus" style="font-size:0.6rem;color:var(--brown-light);width:100%;text-align:right;"></span>
-         </div>`
-      : '';
+         </div>`;
 
     const cachedAgo = LU._cache
       ? (() => {
