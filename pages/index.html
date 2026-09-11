@@ -1806,8 +1806,10 @@ const LU = {
   kick: {},                 // {nflTeam: kickoffISO} — ESPN scoreboard
   ranks: null,              // parsed weekly ranking sheet — see lsParseRanksCsv
   byGameTime: true,         // order interchangeable slots so flex never locks earlier than a position slot
+  faOn: true,               // free-agent watch (redraft only) — see lsFaUpgrades
   _cache: null,             // { at, week, lineups, proj, kick } — see LU_CACHE_TTL
 };
+try { LU.faOn = localStorage.getItem('lu_fa_watch') !== '0'; } catch(_) {}
 
 // How long a loaded lineup snapshot stays fresh before renderLineupCheck refetches.
 // Revisiting the tab, hopping to the ranks grid, or re-rendering after a sheet
@@ -1924,6 +1926,33 @@ function lsGameTime(pid) {
   return iso ? new Date(iso).getTime() : Infinity;
 }
 
+// A player whose NFL game has kicked off is LOCKED: he can no longer be moved out
+// of a starting slot, nor moved into one. Sleeper enforces this server-side, so
+// proposing such a move only produces a write that fails — but the real reason is
+// that his points are already banked, so "a better player is available" stops being
+// something you can act on, and a lineup that only differs in locked slots is in
+// fact optimal.
+//
+// Everything unknown reads as NOT locked (lsGameTime → Infinity): a bye week, a
+// player with no NFL team, and — deliberately — a scoreboard fetch that failed.
+// A missing feed switches the whole feature off rather than locking the wrong half
+// of a lineup.
+function lsLocked(pid) {
+  const t = lsGameTime(pid);
+  return t !== Infinity && t <= Date.now();
+}
+
+// Proposals are cached on the fixture, so they have to be invalidated when a game
+// kicks off underneath them — the 5-minute data cache alone would happily keep a
+// pre-kickoff proposal alive past the lock. Counting the teams already playing is a
+// cheap stamp that only ever changes at a kickoff.
+function lsLockEpoch() {
+  const now = Date.now();
+  let n = 0;
+  for (const iso of Object.values(LU.kick || {})) if (new Date(iso).getTime() <= now) n++;
+  return n;
+}
+
 // Within each position, ensure no flex-slot player kicks off earlier than a
 // same-position player in a dedicated slot — so the earliest games lock into
 // their natural slot and the flex stays open longest. Score-neutral; strict
@@ -1934,6 +1963,7 @@ function lsOrderByGameTime(out, slots) {
     slots.forEach((slot, i) => {
       const pid = String(out[i] || '0');
       if (pid === '0' || rsNormPos(S.players[pid]?.position) !== P) return;
+      if (lsLocked(pid)) return;   // already playing — his slot is frozen
       if (LU_FLEX_ELIG[slot]) flexI.push(i);
       else if (rsNormPos(slot) === P) dedI.push(i);
     });
@@ -2163,6 +2193,7 @@ function lsBuildOptimalStarters(fix, src) {
     const p = S.players[pid];
     if (!p) return null;
     if (excluded.has(String(pid)) && !startSet.has(String(pid))) return null;  // skip IR/taxi (unless already starting)
+    if (lsLocked(pid) && !startSet.has(String(pid))) return null;              // game started — can't be started now
     const pos = lsNormPos(p.position);
     if (!pos) return null;
     return { pid: String(pid), pos };
@@ -2175,6 +2206,9 @@ function lsBuildOptimalStarters(fix, src) {
   slots.forEach((slot, i) => {
     const cur = String(fix.starters[i] || '0');
     if (cur !== '0' && !poolIds.has(cur)) { used.add(cur); locked[i] = true; }   // no data → lock
+    // His game has started: he is neither benchable nor movable to another slot,
+    // so the slot is frozen exactly as it stands.
+    if (cur !== '0' && lsLocked(cur)) { used.add(cur); locked[i] = true; return; }
     const elig = lsSlotElig(slot);
     if (!elig) { locked[i] = true; return; }                                     // unknown slot → lock
     // K and DEF only ever move on the authority of an uploaded sheet: projections
@@ -2238,11 +2272,13 @@ function lsPlayerName(pid) {
 // stays cheap. Cleared whenever the lineup or the sheet changes underneath.
 function lsProposal(fix, src) {
   if (!fix || !lsCanOptimize(src)) return null;
+  const ep = lsLockEpoch();
+  if (fix._propEpoch !== ep) { fix._prop = null; fix._propEpoch = ep; }   // a game kicked off
   if (!fix._prop) fix._prop = {};
   if (!fix._prop[src]) fix._prop[src] = lsBuildOptimalStarters(fix, src).proposed;
   return fix._prop[src];
 }
-function lsClearProposals(fix) { if (fix) { fix._prop = null; fix._shown = null; } }
+function lsClearProposals(fix) { if (fix) { fix._prop = null; fix._shown = null; fix._fa = null; } }
 
 // Injury statuses that mean a starter won't play — flagged on the card, and never
 // auto-started or offered as an injury-swap replacement. Matched case-insensitively
@@ -2261,7 +2297,10 @@ function lsLineupStatus(fix) {
   const gain = have ? opt - cur : 0;
 
   const empty   = fix.starters.filter(p => !p || p === '0').length;
-  const injured = fix.starters.filter(p => lsBadInj(S.players[p]?.injury_status))
+  // An Out player whose game has already kicked off is a sunk zero — there is
+  // nothing left to do about him, so he must not keep the card screaming
+  // "Action needed" for the rest of the week.
+  const injured = fix.starters.filter(p => lsBadInj(S.players[p]?.injury_status) && !lsLocked(p))
                               .map(p => lsPlayerName(p));
 
   const curSet  = new Set(fix.starters.map(String));
@@ -2278,6 +2317,101 @@ function lsLineupStatus(fix) {
   return { level, label, detail, cur, opt, gain };
 }
 
+// ── Free-agent watch (redraft only) ──────────────────────────────────────────
+// "Is anyone sitting on the wire projected to outscore what I'd be starting?"
+//
+// Three things make this honest rather than noisy:
+//  · The baseline is the OPTIMAL lineup, not the current one. Comparing against
+//    whoever happens to be in the slot would flag a free agent every time your own
+//    bench already held the better player — that's an Optimize, not an add.
+//  · Each free agent is paired with the WEAKEST slot he's eligible for, then the
+//    pairs are taken greedily by gain with each slot and each player claimed once,
+//    so five waiver-wire WRs beating the same bad starter collapse to one row.
+//  · Locked slots and locked free agents are both out — a player whose game has
+//    kicked off can neither be added nor benched.
+// Dynasty leagues are skipped by design: a wire that deep is a different question.
+const LU_FA_MIN_GAIN = 1.0;   // points of projection a pickup must clear to be worth a row
+const LU_FA_MAX_ROWS = 4;
+
+function lsFaUpgrades(fix) {
+  if (!LU.faOn || !fix || !fix._redraft || !fix.rostered || !lsHaveProj()) return [];
+  const ep = lsLockEpoch();
+  if (fix._fa && fix._faEpoch === ep) return fix._fa;
+
+  const pc   = lsPtsCtx(fix);
+  const mine = new Set((fix.players || []).map(String));
+  // On an ESPN league the projection map IS the candidate universe (roster + the
+  // free agents we pulled); on Sleeper it's every player with a weekly projection.
+  const universe = fix._espnProj ? Object.keys(fix._espnProj) : Object.keys(LU.proj);
+
+  const fas = [];
+  for (const raw of universe) {
+    const pid = String(raw);
+    if (mine.has(pid) || fix.rostered.has(pid)) continue;
+    const p = S.players[pid];
+    if (!p || lsBadInj(p.injury_status) || lsLocked(pid)) continue;
+    const pos = lsNormPos(p.position);
+    if (!pos) continue;
+    const pts = lsPlayerPts(pid, pc);
+    if (!(pts > 0)) continue;
+    fas.push({ pid, pos, pts });
+  }
+  if (!fas.length) { fix._fa = []; fix._faEpoch = ep; return fix._fa; }
+
+  const base = (lsCanOptimize('projections') && lsProposal(fix, 'projections')) || fix.starters;
+  const pairs = [];
+  fix.rosterPositions.forEach((slot, i) => {
+    const cur = String(base[i] || '0');
+    if (lsLocked(cur)) return;                       // slot can't change any more
+    const elig = lsSlotElig(slot); if (!elig) return;
+    const curPts = cur === '0' ? 0 : lsPlayerPts(cur, pc);
+    for (const f of fas) {
+      if (!elig.includes(f.pos)) continue;
+      const gain = f.pts - curPts;
+      if (gain >= LU_FA_MIN_GAIN) pairs.push({ slotIdx: i, slot, cur, curPts, pid: f.pid, pos: f.pos, pts: f.pts, gain });
+    }
+  });
+  pairs.sort((a, b) => b.gain - a.gain);
+
+  const usedSlot = new Set(), usedPid = new Set(), out = [];
+  for (const c of pairs) {
+    if (usedSlot.has(c.slotIdx) || usedPid.has(c.pid)) continue;
+    usedSlot.add(c.slotIdx); usedPid.add(c.pid); out.push(c);
+    if (out.length >= LU_FA_MAX_ROWS) break;
+  }
+  fix._fa = out; fix._faEpoch = ep;
+  return out;
+}
+
+// The FA rows under a card. Deliberately advisory — there is no "add" button,
+// because a pickup is a waiver claim in Sleeper's app, not a lineup write.
+function lsFaHtml(fix) {
+  const ups = lsFaUpgrades(fix);
+  if (!ups.length) return '';
+  return `<div style="padding:6px 16px 8px;border-top:1px dashed var(--brown-mid);">
+    <div style="font-family:'Rye',serif;font-size:0.52rem;letter-spacing:0.1em;text-transform:uppercase;color:#d08a30;margin-bottom:4px;">◎ On the wire — projected to beat your best lineup</div>
+    ${ups.map(u => {
+      const p = S.players[u.pid] || {};
+      return `<div class="diff-row">
+        <span class="diff-slot">${esc(u.slot)}</span>
+        <span style="color:var(--parchment);flex:1;">
+          <span style="color:#d08a30;">${esc(lsPlayerName(u.pid))}</span>
+          <span style="color:var(--brown-light);font-size:0.75rem;"> ${esc(u.pos)}${p.team ? ' · ' + esc(p.team) : ''} · FA</span>
+          <span style="color:var(--brown-light);"> over </span>${esc(lsPlayerName(u.cur))}
+        </span>
+        <span style="color:var(--brown-light);font-size:0.8rem;white-space:nowrap;flex-shrink:0;">${u.curPts.toFixed(1)} <span style="color:#d08a30;">&rarr; ${u.pts.toFixed(1)}</span> (+${u.gain.toFixed(1)})</span>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+function lsToggleFa() {
+  LU.faOn = !LU.faOn;
+  try { localStorage.setItem('lu_fa_watch', LU.faOn ? '1' : '0'); } catch(_) {}
+  LU.lineups.forEach(f => { f._fa = null; });
+  lsRenderLineupCards();
+}
+
 const LS_LEVEL_COLOR = { bad: '#c0504d', warn: '#d08a30', ok: '#5fae5f', na: 'var(--brown-light)' };
 
 // Right-hand side of the card summary: reason + points + status badge.
@@ -2292,7 +2426,14 @@ function lsSummaryMeta(fix, idx) {
     ? `<span style="font-size:0.85rem;color:${color};">${esc(st.detail)}</span>` : '';
   const icon  = st.level === 'bad' ? '⚠ ' : st.level === 'ok' ? '✓ ' : '';
   const badge = `<span style="font-family:'Rye',serif;font-size:0.52rem;letter-spacing:0.1em;text-transform:uppercase;color:${color};border:1px solid ${color};border-radius:2px;padding:2px 6px;white-space:nowrap;">${icon}${esc(st.label)}</span>`;
-  return `<span id="lc-meta-${idx}" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">${reason}${pts}${badge}</span>`;
+  // Its own chip rather than folded into the status badge: a free-agent upgrade is
+  // a different kind of problem from a bad lineup, and a team can easily have one
+  // while already being Optimal.
+  const ups = lsFaUpgrades(fix);
+  const fa  = ups.length
+    ? `<span title="Free agents projected to beat your best lineup" style="font-family:'Rye',serif;font-size:0.52rem;letter-spacing:0.1em;text-transform:uppercase;color:#d08a30;border:1px dashed #d08a30;border-radius:2px;padding:2px 6px;white-space:nowrap;">◎ ${ups.length} FA +${ups[0].gain.toFixed(1)}</span>`
+    : '';
+  return `<span id="lc-meta-${idx}" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">${reason}${pts}${fa}${badge}</span>`;
 }
 
 // Render the slot rows for a card. mode 'current' shows live starters with proj
@@ -2317,11 +2458,12 @@ function lsBodyRows(fix, mode) {
         <span style="color:var(--brown-light);font-size:0.8rem;white-space:nowrap;flex-shrink:0;">${have ? lsPlayerPts(cur, pc).toFixed(1) : '–'} <span style="color:#5fae5f;">→ ${have ? lsPlayerPts(pr, pc).toFixed(1) : '–'}</span></span>
       </div>`;
     }
-    const pid = mode === 'diff' ? pr : cur;
-    const inj = injuryBadge(S.players[pid]?.injury_status);
-    return `<div class="diff-row">
+    const pid  = mode === 'diff' ? pr : cur;
+    const inj  = injuryBadge(S.players[pid]?.injury_status);
+    const lock = lsLocked(pid);
+    return `<div class="diff-row"${lock ? ' style="opacity:0.62;"' : ''}>
       <span class="diff-slot">${esc(slot)}</span>
-      <span style="color:var(--parchment);flex:1;">${esc(lsPlayerName(pid))}${inj ? ' ' + inj : ''}</span>
+      <span style="color:var(--parchment);flex:1;">${lock ? '<span title="Game has started — this slot is locked" style="color:var(--brown-light);">🔒 </span>' : ''}${esc(lsPlayerName(pid))}${inj ? ' ' + inj : ''}</span>
       ${ptsCell(pid)}
     </div>`;
   }).join('');
@@ -2545,6 +2687,8 @@ function lswCandidates(fix, slotIdx) {
   const slots = fix.rosterPositions;
   const elig  = lsSlotElig(slots[slotIdx]);
   if (!elig) return [];
+  // Once his game has kicked off the slot is frozen — there is no swap to offer.
+  if (lsLocked(String(fix.starters[slotIdx] || '0'))) return [];
   const starting = new Set((fix.starters || []).map(String));
   const excluded = fix.excluded || new Set();
   const pc   = lsPtsCtx(fix);
@@ -2554,6 +2698,7 @@ function lswCandidates(fix, slotIdx) {
     if (starting.has(pid) || excluded.has(pid)) return false;
     const p = S.players[pid];
     if (!p || lsBadInj(p.injury_status)) return false;
+    if (lsLocked(pid)) return false;              // his game has started — can't be started now
     return eligList.includes(lsNormPos(p.position));
   });
 
@@ -2580,6 +2725,7 @@ function lswCandidates(fix, slotIdx) {
     // The promoted player has to be able to play the vacated slot, and has to be
     // someone worth promoting — never slide an already-ruled-out starter upward.
     if (!p || lsBadInj(p.injury_status)) return;
+    if (lsLocked(cur)) return;                    // a playing starter can't be slid to another slot
     if (!elig.includes(lsNormPos(p.position))) return;
     const openElig = lsSlotElig(slot);
     if (!openElig) return;
@@ -2623,7 +2769,8 @@ function lswPlanFor(fix, slotIdx, replPid) {
 // A target still worth writing: writable, has a replacement chosen, and hasn't
 // already been applied successfully (re-sending it would just be a no-op write).
 function lswPending(t) {
-  return lsCanWrite() && !t.fix._espn && !!LSW.picks[t.leagueId] && LSW.done[t.leagueId] !== 'ok';
+  return lsCanWrite() && !t.fix._espn && !!LSW.picks[t.leagueId] && LSW.done[t.leagueId] !== 'ok' &&
+         !lsLocked(String(t.fix.starters[t.slotIdx] || '0'));
 }
 
 // How the sheet labels a candidate for this slot — "RB14", "FLEX23", "—".
@@ -2869,8 +3016,14 @@ function lswLeagueBlock(t) {
   }
 
   if (!cands.length) {
+    // The lock is a property of the player, not the league, so when it fires it
+    // fires in every row at once — say why rather than showing 30 identical
+    // "no eligible bench player" lines, which would read as a bug.
+    const locked = lsLocked(String(fix.starters[t.slotIdx] || '0'));
     return `<div class="lsw-league">${head}
-      <div style="padding:8px 12px;font-size:0.68rem;color:#d08a30;">No eligible bench player for a ${esc(t.slot)} slot — nothing to swap in here.</div>
+      <div style="padding:8px 12px;font-size:0.68rem;color:#d08a30;">${locked
+        ? '🔒 His game has already started — this slot is locked and can no longer be changed.'
+        : `No eligible bench player for a ${esc(t.slot)} slot — nothing to swap in here.`}</div>
     </div>`;
   }
 
@@ -3140,6 +3293,45 @@ const LU_ESPN_PROJ_FILTERS = [
 // produce (ESPN_STAT_TO_FIELD deliberately maps no kicking/defense categories).
 window.lsEspnProjDebug = {};
 
+// The stats array carries several splits at once. Take the projected
+// (statSourceId 1) line for THIS week, preferring the single-week split
+// (statSplitTypeId 1) over anything else that shares the period. Requiring split 1
+// up front was the bug that made ESPN projections silently return nothing.
+function lsEspnProjLine(pl, week) {
+  const proj = (pl?.stats || []).filter(st =>
+    st.statSourceId === 1 && Number(st.scoringPeriodId) === Number(week));
+  return proj.find(st => st.statSplitTypeId === 1) || proj[0] || null;
+}
+
+// ESPN's own projections for the league's FREE AGENTS, same kona_player_info view
+// and therefore the same league-scored `appliedTotal` scale as lsFetchEspnProjections.
+// That shared scale is the whole point: the FA watch compares a free agent against a
+// starter, so pricing one side on ESPN's numbers and the other on Sleeper's would
+// invent upgrades out of thin air. Only called when the roster pull already succeeded
+// — when it didn't, both sides fall back to Sleeper together and stay comparable.
+async function lsFetchEspnFreeAgents(espnId, season, week) {
+  const filter = { players: {
+    filterStatus: { value: ['FREEAGENT', 'WAIVERS'] },
+    limit: 250,
+    sortPercOwned: { sortPriority: 1, sortAsc: false },
+  } };
+  try {
+    const r = await fetch(`/api/espn/fantasy/${espnId}?view=kona_player_info&scoringPeriodId=${week}&seasonId=${season}`,
+                          { credentials: 'include', headers: { 'X-Fantasy-Filter': JSON.stringify(filter) } });
+    if (!r.ok) return null;
+    const d = await r.json();
+    const out = {};
+    for (const entry of (d.players || [])) {
+      const pl  = entry.player || entry;
+      const pid = lsEspnPid(pl);
+      if (!pid) continue;
+      const line = lsEspnProjLine(pl, week);
+      if (line && typeof line.appliedTotal === 'number') out[String(pid)] = line.appliedTotal;
+    }
+    return Object.keys(out).length ? out : null;
+  } catch(_) { return null; }
+}
+
 async function lsFetchEspnProjections(espnId, season, week, espnIdToPid) {
   const ids = Object.keys(espnIdToPid).map(Number).filter(n => !Number.isNaN(n));
   const dbg = { espnId, season, week, wanted: ids.length, attempts: [] };
@@ -3164,12 +3356,7 @@ async function lsFetchEspnProjections(espnId, season, week, espnIdToPid) {
         const pl  = entry.player || entry;
         const pid = espnIdToPid[String(pl.id)];
         if (!pid) continue;
-        // The stats array carries several splits at once. Take the projected
-        // (statSourceId 1) line for THIS week, preferring the single-week split
-        // (statSplitTypeId 1) over anything else that shares the period.
-        const proj = (pl.stats || []).filter(st =>
-          st.statSourceId === 1 && Number(st.scoringPeriodId) === Number(week));
-        const line = proj.find(st => st.statSplitTypeId === 1) || proj[0];
+        const line = lsEspnProjLine(pl, week);
         if (line && typeof line.appliedTotal === 'number') out[String(pid)] = line.appliedTotal;
         else noLine.push({ name: pl.fullName, splits: (pl.stats || []).map(st =>
                `src${st.statSourceId}/split${st.statSplitTypeId}/wk${st.scoringPeriodId}`) });
@@ -3219,6 +3406,16 @@ async function lsLoadEspnLineup(lg, week) {
   const rosterPositions = lsEspnRosterPositions(d.settings?.rosterSettings?.lineupSlotCounts);
   if (!rosterPositions.length) return null;
 
+  // mRoster returns every team's roster, so the league-wide owned set is free here
+  // the same way it is on the Sleeper side.
+  const rostered = new Set();
+  for (const t of (d.teams || [])) {
+    for (const e of (t.roster?.entries || [])) {
+      const pid = lsEspnPid(e.playerPoolEntry?.playerPoolEntry?.player || e.playerPoolEntry?.player);
+      if (pid) rostered.add(String(pid));
+    }
+  }
+
   const players = [], inSlot = [], espnIdToPid = {};
   for (const e of (myTeam.roster?.entries || [])) {
     const pl  = e.playerPoolEntry?.playerPoolEntry?.player || e.playerPoolEntry?.player;
@@ -3252,12 +3449,23 @@ async function lsLoadEspnLineup(lg, week) {
   const parsedScoring = crParseEspnScoring(d.settings).scoring;
   const scoringSettings = Object.keys(parsedScoring).length ? parsedScoring : LU_ESPN_SCORING;
 
+  // Free agents join the SAME projection map as the roster, so lsPlayerPts prices
+  // everyone off one scale with no caller branching. Skipped entirely when the
+  // roster pull fell back to Sleeper's numbers (_espnProj null) — then the FA watch
+  // reads Sleeper projections for both sides, which is equally comparable.
+  const espnProj = await lsFetchEspnProjections(espnId, season, week, espnIdToPid);
+  if (espnProj) Object.assign(espnProj, (await lsFetchEspnFreeAgents(espnId, season, week)) || {});
+
   return {
     leagueName: lg.name, leagueId: lg.league_id, rosterId: myTeam.id,
     starters, rosterPositions, players,
     excluded: new Set(),
     scoringSettings,
-    _espnProj: await lsFetchEspnProjections(espnId, season, week, espnIdToPid),
+    // Same pre-draft guard as the Sleeper side: a league that hasn't drafted would
+    // report most of the NFL as available.
+    rostered: rostered.size >= (d.teams || []).length * 8 ? rostered : null,
+    _redraft: true,            // ESPN has no dynasty concept here
+    _espnProj: espnProj,
     _espn: true,               // read-only: never written back, never bulk-applied
   };
 }
@@ -3301,6 +3509,14 @@ async function lsEnsureLineupData(force = false) {
       const mine    = (rosters || []).find(r => r.owner_id === S.userId);
       if (!mine) return null;
 
+      // Every player owned by anyone in the league — the complement is the free
+      // agent pool, which the redraft FA watch scans. Costs nothing: /rosters is
+      // already in hand. A league whose draft hasn't finished would report almost
+      // the whole NFL as "available", so a thin roster set disables the scan
+      // rather than flooding the card.
+      const rostered = new Set();
+      for (const r of (rosters || [])) for (const p of (r.players || [])) rostered.add(String(p));
+
       // The week's matchup is the source of truth for what update_matchup_leg writes.
       // mine.starters (from /rosters) is the generic roster lineup and can lag a
       // week-specific change — so prefer the matchup starters for week w.
@@ -3318,6 +3534,8 @@ async function lsEnsureLineupData(force = false) {
         players: mine.players || [],
         excluded: new Set([...(mine.reserve || []), ...(mine.taxi || [])].map(String)),  // IR + taxi — never auto-start
         scoringSettings: detail?.scoring_settings || {},
+        rostered: rostered.size >= (rosters || []).length * 8 ? rostered : null,
+        _redraft: rsLeagueCategory(lg.league_id) === 'redraft',
       };
     } catch(_) { return null; }
   }));
@@ -3395,6 +3613,7 @@ function lsCardsHtml() {
         ${lsSummaryMeta(fix, idx)}
       </summary>
       <div id="lc-body-${idx}">${lsBodyRows(fix, 'current')}</div>
+      ${lsFaHtml(fix)}
       ${actions}
     </details>`;
   }).join('');
@@ -3423,6 +3642,7 @@ function lsRenderLineupCards() {
            <span style="font-size:0.55rem;color:${canRank ? 'var(--gold-light)' : 'var(--brown-light)'};">${esc(lsRanksSummary())}</span>
            <button class="ghost-btn" style="font-size:0.5rem;" onclick="openRankingsUpload()">⬆ Upload rankings</button>
            <button class="ghost-btn" style="font-size:0.5rem;" onclick="sw('ranksgrid')">▦ View as ranks grid</button>
+           <button class="ghost-btn" style="font-size:0.5rem;${LU.faOn ? 'color:#d08a30;border-color:#d08a30;' : ''}" title="Flag free agents projected to beat your best lineup (redraft leagues only)" onclick="lsToggleFa()">◎ FA watch: ${LU.faOn ? 'on' : 'off'}</button>
            <span id="lu-allstatus" style="font-size:0.6rem;color:var(--brown-light);width:100%;text-align:right;"></span>
          </div>`;
 
