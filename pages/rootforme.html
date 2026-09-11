@@ -418,6 +418,7 @@ const S = {
   playerMap:       {},
   nflGames:        [],
   matchupResults:  [],
+  espnSkips:       [], // [{name, reason}] — ESPN leagues that dropped out of a load
   processedGames:  null, // cached after loadMatchups
   activeDetail:    null, // { gameKey, pid }
   psActiveDetail:  null, // pid for players section
@@ -526,6 +527,10 @@ async function loadEspnLeagues() {
     await Promise.all(cfg.league_ids.map(id => loadOneEspnLeague(id)));
   } catch {}
 }
+
+// ESPN proTeamId → NFL abbreviation (Sleeper-compatible). Duplicated from
+// index.html — this page shares no state with it.
+const ESPN_TEAM_MAP = {1:'ATL',2:'BUF',3:'CHI',4:'CIN',5:'CLE',6:'DAL',7:'DEN',8:'DET',9:'GB',10:'TEN',11:'IND',12:'KC',13:'LV',14:'LAR',15:'MIA',16:'MIN',17:'NE',18:'NO',19:'NYG',20:'NYJ',21:'PHI',22:'ARI',23:'PIT',24:'LAC',25:'SF',26:'SEA',27:'TB',28:'WAS',29:'CAR',30:'JAX',33:'BAL',34:'HOU'};
 
 async function loadOneEspnLeague(leagueId) {
   try {
@@ -667,6 +672,7 @@ async function loadMatchups() {
     S.playerMap = players || {};
     S.nflGames  = nflGames || [];
 
+    S.espnSkips = [];
     const matchupResults = await Promise.all(contenderLeagues.map(lg => fetchLeagueMatchup(lg)));
     S.matchupResults = matchupResults.filter(Boolean);
     S.activeDetail   = null;
@@ -707,21 +713,23 @@ async function fetchEspnLeagueMatchup(league) {
   try {
     const espnId = league.league_id.replace('espn_', '');
     const r = await fetch(
-      `${API}/espn/fantasy/${espnId}?view=mMatchup&view=mRoster&scoringPeriodId=${S.week}&seasonId=${S.season}`,
+      `${API}/espn/fantasy/${espnId}?view=mMatchup&view=mRoster&view=mTeam&scoringPeriodId=${S.week}&seasonId=${S.season}`,
       { credentials: 'include' }
     );
-    if (!r.ok) return null;
+    if (!r.ok) return espnSkip(league, `ESPN returned HTTP ${r.status}`);
     const d = await r.json();
 
     const mySWID = S.espnSettings?.swid || '';
-    const myTeam = (d.teams || []).find(t => t.primaryOwner === mySWID);
-    if (!myTeam) return null;
+    const myTeam = (d.teams || []).find(t =>
+      t.primaryOwner === mySWID || (t.owners || []).includes(mySWID)
+    );
+    if (!myTeam) return espnSkip(league, 'could not find your team (SWID mismatch)');
 
     const matchup = (d.schedule || []).find(m =>
       m.matchupPeriodId === S.week &&
       (m.home?.teamId === myTeam.id || m.away?.teamId === myTeam.id)
     );
-    if (!matchup) return null;
+    if (!matchup) return espnSkip(league, `no Week ${S.week} matchup on the schedule`);
 
     const iAmHome  = matchup.home?.teamId === myTeam.id;
     const oppTeamId = iAmHome ? matchup.away?.teamId : matchup.home?.teamId;
@@ -731,9 +739,13 @@ async function fetchEspnLeagueMatchup(league) {
     const byName = {};
     const rankOf = p => (p.search_rank != null && p.search_rank < 9999999) ? p.search_rank : Infinity;
     for (const [pid, p] of Object.entries(S.playerMap || {})) {
-      if (!p.full_name) continue;
+      // Sleeper's DEF entries have no full_name — index them off first+last
+      // ("Los Angeles" + "Chargers") so a name match is at least possible;
+      // the proTeamId path below is what actually resolves them.
+      const nm = p.full_name || `${p.first_name || ''} ${p.last_name || ''}`.trim();
+      if (!nm) continue;
       // Normalize names + on collisions keep the more fantasy-relevant player.
-      const key = normName(p.full_name);
+      const key = normName(nm);
       if (byName[key] == null || rankOf(p) < rankOf(S.playerMap[byName[key]])) byName[key] = pid;
     }
 
@@ -748,9 +760,13 @@ async function fetchEspnLeagueMatchup(league) {
         if (!pData) continue;
         const fullName = pData.fullName
           || `${pData.firstName || ''} ${pData.lastName || ''}`.trim();
-        if (!fullName) continue;
-        const pid = byName[normName(fullName)];
-        if (!pid) continue;
+        // D/ST never name-matches (ESPN says "Chargers D/ST", Sleeper says
+        // "Los Angeles Chargers") but Sleeper's DEF player_id IS the team
+        // abbreviation, so resolve it off proTeamId instead.
+        const pid = pData.defaultPositionId === 16
+          ? ESPN_TEAM_MAP[pData.proTeamId]
+          : (fullName ? byName[normName(fullName)] : null);
+        if (!pid || !S.playerMap[pid]) continue;
         starters.push(pid);
         players_points[pid] = entry.playerPoolEntry?.appliedStatTotal ?? 0;
       }
@@ -764,7 +780,15 @@ async function fetchEspnLeagueMatchup(league) {
       myMatchup:  { starters: my.starters,  players: my.starters,  players_points: my.players_points  },
       oppMatchup: oppTeam ? { starters: opp.starters, players: opp.starters, players_points: opp.players_points } : null,
     };
-  } catch { return null; }
+  } catch (e) { return espnSkip(league, e.message || 'request failed'); }
+}
+
+// Every ESPN bail-out used to `return null` silently, so a league that failed
+// to load was indistinguishable from one that simply had no players playing.
+// Record the reason so renderGameCards() can say so.
+function espnSkip(league, reason) {
+  S.espnSkips.push({ name: league.name || 'ESPN league', reason });
+  return null;
 }
 
 // ── Process Games ─────────────────────────────────────────────────────────────
@@ -842,6 +866,11 @@ function renderGameCards() {
   S.processedGames = processGames();
   const processed  = S.processedGames;
 
+  const skipNote = S.espnSkips.length
+    ? `<div class="err-state" style="margin-bottom:16px">Skipped ${S.espnSkips.length} ESPN league${S.espnSkips.length !== 1 ? 's' : ''}: `
+      + S.espnSkips.map(x => `${esc(x.name)} (${esc(x.reason)})`).join(', ') + '</div>'
+    : '';
+
   if (!processed.length) {
     // Distinguish "ESPN has no NFL game schedule for this week yet" from
     // "your leagues have no rostered starters this week".
@@ -861,11 +890,11 @@ function renderGameCards() {
     } else {
       msg = `No players found in contending leagues for Week ${S.week}. Make sure leagues are checked and you have active matchups.`;
     }
-    container.innerHTML = `<div class="empty-state"><p>${esc(msg)}</p></div>`;
+    container.innerHTML = skipNote + `<div class="empty-state"><p>${esc(msg)}</p></div>`;
     return;
   }
 
-  container.innerHTML = processed.map(({ key, game, players }) => {
+  container.innerHTML = skipNote + processed.map(({ key, game, players }) => {
     const kickoff    = new Date(game.kickoff);
     const dateStr    = kickoff.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
     const timeStr    = kickoff.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
