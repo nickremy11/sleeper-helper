@@ -2287,6 +2287,18 @@ function lsClearProposals(fix) { if (fix) { fix._prop = null; fix._shown = null;
 const LS_BAD_INJ = { OUT: 1, IR: 1, SUS: 1, NA: 1, PUP: 1, DNR: 1, COV: 1, DNP: 1, O: 1 };
 function lsBadInj(status) { return !!LS_BAD_INJ[String(status || '').toUpperCase()]; }
 
+// Questionable/Doubtful starters. Deliberately NOT part of lsLineupStatus — these
+// players are still startable and there may well be nothing to do about them, so
+// they must never push a card to "Action needed". This is purely a heads-up chip:
+// "you have a game-time decision in here". Players whose game has already kicked
+// off are dropped — the decision is behind you at that point.
+const LS_DOUBT_INJ = { Q: 1, QUESTIONABLE: 1, D: 1, DOUBTFUL: 1 };
+function lsDoubtInj(status) { return !!LS_DOUBT_INJ[String(status || '').toUpperCase()]; }
+function lsQuestionableStarters(fix) {
+  return fix.starters.filter(p => p && p !== '0' && lsDoubtInj(S.players[p]?.injury_status) && !lsLocked(p))
+                     .map(p => ({ pid: p, name: lsPlayerName(p), tag: String(S.players[p]?.injury_status || '').toUpperCase().startsWith('D') ? 'D' : 'Q' }));
+}
+
 // Per-league lineup health, used for the collapsed summary badge.
 function lsLineupStatus(fix) {
   const pc   = lsPtsCtx(fix);
@@ -2429,11 +2441,15 @@ function lsSummaryMeta(fix, idx) {
   // Its own chip rather than folded into the status badge: a free-agent upgrade is
   // a different kind of problem from a bad lineup, and a team can easily have one
   // while already being Optimal.
+  const qd  = lsQuestionableStarters(fix);
+  const doubt = qd.length
+    ? `<span title="Game-time decisions: ${esc(qd.map(q => q.name + ' (' + q.tag + ')').join(', '))}" style="font-family:'Rye',serif;font-size:0.52rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--gold);border:1px dotted var(--gold);border-radius:2px;padding:2px 6px;white-space:nowrap;">? ${qd.length} Q/D</span>`
+    : '';
   const ups = lsFaUpgrades(fix);
   const fa  = ups.length
     ? `<span title="Free agents projected to beat your best lineup" style="font-family:'Rye',serif;font-size:0.52rem;letter-spacing:0.1em;text-transform:uppercase;color:#d08a30;border:1px dashed #d08a30;border-radius:2px;padding:2px 6px;white-space:nowrap;">◎ ${ups.length} FA +${ups[0].gain.toFixed(1)}</span>`
     : '';
-  return `<span id="lc-meta-${idx}" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">${reason}${pts}${fa}${badge}</span>`;
+  return `<span id="lc-meta-${idx}" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">${reason}${pts}${doubt}${fa}${badge}</span>`;
 }
 
 // Render the slot rows for a card. mode 'current' shows live starters with proj
