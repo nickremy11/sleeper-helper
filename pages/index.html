@@ -919,7 +919,7 @@ async function loadOneEspnLeague(leagueId, season) {
     const lg = { league_id: lgId, name, total_rosters: size, source: 'espn' };
     S.leagues.push(lg);
     S.leagueDetails[lgId] = { ...lg, settings: { type: 0, best_ball: 0 }, _espnId: leagueId };
-    RS.prefs[lgId] = null;  // ESPN leagues have no contender/rebuilder prefs
+    RS.prefs[lgId] = RS._storedPrefs?.[lgId] ?? null;  // Root For Me tags ESPN leagues too (espn_{id})
   } catch {}
 }
 
@@ -5297,6 +5297,9 @@ async function rsLoadPrefs() {
   } else {
     try { stored = JSON.parse(localStorage.getItem('rfm_prefs') || '{}'); } catch {}
   }
+  // Kept so ESPN leagues, which finish loading after this runs, can pick up
+  // their Root For Me tags (keyed espn_{id}) instead of defaulting to null.
+  RS._storedPrefs = stored;
   RS.prefs = {};
   for (const lg of S.leagues) RS.prefs[lg.league_id] = stored[lg.league_id] ?? null;
 }
@@ -7032,11 +7035,19 @@ function lsRecapNeedsOdds() {
   });
 }
 
+// Contender / rebuilder for filtering — straight from Root For Me (Sleeper and
+// ESPN alike); an untagged league is neither. Guillotine leagues are excluded by callers.
+function lsLeagueRole(lgId) {
+  const pref = RS.prefs[lgId];
+  if (pref?.contender === true)  return 'contender';
+  if (pref && pref.contender === false) return 'rebuilder';
+  return null;
+}
+
 function lsRecapMatches(lg) {
-  const R = LS.recap, id = lg.league_id, pref = RS.prefs[id];
+  const R = LS.recap, id = lg.league_id;
   if (R.fmt !== 'all' && rsLeagueCategory(id) !== R.fmt) return false;
-  if (R.role === 'contender' && pref?.contender !== true) return false;
-  if (R.role === 'rebuilder' && !(pref && pref.contender === false)) return false;
+  if (R.role !== 'all' && lsLeagueRole(id) !== R.role) return false;
   const type = S.leagueDetails[id]?.settings?.best_ball === 1 ? 'bestball' : 'lineup';
   if (R.lineup !== 'all' && type !== R.lineup) return false;
   return true;
@@ -7159,11 +7170,11 @@ function lsRecapHtml() {
   if (!maxWeek) return `<div class="rc-wrap">${head}<div class="rc-empty">The first recap posts once Week 1 is final.</div></div>`;
 
   const W = Math.min(LS.recap.week ?? maxWeek, maxWeek);
-  const hasPrefs = S.leagues.some(lg => RS.prefs[lg.league_id] != null);
+  const roles = new Set(pool.map(lg => lsLeagueRole(lg.league_id)));
   const controls = RC_FILTERS.map(f => `<div class="ls-mode-bar">
     <span class="ls-mode-label">${f.lbl}</span>
     ${f.opts.map(([v, l]) => {
-      const off = f.key === 'role' && v !== 'all' && !hasPrefs;
+      const off = f.key === 'role' && v !== 'all' && !roles.has(v);
       return `<button class="ls-mode-pill${LS.recap[f.key] === v ? ' active' : ''}" onclick="lsRecapSet('${f.key}','${v}')"${off ? ' disabled title="Fill out Root For Me first"' : ''}>${l}</button>`;
     }).join('')}
   </div>`).join('');
@@ -7205,7 +7216,7 @@ function lsDrawTable() {
   // lsSimulateAllLeagues() / the contender-score helpers redraw as they progress;
   // when the Scout tab drives the simulation there is no Summaries table on screen.
   if (S.tab !== 'leagues') return;
-  const hasPrefs = S.leagues.some(lg => RS.prefs[lg.league_id] !== null);
+  const roles = new Set(S.leagues.filter(lg => !lsIsGuillotine(lg.league_id)).map(lg => lsLeagueRole(lg.league_id)));
   const cd = LS.contenderData;
   const crLoading = cd.mode === 'projections' && cd.loading;
   if (cd.mode === 'adp' && !cd.aggAdpLoaded && !cd.aggAdpLoading) lsLoadAggregateAdp();
@@ -7236,8 +7247,8 @@ function lsDrawTable() {
     return {
       lgId:       lg.league_id,
       name:       lg.name || 'Unnamed',
-      contender:  pref?.contender === true,
-      rebuilder:  pref !== null && pref?.contender === false,
+      prefContender: pref?.contender === true,   // explicit Root For Me pick — drives the gold name
+      role:       lsLeagueRole(lg.league_id),    // redraft = contender; drives the filter
       hasData:    !!d,
       standing:   d?.standing   ?? 999,
       numTeams:   d?.numTeams   ?? 0,
@@ -7254,8 +7265,8 @@ function lsDrawTable() {
   });
 
   // Apply filter
-  if (LS.filter === 'contenders') rows = rows.filter(r => r.contender);
-  if (LS.filter === 'rebuilders') rows = rows.filter(r => r.rebuilder);
+  if (LS.filter === 'contenders') rows = rows.filter(r => r.role === 'contender');
+  if (LS.filter === 'rebuilders') rows = rows.filter(r => r.role === 'rebuilder');
   if (LS.search) {
     const q = LS.search.toLowerCase();
     rows = rows.filter(r => r.name.toLowerCase().includes(q));
@@ -7287,7 +7298,7 @@ function lsDrawTable() {
 
   const tbody = `<tbody id="ls-tbody">${rows.map(row => {
     // League name cell
-    const nameCls = row.contender ? ' ls-contender-name' : '';
+    const nameCls = row.prefContender ? ' ls-contender-name' : '';
     const nameCell = `<td><a href="/analyzer?league=${row.lgId}" class="row-link${nameCls}">${esc(row.name)}</a></td>`;
 
     // Standing cell
@@ -7355,10 +7366,10 @@ function lsDrawTable() {
       <button class="ghost-btn${LS.filter==='all'?' active':''}" onclick="lsSetFilter('all')" style="${LS.filter==='all'?'border-color:var(--gold);color:var(--gold);':''}">All</button>
       <button class="ghost-btn${LS.filter==='contenders'?' active':''}" onclick="lsSetFilter('contenders')"
         style="${LS.filter==='contenders'?'border-color:var(--gold);color:var(--gold);':''}"
-        ${hasPrefs?'':'disabled title="Fill out Root For Me first"'}>Contenders</button>
+        ${roles.has('contender')?'':'disabled title="Fill out Root For Me first"'}>Contenders</button>
       <button class="ghost-btn${LS.filter==='rebuilders'?' active':''}" onclick="lsSetFilter('rebuilders')"
         style="${LS.filter==='rebuilders'?'border-color:var(--gold);color:var(--gold);':''}"
-        ${hasPrefs?'':'disabled title="Fill out Root For Me first"'}>Rebuilders</button>
+        ${roles.has('rebuilder')?'':'disabled title="Tag a league as rebuilding in Root For Me"'}>Rebuilders</button>
       <input type="text" class="search-input" id="ls-search" placeholder="Search leagues…"
         oninput="lsOnSearch()" value="${esc(LS.search)}" style="max-width:180px;margin-left:4px;" />
       ${LS.sortCol ? `<button class="ls-reset-sort" onclick="lsSort(null)">Sleeper order</button>` : ''}
