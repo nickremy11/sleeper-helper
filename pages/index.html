@@ -414,6 +414,44 @@ a.row-link.ls-contender-name { color: var(--gold-light); font-weight: 700; }
 .ls-mode-label { font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); margin-right: 2px; }
 .ls-mode-pill { background: transparent; border: 1px solid var(--brown-mid); color: var(--brown-light); padding: 3px 11px; border-radius: 12px; font-size: 0.8rem; cursor: pointer; transition: all 0.15s; }
 .ls-mode-pill.active { border-color: var(--gold); color: var(--gold); background: rgba(194,154,83,0.10); }
+.ls-mode-pill:disabled { opacity: 0.4; cursor: default; }
+.ls-reset-sort { background: none; border: none; color: var(--brown-light); font-family: 'Crimson Text', serif; font-size: 0.82rem; cursor: pointer; text-decoration: underline dotted; padding: 0; }
+.ls-reset-sort:hover { color: var(--gold-light); }
+
+/* Weekly Recap — parchment "dispatch" cards */
+.rc-wrap { margin: 0 0 26px; }
+.rc-controls { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin-bottom: 12px; }
+.rc-weeks { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-bottom: 14px; }
+.rc-week-pill { min-width: 34px; padding: 3px 8px; }
+.rc-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.rc-card { position: relative; overflow: hidden; background: linear-gradient(160deg, var(--cream) 0%, var(--parchment) 100%); color: var(--ink); border: 3px double var(--brown-mid); border-radius: 3px; padding: 16px 18px 14px; box-shadow: 5px 5px 0 rgba(0,0,0,0.35); }
+.rc-card::before { content: ''; position: absolute; inset: 5px; border: 1px dashed rgba(92,61,30,0.35); pointer-events: none; }
+.rc-kicker { font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--brown-light); }
+.rc-headline { font-family: 'Rye', serif; font-size: 1.45rem; line-height: 1.1; color: var(--brown-dark); margin: 4px 0 2px; padding-right: 74px; }
+.rc-scope { font-family: 'Crimson Text', serif; font-style: italic; font-size: 0.85rem; color: var(--brown-mid); }
+.rc-stamp { position: absolute; top: 14px; right: 14px; width: 64px; height: 64px; border-radius: 50%; border: 3px solid currentColor; display: flex; flex-direction: column; align-items: center; justify-content: center; transform: rotate(-12deg); font-family: 'Rye', serif; line-height: 1; opacity: 0.85; }
+.rc-stamp b { font-size: 1.05rem; font-weight: 400; }
+.rc-stamp span { font-size: 0.38rem; letter-spacing: 0.14em; margin-top: 3px; text-transform: uppercase; }
+.rc-rule { display: flex; align-items: center; gap: 8px; margin: 12px 0 8px; font-family: 'Rye', serif; font-size: 0.46rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--brown-mid); }
+.rc-rule::before, .rc-rule::after { content: ''; flex: 1; border-top: 2px solid rgba(92,61,30,0.45); }
+.rc-row { display: grid; grid-template-columns: 1.15fr 1fr 1fr; gap: 12px; }
+.rc-row4 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 14px; }
+.rc-stat-lbl { font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brown-light); }
+.rc-big { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 1.6rem; line-height: 1.1; color: var(--brown-dark); white-space: nowrap; }
+.rc-mid { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 1.15rem; line-height: 1.15; color: var(--brown-dark); white-space: nowrap; }
+.rc-sub { font-family: 'Crimson Text', serif; font-size: 0.78rem; color: var(--brown-mid); line-height: 1.25; }
+.rc-bar { display: flex; height: 7px; margin-top: 5px; border-radius: 4px; overflow: hidden; background: rgba(92,61,30,0.18); }
+.rc-bar .w { background: var(--green-light); }
+.rc-bar .t { background: var(--gold); }
+.rc-bar .l { background: var(--red); }
+.rc-bar .fill { background: var(--gold); }
+.rc-bar .fill.bad { background: var(--red); }
+.rc-pos { color: var(--green-light); }
+.rc-neg { color: var(--red); }
+.rc-foot { margin-top: 10px; font-family: 'Crimson Text', serif; font-size: 0.74rem; font-style: italic; color: var(--brown-light); }
+.rc-foot button { background: none; border: none; padding: 0; font: inherit; color: var(--brown-dark); text-decoration: underline; cursor: pointer; }
+.rc-empty { padding: 14px 16px; border: 1px dashed var(--brown-mid); color: var(--brown-light); font-family: 'Crimson Text', serif; font-style: italic; }
+@media (max-width: 420px) { .rc-row { grid-template-columns: 1fr 1fr; } .rc-row > :first-child { grid-column: 1 / -1; } }
 
 /* ── WAIVERS TAB ── */
 .wv-mode-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
@@ -596,11 +634,12 @@ const RS = {
 
 // ── League Summaries state ────────────────────────────────────────────────────
 const LS = {
-  leagueData: {},   // {lgId: {standing, numTeams, wins, losses, playoffTeams, apWins, apLosses, myRosterId, rosterPlayers}}
+  leagueData: {},   // {lgId: {standing, numTeams, wins, losses, playoffTeams, apWins, apLosses, myRosterId, rosterPlayers, banked, weekly}}
   loaded:     false,
   loading:    false,
-  sortCol:    'record',
-  sortDir:    -1,
+  sortCol:    null, // null = the order Sleeper lists your leagues in (ESPN appended)
+  sortDir:    1,    // 1 = the column's natural direction (A-Z / best first), -1 = reversed
+  recap: { week: null, fmt: 'all', role: 'all', lineup: 'all' },  // Weekly Recap — week null = latest completed
   filter:     'all', // 'all' | 'contenders' | 'rebuilders'
   search:     '',
   oddsLoaded:  false,
@@ -857,6 +896,11 @@ async function loadEspnLeagues(season) {
       if (newEspnLeagues.length) {
         await Promise.all(newEspnLeagues.map(lg => lsLoadEspnLeague(lg)));
         lsRestoreOddsCache();
+        lsRecapSnapshot();
+        // Odds already ran (or are running) without these — cover them too.
+        const missing = newEspnLeagues.some(l => LS.leagueData[l.league_id] && LS.leagueData[l.league_id].playoffOdds == null);
+        if (missing && LS.oddsLoading) LS._oddsRerun = true;
+        else if (missing && LS.oddsLoaded) { LS._oddsUseCache = true; lsSimulateAllLeagues(); }
         lsDrawTable();
       }
     }
@@ -5974,11 +6018,23 @@ async function renderLeagueSummaries() {
   }
   LS.loading = false;
   lsDrawTable();
+  // A new week just finished and nothing's cached for it → generate its recap
+  // odds now rather than waiting for a button press.
+  if (!LS._autoOdds && !LS.oddsLoading && lsRecapNeedsOdds()) {
+    LS._autoOdds = true;
+    LS._oddsUseCache = true;
+    lsSimulateAllLeagues();
+  }
 }
 
 async function lsLoadData() {
   await getNflState();
   await loadPlayers(); // ESPN roster→Sleeper-id name matching below needs S._playersByName ready
+  // loadUser() fires the league-detail fetches without awaiting them, but banked
+  // weeks (median games), the recap filters and the sim all read settings.
+  await Promise.all(S.leagues
+    .filter(lg => lg.source !== 'espn' && !S.leagueDetails[lg.league_id])
+    .map(lg => api('/league/' + lg.league_id).then(dd => { if (dd) S.leagueDetails[lg.league_id] = dd; }).catch(() => {})));
   await Promise.allSettled(S.leagues.map(async lg => {
     if (lg.source === 'espn') return lsLoadEspnLeague(lg);
     try {
@@ -6003,10 +6059,17 @@ async function lsLoadData() {
         rosterPlayers[r.roster_id] = r.players || [];
         rosterOwners[r.roster_id]  = r.owner_id || null;
         rosterStats[r.roster_id]   = {
-          wins: r.settings?.wins  || 0,
-          fpts: (r.settings?.fpts || 0) + (r.settings?.fpts_decimal || 0) / 100,
+          wins:  r.settings?.wins  || 0,
+          fpts:  (r.settings?.fpts || 0) + (r.settings?.fpts_decimal || 0) / 100,
+          maxPf: (r.settings?.ppts || 0) + (r.settings?.ppts_decimal || 0) / 100,  // Sleeper "potential points"
         };
       }
+      // No potential points yet (Sleeper fills ppts in after scoring) → rank Max PF on PF.
+      if (!Object.values(rosterStats).some(s => s.maxPf > 0)) {
+        for (const s of Object.values(rosterStats)) s.maxPf = s.fpts;
+      }
+      const median = detail?.settings?.league_average_match === 1;
+      const played = (mine.settings?.wins || 0) + (mine.settings?.losses || 0) + (mine.settings?.ties || 0);
       LS.leagueData[lg.league_id] = {
         standing, numTeams, playoffTeams,
         wins:   mine.settings?.wins   || 0,
@@ -6014,19 +6077,25 @@ async function lsLoadData() {
         myRosterId: mine.roster_id,
         apWins: null, apLosses: null,
         rosterPlayers, rosterStats, rosterOwners,
+        median,
+        // Weeks already in the records — derived from the records themselves, not
+        // the NFL calendar, so the sim can never re-simulate (or skip) a week that
+        // Sleeper has or hasn't processed yet. A median league plays 2 games a week.
+        banked: Math.round(played / (median ? 2 : 1)),
+        weekly: {},
       };
     } catch(_) {}
   }));
-  // Now load all-play in parallel (Sleeper only — ESPN all-play isn't built;
-  // apWins/apLosses stay null, which the table already renders as "—")
+  // Per-week results + all-play (Sleeper — ESPN builds its own in lsLoadEspnLeague
+  // from the schedule it already fetched)
   await Promise.allSettled(S.leagues.map(async lg => {
     if (lg.source === 'espn') return;
     const d = LS.leagueData[lg.league_id];
     if (!d) return;
-    const ap = await lsLoadAllPlay(lg.league_id, d.myRosterId);
-    d.apWins   = ap.apWins;
-    d.apLosses = ap.apLosses;
+    d.weekly = await lsLoadWeekly(lg.league_id, d);
+    lsApplyApTotals(d);
   }));
+  lsRecapSnapshot();
 }
 
 // ESPN counterpart to the Sleeper branch above — populates LS.leagueData the
@@ -6038,7 +6107,9 @@ async function lsLoadEspnLeague(lg) {
   const espnId  = S.leagueDetails[lg.league_id]?._espnId;
   const season  = S.nflState?.season || new Date().getFullYear().toString();
   try {
-    const r = await fetch(`/api/espn/fantasy/${espnId}?view=mRoster&view=mTeam&view=mSettings&seasonId=${season}`, { credentials: 'include' });
+    // mMatchupScore adds the whole season schedule (with scores) — all-play, the
+    // weekly recap and the odds sim's future matchups all read it from one call.
+    const r = await fetch(`/api/espn/fantasy/${espnId}?view=mRoster&view=mTeam&view=mSettings&view=mMatchupScore&seasonId=${season}`, { credentials: 'include' });
     if (!r.ok) return;
     const d = await r.json();
     const mySWID = S.espnSettings?.swid || '';
@@ -6066,44 +6137,81 @@ async function lsLoadEspnLeague(lg) {
       }
       rosterPlayers[t.id] = pids;
       rosterStats[t.id]   = {
-        wins: t.record?.overall?.wins || 0,
-        fpts: t.record?.overall?.pointsFor || 0,
+        wins:  t.record?.overall?.wins || 0,
+        fpts:  t.record?.overall?.pointsFor || 0,
+        maxPf: t.record?.overall?.pointsFor || 0,  // ESPN exposes no potential points here — PF stands in
       };
+    }
+
+    const rec      = myTeam.record?.overall || {};
+    const banked   = (rec.wins || 0) + (rec.losses || 0) + (rec.ties || 0);
+    const schedule = d.schedule || [];
+    const weekly   = {};
+    for (let w = 1; w <= banked; w++) {
+      const rows = [];
+      for (const m of schedule) {
+        if (m.matchupPeriodId !== w || !m.home) continue;
+        const mid = m.away ? `${w}_${m.home.teamId}` : null;   // no away = bye
+        rows.push({ rid: m.home.teamId, mid, pts: m.home.totalPoints || 0 });
+        if (m.away) rows.push({ rid: m.away.teamId, mid, pts: m.away.totalPoints || 0 });
+      }
+      const res = lsWeekResult(rows, myTeam.id, false);
+      if (res) weekly[w] = res;
     }
 
     LS.leagueData[lg.league_id] = {
       standing, numTeams, playoffTeams,
-      wins:   myTeam.record?.overall?.wins   || 0,
-      losses: myTeam.record?.overall?.losses || 0,
+      wins:   rec.wins   || 0,
+      losses: rec.losses || 0,
       myRosterId: myTeam.id,
       apWins: null, apLosses: null,
       rosterPlayers, rosterStats,
-      _espn: { id: espnId, settings: d.settings },
+      median: false, banked, weekly,
+      _espn: { id: espnId, settings: d.settings, schedule },
     };
+    lsApplyApTotals(LS.leagueData[lg.league_id]);
   } catch (_) {}
 }
 
-async function lsLoadAllPlay(lgId, myRosterId) {
-  const week = S.nflState?.week || 1;
-  const weeksCompleted = Math.max(0, week - 1);
-  if (weeksCompleted === 0) return { apWins: 0, apLosses: 0 };
-  let apWins = 0, apLosses = 0;
-  const results = await Promise.allSettled(
-    Array.from({ length: weeksCompleted }, (_, i) => api('/league/' + lgId + '/matchups/' + (i + 1)))
-  );
-  for (const res of results) {
-    if (res.status !== 'fulfilled' || !res.value) continue;
-    const matchups = res.value;
-    const mine = matchups.find(m => m.roster_id === myRosterId);
-    if (!mine) continue;
-    const myPts = mine.points || 0;
-    if (myPts === 0) continue; // week not yet scored
-    for (const other of matchups) {
-      if (other.roster_id === myRosterId) continue;
-      if (myPts > (other.points || 0)) apWins++; else apLosses++;
-    }
+// One week, one league, from my seat. `rows` = [{rid, mid, pts}] for every team
+// (mid null = no opponent). Median leagues add a second game: top half wins.
+// Returns null for a week that isn't scored for me yet.
+function lsWeekResult(rows, myRid, median) {
+  const mine = rows.find(r => r.rid === myRid);
+  if (!mine || !(mine.pts > 0)) return null;
+  const others = rows.filter(r => r.rid !== myRid);
+  const opp = mine.mid != null ? others.find(r => r.mid === mine.mid) : null;
+  const g = { pts: mine.pts, opp: opp ? opp.pts : null, w: 0, l: 0, t: 0, apW: 0, apL: 0, apT: 0 };
+  if (opp) {
+    if (mine.pts > opp.pts) g.w++; else if (mine.pts < opp.pts) g.l++; else g.t++;
   }
-  return { apWins, apLosses };
+  for (const o of others) {
+    if (mine.pts > o.pts) g.apW++; else if (mine.pts < o.pts) g.apL++; else g.apT++;
+  }
+  if (median && others.length) {
+    if (g.apL < Math.floor(rows.length / 2)) g.w++; else g.l++;
+  }
+  return g;
+}
+
+async function lsLoadWeekly(lgId, d) {
+  const weekly = {};
+  const res = await Promise.allSettled(
+    Array.from({ length: d.banked }, (_, i) => api('/league/' + lgId + '/matchups/' + (i + 1)))
+  );
+  res.forEach((r, i) => {
+    if (r.status !== 'fulfilled' || !Array.isArray(r.value)) return;
+    const rows = r.value.map(m => ({ rid: m.roster_id, mid: m.matchup_id ?? null, pts: m.points || 0 }));
+    const g = lsWeekResult(rows, d.myRosterId, d.median);
+    if (g) weekly[i + 1] = g;
+  });
+  return weekly;
+}
+
+function lsApplyApTotals(d) {
+  const wks = Object.values(d.weekly || {});
+  d.apWins   = wks.reduce((s, g) => s + g.apW, 0);
+  d.apLosses = wks.reduce((s, g) => s + g.apL, 0);
 }
 
 // ── Playoff simulation (ported from analyzer.html) ───────────────────────────
@@ -6184,13 +6292,29 @@ function lsGaussianRandom(mu, sigma) {
   return Math.max(0, mu + sigma * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v));
 }
 
-function lsRunSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams, N = 5000) {
-  const count = {}, count2 = {};
-  for (const t of teams) { count[t.rosterId] = 0; count2[t.rosterId] = 0; }
+// Teams that skip round one of a single-elimination bracket: 6-team playoffs → 2,
+// 7 → 1, 4 or 8 → 0. Replaces the old hardcoded "top 2 = bye", which invented
+// byes for 4- and 8-team brackets.
+function lsByeSlots(playoffTeams) {
+  if (!(playoffTeams > 1)) return 0;
+  let p = 1;
+  while (p < playoffTeams) p *= 2;
+  return p - playoffTeams;
+}
+
+// Starts every team from its banked wins / PF / max PF and plays out futureWeeks.
+// Scores are drawn around each roster's optimal lineup, so the simulated points
+// double as max-PF points. Median leagues award a second win to the top half.
+// Returns per-roster fractions: odds (playoffs), bye (null when the bracket has
+// no byes), lastPf (finish last in max PF).
+function lsRunSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams, opts = {}, N = 5000) {
+  const { byeSlots = 0, median = false } = opts;
+  const count = {}, countBye = {}, countLast = {};
+  for (const t of teams) { count[t.rosterId] = 0; countBye[t.rosterId] = 0; countLast[t.rosterId] = 0; }
 
   for (let sim = 0; sim < N; sim++) {
-    const wins = {}, pts = {};
-    for (const t of teams) { wins[t.rosterId] = t.wins; pts[t.rosterId] = t.fpts; }
+    const wins = {}, pts = {}, maxPf = {};
+    for (const t of teams) { wins[t.rosterId] = t.wins; pts[t.rosterId] = t.fpts; maxPf[t.rosterId] = t.maxPf ?? t.fpts; }
 
     for (const week of futureWeeks) {
       const groups = {};
@@ -6198,15 +6322,23 @@ function lsRunSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, pl
         if (!m.matchup_id) continue;
         (groups[m.matchup_id] = groups[m.matchup_id] || []).push(m);
       }
+      const weekScores = [];
       for (const pair of Object.values(groups)) {
         if (pair.length !== 2) continue;
         const [a, b] = pair;
         const sA = lsGaussianRandom(muMap[a.roster_id]?.[week] ?? 100, sigmaMap[a.roster_id]?.[week] ?? 20);
         const sB = lsGaussianRandom(muMap[b.roster_id]?.[week] ?? 100, sigmaMap[b.roster_id]?.[week] ?? 20);
-        pts[a.roster_id] = (pts[a.roster_id] || 0) + sA;
-        pts[b.roster_id] = (pts[b.roster_id] || 0) + sB;
+        pts[a.roster_id]   = (pts[a.roster_id]   || 0) + sA;
+        pts[b.roster_id]   = (pts[b.roster_id]   || 0) + sB;
+        maxPf[a.roster_id] = (maxPf[a.roster_id] || 0) + sA;
+        maxPf[b.roster_id] = (maxPf[b.roster_id] || 0) + sB;
         if      (sA > sB) wins[a.roster_id] = (wins[a.roster_id] || 0) + 1;
         else if (sB > sA) wins[b.roster_id] = (wins[b.roster_id] || 0) + 1;
+        weekScores.push([a.roster_id, sA], [b.roster_id, sB]);
+      }
+      if (median && weekScores.length > 1) {
+        const cut = weekScores.map(x => x[1]).sort((x, y) => y - x)[Math.floor(weekScores.length / 2)];
+        for (const [rid, s] of weekScores) if (s > cut) wins[rid] = (wins[rid] || 0) + 1;
       }
     }
 
@@ -6215,24 +6347,65 @@ function lsRunSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, pl
       return wd !== 0 ? wd : (pts[b.rosterId] || 0) - (pts[a.rosterId] || 0);
     });
     for (let i = 0; i < Math.min(playoffTeams, ranked.length); i++) count[ranked[i].rosterId]++;
-    for (let i = 0; i < Math.min(2, ranked.length); i++) count2[ranked[i].rosterId]++;
+    for (let i = 0; i < Math.min(byeSlots, ranked.length); i++) countBye[ranked[i].rosterId]++;
+    let last = teams[0];
+    for (const t of teams) if (maxPf[t.rosterId] < maxPf[last.rosterId]) last = t;
+    if (last) countLast[last.rosterId]++;
   }
 
-  const odds = {}, top2 = {};
-  for (const t of teams) { odds[t.rosterId] = count[t.rosterId] / N; top2[t.rosterId] = count2[t.rosterId] / N; }
-  return { odds, top2 };
+  const odds = {}, bye = byeSlots ? {} : null, lastPf = {};
+  for (const t of teams) {
+    odds[t.rosterId]   = count[t.rosterId] / N;
+    lastPf[t.rosterId] = countLast[t.rosterId] / N;
+    if (bye) bye[t.rosterId] = countBye[t.rosterId] / N;
+  }
+  return { odds, bye, lastPf };
 }
 
-// Season-over fallback: rank every roster by wins → points-for and mark the top
-// `playoffTeams` as 100% (the rest 0%). Same shape lsRunSimulation's odds map
-// has, so the Scout tab can classify teams without a live simulation.
-function lsFinalStandingsOdds(d) {
-  const ranked = Object.entries(d.rosterStats || {})
-    .map(([rid, s]) => ({ rid: Number(rid), wins: s.wins || 0, fpts: s.fpts || 0 }))
-    .sort((a, b) => (b.wins - a.wins) || (b.fpts - a.fpts));
-  const out = {};
-  ranked.forEach((t, i) => { out[t.rid] = i < d.playoffTeams ? 1 : 0; });
-  return out;
+// Season-over fallback: final standings (wins → PF) and final max PF, as 1/0
+// maps in the same shape lsRunSimulation returns, so the Scout tab and the recap
+// can read them without a live simulation.
+function lsFinalStandings(d) {
+  const stats  = Object.entries(d.rosterStats || {}).map(([rid, s]) => ({ rid: Number(rid), ...s }));
+  const ranked = [...stats].sort((a, b) => (b.wins - a.wins) || (b.fpts - a.fpts));
+  const byeSlots = lsByeSlots(d.playoffTeams);
+  const odds = {}, bye = byeSlots ? {} : null, lastPf = {};
+  const lastRid = stats.reduce((lo, s) => (!lo || (s.maxPf ?? s.fpts) < (lo.maxPf ?? lo.fpts)) ? s : lo, null)?.rid;
+  ranked.forEach((t, i) => {
+    odds[t.rid]   = i < d.playoffTeams ? 1 : 0;
+    lastPf[t.rid] = t.rid === lastRid ? 1 : 0;
+    if (bye) bye[t.rid] = i < byeSlots ? 1 : 0;
+  });
+  return { odds, bye, lastPf };
+}
+
+// Clinched outright: fewer than `playoffTeams` rivals can still reach my win
+// total even by winning out. A rival who could only TIE me still counts against
+// me — ties break on points, which isn't guaranteed.
+function lsClinched(d, regularSeasonWeeks) {
+  const me = d.rosterStats?.[d.myRosterId];
+  if (!me) return false;
+  const left = Math.max(0, regularSeasonWeeks - d.banked) * (d.median ? 2 : 1);
+  const catchers = Object.entries(d.rosterStats)
+    .filter(([rid, s]) => Number(rid) !== d.myRosterId && s.wins + left >= me.wins).length;
+  return catchers < d.playoffTeams;
+}
+
+// Writes a sim result onto the league entry (mine + every roster).
+function lsApplyOdds(d, res) {
+  d.playoffOdds    = res.odds?.[d.myRosterId] ?? null;
+  d.byeOdds        = res.bye ? (res.bye[d.myRosterId] ?? null) : null;
+  d.lastPfOdds     = res.lastPf?.[d.myRosterId] ?? null;
+  d.allPlayoffOdds = res.odds;    // {rosterId: frac} — every team, for the Scout tab
+  d.allByeOdds     = res.bye;
+  d.allLastPfOdds  = res.lastPf;
+}
+
+// Keyed to banked weeks, so a new week of results invalidates it immediately
+// instead of serving last week's odds for up to 24h.
+function lsOddsCacheKey(lg, d, detail) {
+  const season = S.nflState?.season || String(new Date().getFullYear());
+  return `ls_odds_v2_${lg.league_id}_${season}_b${d.banked ?? 0}_w${lsRegularSeasonWeeks(lg, d, detail)}`;
 }
 
 // Regular-season-length lookup shared by lsRestoreOddsCache/lsSimulateAllLeagues —
@@ -6244,27 +6417,26 @@ function lsRegularSeasonWeeks(lg, d, detail) {
     : (detail?.settings?.playoff_week_start ?? 15) - 1;
 }
 
+function lsReadOddsCache(lg, d, detail) {
+  try {
+    const cached = JSON.parse(localStorage.getItem(lsOddsCacheKey(lg, d, detail)) || 'null');
+    if (cached && Date.now() - cached.ts < 24 * 3600 * 1000 && cached.odds) return cached;
+  } catch (_) {}
+  return null;
+}
+
 function lsRestoreOddsCache() {
-  const nflSeason = S.nflState?.season || String(new Date().getFullYear());
   let anyRestored = false;
   for (const lg of S.leagues) {
     const d      = LS.leagueData[lg.league_id];
     const detail = S.leagueDetails[lg.league_id];
     if (!d || (lg.source !== 'espn' && !detail)) continue;
-    const regularSeasonWeeks = lsRegularSeasonWeeks(lg, d, detail);
-    const cacheKey = `ls_odds_${lg.league_id}_${nflSeason}_w${regularSeasonWeeks}`;
-    try {
-      const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
-      if (cached && Date.now() - cached.ts < 24 * 3600 * 1000) {
-        d.playoffOdds = cached.odds;
-        d.top2Odds    = cached.top2Odds;
-        if (cached.allOdds) { d.allPlayoffOdds = cached.allOdds; d.allTop2Odds = cached.allTop2 || null; }
-        anyRestored = true;
-      }
-    } catch (_) {}
+    const cached = lsReadOddsCache(lg, d, detail);
+    if (cached) { lsApplyOdds(d, cached); anyRestored = true; }
   }
   if (anyRestored) {
     LS.oddsLoaded = true;
+    lsRecapSnapshot();
   }
 }
 
@@ -6277,10 +6449,9 @@ async function lsSimulateAllLeagues() {
   try {
     await loadPlayers();
     const nflSeason      = S.nflState?.season || String(new Date().getFullYear());
-    const currentWeek    = S.nflState?.week || 1;
-    const weeksCompleted = Math.max(0, currentWeek - 1);
 
-    // Collect unique future weeks across all leagues
+    // Collect unique future weeks across all leagues. Each league simulates from
+    // its own banked weeks (what its records already include), not the calendar.
     const leagueInfos = [];
     for (const lg of S.leagues) {
       const d      = LS.leagueData[lg.league_id];
@@ -6288,8 +6459,8 @@ async function lsSimulateAllLeagues() {
       if (!d || (lg.source !== 'espn' && !detail)) continue;
       const regularSeasonWeeks = lsRegularSeasonWeeks(lg, d, detail);
       const futureWeeks        = [];
-      for (let w = weeksCompleted + 1; w <= regularSeasonWeeks; w++) futureWeeks.push(w);
-      leagueInfos.push({ lgId: lg.league_id, isEspn: lg.source === 'espn', d, detail, regularSeasonWeeks, futureWeeks });
+      for (let w = (d.banked ?? 0) + 1; w <= regularSeasonWeeks; w++) futureWeeks.push(w);
+      leagueInfos.push({ lg, lgId: lg.league_id, isEspn: lg.source === 'espn', d, detail, regularSeasonWeeks, futureWeeks });
     }
 
     const allFutureWeeks = [...new Set(leagueInfos.flatMap(li => li.futureWeeks))].sort((a, b) => a - b);
@@ -6311,35 +6482,27 @@ async function lsSimulateAllLeagues() {
     }
 
     // Per league: fetch future matchup schedules and run simulation
-    await Promise.allSettled(leagueInfos.map(async ({ lgId, isEspn, d, detail, regularSeasonWeeks, futureWeeks }) => {
+    await Promise.allSettled(leagueInfos.map(async ({ lg, lgId, isEspn, d, detail, regularSeasonWeeks, futureWeeks }) => {
       try {
-        const cacheKey = `ls_odds_${lgId}_${nflSeason}_w${regularSeasonWeeks}`;
-        try {
-          const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
-          // Require cached.allOdds (per-roster map, added for the Scout tab) — an
-          // older cache without it is treated as a miss so it gets recomputed.
-          if (cached && Date.now() - cached.ts < 24 * 3600 * 1000 && cached.allOdds) {
-            d.playoffOdds     = cached.odds;
-            d.top2Odds        = cached.top2Odds;
-            d.allPlayoffOdds  = cached.allOdds;
-            d.allTop2Odds     = cached.allTop2 || null;
-            return;
-          }
-        } catch (_) {}
+        // Recalculate always re-runs; the cache only saves work within one run
+        // (e.g. the ESPN backfill re-running for just the late leagues).
+        const cached = LS._oddsUseCache ? lsReadOddsCache(lg, d, detail) : null;
+        if (cached) { lsApplyOdds(d, cached); return; }
 
         if (futureWeeks.length === 0) {
           // Season is over — standings are final
-          d.playoffOdds = d.standing <= d.playoffTeams ? 1.0 : 0.0;
-          d.top2Odds    = d.standing <= 2 ? 1.0 : 0.0;
-          d.allPlayoffOdds = lsFinalStandingsOdds(d);
+          lsApplyOdds(d, lsFinalStandings(d));
           return;
         }
 
         // Fetch the future-weeks schedule structure (who plays whom). Sleeper
-        // has one endpoint per week; ESPN returns the whole season in one call.
+        // has one endpoint per week; ESPN returns the whole season in one call
+        // (already fetched by lsLoadEspnLeague).
         let matchupsByWeek;
         if (isEspn) {
-          matchupsByWeek = await lsFetchEspnScheduleByWeek(d._espn.id, futureWeeks);
+          matchupsByWeek = d._espn.schedule?.length
+            ? crEspnScheduleToMatchupsByWeek(d._espn.schedule, futureWeeks)
+            : await lsFetchEspnScheduleByWeek(d._espn.id, futureWeeks);
         } else {
           const matchupResults = await Promise.all(
             futureWeeks.map(w =>
@@ -6363,6 +6526,7 @@ async function lsSimulateAllLeagues() {
           rosterId: Number(ridStr),
           wins:     stats.wins,
           fpts:     stats.fpts,
+          maxPf:    stats.maxPf,
         }));
 
         // Build mu/sigma per roster per future week from projections
@@ -6385,17 +6549,15 @@ async function lsSimulateAllLeagues() {
         ) / Math.max(1, teams.length * futureWeeks.length);
         if (avgMu < 20) throw new Error('Projection data empty for this league');
 
-        const { odds, top2 } = lsRunSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, d.playoffTeams);
-        d.playoffOdds    = odds[d.myRosterId] ?? null;
-        d.top2Odds       = top2[d.myRosterId] ?? null;
-        d.allPlayoffOdds = odds;   // {rosterId: frac} — every team, for the Scout tab
-        d.allTop2Odds    = top2;
+        const res = lsRunSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, d.playoffTeams, {
+          byeSlots: lsByeSlots(d.playoffTeams),
+          median:   d.median,
+        });
+        lsApplyOdds(d, res);
+        delete d.playoffOddsError;
 
         try {
-          localStorage.setItem(cacheKey, JSON.stringify({
-            ts: Date.now(), odds: d.playoffOdds, top2Odds: d.top2Odds,
-            allOdds: odds, allTop2: top2,
-          }));
+          localStorage.setItem(lsOddsCacheKey(lg, d, detail), JSON.stringify({ ts: Date.now(), ...res }));
         } catch (_) {}
       } catch (e) {
         d.playoffOddsError = e.message;
@@ -6407,8 +6569,17 @@ async function lsSimulateAllLeagues() {
     LS.oddsError = e.message;
   }
 
-  LS.oddsLoading = false;
-  LS.oddsLoaded  = true;
+  LS.oddsLoading   = false;
+  LS.oddsLoaded    = true;
+  LS._oddsUseCache = false;
+  lsRecapSnapshot();
+  // ESPN leagues that finished loading mid-run missed it — run again for them
+  // (everything else comes straight back out of the cache just written).
+  if (LS._oddsRerun) {
+    LS._oddsRerun = false;
+    LS._oddsUseCache = true;
+    return lsSimulateAllLeagues();
+  }
   lsDrawTable();
 }
 
@@ -6756,32 +6927,25 @@ function lsGzSection() {
 }
 
 
+// Higher key = better team. sortDir 1 (a column's first click) = best first,
+// or A-Z for the name column. Rows with no value sink to the bottom either way.
+const LS_SORT_KEYS = {
+  standing:  r => r.hasData ? -r.standing : null,
+  record:    r => r.hasData && (r.wins + r.losses) ? r.wins / (r.wins + r.losses) + r.wins * 1e-4 : null,
+  allplay:   r => r.apWins != null && (r.apWins + r.apLosses) ? r.apWins / (r.apWins + r.apLosses) : null,
+  // No odds yet → below every league that has them, in standing order
+  chances:   r => r.playoffOdds != null ? r.playoffOdds : (r.hasData ? -1 - r.standing / 1000 : null),
+  contender: r => r.crScore ?? null,
+};
+
 function lsSortRows(rows) {
+  if (!LS.sortCol) return rows;   // already in S.leagues (Sleeper) order
+  const key = LS_SORT_KEYS[LS.sortCol];
   return [...rows].sort((a, b) => {
-    let v = 0;
-    if (LS.sortCol === 'name') {
-      v = a.name.localeCompare(b.name);
-    } else if (LS.sortCol === 'standing') {
-      v = a.standing - b.standing;
-    } else if (LS.sortCol === 'record') {
-      v = b.wins !== a.wins ? b.wins - a.wins : a.losses - b.losses;
-    } else if (LS.sortCol === 'allplay') {
-      const apA = (a.apWins || 0), apB = (b.apWins || 0);
-      v = apB - apA;
-    } else if (LS.sortCol === 'chances') {
-      const oddsA = a.playoffOdds ?? null;
-      const oddsB = b.playoffOdds ?? null;
-      if (oddsA !== null || oddsB !== null) {
-        v = (oddsB ?? -1) - (oddsA ?? -1);
-      } else {
-        v = a.standing - b.standing;
-      }
-    } else if (LS.sortCol === 'contender') {
-      v = (b.crScore ?? -1) - (a.crScore ?? -1);
-    }
-    if (v !== 0) return v * LS.sortDir;
-    // secondary: alphabetical
-    return a.name.localeCompare(b.name);
+    if (LS.sortCol === 'name') return a.name.localeCompare(b.name) * LS.sortDir;
+    const ka = key(a), kb = key(b);
+    if (ka == null || kb == null) return ((ka == null) - (kb == null)) || a.name.localeCompare(b.name);
+    return ((kb - ka) * LS.sortDir) || a.name.localeCompare(b.name);
   });
 }
 
@@ -6803,9 +6967,238 @@ function lsOnSearch() {
 }
 
 function lsSort(col) {
-  LS.sortDir = LS.sortCol === col ? LS.sortDir * -1 : (col === 'name' ? 1 : -1);
+  LS.sortDir = LS.sortCol === col ? LS.sortDir * -1 : 1;
   LS.sortCol = col;
   lsDrawTable();
+}
+
+// ── Weekly Recap ──────────────────────────────────────────────────────────────
+// Record / all-play / margin are recomputed live from d.weekly for any week.
+// The forward-looking half (playoff/bye/last-in-max-PF odds, clinched) can't be —
+// rosters and schedules move on — so it's snapshotted per completed week into
+// localStorage whenever odds exist while that week is the latest result, and a
+// past week's card reads the snapshot back.
+
+const RC_FILTERS = [
+  { key: 'fmt',    lbl: 'Format', opts: [['all', 'All'], ['dynasty', 'Dynasty'], ['redraft', 'Redraft']] },
+  { key: 'role',   lbl: 'Mode',   opts: [['all', 'All'], ['contender', 'Contenders'], ['rebuilder', 'Rebuilders']] },
+  { key: 'lineup', lbl: 'Type',   opts: [['all', 'All'], ['lineup', 'Lineup'], ['bestball', 'Best Ball']] },
+];
+const RC_HEADLINES = [[0.75, 'Gold Rush'], [0.6, 'Striking Gold'], [0.5, 'Holding the Fort'], [0.4, 'Dust Storm'], [0, 'Rough Ride']];
+
+function lsRecapKey() {
+  const season = S.nflState?.season || String(new Date().getFullYear());
+  return `ls_recap_v1_${S.userId}_${season}`;
+}
+function lsRecapStore() {
+  try { return JSON.parse(localStorage.getItem(lsRecapKey()) || '{}') || {}; } catch (_) { return {}; }
+}
+
+// Regular season only — once playoffs start there's no "from here on out" left.
+function lsRecapInSeason(lg) {
+  const d = LS.leagueData[lg.league_id];
+  if (!d || !d.banked || lsIsGuillotine(lg.league_id)) return false;
+  return d.banked <= lsRegularSeasonWeeks(lg, d, S.leagueDetails[lg.league_id]);
+}
+
+function lsRecapSnapshot() {
+  if (!S.userId) return;
+  const store = lsRecapStore();
+  let dirty = false;
+  for (const lg of S.leagues) {
+    if (!lsRecapInSeason(lg)) continue;
+    const d    = LS.leagueData[lg.league_id];
+    const wk   = store[d.banked] || (store[d.banked] = {});
+    const prev = wk[lg.league_id] || {};
+    const snap = {
+      clinched: lsClinched(d, lsRegularSeasonWeeks(lg, d, S.leagueDetails[lg.league_id])),
+      hasBye:   lsByeSlots(d.playoffTeams) > 0,
+      po:   d.playoffOdds ?? prev.po   ?? null,
+      bye:  d.byeOdds     ?? prev.bye  ?? null,
+      // ESPN leagues are redraft — no draft-pick stakes in finishing last, so they
+      // stay out of the Max PF watch (explicit null also clears older snapshots).
+      last: lg.source === 'espn' ? null : (d.lastPfOdds ?? prev.last ?? null),
+    };
+    if (JSON.stringify(prev) !== JSON.stringify(snap)) { wk[lg.league_id] = snap; dirty = true; }
+  }
+  if (dirty) { try { localStorage.setItem(lsRecapKey(), JSON.stringify(store)); } catch (_) {} }
+}
+
+function lsRecapNeedsOdds() {
+  return S.leagues.some(lg => {
+    if (!lsRecapInSeason(lg)) return false;
+    const d = LS.leagueData[lg.league_id];
+    return d.playoffOdds == null && !d.playoffOddsError;
+  });
+}
+
+function lsRecapMatches(lg) {
+  const R = LS.recap, id = lg.league_id, pref = RS.prefs[id];
+  if (R.fmt !== 'all' && rsLeagueCategory(id) !== R.fmt) return false;
+  if (R.role === 'contender' && pref?.contender !== true) return false;
+  if (R.role === 'rebuilder' && !(pref && pref.contender === false)) return false;
+  const type = S.leagueDetails[id]?.settings?.best_ball === 1 ? 'bestball' : 'lineup';
+  if (R.lineup !== 'all' && type !== R.lineup) return false;
+  return true;
+}
+
+function lsRecapSet(key, val) {
+  LS.recap[key] = val;
+  lsDrawTable();
+}
+
+// cumulative: every scored week ≤ `week`; otherwise just `week`.
+function lsRecapTally(leagues, week, cumulative, snaps) {
+  const t = { n: 0, w: 0, l: 0, t: 0, apW: 0, apL: 0, apT: 0, marg: [],
+              po: [0, 0], bye: [0, 0], clinched: [0, 0], last: [0, 0] };
+  for (const lg of leagues) {
+    const weekly = LS.leagueData[lg.league_id]?.weekly || {};
+    const games  = cumulative
+      ? Object.entries(weekly).filter(([w]) => Number(w) <= week).map(([, g]) => g)
+      : (weekly[week] ? [weekly[week]] : []);
+    if (!games.length) continue;
+    t.n++;
+    for (const g of games) {
+      t.w += g.w; t.l += g.l; t.t += g.t;
+      t.apW += g.apW; t.apL += g.apL; t.apT += g.apT;
+      if (g.opp != null) t.marg.push(g.pts - g.opp);
+    }
+    const s = snaps?.[lg.league_id];
+    if (!s) continue;
+    t.clinched[1]++; if (s.clinched) t.clinched[0]++;
+    if (s.po != null)                { t.po[1]++;   if (s.po   > 0.5) t.po[0]++;   }
+    if (s.hasBye && s.bye != null)   { t.bye[1]++;  if (s.bye  > 0.3) t.bye[0]++;  }
+    if (s.last != null)              { t.last[1]++; if (s.last > 0.3) t.last[0]++; }
+  }
+  return t;
+}
+
+function lsRecapCard(t, { kicker, scope, cumulative, oddsNote }) {
+  if (!t.n) {
+    return `<div class="rc-card">
+      <div class="rc-kicker">${kicker}</div>
+      <div class="rc-headline">Quiet Out West</div>
+      <div class="rc-scope">${scope}</div>
+      <div class="rc-foot">No league in this scope has a scored game ${cumulative ? 'yet' : 'this week'}.</div>
+    </div>`;
+  }
+  const fmt3 = p => p >= 1 ? '1.000' : p.toFixed(3).replace(/^0/, '');
+  const rec  = (w, l, tt) => `${w}–${l}${tt ? '–' + tt : ''}`;
+  const bar  = (w, l, tt) => {
+    const n = (w + l + tt) || 1;
+    return `<div class="rc-bar"><span class="w" style="width:${w / n * 100}%"></span><span class="t" style="width:${tt / n * 100}%"></span><span class="l" style="width:${l / n * 100}%"></span></div>`;
+  };
+  const games  = t.w + t.l + t.t;
+  const pct    = games ? (t.w + t.t / 2) / games : 0;
+  const apN    = t.apW + t.apL + t.apT;
+  const apPct  = apN ? (t.apW + t.apT / 2) / apN : 0;
+  const avg    = arr => arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : null;
+  const mAll   = avg(t.marg);
+  const mWin   = avg(t.marg.filter(v => v > 0));
+  const mLoss  = avg(t.marg.filter(v => v < 0));
+  const signed = v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1);
+  const head   = RC_HEADLINES.find(([min]) => pct >= min)[1];
+  const stampColor = pct >= 0.5 ? 'var(--green-light)' : 'var(--red)';
+
+  const meter = (label, [hit, of], sub, bad) => {
+    if (!of) return `<div><div class="rc-stat-lbl">${label}</div><div class="rc-mid">—</div><div class="rc-sub">${sub}</div></div>`;
+    const p = Math.round(hit / of * 100);
+    return `<div>
+      <div class="rc-stat-lbl">${label}</div>
+      <div class="rc-mid">${p}% <span class="rc-sub">${hit} of ${of}</span></div>
+      <div class="rc-bar"><span class="fill${bad ? ' bad' : ''}" style="width:${p}%"></span></div>
+      <div class="rc-sub">${sub}</div>
+    </div>`;
+  };
+
+  return `<div class="rc-card">
+    <div class="rc-stamp" style="color:${stampColor}"><b>${fmt3(pct)}</b><span>Win Pct</span></div>
+    <div class="rc-kicker">${kicker}</div>
+    <div class="rc-headline">${head}</div>
+    <div class="rc-scope">${scope} — ${t.n} league${t.n === 1 ? '' : 's'}</div>
+
+    <div class="rc-rule">${cumulative ? 'Season to Date' : 'The Week'}</div>
+    <div class="rc-row">
+      <div>
+        <div class="rc-stat-lbl">Record</div>
+        <div class="rc-big">${rec(t.w, t.l, t.t)}</div>
+        ${bar(t.w, t.l, t.t)}
+      </div>
+      <div>
+        <div class="rc-stat-lbl">All-Play</div>
+        <div class="rc-mid">${rec(t.apW, t.apL, t.apT)}</div>
+        ${bar(t.apW, t.apL, t.apT)}
+        <div class="rc-sub">${fmt3(apPct)}</div>
+      </div>
+      <div>
+        <div class="rc-stat-lbl">Avg Margin</div>
+        <div class="rc-mid ${mAll > 0 ? 'rc-pos' : mAll < 0 ? 'rc-neg' : ''}">${mAll == null ? '—' : signed(mAll)}</div>
+        <div class="rc-sub">${mWin != null ? `W by ${mWin.toFixed(1)}` : ''}${mWin != null && mLoss != null ? ' · ' : ''}${mLoss != null ? `L by ${Math.abs(mLoss).toFixed(1)}` : ''}</div>
+      </div>
+    </div>
+
+    <div class="rc-rule">From Here On Out</div>
+    <div class="rc-row4">
+      ${meter('Playoff Odds &gt; 50%', t.po, 'of leagues simulated')}
+      ${meter('Bye Odds &gt; 30%', t.bye, 'of leagues with byes')}
+      <div>
+        <div class="rc-stat-lbl">Clinched Playoffs</div>
+        <div class="rc-mid">${t.clinched[1] ? t.clinched[0] : '—'} ${t.clinched[1] ? `<span class="rc-sub">of ${t.clinched[1]}</span>` : ''}</div>
+        <div class="rc-sub">mathematically locked in</div>
+      </div>
+      ${meter('Last in Max PF &gt; 30%', t.last, 'the rebuilder watch', true)}
+    </div>
+    ${oddsNote ? `<div class="rc-foot">${oddsNote}</div>` : ''}
+  </div>`;
+}
+
+function lsRecapHtml() {
+  const head = `<div class="section-head" style="margin-bottom:10px;"><h2>Weekly Recap</h2><div class="section-head-line"></div></div>`;
+  const pool = S.leagues.filter(lg => !lsIsGuillotine(lg.league_id) && LS.leagueData[lg.league_id]);
+  const maxWeek = Math.max(0, ...pool.flatMap(lg => Object.keys(LS.leagueData[lg.league_id].weekly || {}).map(Number)));
+  if (!maxWeek) return `<div class="rc-wrap">${head}<div class="rc-empty">The first recap posts once Week 1 is final.</div></div>`;
+
+  const W = Math.min(LS.recap.week ?? maxWeek, maxWeek);
+  const hasPrefs = S.leagues.some(lg => RS.prefs[lg.league_id] != null);
+  const controls = RC_FILTERS.map(f => `<div class="ls-mode-bar">
+    <span class="ls-mode-label">${f.lbl}</span>
+    ${f.opts.map(([v, l]) => {
+      const off = f.key === 'role' && v !== 'all' && !hasPrefs;
+      return `<button class="ls-mode-pill${LS.recap[f.key] === v ? ' active' : ''}" onclick="lsRecapSet('${f.key}','${v}')"${off ? ' disabled title="Fill out Root For Me first"' : ''}>${l}</button>`;
+    }).join('')}
+  </div>`).join('');
+  // The latest week is stored as null so the view rolls forward when a new week posts.
+  const weeks = Array.from({ length: maxWeek }, (_, i) => i + 1).map(w =>
+    `<button class="ls-mode-pill rc-week-pill${w === W ? ' active' : ''}" onclick="lsRecapSet('week',${w === maxWeek ? 'null' : w})">Wk ${w}</button>`
+  ).join('');
+
+  const scopeParts = RC_FILTERS.map(f => LS.recap[f.key] === 'all' ? null : f.opts.find(o => o[0] === LS.recap[f.key])[1]).filter(Boolean);
+  const scope   = scopeParts.length ? scopeParts.join(' · ') : 'Every league';
+  const leagues = pool.filter(lsRecapMatches);
+  const snaps   = lsRecapStore()[W] || null;
+
+  let oddsNote = '';
+  if (!snaps || !Object.values(snaps).some(s => s.po != null)) {
+    oddsNote = W !== maxWeek
+      ? `No odds were run while Week ${W} was the latest result, so its outlook wasn't saved.`
+      : LS.oddsLoading
+        ? 'Simulating the rest of the season…'
+        : `Outlook not calculated yet — <button onclick="lsSimulateAllLeagues()">run the odds</button>.`;
+  } else {
+    oddsNote = `Outlook as of the end of Week ${W}: banked records + a simulated rest of season.`;
+  }
+
+  const weekly = lsRecapTally(leagues, W, false, snaps);
+  const cum    = lsRecapTally(leagues, W, true, snaps);
+  return `<div class="rc-wrap">
+    ${head}
+    <div class="rc-controls">${controls}</div>
+    <div class="rc-weeks"><span class="ls-mode-label">Week</span>${weeks}</div>
+    <div class="rc-cards">
+      ${lsRecapCard(weekly, { kicker: `Week ${W} Dispatch`, scope, cumulative: false, oddsNote })}
+      ${lsRecapCard(cum,    { kicker: `Season Ledger · Thru Week ${W}`, scope, cumulative: true, oddsNote })}
+    </div>
+  </div>`;
 }
 
 function lsDrawTable() {
@@ -6854,7 +7247,7 @@ function lsDrawTable() {
       apWins:          d?.apWins,
       apLosses:        d?.apLosses,
       playoffOdds:     d?.playoffOdds,
-      top2Odds:        d?.top2Odds,
+      byeOdds:         d?.byeOdds,
       playoffOddsError: d?.playoffOddsError,
       crScore, crRank, crColor,
     };
@@ -6870,9 +7263,11 @@ function lsDrawTable() {
 
   rows = lsSortRows(rows);
 
+  // Arrow shows the visual order: A-Z reads ↑, best-first reads ↓.
   const arr = (col) => {
     if (LS.sortCol !== col) return '<span class="ls-arr">⇅</span>';
-    return `<span class="ls-arr">${LS.sortDir === -1 ? '↓' : '↑'}</span>`;
+    const natural = col === 'name' ? '↑' : '↓', reversed = col === 'name' ? '↓' : '↑';
+    return `<span class="ls-arr">${LS.sortDir === 1 ? natural : reversed}</span>`;
   };
   const thCls = (col) => LS.sortCol === col ? 'ls-sorted' : '';
 
@@ -6928,8 +7323,8 @@ function lsDrawTable() {
     } else if (row.playoffOdds !== undefined && row.playoffOdds !== null) {
       const pct  = Math.round(row.playoffOdds * 100);
       const hue  = Math.round(pct * 1.2); // 0→red, 100→green
-      const byeHtml = row.top2Odds != null
-        ? `<span class="ls-bye-pct">${Math.round(row.top2Odds * 100)}% bye</span>` : '';
+      const byeHtml = row.byeOdds != null
+        ? `<span class="ls-bye-pct">${Math.round(row.byeOdds * 100)}% bye</span>` : '';
       chancesCell = `<td><span class="ls-odds-pct" style="color:hsl(${hue},70%,38%)">${pct}%</span>${byeHtml}</td>`;
     } else if (row.playoffOddsError) {
       chancesCell = `<td><span style="color:var(--brown-light);font-size:0.8rem;" title="${esc(row.playoffOddsError)}">— ⚠︎</span></td>`;
@@ -6966,6 +7361,7 @@ function lsDrawTable() {
         ${hasPrefs?'':'disabled title="Fill out Root For Me first"'}>Rebuilders</button>
       <input type="text" class="search-input" id="ls-search" placeholder="Search leagues…"
         oninput="lsOnSearch()" value="${esc(LS.search)}" style="max-width:180px;margin-left:4px;" />
+      ${LS.sortCol ? `<button class="ls-reset-sort" onclick="lsSort(null)">Sleeper order</button>` : ''}
     </div>`;
 
   const oddsBtn = LS.oddsLoading
@@ -6986,6 +7382,7 @@ function lsDrawTable() {
     </div>`;
 
   setC(`
+    ${lsRecapHtml()}
     <div class="section-head"><h2>League Summaries</h2><div class="section-head-line"></div></div>
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
       ${filterBtns}
@@ -7421,6 +7818,7 @@ async function scoutRun() {
     if (needsOdds) {
       SC.progress = 'Simulating playoff odds — up to a minute the first time, instant afterward…';
       renderScout();
+      LS._oddsUseCache = true;
       await lsSimulateAllLeagues();
     }
 
