@@ -316,9 +316,18 @@ footer a:hover { color: var(--gold); }
 .rg-on  .rg-name { color: #8fd08f; font-weight: 700; }
 .rg-off { background: rgba(192,80,77,0.16); box-shadow: inset 3px 0 0 #c0504d; }
 .rg-off .rg-name { color: #e08b88; }
-.rg-fa  { background: rgba(214,178,60,0.18); box-shadow: inset 3px 0 0 #d6b23c; }
-.rg-fa  .rg-name { color: #e6cc72; }
+/* Free agent. Pushed well clear of .rg-tier-b in BOTH brightness and saturation:
+   the tier band is a warm parchment tint, so at the original 18% gold the two
+   converged into near-identical dark browns over --brown-dark. */
+.rg-fa  { background: rgba(235,195,55,0.28); box-shadow: inset 3px 0 0 #f0c93c; }
+.rg-fa  .rg-name { color: #f5da7a; }
 .rg-pill.on { border-color: var(--gold); color: var(--gold-light); }
+/* Waiver grid only. Owned-by-someone-else is the majority state, so it recedes
+   rather than getting a colour of its own — the point of the view is that the
+   yellow and green rows are the only ones that pop. Unmatched rows can't be
+   placed on either side of the ownership line, so they're marked, not painted. */
+.wv-taken { opacity: 0.4; }
+.wv-unk .rg-name { font-style: italic; color: var(--brown-light); }
 /* Too narrow to sit two halves side by side — stack them, which restores one
    continuous 1..N list, and let the column keep its double width. */
 @media (max-width: 1200px) {
@@ -705,8 +714,11 @@ const WV = {
   fcMap:              {},
   rosteredByLeague:   {},  // {lgId: Set<pid>}
   rows:               [],
-  redraftRankings:    [],  // [{name, pos, rank, pid}]
+  redraftRankings:    [],  // [{name, pos, rank, posRank, tier, team, ppg, bye, pid}]
   rankUnmatched:      0,   // rows in the uploaded sheet that resolved to no Sleeper id
+  myByLeague:         {},  // {lgId: Set<pid>} — my own roster, for the grid's green
+  gridLeagueId:       null,// redraft grid: the one league on screen (see wvGridHtml)
+  gridFaOnly:         false,
   expandedKey:        null,
   sortCol:            'adjVal',
   sortDir:            -1,
@@ -981,10 +993,16 @@ function sw(tab) {
   if (grpId) document.querySelector('#' + grpId + ' .tab-group-btn').classList.add('active');
   document.querySelectorAll('.tab-group').forEach(g => g.classList.remove('open'));
   if (tab !== 'tracker' && T.pollTimer) { clearInterval(T.pollTimer); T.pollTimer = null; }
-  // The ranks grid is the one view that earns more than the site's 900px column.
-  document.querySelector('.main')?.classList.toggle('wide', tab === 'ranksgrid');
+  wvApplyWide(tab);
   render(tab);
 }
+// The ranks grid and the redraft waiver grid are the views that earn more than
+// the site's 900px column. Waivers is mode-dependent, so wvSetMode re-applies it.
+function wvApplyWide(tab) {
+  const wide = tab === 'ranksgrid' || (tab === 'waivers' && WV.mode === 'redraft');
+  document.querySelector('.main')?.classList.toggle('wide', wide);
+}
+
 function render(tab) {
   if (!S.userId && tab !== 'partners' && tab !== 'home' && tab !== 'guide') { setC('<div class="empty-state"><p>Enter your username above to get started</p></div>'); return; }
   ({ home: renderHome, leagues: renderLeagueSummaries, trades: renderTrades, player: renderPlayerSearch, lineups: renderLineupCheck, drafts: renderDraftQueue, tracker: renderDraftTracker, rostership: renderRostership, partners: renderTradePartners, waivers: renderWaivers, scout: renderScout,
@@ -1581,7 +1599,7 @@ function renderWaivers() {
       <button class="pos-pill${isDyn?' active':''}" onclick="wvSetMode('dynasty')">Dynasty</button>
       <button class="pos-pill${!isDyn?' active':''}" onclick="wvSetMode('redraft')">Redraft</button>
       <span style="font-family:'Crimson Text',serif;font-size:0.82rem;font-style:italic;color:var(--brown-light);margin-left:4px;">
-        ${isDyn ? 'Scans dynasty leagues · FC value ≥ 100 (TE ×2)' : 'Scans redraft leagues · sorted by your uploaded rankings'}
+        ${isDyn ? 'Scans dynasty leagues · FC value ≥ 100 (TE ×2)' : 'Your ranking sheet as a grid, one redraft league at a time · guillotine leagues excluded'}
       </span>
     </div>
     ${uploadSection}
@@ -1591,9 +1609,18 @@ function renderWaivers() {
       ${WV.loaded && WV.skippedCount > 0 ? `<span class="setup-status" style="margin:0;font-style:italic;">— ${WV.skippedCount} league${WV.skippedCount > 1 ? 's' : ''} skipped (draft not yet complete)</span>` : ''}
     </div>
     <div id="wv-table-wrap">
-      ${WV.loaded ? wvRenderTable() : '<div class="empty-state"><p>Click Load Waivers to scan all leagues for available players</p></div>'}
+      ${WV.loaded ? wvRenderTable() : `<div class="empty-state"><p>${isDyn ? 'Click Load Waivers to scan all leagues for available players' : 'Click Load Waivers to pull rosters, then pick a league'}</p></div>`}
     </div>
   </div>`);
+}
+
+// Leagues this tab scans. Guillotine leagues are Sleeper type 3, which
+// rsLeagueCategory buckets as 'redraft' — but there is no waiver wire to work
+// in a format where losing the week removes your whole roster, so they're out
+// of both modes rather than quietly padding every "# Available" count.
+function wvLeagues() {
+  return S.leagues.filter(lg =>
+    rsLeagueCategory(lg.league_id) === WV.mode && !lsIsGuillotine(lg.league_id));
 }
 
 async function loadWaiverData() {
@@ -1625,8 +1652,16 @@ async function loadWaiverData() {
       } catch { WV.fcMap = {}; }
     }
 
+    // loadUser() fires the per-league detail fetches without awaiting them, and
+    // both rsLeagueCategory and lsIsGuillotine read S.leagueDetails — so settle
+    // the stragglers first or a slow league gets miscategorised on a cold tab.
+    await Promise.all(S.leagues
+      .filter(lg => lg.source !== 'espn' && !S.leagueDetails[lg.league_id])
+      .map(lg => api('/league/' + lg.league_id)
+        .then(d => { if (d) S.leagueDetails[lg.league_id] = d; }).catch(() => {})));
+
     // Only scan leagues matching the current mode
-    const allTarget = S.leagues.filter(lg => rsLeagueCategory(lg.league_id) === WV.mode);
+    const allTarget = wvLeagues();
 
     // Filter out leagues whose startup or rookie draft isn't complete yet
     if (statEl) statEl.textContent = 'Checking draft status…';
@@ -1651,11 +1686,14 @@ async function loadWaiverData() {
       else { eligible.push(lg); }
     }));
 
-    WV.rosteredByLeague = {}; // clear stale data before new load
+    WV.rosteredByLeague = {}; WV.myByLeague = {}; // clear stale data before new load
     if (statEl) statEl.textContent = `Fetching ${eligible.length} leagues…`;
     await Promise.all(eligible.map(lg => wvLoadLeagueRosters(lg)));
 
-    wvBuildRows();
+    // Redraft renders one league at a time (wvGridHtml); dynasty stays a
+    // cross-league table and needs the row build.
+    if (WV.mode === 'dynasty') wvBuildRows();
+    else if (!eligible.some(lg => lg.league_id === WV.gridLeagueId)) WV.gridLeagueId = eligible[0]?.league_id || null;
     WV.loaded = true;
     WV.skippedCount = skipped;
     renderWaivers();
@@ -1667,48 +1705,62 @@ async function loadWaiverData() {
   }
 }
 
+// Builds two sets per league: everyone rostered by ANYONE (the complement is the
+// free-agent pool) and my own roster. A failed fetch stores NULL, not an empty
+// Set — an empty one reads as "nobody owns anyone", which would paint the whole
+// grid yellow and inflate every "# Available" count in the dynasty table.
 async function wvLoadLeagueRosters(lg) {
+  const fail = () => { WV.rosteredByLeague[lg.league_id] = null; WV.myByLeague[lg.league_id] = null; };
   try {
     if (lg.source === 'espn') {
       const leagueId = S.leagueDetails[lg.league_id]?._espnId;
       const season   = S.nflState?.season || new Date().getFullYear().toString();
       const r = await fetch(`/api/espn/fantasy/${leagueId}?view=mRoster&view=mTeam&seasonId=${season}`, { credentials: 'include' });
-      if (!r.ok) { WV.rosteredByLeague[lg.league_id] = new Set(); return; }
-      const d       = await r.json();
-      const rostered = new Set();
+      if (!r.ok) { fail(); return; }
+      const d        = await r.json();
+      const rostered = new Set(), mine = new Set();
+      const swid     = S.espnSettings?.swid;
       for (const team of (d.teams || [])) {
+        const isMine = !!swid && team.primaryOwner === swid;
         for (const entry of (team.roster?.entries || [])) {
           const pData = entry.playerPoolEntry?.playerPoolEntry?.player || entry.playerPoolEntry?.player;
           if (!pData) continue;
           const fullName = pData.fullName || `${pData.firstName||''} ${pData.lastName||''}`.trim();
           const pid = S._playersByName[normName(fullName)];
-          if (pid) rostered.add(pid);
+          if (!pid) continue;
+          rostered.add(pid);
+          if (isMine) mine.add(pid);
         }
       }
       WV.rosteredByLeague[lg.league_id] = rostered;
+      WV.myByLeague[lg.league_id]       = mine;
     } else {
       // Sleeper: RS.leagueRosters has all teams — reuse if warm
       const cached = RS.leagueRosters[lg.league_id];
-      const source = cached?.length > 0 ? cached : null;
       let rosters;
-      if (source) {
-        rosters = source;
+      if (cached?.length > 0) {
+        rosters = cached;
       } else {
         const r = await fetch(`/api/sleeper/league/${lg.league_id}/rosters`);
-        if (!r.ok) { WV.rosteredByLeague[lg.league_id] = new Set(); return; }
+        if (!r.ok) { fail(); return; }
         rosters = await r.json() || [];
       }
-      const rostered = new Set();
+      const rostered = new Set(), mine = new Set();
       for (const roster of rosters) {
-        for (const pid of (roster.players || [])) rostered.add(pid);
+        const isMine = roster.owner_id === S.userId;
+        for (const pid of (roster.players || [])) {
+          rostered.add(pid);
+          if (isMine) mine.add(pid);
+        }
       }
       WV.rosteredByLeague[lg.league_id] = rostered;
+      WV.myByLeague[lg.league_id]       = mine;
     }
-  } catch { WV.rosteredByLeague[lg.league_id] = new Set(); }
+  } catch { fail(); }
 }
 
 function wvBuildRows() {
-  const targetLeagues = S.leagues.filter(lg => rsLeagueCategory(lg.league_id) === WV.mode);
+  const targetLeagues = wvLeagues();
 
   if (WV.mode === 'dynasty') {
     const rows = [];
@@ -1755,15 +1807,142 @@ function wvBuildRows() {
   }
 }
 
-function wvRenderTable() {
-  if (!WV.rows.length) {
-    const msg = WV.mode === 'dynasty'
-      ? 'No available players found above value threshold (100)'
-      : (WV.redraftRankings.length ? 'No ranked players found on waivers' : 'Upload a rankings CSV first, then reload');
-    return `<div class="empty-state"><p>${msg}</p></div>`;
-  }
+// ── Redraft waiver grid ──────────────────────────────────────────────────────
+// One league at a time, laid out like the Weekly Ranks Grid (and reusing its
+// .rg-* CSS): the uploaded sheet as side-by-side positional columns, banded by
+// tier, with ownership painted on top. The cross-league table this replaced
+// answered "who is free SOMEWHERE"; this answers "what should I do in THIS
+// league", which is the question you actually have on a Tuesday.
+//   green = on my roster · yellow = free agent · dimmed = another team owns him
+const WV_GRID_COLS = [['QB','QB'], ['RB','RB', true], ['WR','WR', true], ['TE','TE'], ['DEF','D/ST'], ['K','K']];
+const WV_SPLIT_MIN = 40;   // same threshold as the ranks grid — below it a split is two stubs
 
-  const isDyn = WV.mode === 'dynasty';
+// The sheet is ONE flat overall list, so the columns are re-cut from it by
+// position, keeping the sheet's own order within each.
+function wvGridCols() {
+  const cols = {};
+  for (const r of WV.redraftRankings) {
+    const raw = (r.pos || '').replace(/[^A-Za-z]/g, '');
+    const pos = lsNormPos(raw) || lsNormPos(S.players[r.pid]?.position);
+    if (!pos) continue;
+    if (!cols[pos]) cols[pos] = [];
+    cols[pos].push(r);
+  }
+  return cols;
+}
+
+function wvSetGridLeague(v) {
+  WV.gridLeagueId = v || null;
+  const wrap = document.getElementById('wv-table-wrap');
+  if (wrap) wrap.innerHTML = wvRenderTable();
+}
+function wvToggleFaOnly() {
+  WV.gridFaOnly = !WV.gridFaOnly;
+  const wrap = document.getElementById('wv-table-wrap');
+  if (wrap) wrap.innerHTML = wvRenderTable();
+}
+
+function wvGridHtml() {
+  if (!WV.redraftRankings.length) return `<div class="empty-state"><p>Upload a rankings CSV first, then reload</p></div>`;
+
+  const leagues = wvLeagues().filter(lg => WV.rosteredByLeague[lg.league_id] !== undefined);
+  if (!leagues.length) return `<div class="empty-state"><p>No redraft leagues loaded — every one was skipped or failed to load</p></div>`;
+
+  const lgId  = leagues.some(lg => lg.league_id === WV.gridLeagueId) ? WV.gridLeagueId : leagues[0].league_id;
+  const owned = WV.rosteredByLeague[lgId] || null;   // null = rosters didn't load; see wvLoadLeagueRosters
+  const mine  = WV.myByLeague[lgId] || null;
+
+  const cols    = wvGridCols();
+  const present = WV_GRID_COLS.filter(([k]) => (cols[k] || []).length);
+  if (!present.length) return `<div class="empty-state"><p>None of the ${WV.redraftRankings.length} ranked rows carry a position this grid lays out (QB/RB/WR/TE/D-ST/K)</p></div>`;
+
+  // A row's state. Unmatched rows (no Sleeper id) can't be placed on either side
+  // of the ownership line, so they stay unpainted rather than guessing.
+  const state = r => {
+    const pid = r.pid ? String(r.pid) : null;
+    if (!pid || !owned)   return 'unk';
+    if (mine && mine.has(pid)) return 'mine';
+    return owned.has(pid) ? 'taken' : 'fa';
+  };
+
+  let faCount = 0;
+  for (const r of WV.redraftRankings) if (state(r) === 'fa') faCount++;
+
+  const leagueSel = `<select onchange="wvSetGridLeague(this.value)" style="max-width:280px;">
+      ${leagues.map(lg => `<option value="${esc(lg.league_id)}" ${lg.league_id === lgId ? 'selected' : ''}>${esc(lg.name || lg.league_id)}${lg.source === 'espn' ? ' (ESPN)' : ''}</option>`).join('')}
+    </select>`;
+
+  const note = !owned
+    ? `<span style="font-size:0.6rem;color:#e08b88;">rosters didn't load for this league — nothing highlighted</span>` : '';
+
+  const controls = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
+      <span style="font-size:0.55rem;color:var(--brown-light);">League:</span>${leagueSel}
+      <button class="ghost-btn rg-pill ${WV.gridFaOnly ? 'on' : ''}" style="font-size:0.5rem;" onclick="wvToggleFaOnly()">◎ Free agents only</button>
+      <span style="font-size:0.6rem;color:var(--gold-light);">${faCount} ranked free agent${faCount === 1 ? '' : 's'}</span>
+      ${note}
+      <span style="flex:1;"></span>
+      <span style="font-size:0.6rem;color:var(--brown-light);display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+        <span><span style="display:inline-block;width:9px;height:9px;background:rgba(95,174,95,0.6);border-left:3px solid #5fae5f;margin-right:4px;"></span>my roster</span>
+        <span><span style="display:inline-block;width:9px;height:9px;background:rgba(235,195,55,0.75);border-left:3px solid #d6a82a;margin-right:4px;"></span>free agent</span>
+        <span><span style="display:inline-block;width:9px;height:9px;background:var(--brown-dark);border:1px solid var(--brown-mid);margin-right:4px;opacity:0.45;"></span>rostered elsewhere</span>
+      </span>
+    </div>`;
+
+  const navH = document.querySelector('.tab-bar')?.offsetHeight || 40;
+
+  // Resolve every column's final row list FIRST, because --rg-tracks has to be
+  // counted off the same lists that render. Splitting is decided on the FILTERED
+  // length (a thinned column is exactly the two stubs WV_SPLIT_MIN exists to
+  // avoid), so counting tracks off the unfiltered one leaves a dead track the
+  // moment the FA filter is on.
+  const built = present.map(([key, label, sp]) => {
+    const full = cols[key];
+    // Tier bands are computed over the FULL column before any filter or split,
+    // and each row keeps its true index — otherwise the stripes restart halfway
+    // down a split column, or realign every time the FA filter is toggled.
+    const bands = [];
+    for (let i = 0, b = 0; i < full.length; i++) {
+      if (i > 0 && full[i].tier !== full[i - 1].tier) b ^= 1;
+      bands.push(b);
+    }
+    const list = full.map((r, i) => [r, i]).filter(([r]) => !WV.gridFaOnly || state(r) === 'fa');
+    return { key, label, bands, list, split: !!sp && list.length >= WV_SPLIT_MIN };
+  });
+  const tracks = built.reduce((n, c) => n + (c.split ? 2 : 1), 0);
+
+  const grid = `<div class="rg-wrap" style="--rg-tracks:${tracks};">${built.map(({ label, bands, list, split }) => {
+    if (!list.length) return `<div class="rg-col"><div class="rg-head" style="top:${navH}px;">${esc(label)} <em>0</em></div>
+      <div class="rg-cell" style="color:var(--brown-light);font-style:italic;">none free</div></div>`;
+
+    const cell = ([r, i]) => {
+      const st  = state(r);
+      const cls = st === 'mine' ? ' rg-on' : st === 'fa' ? ' rg-fa' : st === 'taken' ? ' wv-taken' : ' wv-unk';
+      const right = r.ppg != null ? r.ppg.toFixed(1) : esc(r.team || '');
+      const tip = [r.team, r.bye ? 'bye ' + r.bye : '', r.tier ? 'tier ' + r.tier : '',
+                   st === 'unk' ? 'no Sleeper match' : ''].filter(Boolean).join(' · ');
+      return `<div class="rg-cell${bands[i] ? ' rg-tier-b' : ''}${cls}" title="${esc(tip)}">
+        <span class="rg-rank">${r.posRank != null ? r.posRank : i + 1}</span>
+        <span class="rg-name">${esc(r.name)}</span>
+        <span class="rg-opp">${right}</span>
+      </div>`;
+    };
+    const half = Math.ceil(list.length / 2);
+    const body  = split
+      ? `<div class="rg-halves"><div class="rg-half">${list.slice(0, half).map(cell).join('')}</div>`
+        + `<div class="rg-half">${list.slice(half).map(cell).join('')}</div></div>`
+      : list.map(cell).join('');
+    return `<div class="rg-col${split ? ' rg-split' : ''}">
+      <div class="rg-head" style="top:${navH}px;">${esc(label)} <em>${list.length}</em></div>${body}</div>`;
+  }).join('')}</div>`;
+
+  return controls + grid;
+}
+
+function wvRenderTable() {
+  if (WV.mode !== 'dynasty') return wvGridHtml();
+  if (!WV.rows.length) return `<div class="empty-state"><p>No available players found above value threshold (100)</p></div>`;
+
+  const isDyn = true;
   // Attach projected PPG (name-keyed) so it's sortable and renderable
   const hasProj = Object.keys(WV.projPpg).length > 0;
   for (const row of WV.rows) row.projPpg = WV.projPpg[(row.name || '').toLowerCase()] ?? null;
@@ -1843,6 +2022,7 @@ function wvSetMode(mode) {
   WV.loaded  = false;
   WV.rows    = [];
   WV.expandedKey = null;
+  wvApplyWide('waivers');
   renderWaivers();
 }
 
@@ -1856,6 +2036,11 @@ const WV_RANK_COLS = {
   pos:  ['POSITION', 'POS'],
   rank: ['OVERALL', 'OVERALL RANK', 'RANK', 'RK', '#'],
   team: ['TEAM', 'NFL TEAM', 'TM'],
+  // Read when present, all optional — they only decorate the redraft grid.
+  posRank: ['POSITIONAL RANK', 'POS RANK', 'POSITION RANK'],
+  tier: ['TIER'],
+  ppg:  ['PPG', 'POINTS PER GAME'],
+  bye:  ['BYE', 'BYE WEEK'],
 };
 
 // A row is the header iff it carries a recognizable NAME column — that is the
@@ -1895,7 +2080,11 @@ async function wvUploadRankings(input) {
     const n   = parseInt(cell('rank'), 10);
     const pid = lsMatchRankRow(name, cell('team'));
     if (!pid) unmatched++;
-    rankings.push({ name, pos: cell('pos'), rank: isFinite(n) ? n : autoRank, pid: pid || null });
+    rankings.push({
+      name, pos: cell('pos'), rank: isFinite(n) ? n : autoRank, pid: pid || null,
+      posRank: lsNum(cell('posRank')), tier: cell('tier') || null,
+      team: cell('team'), ppg: lsNum(cell('ppg')), bye: cell('bye'),
+    });
     autoRank++;
   }
 
@@ -4017,7 +4206,7 @@ function rgDraw() {
       <span style="font-size:0.6rem;color:var(--brown-light);display:flex;gap:12px;align-items:center;">
         <span><span style="display:inline-block;width:9px;height:9px;background:rgba(95,174,95,0.6);border-left:3px solid #5fae5f;margin-right:4px;"></span>starting</span>
         <span><span style="display:inline-block;width:9px;height:9px;background:rgba(192,80,77,0.6);border-left:3px solid #c0504d;margin-right:4px;"></span>rostered, benched</span>
-        <span><span style="display:inline-block;width:9px;height:9px;background:rgba(214,178,60,0.6);border-left:3px solid #d6b23c;margin-right:4px;"></span>free agent</span>
+        <span><span style="display:inline-block;width:9px;height:9px;background:rgba(235,195,55,0.75);border-left:3px solid #d6a82a;margin-right:4px;"></span>free agent</span>
       </span>
     </div>`;
 
@@ -4089,7 +4278,7 @@ const GUIDE = [
     { name:'Player Finder',    tab:'player',
       desc:'Look up any player for his dynasty value and every roster in your leagues he sits on.' },
     { name:'Waivers',          tab:'waivers',    espn:true,
-      desc:'The best free agents left across all your leagues, ranked by dynasty value or by weekly ranks you upload.' },
+      desc:'Dynasty: the best free agents left across all your leagues by FantasyCalc value. Redraft: your uploaded ranking sheet as a grid for one league, with your players in green and free agents in yellow.' },
     { name:'Open Trades',      tab:'trades',
       desc:'Every pending trade offer across every league in one list, with real player names instead of ID numbers.' },
     { name:'Trade Partners',   tab:'partners',
