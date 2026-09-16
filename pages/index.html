@@ -217,6 +217,11 @@ footer a:hover { color: var(--gold); }
 .lineup-card[open] > summary { background: rgba(255,255,255,0.03); border-bottom-color: var(--gold); }
 .diff-row { display: flex; align-items: center; gap: 6px; padding: 7px 16px; font-family: 'Crimson Text', serif; font-size: 0.9rem; border-bottom: 1px dashed rgba(255,255,255,0.07); flex-wrap: wrap; }
 .diff-slot { font-family: 'Rye', serif; font-size: 0.45rem; letter-spacing: 0.12em; color: var(--gold); width: 72px; flex-shrink: 0; }
+/* Sheet ranks on a lineup row. Two cells, not one: a positional rank and a flex
+   rank are different scales and collapsing them would imply they're comparable. */
+.diff-rank { font-size: 0.68rem; min-width: 38px; text-align: right; flex-shrink: 0; color: var(--gold-light); }
+.diff-rank.diff-flex { min-width: 32px; color: var(--brown-light); }
+.diff-rank.diff-none { color: var(--brown-mid); }
 /* Injury swap — search suggestions, per-league blocks, candidate chooser */
 .lsw-sug { display: flex; align-items: center; gap: 8px; padding: 6px 10px; cursor: pointer; font-family: 'Crimson Text', serif; font-size: 0.85rem; border-bottom: 1px dashed rgba(255,255,255,0.07); }
 .lsw-sug:last-child { border-bottom: none; }
@@ -275,7 +280,13 @@ footer a:hover { color: var(--gold); }
    blocks have different lengths (FLEX runs to 100 while QB stops at 25), so each
    column simply ends where its own list does. */
 .main.wide { max-width: 1600px; }
-.rg-wrap { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; align-items: start; }
+.rg-wrap { display: grid; grid-template-columns: repeat(var(--rg-tracks, 5), minmax(0, 1fr)); gap: 10px; align-items: start; }
+/* A split column spans two tracks and carries its halves side by side with no
+   gap between them, so 1-50 / 51-100 read as one list rather than two positions. */
+.rg-split { grid-column: span 2; }
+.rg-halves { display: grid; grid-template-columns: 1fr 1fr; }
+.rg-half { min-width: 0; }
+.rg-half + .rg-half { border-left: 1px solid var(--brown-mid); }
 .rg-col { min-width: 0; border: 1px solid var(--brown-mid); border-radius: 2px; background: var(--brown-dark); }
 .rg-head { font-family: 'Rye', serif; font-size: 0.55rem; letter-spacing: 0.12em; text-transform: uppercase;
            color: var(--gold-light); background: #2b1d13; padding: 7px 8px; text-align: center;
@@ -284,7 +295,7 @@ footer a:hover { color: var(--gold); }
 .rg-cell { display: flex; align-items: baseline; gap: 6px; padding: 3px 7px; font-size: 0.78rem;
            color: var(--parchment); border-bottom: 1px solid rgba(255,255,255,0.05); line-height: 1.35; }
 .rg-col > .rg-cell:last-child { border-bottom: none; }
-.rg-rank { color: var(--brown-light); font-size: 0.62rem; min-width: 18px; text-align: right; flex-shrink: 0; }
+.rg-rank { color: var(--brown-light); font-size: 0.74rem; font-weight: 600; min-width: 22px; text-align: right; flex-shrink: 0; }
 .rg-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rg-opp { color: var(--brown-light); font-size: 0.62rem; flex-shrink: 0; }
 .rg-on  { background: rgba(95,174,95,0.18);  box-shadow: inset 3px 0 0 #5fae5f; }
@@ -292,7 +303,13 @@ footer a:hover { color: var(--gold); }
 .rg-off { background: rgba(192,80,77,0.16); box-shadow: inset 3px 0 0 #c0504d; }
 .rg-off .rg-name { color: #e08b88; }
 .rg-pill.on { border-color: var(--gold); color: var(--gold-light); }
-@media (max-width: 1200px) { .rg-wrap { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+/* Too narrow to sit two halves side by side — stack them, which restores one
+   continuous 1..N list, and let the column keep its double width. */
+@media (max-width: 1200px) {
+  .rg-wrap { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .rg-halves { grid-template-columns: 1fr; }
+  .rg-half + .rg-half { border-left: none; }
+}
 @media (max-width: 700px)  { .rg-wrap { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 @media (max-width: 600px) {
@@ -406,9 +423,6 @@ a.row-link.ls-contender-name { color: var(--gold-light); font-weight: 700; }
 .ls-chance-lg    { color: var(--gold-light); }
 .ls-chance-nervy { color: var(--parchment); font-style: italic; }
 .ls-chance-blny  { color: var(--brown-light); font-style: italic; }
-/* Contender rank badge */
-.ls-cr-badge { display: inline-block; min-width: 26px; text-align: center; padding: 2px 7px; border-radius: 3px; font-weight: 700; font-size: 0.88rem; color: #fff; }
-.ls-cr-sub   { font-size: 0.7rem; color: var(--brown-light); margin-left: 2px; }
 /* Starter value mode toggle */
 .ls-mode-bar { display: flex; align-items: center; gap: 6px; }
 .ls-mode-label { font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); margin-right: 2px; }
@@ -645,16 +659,15 @@ const LS = {
   oddsLoaded:  false,
   oddsLoading: false,
   oddsError:   null,
-  contenderData: {
-    mode:           'adp',  // 'adp' | 'projections'
+  // Projection sources (Clay / Sleeper / your uploaded PPG), fetched once and
+  // shared. Only the guillotine Power Score reads these now — the Contender
+  // Rank column that used to be their main consumer is gone.
+  projData: {
     clayMap:        {},     // sleeperId → { ppg }
     sleeperProjMap: {},     // sleeperId → { ppg }
     userProjMap:    {},     // sleeperId → { ppg }
-    aggAdpMap:      {},     // sleeperId → aggregate consensus ADP rank (mode 'adp' only)
     loaded:         false,
     loading:        false,
-    aggAdpLoaded:   false,
-    aggAdpLoading:  false,
   },
   gz: {},   // {lgId: {loading, loaded, error, computedAtWeek, rows: [...]}} — guillotine leagues, see lsIsGuillotine()
 };
@@ -2596,6 +2609,21 @@ function lsBodyRows(fix, mode) {
   const have = lsHaveProj();
   const ptsCell = pid => `<span style="color:var(--brown-light);font-size:0.8rem;min-width:36px;text-align:right;flex-shrink:0;">${have ? lsPlayerPts(pid, pc).toFixed(1) : '–'}</span>`;
 
+  // Sheet ranks, between the name and the projection. Rendered only when a sheet
+  // is loaded — with no sheet every row would carry two empty columns.
+  // Flex rank is genuinely absent for QB/K/DEF (the sheet's FLEX block doesn't
+  // list them), so a blank there is correct rather than missing data.
+  const haveRanks = lsHaveRankings();
+  const rankCells = pid => {
+    if (!haveRanks) return '';
+    const ri  = lsRankInfo(pid);
+    const pos = lsNormPos(S.players[pid]?.position) || '';
+    const pr  = ri?.posRank  ? pos + ri.posRank : '–';
+    const fr  = ri?.flexRank ? 'F' + ri.flexRank : '';
+    return `<span class="diff-rank${ri?.posRank ? '' : ' diff-none'}" title="Position rank on the sheet">${esc(pr)}</span>`
+         + `<span class="diff-rank diff-flex" title="Flex rank on the sheet">${esc(fr)}</span>`;
+  };
+
   return fix.rosterPositions.map((slot, i) => {
     const cur = String(fix.starters[i] || '0');
     const pr  = String(prop[i] || '0');
@@ -2616,6 +2644,7 @@ function lsBodyRows(fix, mode) {
     return `<div class="diff-row"${lock ? ' style="opacity:0.62;"' : ''}>
       <span class="diff-slot">${esc(slot)}</span>
       <span style="color:var(--parchment);flex:1;">${lock ? '<span title="Game has started — this slot is locked" style="color:var(--brown-light);">🔒 </span>' : ''}${esc(lsPlayerName(pid))}${inj ? ' ' + inj : ''}</span>
+      ${rankCells(pid)}
       ${ptsCell(pid)}
     </div>`;
   }).join('');
@@ -3855,7 +3884,13 @@ function lsSwapBarHtml() {
 // the mode toggle — the point is to flip between ranks and projections and see
 // where the two disagree.
 const RG = { leagueIdx: 0, mode: 'current' };          // mode: current | ranks | projections
-const RG_COLS = [['QB','QB'], ['RB','RB'], ['WR','WR'], ['TE','TE'], ['FLEX','FLEX'], ['DEF','D'], ['K','K']];
+// K and DEF are still parsed and still drive the optimizer — they're dropped from
+// the GRID only, where two short columns cost as much width as a long one and
+// neither is a call you make by scanning a list.
+// Third element marks a column splittable: a long list reads better as two
+// adjacent halves than as one column you have to scan past twice.
+const RG_COLS = [['QB','QB'], ['RB','RB'], ['WR','WR', true], ['TE','TE'], ['FLEX','FLEX', true]];
+const RG_SPLIT_MIN = 40;   // below this, splitting just yields two stubby columns
 const RG_MODES = [['current','Current lineup'], ['ranks','Ranked optimal'], ['projections','Projection optimal']];
 
 async function renderRanksGrid(force = false) {
@@ -3927,10 +3962,18 @@ function rgDraw() {
       </span>
     </div>`;
 
-  const grid = `<div class="rg-wrap">${RG_COLS.map(([key, label]) => {
+  // How many grid tracks the row actually needs — a split column takes two. Driven
+  // by the real list lengths so a sheet with a short WR block doesn't leave an
+  // empty track. Passed as a custom property rather than an inline
+  // grid-template-columns, which would outrank the responsive overrides.
+  const isSplit = (key, sp) => !!sp && (cols[key] || []).length >= RG_SPLIT_MIN;
+  const tracks  = RG_COLS.reduce((n, [k, , sp]) =>
+    (cols[k] || []).length ? n + (isSplit(k, sp) ? 2 : 1) : n, 0);
+
+  const grid = `<div class="rg-wrap" style="--rg-tracks:${tracks};">${RG_COLS.map(([key, label, sp]) => {
     const list = cols[key] || [];
     if (!list.length) return '';
-    const rows = list.map(r => {
+    const cell = r => {
       const pid = r.pid ? String(r.pid) : null;
       // A flex-eligible player is listed twice by the sheet — in his position
       // column and again in FLEX — so he lights up in both. Same player.
@@ -3941,9 +3984,15 @@ function rgDraw() {
         <span class="rg-name">${esc(r.name)}</span>
         <span class="rg-opp">${esc(r.opp || '')}</span>
       </div>`;
-    }).join('');
-    return `<div class="rg-col">
-      <div class="rg-head" style="top:${navH}px;">${esc(label)} <em>${list.length}</em></div>${rows}</div>`;
+    };
+    const split = isSplit(key, sp);
+    const half  = Math.ceil(list.length / 2);
+    const body  = split
+      ? `<div class="rg-halves"><div class="rg-half">${list.slice(0, half).map(cell).join('')}</div>`
+        + `<div class="rg-half">${list.slice(half).map(cell).join('')}</div></div>`
+      : list.map(cell).join('');
+    return `<div class="rg-col${split ? ' rg-split' : ''}">
+      <div class="rg-head" style="top:${navH}px;">${esc(label)} <em>${list.length}</em></div>${body}</div>`;
   }).join('')}</div>`;
 
   setC(`<div>${head}${controls}${grid}</div>`);
@@ -4174,8 +4223,11 @@ function leagueFlags(lg) {
 // that means "won't play" is red, anything in doubt is gold. Keep the red set in
 // step with LS_BAD_INJ, which decides who the lineup tools refuse to start.
 const INJ_BADGE = {
-  Q: ['badge-gold', 'Q'],   QUESTIONABLE: ['badge-gold', 'Q'],
-  D: ['badge-gold', 'D'],   DOUBTFUL:     ['badge-gold', 'D'],
+  // Q/D are red, not gold: a questionable starter is the thing most worth acting
+  // on before kickoff, and gold read as decorative next to the red Out badge.
+  // The letter still separates them — red Q is not red Out.
+  Q: ['badge-red', 'Q'],   QUESTIONABLE: ['badge-red', 'Q'],
+  D: ['badge-red', 'D'],   DOUBTFUL:     ['badge-red', 'D'],
   O: ['badge-red',  'Out'], OUT:          ['badge-red',  'Out'],
   IR:  ['badge-red', 'IR'],  PUP: ['badge-red', 'PUP'], SUS: ['badge-red', 'Sus'],
   NA:  ['badge-red', 'NA'],  COV: ['badge-red', 'COV'], DNR: ['badge-red', 'DNR'],
@@ -4186,7 +4238,9 @@ function injuryBadge(s) {
   return hit ? `<span class="badge ${hit[0]}">${hit[1]}</span>` : '';
 }
 function statusBadgeCls(s) {
-  return (s==='EMPTY'||s==='O'||s==='IR') ? 'badge-red' : (s==='Q'||s==='D') ? 'badge-gold' : 'badge-outline';
+  // Currently unreferenced, but kept in step with INJ_BADGE so it can't reintroduce
+  // gold Q/D if something starts calling it.
+  return (s==='EMPTY'||s==='O'||s==='IR'||s==='Q'||s==='D') ? 'badge-red' : 'badge-outline';
 }
 function statusLabel(s) {
   return ({EMPTY:'Empty',Q:'Questionable',D:'Doubtful',O:'Out',IR:'IR'})[s]||s;
@@ -6646,6 +6700,15 @@ async function lsSimulateAllLeagues() {
         ) / Math.max(1, teams.length * futureWeeks.length);
         if (avgMu < 20) throw new Error('Projection data empty for this league');
 
+        // Mirrors analyzer.html's '[Analyzer odds] week accounting' log — the two
+        // pages run the same sim, so when their numbers disagree for a league
+        // these are the inputs to compare first.
+        console.log('[playoff odds] week accounting', {
+          lgId, name: lg.name, regularSeasonWeeks, median: d.median,
+          bankedWeeks: d.banked, futureWeeks,
+          playoffTeams: d.playoffTeams, numTeams: d.numTeams, teams: teams.length,
+        });
+
         const res = lsRunSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, d.playoffTeams, {
           byeSlots: lsByeSlots(d.playoffTeams),
           median:   d.median,
@@ -6691,68 +6754,30 @@ function lsPlayoffChancesLabel(standing, numTeams) {
   return               { label: 'Better Luck Next Year',     cls: 'ls-chance-blny'  };
 }
 
-// ── Contender Rank helpers ────────────────────────────────────────────────────
-// Scoring logic lives in shared-utils.js (cr* functions) so the analyzer can
-// reuse the exact same formula. Here we just build the ctx and cache results.
+// ── Projection-scored roster helper ───────────────────────────────────────────
+// Builds the ctx the shared crScoreRoster() wants. Its only caller now is the
+// guillotine Power Score — the Contender Rank column this was written for has
+// been removed (playoff odds answer the same question without depending on ADP,
+// which moves around too much to compare leagues with).
 
-function lsCrCtx(league) {
-  const cd = LS.contenderData;
+function lsProjScoreCtx(league) {
+  const pd = LS.projData;
   return {
-    mode:            cd.mode,
+    mode:            'projections',
     players:         S.players,
-    clayMap:         cd.clayMap,
-    sleeperProjMap:  cd.sleeperProjMap,
-    userProjMap:     cd.userProjMap,
-    aggAdpMap:       cd.aggAdpMap,
+    clayMap:         pd.clayMap,
+    sleeperProjMap:  pd.sleeperProjMap,
+    userProjMap:     pd.userProjMap,
     scoring:         league.scoring_settings || {},
     rosterPositions: league.roster_positions || [],
   };
 }
 
-// Fetches once, lazily, the first time ADP mode is actually rendered (mirrors
-// lsLoadContenderData's pattern for 'projections' but with its own loaded/
-// loading flags — the two fetches are independent of each other).
-async function lsLoadAggregateAdp() {
-  const cd = LS.contenderData;
-  if (cd.aggAdpLoaded || cd.aggAdpLoading) return;
-  cd.aggAdpLoading = true;
-  await loadPlayers(); // ensure S._playersByName is ready
-  cd.aggAdpMap = await crLoadAggregateAdp({ apiBase: '/api', byName: S._playersByName });
-  cd.aggAdpLoaded  = true;
-  cd.aggAdpLoading = false;
-  lsDrawTable();
-}
-
-// Returns {rosterId: score} for all rosters in a league, and caches it so the
-// analyzer can reference the same value without recomputing.
-function lsCrComputeLeague(lgId) {
-  const d = LS.leagueData[lgId];
-  if (!d) return {};
-  const league = S.leagueDetails[lgId] || {};
-  const ctx = lsCrCtx(league);
-  const scores = {};
-  for (const [rid, pids] of Object.entries(d.rosterPlayers)) {
-    scores[rid] = crScoreRoster(pids, ctx);
-  }
-  crCacheScores(lgId, LS.contenderData.mode, scores);
-  return scores;
-}
-
-// Badge color based on score percentile within the league (green=best, red=worst)
-function lsCrBadgeColor(myScore, allScores) {
-  const min = Math.min(...allScores);
-  const max = Math.max(...allScores);
-  const t = max > min ? (myScore - min) / (max - min) : 0.5;
-  const hue = Math.round(t * 120); // 0=red, 120=green
-  return `hsl(${hue},70%,40%)`;
-}
-
-async function lsLoadContenderData() {
-  const cd = LS.contenderData;
-  if (cd.loaded || cd.loading) return;
-  cd.loading = true;
-  cd.clayMap = {}; cd.sleeperProjMap = {}; cd.userProjMap = {};
-  lsDrawTable(); // show spinner cells
+async function lsLoadProjData() {
+  const pd = LS.projData;
+  if (pd.loaded || pd.loading) return;
+  pd.loading = true;
+  pd.clayMap = {}; pd.sleeperProjMap = {}; pd.userProjMap = {};
 
   await loadPlayers(); // ensure S.players and S._playersByName are ready
 
@@ -6760,24 +6785,12 @@ async function lsLoadContenderData() {
   const { clayMap, sleeperProjMap, userProjMap } = await crLoadProjectionData({
     apiBase: '/api', season, authed: !!S.auth, byName: S._playersByName,
   });
-  cd.clayMap = clayMap;
-  cd.sleeperProjMap = sleeperProjMap;
-  cd.userProjMap = userProjMap;
+  pd.clayMap = clayMap;
+  pd.sleeperProjMap = sleeperProjMap;
+  pd.userProjMap = userProjMap;
 
-  cd.loaded  = true;
-  cd.loading = false;
-  lsDrawTable();
-}
-
-function lsSetContenderMode(mode) {
-  const cd = LS.contenderData;
-  if (cd.mode === mode) return;
-  cd.mode = mode;
-  if (mode === 'projections' && !cd.loaded && !cd.loading) {
-    lsLoadContenderData(); // async: sets loading=true → spinner → fetches → redraws
-  } else {
-    lsDrawTable(); // ADP always instant; projections already cached
-  }
+  pd.loaded  = true;
+  pd.loading = false;
 }
 
 // ── Guillotine (elimination) league simulation ───────────────────────────────
@@ -6814,7 +6827,7 @@ function lsGzIsAlive(roster) {
 }
 
 // Fetches rosters/users/matchup history for a guillotine league and derives,
-// per team: alive/weeks-survived, power score (Contender Rank formula forced
+// per team: alive/weeks-survived, power score (crScoreRoster forced
 // to projections mode, so it's on the same real-point scale as actual fpts),
 // and FAAB reserve. Does not run the simulation — see lsGzCalculate().
 async function lsGzComputeLeague(lgId) {
@@ -6850,8 +6863,8 @@ async function lsGzComputeLeague(lgId) {
 
   // Sleeper projections only for guillotine Power Score (per-request) — zeroing
   // out clayMap/userProjMap makes crPlayerPpg() fall through to sleeperProjMap
-  // alone without touching the shared cr* formula used elsewhere in the app.
-  const ctx = { ...lsCrCtx(detail), mode: 'projections', clayMap: {}, userProjMap: {} };
+  // alone without touching the shared crScoreRoster formula.
+  const ctx = { ...lsProjScoreCtx(detail), clayMap: {}, userProjMap: {} };
   const totalBudget = detail.settings?.waiver_budget || 0;
 
   const aliveRosters = rosters.filter(lsGzIsAlive);
@@ -6944,7 +6957,7 @@ async function lsGzCalculate(lgId) {
   gz.error = null;
   lsDrawTable();
   try {
-    await lsLoadContenderData(); // ensures clay/sleeper/user projection maps are cached (gz always reads projections mode)
+    await lsLoadProjData(); // ensures clay/sleeper/user projection maps are cached
     const currentWeek     = S.nflState?.week || 1;
     const weeksRemaining   = Math.max(0, GZ_CUTOVER_WEEK - currentWeek);
     const rows             = await lsGzComputeLeague(lgId);
@@ -7032,7 +7045,6 @@ const LS_SORT_KEYS = {
   allplay:   r => r.apWins != null && (r.apWins + r.apLosses) ? r.apWins / (r.apWins + r.apLosses) : null,
   // No odds yet → below every league that has them, in standing order
   chances:   r => r.playoffOdds != null ? r.playoffOdds : (r.hasData ? -1 - r.standing / 1000 : null),
-  contender: r => r.crScore ?? null,
 };
 
 function lsSortRows(rows) {
@@ -7307,37 +7319,16 @@ function lsRecapHtml() {
 }
 
 function lsDrawTable() {
-  // lsSimulateAllLeagues() / the contender-score helpers redraw as they progress;
-  // when the Scout tab drives the simulation there is no Summaries table on screen.
+  // lsSimulateAllLeagues() redraws as it progresses; when the Scout tab drives
+  // the simulation there is no Summaries table on screen.
   if (S.tab !== 'leagues') return;
   const roles = new Set(S.leagues.filter(lg => !lsIsGuillotine(lg.league_id)).map(lg => lsLeagueRole(lg.league_id)));
-  const cd = LS.contenderData;
-  const crLoading = cd.mode === 'projections' && cd.loading;
-  if (cd.mode === 'adp' && !cd.aggAdpLoaded && !cd.aggAdpLoading) lsLoadAggregateAdp();
-
-  // Compute contender scores per league (keyed roster_id → score)
-  const crScoresPerLeague = {};
-  for (const lg of S.leagues) {
-    if (!LS.leagueData[lg.league_id]) continue;
-    crScoresPerLeague[lg.league_id] = lsCrComputeLeague(lg.league_id);
-  }
 
   // Build rows (guillotine leagues get their own section below — standing/record/
   // playoff-chances/all-play don't mean anything under elimination rules)
   let rows = S.leagues.filter(lg => !lsIsGuillotine(lg.league_id)).map(lg => {
     const d    = LS.leagueData[lg.league_id];
     const pref = RS.prefs[lg.league_id];
-    const isEspn = lg.source === 'espn';
-    const crScores = !isEspn ? (crScoresPerLeague[lg.league_id] || {}) : {};
-    const myRid = d?.myRosterId;
-    const crScore = !isEspn && myRid != null ? (crScores[myRid] ?? null) : null;
-    const allCrScores = Object.values(crScores);
-    // Rank = how many teams have a higher score + 1
-    const crRank = crScore != null && allCrScores.length > 0
-      ? allCrScores.filter(s => s > crScore).length + 1
-      : null;
-    const crColor = crScore != null && allCrScores.length > 1
-      ? lsCrBadgeColor(crScore, allCrScores) : null;
     return {
       lgId:       lg.league_id,
       name:       lg.name || 'Unnamed',
@@ -7354,7 +7345,6 @@ function lsDrawTable() {
       playoffOdds:     d?.playoffOdds,
       byeOdds:         d?.byeOdds,
       playoffOddsError: d?.playoffOddsError,
-      crScore, crRank, crColor,
     };
   });
 
@@ -7376,10 +7366,8 @@ function lsDrawTable() {
   };
   const thCls = (col) => LS.sortCol === col ? 'ls-sorted' : '';
 
-  const crModeLbl = cd.mode === 'adp' ? 'ADP' : 'Proj';
   const cols = [
     { key: 'name',      lbl: 'League'         },
-    { key: 'contender', lbl: `Contender<br><span style="font-family:'Crimson Text',serif;font-size:0.68rem;font-weight:400;letter-spacing:0;text-transform:none;opacity:0.7;">${crModeLbl}</span>` },
     { key: 'standing',  lbl: 'Standing'       },
     { key: 'record',    lbl: 'Record'         },
     { key: 'allplay',   lbl: 'All-Play'       },
@@ -7438,20 +7426,7 @@ function lsDrawTable() {
       chancesCell = `<td><span class="${cls}">${label}</span></td>`;
     }
 
-    // Contender rank cell
-    let crCell;
-    if (!row.hasData) {
-      crCell = '<td>—</td>';
-    } else if (crLoading) {
-      crCell = '<td><span style="color:var(--brown-light);font-size:0.8rem;">…</span></td>';
-    } else if (row.crRank != null) {
-      const bg = row.crColor || '#555';
-      crCell = `<td><span class="ls-cr-badge" style="background:${bg}">${row.crRank}</span><span class="ls-cr-sub">of ${row.numTeams}</span></td>`;
-    } else {
-      crCell = '<td><span style="color:var(--brown-light);font-size:0.8rem;">—</span></td>';
-    }
-
-    return `<tr>${nameCell}${crCell}${standingCell}${recordCell}${apCell}${chancesCell}</tr>`;
+    return `<tr>${nameCell}${standingCell}${recordCell}${apCell}${chancesCell}</tr>`;
   }).join('')}</tbody>`;
 
   const filterBtns = `
@@ -7479,20 +7454,12 @@ function lsDrawTable() {
     ? `<div style="color:#c0392b;font-size:0.82rem;margin:8px 0 4px;">${esc(LS.oddsError)}</div>`
     : '';
 
-  const modeBar = `
-    <div class="ls-mode-bar">
-      <span class="ls-mode-label">Starter Value</span>
-      <button class="ls-mode-pill${cd.mode==='adp'?' active':''}" onclick="lsSetContenderMode('adp')">ADP</button>
-      <button class="ls-mode-pill${cd.mode==='projections'?' active':''}" onclick="lsSetContenderMode('projections')">Projections</button>
-    </div>`;
-
   setC(`
     ${lsRecapHtml()}
     <div class="section-head"><h2>League Summaries</h2><div class="section-head-line"></div></div>
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
       ${filterBtns}
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-        ${modeBar}
         ${oddsBtn}
       </div>
     </div>

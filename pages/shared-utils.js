@@ -40,10 +40,18 @@ function errHtml(e) { return `<div class="err-state">Error: ${esc(e.message)}</d
 function loading(msg = 'Loading…') { return `<div class="loading-state"><div class="spinner"></div>${esc(msg)}</div>`; }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Contender scoring — single source of truth shared by League Summaries
-// (index.html) and the League Analyzer (analyzer.html).
+// Per-player and per-roster scoring helpers.
 //
-// Two modes:
+// These once backed a "Contender Rank" column on League Summaries and the
+// League Analyzer. That column is gone — playoff odds answer the same question
+// ("how good is this team right now") without leaning on ADP, which moves
+// around too much to compare leagues against each other. What's left has three
+// live consumers:
+//   • the Scout tab (index.html)         → crPlayerPpg, for positional ranks
+//   • the guillotine Power Score          → crScoreRoster, projections mode only
+//   • the Analyzer's Trade Targets panel  → crScoreClay / crScoreSleeper
+//
+// Two valuation modes survive because Scout still uses both:
 //   'adp'         → aggregate consensus ADP (JuiceBoxOne sheet: FantasyPros/
 //                   ESPN/Sleeper/Yahoo blend, 1000 / √rank decay), falling back
 //                   to Sleeper's own search_rank for anyone the sheet doesn't
@@ -52,16 +60,10 @@ function loading(msg = 'Loading…') { return `<div class="loading-state"><div c
 //                   projections, and the user's own projections, each scored
 //                   with the league's own scoring_settings.
 //
-// A roster's contender score = sum of its best starters under a position-aware
-// selection: 2 QB if SF (else 1), (RB/WR/TE slots + 1) each, then the best
-// remaining flex-eligible players up to (starter_count + 3).
-//
-// Results are cached per league + mode in localStorage so the analyzer can
-// reference a value Summaries already computed instead of recomputing it.
+// crScoreRoster sums a roster's best starters under a position-aware selection:
+// 2 QB if SF (else 1), (RB/WR/TE slots + 1) each, then the best remaining
+// flex-eligible players up to (starter_count + 3).
 // ════════════════════════════════════════════════════════════════════════════
-
-const CR_CACHE_PREFIX = 'cr_scores_';
-const CR_CACHE_TTL_MS = 2 * 3600 * 1000; // 2h — rosters change with trades
 
 function crNormPos(raw) {
   if (!raw) return null;
@@ -125,7 +127,7 @@ function crPlayerPpg(pid, ctx) {
   return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
 }
 
-// Contender score for one roster's player ids.
+// Summed starter value for one roster's player ids.
 // ctx additionally carries { rosterPositions }.
 function crScoreRoster(playerIds, ctx) {
   const starterSlots = (ctx.rosterPositions || []).filter(p => !['BN','IR','TAXI'].includes(p));
@@ -363,17 +365,3 @@ async function crLoadAggregateAdp(opts) {
   return aggAdpMap;
 }
 
-// localStorage handoff so the analyzer can reuse what Summaries computed.
-function crCacheScores(lgId, mode, scores) {
-  try {
-    localStorage.setItem(CR_CACHE_PREFIX + lgId + '_' + mode,
-      JSON.stringify({ ts: Date.now(), scores }));
-  } catch {}
-}
-function crReadCachedScores(lgId, mode) {
-  try {
-    const c = JSON.parse(localStorage.getItem(CR_CACHE_PREFIX + lgId + '_' + mode) || 'null');
-    if (c && Date.now() - c.ts < CR_CACHE_TTL_MS) return c.scores;
-  } catch {}
-  return null;
-}
