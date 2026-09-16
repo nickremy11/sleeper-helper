@@ -303,8 +303,12 @@ footer a:hover { color: var(--gold); }
 /* Tier banding — alternates every time the sheet's tier changes, so tier breaks
    are visible without spending a column on the number. Declared BEFORE the
    highlight classes below so a starting / benched / free-agent background always
-   wins over the stripe (equal specificity, later rule takes it). */
-.rg-tier-b { background: rgba(255,255,255,0.04); }
+   wins over the stripe (equal specificity, later rule takes it).
+   Warm parchment tint rather than neutral white, and strong enough to actually
+   read: the first attempt at 4% white came out fainter than .rg-cell's own
+   1px rgba(255,255,255,0.05) bottom border, so the stripe lost to the row
+   separators and looked like it had never rendered. */
+.rg-tier-b { background: rgba(232,213,176,0.10); }
 .rg-rank { color: var(--brown-light); font-size: 0.74rem; font-weight: 600; min-width: 22px; text-align: right; flex-shrink: 0; }
 .rg-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rg-opp { color: var(--brown-light); font-size: 0.62rem; flex-shrink: 0; }
