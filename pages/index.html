@@ -1851,14 +1851,106 @@ const LU = {
   ranks: null,              // parsed weekly ranking sheet — see lsParseRanksCsv
   byGameTime: true,         // order interchangeable slots so flex never locks earlier than a position slot
   faOn: true,               // free-agent watch (redraft only) — see lsFaUpgrades
+  weekOverride: null,       // {from, to} — self-expiring manual week, see lsWeekFor
   _cache: null,             // { at, week, lineups, proj, kick } — see LU_CACHE_TTL
 };
 try { LU.faOn = localStorage.getItem('lu_fa_watch') !== '0'; } catch(_) {}
+try { LU.weekOverride = JSON.parse(localStorage.getItem('lu_week_override') || 'null'); } catch(_) {}
 
 // How long a loaded lineup snapshot stays fresh before renderLineupCheck refetches.
 // Revisiting the tab, hopping to the ranks grid, or re-rendering after a sheet
 // upload all skip the per-league rosters+matchups fetch entirely within it.
 const LU_CACHE_TTL = 5 * 60 * 1000;
+
+const LU_WEEK_KEY = 'lu_week_override';
+const LU_MAX_WEEK = 18;
+
+// Which week the lineup tools operate on.
+//
+// Sleeper publishes two answers that disagree for about 24h every week:
+//   leg / week    — advances once the prior week's games finish scoring
+//                   (observed already flipped by Tuesday morning)
+//   display_week  — holds on the just-completed week through the results-review
+//                   window, rolling over around Wednesday's waiver run
+//
+// This tab SETS lineups, so it wants the week it is about to play, not the one
+// being reviewed — that makes `leg` the right source here and leaves the Tuesday
+// dead zone with no lineup to edit. display_week stays the fallback.
+//
+// The reverse risk — leg flipping while Monday night is still being played — is
+// not real in practice: it would break Sleeper's own live scoring for everyone,
+// and once MNF is final the week's lineups are moot anyway. The manual stepper
+// below covers it if that assumption ever turns out to be wrong.
+//
+// Deliberately NOT shared with the rest of the app: League Summaries counts
+// banked results and rootforme.html shows the week being played, and both are
+// correct to keep following display_week.
+function lsAutoWeek(nflState) {
+  if (!nflState) return null;
+  if (nflState.season_type !== 'regular') return 1;
+  return nflState.leg || nflState.display_week || 1;
+}
+
+// The override is stored as {from, to} rather than a bare week number so it
+// EXPIRES ON ITS OWN: it applies only while Sleeper's own answer still reads
+// `from`, so the moment display_week catches up the override stops matching and
+// is dropped. A bare number would be a sticky manual week — i.e. the exact bug
+// this exists to fix, one week later and with no auto-recovery.
+// True while a stored override still refers to the week it was pinned against.
+// The regular-season test is load-bearing, not belt-and-braces: lsAutoWeek pins
+// EVERY other season type to week 1, so without it a forgotten {from:1} override
+// would come back from the dead in the offseason and read as a stuck week.
+function lsOverrideLive(nflState, ov = LU.weekOverride) {
+  return !!(ov && nflState && nflState.season_type === 'regular' && ov.from === lsAutoWeek(nflState));
+}
+
+function lsWeekFor(nflState) {
+  return lsOverrideLive(nflState) ? LU.weekOverride.to : lsAutoWeek(nflState);
+}
+
+function lsSaveWeekOverride(ov) {
+  LU.weekOverride = ov;
+  try {
+    if (ov) localStorage.setItem(LU_WEEK_KEY, JSON.stringify(ov));
+    else    localStorage.removeItem(LU_WEEK_KEY);
+  } catch(_) {}
+}
+
+// Step the manual week — now a safety valve rather than the routine path, since
+// lsAutoWeek follows `leg` and lands on the right week by itself. Landing back on
+// Sleeper's own answer clears the override outright instead of storing a no-op,
+// so the badge stops claiming "manual".
+async function lsStepWeek(delta) {
+  if (S.nflState?.season_type !== 'regular') return;
+  const auto = lsAutoWeek(S.nflState);
+  if (auto == null) return;
+  const next = Math.max(1, Math.min(LU_MAX_WEEK, (LU.week || auto) + delta));
+  if (next === LU.week) return;
+  lsSaveWeekOverride(next === auto ? null : { from: auto, to: next });
+  await renderLineupCheck(true);
+}
+
+async function lsClearWeek() {
+  lsSaveWeekOverride(null);
+  await renderLineupCheck(true);
+}
+
+// Compact stepper for the lineup toolbar. An active override is labelled and
+// gets an explicit way back to Sleeper's answer — a manual week that rendered
+// identically to the automatic one would be impossible to notice, which is the
+// failure mode that makes a stuck week look like a bug in the first place.
+function lsWeekCtlHtml(w) {
+  // Nothing to step through outside the regular season — every week resolves to 1.
+  if (S.nflState?.season_type !== 'regular') return '';
+  const auto = lsAutoWeek(S.nflState);
+  const on   = lsOverrideLive(S.nflState);
+  return `<span style="display:inline-flex;gap:4px;align-items:center;">
+      <button class="ghost-btn" style="font-size:0.5rem;" title="Previous week" onclick="lsStepWeek(-1)"${w <= 1 ? ' disabled' : ''}>◀</button>
+      <span style="font-size:0.55rem;white-space:nowrap;color:${on ? '#d08a30' : 'var(--brown-light)'};">Week ${w}${on ? ' · manual' : ''}</span>
+      <button class="ghost-btn" style="font-size:0.5rem;" title="Next week" onclick="lsStepWeek(1)"${w >= LU_MAX_WEEK ? ' disabled' : ''}>▶</button>
+      ${on ? `<button class="ghost-btn" style="font-size:0.5rem;" title="Back to Sleeper's week (${auto})" onclick="lsClearWeek()">✕</button>` : ''}
+    </span>`;
+}
 
 // Step-1 proof: re-write a league's CURRENT starters back (a no-op set).
 // Confirms the write pipe (proxy + token + mutation shape) works end-to-end
@@ -3532,9 +3624,7 @@ async function lsLoadEspnLineup(lg, week) {
 
 // True while the in-memory snapshot can be reused as-is.
 function lsCacheFresh() {
-  const expectWeek = S.nflState
-    ? (S.nflState.season_type !== 'regular' ? 1 : (S.nflState.display_week || S.nflState.leg || 1))
-    : null;
+  const expectWeek = lsWeekFor(S.nflState);
   return !!(LU._cache && LU._cache.week === expectWeek && Date.now() - LU._cache.at < LU_CACHE_TTL);
 }
 
@@ -3552,9 +3642,11 @@ async function lsEnsureLineupData(force = false) {
   }
 
   await loadPlayers();
-  const nflState    = await getNflState();
-  const isOffseason = nflState.season_type !== 'regular';
-  const w           = isOffseason ? 1 : (nflState.display_week || nflState.leg || 1);
+  const nflState = await getNflState();
+  // Drop a spent override before resolving — once Sleeper's own week moves off
+  // the one the override was pinned against it has served its purpose.
+  if (LU.weekOverride && !lsOverrideLive(nflState)) lsSaveWeekOverride(null);
+  const w = lsWeekFor(nflState) || 1;
 
   // Per-league fetches run in parallel — done sequentially this loop was the
   // main source of the delay (2 round-trips × every league, one after another).
@@ -3698,6 +3790,8 @@ function lsRenderLineupCards() {
            <button class="setup-btn" ${canProj ? '' : 'disabled'} onclick="optimizeAll()">⚡ Optimize all</button>
            ${canWrite ? `<button class="setup-btn" ${canProj ? '' : 'disabled'} onclick="applyAll()">✓ Apply all</button>` : ''}
            <button class="ghost-btn" id="lu-collapse-btn" style="font-size:0.5rem;" onclick="toggleCollapseAll()">Expand all</button>
+           <span style="width:1px;height:18px;background:var(--brown-mid);"></span>
+           ${lsWeekCtlHtml(w)}
            <span style="width:1px;height:18px;background:var(--brown-mid);"></span>
            <span style="font-size:0.55rem;color:${canRank ? 'var(--gold-light)' : 'var(--brown-light)'};">${esc(lsRanksSummary())}</span>
            <button class="ghost-btn" style="font-size:0.5rem;" onclick="openRankingsUpload()">⬆ Upload rankings</button>
