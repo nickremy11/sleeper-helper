@@ -706,6 +706,7 @@ const WV = {
   rosteredByLeague:   {},  // {lgId: Set<pid>}
   rows:               [],
   redraftRankings:    [],  // [{name, pos, rank, pid}]
+  rankUnmatched:      0,   // rows in the uploaded sheet that resolved to no Sleeper id
   expandedKey:        null,
   sortCol:            'adjVal',
   sortDir:            -1,
@@ -1567,8 +1568,8 @@ function renderWaivers() {
       <span class="filter-lbl-rs">Rankings CSV</span>
       <input type="file" id="wv-file" accept=".csv,.txt" class="wv-file-input" onchange="wvUploadRankings(this)" />
       ${WV.redraftRankings.length
-        ? `<span class="setup-status ok" style="margin:0;">${WV.redraftRankings.length} players loaded</span>`
-        : `<span style="font-family:'Crimson Text',serif;font-size:0.82rem;font-style:italic;color:var(--brown-light);">CSV: one player per line, or columns: Name, Position, Rank</span>`}
+        ? `<span class="setup-status ok" style="margin:0;">${WV.redraftRankings.length} players loaded${WV.rankUnmatched ? ` · ${WV.rankUnmatched} unmatched` : ''}</span>`
+        : `<span style="font-family:'Crimson Text',serif;font-size:0.82rem;font-style:italic;color:var(--brown-light);">CSV with a Player column (Position / Overall / Team read if present), or one name per line</span>`}
     </div>` : '';
 
   setC(`<div>
@@ -1845,26 +1846,61 @@ function wvSetMode(mode) {
   renderWaivers();
 }
 
+// Rankings CSV → [{name, pos, rank, pid}]. Columns are located by HEADER TEXT,
+// not by position: exports differ (this app's own sheet leads with an "Overall"
+// index column, a plain list leads with the name), and reading column 0 as the
+// name is what silently turned every row of such a sheet into
+// {name:"1", rank:NaN, pid:null} — rows loaded, nothing ever matched.
+const WV_RANK_COLS = {
+  name: ['PLAYER', 'NAME', 'PLAYER NAME', 'FULL NAME'],
+  pos:  ['POSITION', 'POS'],
+  rank: ['OVERALL', 'OVERALL RANK', 'RANK', 'RK', '#'],
+  team: ['TEAM', 'NFL TEAM', 'TM'],
+};
+
+// A row is the header iff it carries a recognizable NAME column — that is the
+// one field the parser can't work without.
+function wvRankHeaderIdx(row) {
+  const idx = {};
+  (row || []).forEach((h, i) => {
+    const k = String(h || '').trim().toUpperCase();
+    for (const field in WV_RANK_COLS) {
+      if (idx[field] === undefined && WV_RANK_COLS[field].includes(k)) idx[field] = i;
+    }
+  });
+  return idx.name === undefined ? null : idx;
+}
+
 async function wvUploadRankings(input) {
   const file = input.files[0];
   if (!file) return;
   const text = await file.text();
   await loadPlayers();
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+
+  // Real CSV split (quoted fields, BOM stripped) — shared with the weekly sheet.
+  const rows = lsCsvRows(text).filter(r => r.some(c => String(c || '').trim()));
+  const idx  = rows.length ? wvRankHeaderIdx(rows[0]) : null;
+  const col  = idx || { name: 0, pos: 1, rank: 2 };   // bare "Name, Position, Rank" fallback
+  let body   = idx ? rows.slice(1) : rows;
+  // Unrecognized header on the fallback path: test the PARSED cell, not the raw
+  // line — a quoted first field ("Player") never matched the old raw-line regex.
+  if (!idx && body.length && /^(rank|player|name|pos|overall)$/i.test(String(body[0][0] || '').trim())) body = body.slice(1);
+
   const rankings = [];
-  let autoRank = 1;
-  for (const line of lines) {
-    if (autoRank === 1 && /^(rank|player|name|pos)/i.test(line)) continue; // skip header row
-    const parts = line.split(',').map(p => p.trim().replace(/^"|"$/g, ''));
-    const name  = parts[0];
-    const pos   = parts[1] || '';
-    const rankOverride = parts[2] ? parseInt(parts[2]) : null;
+  let unmatched = 0, autoRank = 1;
+  for (const r of body) {
+    const cell = k => (col[k] === undefined ? '' : String(r[col[k]] ?? '').trim());
+    const name = cell('name');
     if (!name) continue;
-    const pid = S._playersByName[normName(name)];
-    rankings.push({ name, pos, rank: rankOverride ?? autoRank, pid: pid || null });
+    const n   = parseInt(cell('rank'), 10);
+    const pid = lsMatchRankRow(name, cell('team'));
+    if (!pid) unmatched++;
+    rankings.push({ name, pos: cell('pos'), rank: isFinite(n) ? n : autoRank, pid: pid || null });
     autoRank++;
   }
+
   WV.redraftRankings = rankings;
+  WV.rankUnmatched   = unmatched;
   WV.loaded = false;
   WV.rows   = [];
   renderWaivers();
