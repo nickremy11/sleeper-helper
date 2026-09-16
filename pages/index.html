@@ -218,10 +218,15 @@ footer a:hover { color: var(--gold); }
 .diff-row { display: flex; align-items: center; gap: 6px; padding: 7px 16px; font-family: 'Crimson Text', serif; font-size: 0.9rem; border-bottom: 1px dashed rgba(255,255,255,0.07); flex-wrap: wrap; }
 .diff-slot { font-family: 'Rye', serif; font-size: 0.45rem; letter-spacing: 0.12em; color: var(--gold); width: 72px; flex-shrink: 0; }
 /* Sheet ranks on a lineup row. Two cells, not one: a positional rank and a flex
-   rank are different scales and collapsing them would imply they're comparable. */
-.diff-rank { font-size: 0.68rem; min-width: 38px; text-align: right; flex-shrink: 0; color: var(--gold-light); }
-.diff-rank.diff-flex { min-width: 32px; color: var(--brown-light); }
+   rank are different scales and collapsing them would imply they're comparable.
+   No min-width here on purpose — they sit directly after the name rather than
+   in their own right-aligned columns, so they read as part of the player. */
+.diff-rank { font-size: 0.82rem; flex-shrink: 0; color: var(--gold-light); }
+.diff-rank.diff-flex { color: var(--gold-light); }
 .diff-rank.diff-none { color: var(--brown-mid); }
+/* Projection keeps its right-aligned column, but shares the ranks' size+colour
+   so the three numbers read as one group. */
+.diff-pts { font-size: 0.82rem; min-width: 40px; text-align: right; flex-shrink: 0; color: var(--gold-light); }
 /* Injury swap — search suggestions, per-league blocks, candidate chooser */
 .lsw-sug { display: flex; align-items: center; gap: 8px; padding: 6px 10px; cursor: pointer; font-family: 'Crimson Text', serif; font-size: 0.85rem; border-bottom: 1px dashed rgba(255,255,255,0.07); }
 .lsw-sug:last-child { border-bottom: none; }
@@ -276,7 +281,7 @@ footer a:hover { color: var(--gold); }
 }
 
 /* ── WEEKLY RANKS GRID ── */
-/* The grid is seven independent ranked lists side by side, not a table: the
+/* The grid is five independent ranked lists side by side, not a table: the
    blocks have different lengths (FLEX runs to 100 while QB stops at 25), so each
    column simply ends where its own list does. */
 .main.wide { max-width: 1600px; }
@@ -295,6 +300,11 @@ footer a:hover { color: var(--gold); }
 .rg-cell { display: flex; align-items: baseline; gap: 6px; padding: 3px 7px; font-size: 0.78rem;
            color: var(--parchment); border-bottom: 1px solid rgba(255,255,255,0.05); line-height: 1.35; }
 .rg-col > .rg-cell:last-child { border-bottom: none; }
+/* Tier banding — alternates every time the sheet's tier changes, so tier breaks
+   are visible without spending a column on the number. Declared BEFORE the
+   highlight classes below so a starting / benched / free-agent background always
+   wins over the stripe (equal specificity, later rule takes it). */
+.rg-tier-b { background: rgba(255,255,255,0.04); }
 .rg-rank { color: var(--brown-light); font-size: 0.74rem; font-weight: 600; min-width: 22px; text-align: right; flex-shrink: 0; }
 .rg-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rg-opp { color: var(--brown-light); font-size: 0.62rem; flex-shrink: 0; }
@@ -302,6 +312,8 @@ footer a:hover { color: var(--gold); }
 .rg-on  .rg-name { color: #8fd08f; font-weight: 700; }
 .rg-off { background: rgba(192,80,77,0.16); box-shadow: inset 3px 0 0 #c0504d; }
 .rg-off .rg-name { color: #e08b88; }
+.rg-fa  { background: rgba(214,178,60,0.18); box-shadow: inset 3px 0 0 #d6b23c; }
+.rg-fa  .rg-name { color: #e6cc72; }
 .rg-pill.on { border-color: var(--gold); color: var(--gold-light); }
 /* Too narrow to sit two halves side by side — stack them, which restores one
    continuous 1..N list, and let the column keep its double width. */
@@ -2607,7 +2619,7 @@ function lsBodyRows(fix, mode) {
   const pc   = lsPtsCtx(fix);
   const prop = (fix._shown && lsProposal(fix, fix._shown)) || fix.starters;
   const have = lsHaveProj();
-  const ptsCell = pid => `<span style="color:var(--brown-light);font-size:0.8rem;min-width:36px;text-align:right;flex-shrink:0;">${have ? lsPlayerPts(pid, pc).toFixed(1) : '–'}</span>`;
+  const ptsCell = pid => `<span class="diff-pts">${have ? lsPlayerPts(pid, pc).toFixed(1) : '–'}</span>`;
 
   // Sheet ranks, between the name and the projection. Rendered only when a sheet
   // is loaded — with no sheet every row would carry two empty columns.
@@ -2643,8 +2655,9 @@ function lsBodyRows(fix, mode) {
     const lock = lsLocked(pid);
     return `<div class="diff-row"${lock ? ' style="opacity:0.62;"' : ''}>
       <span class="diff-slot">${esc(slot)}</span>
-      <span style="color:var(--parchment);flex:1;">${lock ? '<span title="Game has started — this slot is locked" style="color:var(--brown-light);">🔒 </span>' : ''}${esc(lsPlayerName(pid))}${inj ? ' ' + inj : ''}</span>
+      <span style="color:var(--parchment);flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${lock ? '<span title="Game has started — this slot is locked" style="color:var(--brown-light);">🔒 </span>' : ''}${esc(lsPlayerName(pid))}${inj ? ' ' + inj : ''}</span>
       ${rankCells(pid)}
+      <span style="flex:1;"></span>
       ${ptsCell(pid)}
     </div>`;
   }).join('');
@@ -3938,6 +3951,11 @@ function rgDraw() {
 
   const starters = rgStarterSet(fix, RG.mode);
   const rostered = fix ? new Set((fix.players || []).map(String)) : new Set();
+  // Every player owned by ANYONE in the league — the complement is the free-agent
+  // pool. Already on the fixture (the FA watch uses the same set), and null when
+  // the league looks pre-draft, which switches the highlight off rather than
+  // painting most of the sheet yellow.
+  const leagueOwned = fix?.rostered || null;
   // Sticky column headers sit exactly under the sticky nav — measured rather
   // than guessed, since the bar's height moves with the font.
   const navH = document.querySelector('.tab-bar')?.offsetHeight || 40;
@@ -3959,6 +3977,7 @@ function rgDraw() {
       <span style="font-size:0.6rem;color:var(--brown-light);display:flex;gap:12px;align-items:center;">
         <span><span style="display:inline-block;width:9px;height:9px;background:rgba(95,174,95,0.6);border-left:3px solid #5fae5f;margin-right:4px;"></span>starting</span>
         <span><span style="display:inline-block;width:9px;height:9px;background:rgba(192,80,77,0.6);border-left:3px solid #c0504d;margin-right:4px;"></span>rostered, benched</span>
+        <span><span style="display:inline-block;width:9px;height:9px;background:rgba(214,178,60,0.6);border-left:3px solid #d6b23c;margin-right:4px;"></span>free agent</span>
       </span>
     </div>`;
 
@@ -3973,13 +3992,23 @@ function rgDraw() {
   const grid = `<div class="rg-wrap" style="--rg-tracks:${tracks};">${RG_COLS.map(([key, label, sp]) => {
     const list = cols[key] || [];
     if (!list.length) return '';
-    const cell = r => {
+    // Flip the band every time the tier changes. Computed over the FULL list
+    // before any split, so the stripes carry on correctly across the two halves
+    // instead of restarting. A sheet with no Tier column leaves every row null,
+    // so nothing ever flips and the grid looks exactly as it did.
+    const bands = [];
+    for (let i = 0, b = 0; i < list.length; i++) {
+      if (i > 0 && list[i].tier !== list[i - 1].tier) b ^= 1;
+      bands.push(b);
+    }
+    const cell = (r, i) => {
       const pid = r.pid ? String(r.pid) : null;
       // A flex-eligible player is listed twice by the sheet — in his position
       // column and again in FLEX — so he lights up in both. Same player.
-      const cls = pid && starters?.has(pid) ? ' rg-on'
-                : pid && rostered.has(pid)  ? ' rg-off' : '';
-      return `<div class="rg-cell${cls}">
+      const cls = pid && starters?.has(pid)                    ? ' rg-on'
+                : pid && rostered.has(pid)                     ? ' rg-off'
+                : pid && leagueOwned && !leagueOwned.has(pid)  ? ' rg-fa' : '';
+      return `<div class="rg-cell${bands[i] ? ' rg-tier-b' : ''}${cls}">
         <span class="rg-rank">${r.rank}</span>
         <span class="rg-name">${esc(r.name)}</span>
         <span class="rg-opp">${esc(r.opp || '')}</span>
@@ -3987,10 +4016,12 @@ function rgDraw() {
     };
     const split = isSplit(key, sp);
     const half  = Math.ceil(list.length / 2);
+    // The second half must keep its true index or both the banding and the split
+    // point would restart at zero.
     const body  = split
-      ? `<div class="rg-halves"><div class="rg-half">${list.slice(0, half).map(cell).join('')}</div>`
-        + `<div class="rg-half">${list.slice(half).map(cell).join('')}</div></div>`
-      : list.map(cell).join('');
+      ? `<div class="rg-halves"><div class="rg-half">${list.slice(0, half).map((r, i) => cell(r, i)).join('')}</div>`
+        + `<div class="rg-half">${list.slice(half).map((r, i) => cell(r, half + i)).join('')}</div></div>`
+      : list.map((r, i) => cell(r, i)).join('');
     return `<div class="rg-col${split ? ' rg-split' : ''}">
       <div class="rg-head" style="top:${navH}px;">${esc(label)} <em>${list.length}</em></div>${body}</div>`;
   }).join('')}</div>`;

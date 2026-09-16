@@ -61,6 +61,25 @@ const FC_TTL        = 60 * 60 * 24;  // 24 hours
 const AGG_ADP_TTL   = 60 * 60 * 12;  // 12 hours — a personal doc, refresh more often than FC in case it moves/breaks
 const ESPN_TTL      = 60 * 5;        // 5 minutes (game times are stable but scores update live)
 const ROOM_TTL_MS   = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+// ── Browser cache policy ──────────────────────────────────────────────────────
+// Applied at individual CALL SITES, never inside jsonRes. jsonRes is shared with
+// per-user handlers — handleRootformePrefs returns one account's prefs through it
+// — and a max-age on those would hand one user's data to the next reader. Only
+// responses that are byte-identical for every caller get a lifetime here, and
+// those all use the static `*`-origin CORS block, so no Vary is needed.
+//
+// PLAYERS is deliberately far shorter than its 2h KV TTL: /api/players carries
+// injury_status, which the lineup optimizer and Injury Swap both act on, and a
+// long browser TTL would show stale inactives on a Sunday morning.
+// stale-while-revalidate keeps navigation instant without widening that window.
+const PLAYERS_BROWSER_TTL = 600;    // 10m
+const PLAYERS_SWR         = 3600;   // then serve stale up to 1h while refreshing
+const FC_BROWSER_TTL      = 3600;   // 1h, against a 24h KV TTL
+
+function cacheFor(maxAge, swr = 0) {
+  return { 'Cache-Control': `public, max-age=${maxAge}${swr ? `, stale-while-revalidate=${swr}` : ''}` };
+}
 const ALLOWED_ORIGINS = new Set([
   'https://ffhistorian.com',
   'https://helper.ffhistorian.com',
@@ -105,7 +124,7 @@ export default {
     }
 
     if (url.pathname.startsWith('/api/sleeper/') && request.method === 'GET') {
-      return handleProxy(url);
+      return handleProxy(url, env);
     }
 
     if (url.pathname === '/api/graphql' && request.method === 'POST') {
@@ -191,7 +210,7 @@ async function handleFantasyCalc(env, url) {
     const age = cached.metadata?.cachedAt
       ? Math.floor((Date.now() - cached.metadata.cachedAt) / 1000)
       : 0;
-    return jsonRes(cached.value, { 'X-Cache': 'HIT', 'X-Cache-Age': String(age) });
+    return jsonRes(cached.value, { 'X-Cache': 'HIT', 'X-Cache-Age': String(age), ...cacheFor(FC_BROWSER_TTL) });
   }
 
   const fcParams = new URLSearchParams({ isDynasty: String(isDynasty), numQbs, ppr, includePickValues: String(includePickValues) });
@@ -220,7 +239,7 @@ async function handleFantasyCalc(env, url) {
     metadata: { cachedAt: Date.now() },
   });
 
-  return jsonRes(body, { 'X-Cache': 'MISS' });
+  return jsonRes(body, { 'X-Cache': 'MISS', ...cacheFor(FC_BROWSER_TTL) });
 }
 
 // ── Aggregate ADP (JuiceBoxOne consensus sheet) ────────────────────────────────
@@ -1312,7 +1331,7 @@ async function handlePlayers(env) {
     const age = cached.metadata?.cachedAt
       ? Math.floor((Date.now() - cached.metadata.cachedAt) / 1000)
       : 0;
-    return jsonRes(cached.value, { 'X-Cache': 'HIT', 'X-Cache-Age': String(age) });
+    return jsonRes(cached.value, { 'X-Cache': 'HIT', 'X-Cache-Age': String(age), ...cacheFor(PLAYERS_BROWSER_TTL, PLAYERS_SWR) });
   }
 
   const upstream = await fetch(`${SLEEPER_BASE}/players/nfl`);
@@ -1326,7 +1345,7 @@ async function handlePlayers(env) {
     metadata: { cachedAt: Date.now() },
   });
 
-  return jsonRes(body, { 'X-Cache': 'MISS' });
+  return jsonRes(body, { 'X-Cache': 'MISS', ...cacheFor(PLAYERS_BROWSER_TTL, PLAYERS_SWR) });
 }
 
 async function handleGraphQL(request, env) {
@@ -1366,16 +1385,64 @@ async function handleGraphQL(request, env) {
   });
 }
 
-async function handleProxy(url) {
-  const path     = url.pathname.replace('/api/sleeper', '');
+// Per-path cache policy for the Sleeper proxy. The default is, and must remain,
+// "no cache" — rosters, trades, drafts, users and state all depend on this route
+// being a live passthrough. A path opts in only when its content is provably
+// slow-moving, and a request carrying ANY query string opts straight back out:
+// that's either a cache-buster (lsEnsureLineupData appends ?_=Date.now() to its
+// matchup fetches for exactly this reason) or a variant this table doesn't model,
+// and ignoring it would also let two different queries collide on one KV key.
+const PROXY_CACHE_RULES = [
+  // Weekly projections drift as news breaks, but nothing reads them live — every
+  // caller here is scoring a whole season at once. Worth a KV copy as well: this
+  // is ~70KB x 13 weeks on a cold analyzer load, the second-biggest cost after
+  // the player map.
+  { re: /^\/projections\/nfl\/[a-z]+\/\d{4}\/\d+$/, browser: 21600, kv: 21600 },
+  // Matchups carry in-progress scores, so browser-only and short: long enough
+  // that hopping between pages costs nothing, short enough that a live score is
+  // never more than a minute behind. No KV copy — it would outlive that window.
+  { re: /^\/league\/\d+\/matchups\/\d+$/,           browser: 60 },
+];
+
+function proxyCacheRule(path) {
+  return PROXY_CACHE_RULES.find(r => r.re.test(path)) || null;
+}
+
+function isJsonBody(s) {
+  try { JSON.parse(s); return true; } catch (_) { return false; }
+}
+
+async function handleProxy(url, env) {
+  const path = url.pathname.replace('/api/sleeper', '');
+  const rule = url.search ? null : proxyCacheRule(path);
+  const key  = rule?.kv ? `proxy_${path}` : null;
+
+  if (key && env?.SLEEPER_KV) {
+    const hit = await env.SLEEPER_KV.get(key, 'text');
+    if (hit) return jsonRes(hit, { 'X-Cache': 'HIT', ...cacheFor(rule.browser, rule.swr || 0) });
+  }
+
   const upstream = await fetch(`${SLEEPER_BASE}${path}${url.search}`, {
     headers: { 'User-Agent': 'sleeper-helper/1.0 (helper.ffhistorian.com)' },
   });
   const body   = await upstream.text();
   const status = upstream.ok ? 200 : upstream.status;
+
+  // Never store a body that isn't the JSON we expect. A 200 carrying an HTML
+  // error page would otherwise pin the broken response for the whole TTL — the
+  // same trap handleFantasyCalc already guards against.
+  if (key && upstream.ok && env?.SLEEPER_KV && isJsonBody(body)) {
+    await env.SLEEPER_KV.put(key, body, { expirationTtl: rule.kv });
+  }
+
   return new Response(body, {
     status,
-    headers: { ...CORS, 'Content-Type': 'application/json;charset=UTF-8' },
+    headers: {
+      ...CORS,
+      'Content-Type': 'application/json;charset=UTF-8',
+      // An error response must never carry a cache lifetime.
+      ...(rule && upstream.ok ? cacheFor(rule.browser, rule.swr || 0) : {}),
+    },
   });
 }
 
