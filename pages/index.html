@@ -284,7 +284,10 @@ footer a:hover { color: var(--gold); }
 /* The grid is five independent ranked lists side by side, not a table: the
    blocks have different lengths (FLEX runs to 100 while QB stops at 25), so each
    column simply ends where its own list does. */
-.main.wide { max-width: 1600px; }
+/* Wide views get 1600px on any screen, and up to 2200px on a monitor that has it
+   — the ranks grid spends the extra width on more FLEX parts (see rgAllocParts).
+   max() keeps it from ever being NARROWER than the old flat 1600px cap. */
+.main.wide { max-width: max(1600px, min(2200px, 97vw)); }
 .rg-wrap { display: grid; grid-template-columns: repeat(var(--rg-tracks, 5), minmax(0, 1fr)); gap: 10px; align-items: start; }
 /* A split column spans one track per part and carries its parts side by side with
    no gap between them, so 1-34 / 35-67 / 68-100 read as one list rather than three
@@ -4726,18 +4729,26 @@ function lsSwapBarHtml() {
 // lineup, red where he's rostered but doesn't. Which lineup "starting" means is
 // the mode toggle — the point is to flip between ranks and projections and see
 // where the two disagree.
-const RG = { leagueIdx: 0, mode: 'current' };          // mode: current | ranks | projections
+const RG = { leagueIdx: 0, mode: 'current', _sig: null };   // mode: current | ranks | projections
 // K and DEF are still parsed and still drive the optimizer — they're dropped from
 // the GRID only, where two short columns cost as much width as a long one and
 // neither is a call you make by scanning a list.
-// Third element is how many adjacent parts the column may be cut into: a long
-// list reads better side by side than as one column you have to scan past
-// several times. Only FLEX is long enough to earn it (100 rows -> three ~34-row
-// parts); every positional block stays a single column, since even WR at 50 is
-// one screen and splitting it only costs width the FLEX parts want.
-const RG_COLS = [['QB','QB'], ['RB','RB'], ['WR','WR'], ['TE','TE'], ['FLEX','FLEX', 3]];
+// Third element is the MOST adjacent parts the column may be cut into — how many
+// it actually gets depends on the width available (rgAllocParts). A long list
+// reads better side by side than as one column you have to scan past several
+// times, but only while every track stays wide enough to show a full name.
+const RG_COLS = [['QB','QB'], ['RB','RB', 2], ['WR','WR', 2], ['TE','TE'], ['FLEX','FLEX', 3]];
 const RG_SPLIT_MIN = 20;   // rows per part — a shorter sheet drops to fewer parts
                            // rather than rendering stubs
+const RG_TRACK_MIN = 190;  // px a track needs before names start ellipsizing
+const RG_WRAP_GAP  = 10;   // must match .rg-wrap's gap
+// FLEX's two extra parts are the BASELINE — the shape this grid is meant to have
+// at any width, so they're granted on row count alone. WR's and RB's second parts
+// are bought with screen width, in this order. Splitting FLEX unconditionally is
+// deliberate: gating it on RG_TRACK_MIN too would have quietly taken the 3-way
+// FLEX split away from every 1366-1440px laptop.
+const RG_SPLIT_BASE = ['FLEX', 'FLEX'];
+const RG_SPLIT_WIDE = ['WR', 'RB'];
 const RG_MODES = [['current','Current lineup'], ['ranks','Ranked optimal'], ['projections','Projection optimal']];
 
 async function renderRanksGrid(force = false) {
@@ -4756,6 +4767,59 @@ function rgStarterSet(fix, mode) {
   const prop = lsProposal(fix, mode === 'ranks' ? 'ranks' : 'projections');
   return prop ? new Set(prop.map(String)) : null;
 }
+
+// The grid's real content width. Measured rather than derived from
+// window.innerWidth, because .main.wide's own cap is viewport-relative and
+// #content is exactly the box the grid will be laid out in.
+function rgWidth() {
+  const w = document.getElementById('content')?.clientWidth || 0;
+  return w > 320 ? w : Math.max(320, (window.innerWidth || 1200) - 64);
+}
+
+// Parts per column for the width we actually have. Every column that exists
+// starts at one and takes its RG_SPLIT_BASE extras outright; the RG_SPLIT_WIDE
+// ones are then granted only while every track still clears RG_TRACK_MIN. So the
+// same sheet reads QB/RB/WR/TE/FLEX·FLEX·FLEX up to about 1700px of viewport,
+// QB/RB/WR·WR/TE/FLEX·FLEX·FLEX from ~1728px, and the full nine tracks —
+// QB/RB·RB/WR·WR/TE/FLEX·FLEX·FLEX — from ~1920px up.
+function rgAllocParts(cols, width) {
+  const parts = {};
+  let tracks = 0;
+  for (const [k] of RG_COLS) if ((cols[k] || []).length) { parts[k] = 1; tracks++; }
+  // Stubby parts read worse than one continuous column, so a short sheet stops
+  // splitting on its own rather than being forced into the shape below.
+  const room = key => {
+    const max = RG_COLS.find(([k]) => k === key)?.[2] || 1;
+    const now = parts[key];
+    return !!now && now < max && (cols[key] || []).length >= (now + 1) * RG_SPLIT_MIN;
+  };
+  const take = key => { parts[key]++; tracks++; };
+  for (const key of RG_SPLIT_BASE) if (room(key)) take(key);
+  const fits = t => (width - RG_WRAP_GAP * (t - 1)) / t >= RG_TRACK_MIN;
+  for (const key of RG_SPLIT_WIDE) {
+    if (!room(key)) continue;
+    // Each part costs exactly one track, so once one doesn't fit none will.
+    if (!fits(tracks + 1)) break;
+    take(key);
+  }
+  return { parts, tracks };
+}
+
+// A resize — or the window dragged onto another monitor — changes what fits, so
+// the split has to be re-allocated. Redraw only when the allocation actually
+// moved: redrawing on every resize event would throw away the scroll position
+// for nothing.
+const rgPartsSig = parts => RG_COLS.map(([k]) => `${k}${parts[k] || 0}`).join('|');
+let rgResizeTimer = null;
+window.addEventListener('resize', () => {
+  if (S.tab !== 'ranksgrid') return;
+  clearTimeout(rgResizeTimer);
+  rgResizeTimer = setTimeout(() => {
+    if (S.tab !== 'ranksgrid') return;
+    const sig = rgPartsSig(rgAllocParts(LU.ranks?.cols || {}, rgWidth()).parts);
+    if (sig !== RG._sig) rgDraw();
+  }, 150);
+});
 
 function rgDraw() {
   const week   = LU.week;
@@ -4816,21 +4880,15 @@ function rgDraw() {
     </div>`;
 
   // How many grid tracks the row actually needs — a split column takes one per
-  // part. Driven by the real list lengths so a sheet with a short block doesn't
-  // leave an empty track. Passed as a custom property rather than an inline
-  // grid-template-columns, which would outrank the responsive overrides.
-  // A short sheet steps down a part at a time rather than falling straight back
-  // to one column, so a 60-row FLEX block still reads as two halves.
-  const partsFor = (key, want) => {
-    const len = (cols[key] || []).length;
-    let p = Math.max(1, want || 1);
-    while (p > 1 && len < p * RG_SPLIT_MIN) p--;
-    return p;
-  };
-  const tracks = RG_COLS.reduce((n, [k, , sp]) =>
-    (cols[k] || []).length ? n + partsFor(k, sp) : n, 0);
+  // part. Driven by the measured width and the real list lengths, so a sheet with
+  // a short block doesn't leave an empty track. Passed as a custom property
+  // rather than an inline grid-template-columns, which would outrank the
+  // responsive overrides.
+  const alloc = rgAllocParts(cols, rgWidth());
+  const tracks = alloc.tracks;
+  RG._sig = rgPartsSig(alloc.parts);
 
-  const grid = `<div class="rg-wrap" style="--rg-tracks:${tracks};">${RG_COLS.map(([key, label, sp]) => {
+  const grid = `<div class="rg-wrap" style="--rg-tracks:${tracks};">${RG_COLS.map(([key, label]) => {
     const list = cols[key] || [];
     if (!list.length) return '';
     // Flip the band every time the tier changes. Computed over the FULL list
@@ -4855,7 +4913,7 @@ function rgDraw() {
         <span class="rg-opp">${esc(r.opp || '')}</span>
       </div>`;
     };
-    const parts = partsFor(key, sp);
+    const parts = alloc.parts[key] || 1;
     const per   = Math.ceil(list.length / parts);
     // Every part after the first must keep its true index or both the banding and
     // the cut points would restart at zero.
