@@ -286,10 +286,12 @@ footer a:hover { color: var(--gold); }
    column simply ends where its own list does. */
 .main.wide { max-width: 1600px; }
 .rg-wrap { display: grid; grid-template-columns: repeat(var(--rg-tracks, 5), minmax(0, 1fr)); gap: 10px; align-items: start; }
-/* A split column spans two tracks and carries its halves side by side with no
-   gap between them, so 1-50 / 51-100 read as one list rather than two positions. */
-.rg-split { grid-column: span 2; }
-.rg-halves { display: grid; grid-template-columns: 1fr 1fr; }
+/* A split column spans one track per part and carries its parts side by side with
+   no gap between them, so 1-34 / 35-67 / 68-100 read as one list rather than three
+   positions. --rg-parts is set per column; the default of 2 is what the waiver
+   grid (which reuses these rules) still sets by shape. */
+.rg-split { grid-column: span var(--rg-parts, 2); }
+.rg-halves { display: grid; grid-template-columns: repeat(var(--rg-parts, 2), 1fr); }
 .rg-half { min-width: 0; }
 .rg-half + .rg-half { border-left: 1px solid var(--brown-mid); }
 .rg-col { min-width: 0; border: 1px solid var(--brown-mid); border-radius: 2px; background: var(--brown-dark); }
@@ -332,6 +334,7 @@ footer a:hover { color: var(--gold); }
    continuous 1..N list, and let the column keep its double width. */
 @media (max-width: 1200px) {
   .rg-wrap { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .rg-split { grid-column: span 2; }
   .rg-halves { grid-template-columns: 1fr; }
   .rg-half + .rg-half { border-left: none; }
 }
@@ -4727,10 +4730,14 @@ const RG = { leagueIdx: 0, mode: 'current' };          // mode: current | ranks 
 // K and DEF are still parsed and still drive the optimizer — they're dropped from
 // the GRID only, where two short columns cost as much width as a long one and
 // neither is a call you make by scanning a list.
-// Third element marks a column splittable: a long list reads better as two
-// adjacent halves than as one column you have to scan past twice.
-const RG_COLS = [['QB','QB'], ['RB','RB'], ['WR','WR', true], ['TE','TE'], ['FLEX','FLEX', true]];
-const RG_SPLIT_MIN = 40;   // below this, splitting just yields two stubby columns
+// Third element is how many adjacent parts the column may be cut into: a long
+// list reads better side by side than as one column you have to scan past
+// several times. Only FLEX is long enough to earn it (100 rows -> three ~34-row
+// parts); every positional block stays a single column, since even WR at 50 is
+// one screen and splitting it only costs width the FLEX parts want.
+const RG_COLS = [['QB','QB'], ['RB','RB'], ['WR','WR'], ['TE','TE'], ['FLEX','FLEX', 3]];
+const RG_SPLIT_MIN = 20;   // rows per part — a shorter sheet drops to fewer parts
+                           // rather than rendering stubs
 const RG_MODES = [['current','Current lineup'], ['ranks','Ranked optimal'], ['projections','Projection optimal']];
 
 async function renderRanksGrid(force = false) {
@@ -4808,13 +4815,20 @@ function rgDraw() {
       </span>
     </div>`;
 
-  // How many grid tracks the row actually needs — a split column takes two. Driven
-  // by the real list lengths so a sheet with a short WR block doesn't leave an
-  // empty track. Passed as a custom property rather than an inline
+  // How many grid tracks the row actually needs — a split column takes one per
+  // part. Driven by the real list lengths so a sheet with a short block doesn't
+  // leave an empty track. Passed as a custom property rather than an inline
   // grid-template-columns, which would outrank the responsive overrides.
-  const isSplit = (key, sp) => !!sp && (cols[key] || []).length >= RG_SPLIT_MIN;
-  const tracks  = RG_COLS.reduce((n, [k, , sp]) =>
-    (cols[k] || []).length ? n + (isSplit(k, sp) ? 2 : 1) : n, 0);
+  // A short sheet steps down a part at a time rather than falling straight back
+  // to one column, so a 60-row FLEX block still reads as two halves.
+  const partsFor = (key, want) => {
+    const len = (cols[key] || []).length;
+    let p = Math.max(1, want || 1);
+    while (p > 1 && len < p * RG_SPLIT_MIN) p--;
+    return p;
+  };
+  const tracks = RG_COLS.reduce((n, [k, , sp]) =>
+    (cols[k] || []).length ? n + partsFor(k, sp) : n, 0);
 
   const grid = `<div class="rg-wrap" style="--rg-tracks:${tracks};">${RG_COLS.map(([key, label, sp]) => {
     const list = cols[key] || [];
@@ -4841,15 +4855,15 @@ function rgDraw() {
         <span class="rg-opp">${esc(r.opp || '')}</span>
       </div>`;
     };
-    const split = isSplit(key, sp);
-    const half  = Math.ceil(list.length / 2);
-    // The second half must keep its true index or both the banding and the split
-    // point would restart at zero.
-    const body  = split
-      ? `<div class="rg-halves"><div class="rg-half">${list.slice(0, half).map((r, i) => cell(r, i)).join('')}</div>`
-        + `<div class="rg-half">${list.slice(half).map((r, i) => cell(r, half + i)).join('')}</div></div>`
+    const parts = partsFor(key, sp);
+    const per   = Math.ceil(list.length / parts);
+    // Every part after the first must keep its true index or both the banding and
+    // the cut points would restart at zero.
+    const body  = parts > 1
+      ? `<div class="rg-halves">${Array.from({ length: parts }, (_, p) =>
+          `<div class="rg-half">${list.slice(p * per, (p + 1) * per).map((r, i) => cell(r, p * per + i)).join('')}</div>`).join('')}</div>`
       : list.map((r, i) => cell(r, i)).join('');
-    return `<div class="rg-col${split ? ' rg-split' : ''}">
+    return `<div class="rg-col${parts > 1 ? ' rg-split' : ''}" style="--rg-parts:${parts};">
       <div class="rg-head" style="top:${navH}px;">${esc(label)} <em>${list.length}</em></div>${body}</div>`;
   }).join('')}</div>`;
 
