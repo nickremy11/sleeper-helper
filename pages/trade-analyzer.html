@@ -358,6 +358,7 @@
   let _routes   = [];
   let _analysis = null;
   let _myRosterId = null;   // the signed-in user's roster in this league (Sleeper only)
+  let _myUserId   = null;   // …and their Sleeper user id (the trade DM's author)
   // "Propose in Sleeper" flow: null | {stage:'confirm'|'sending'|'sent'|'error', assets, tx?, msg?}.
   // `assets` is snapshotted when the confirm opens, so what sends is exactly what was shown.
   let _propose  = null;
@@ -955,6 +956,7 @@
       numTeams, playoffTeams, hasIDP,
       allRosters, tradedPicks, players, fcMap, fcPickMap, ridToSlot, numRounds,
       rp, scoringSettings, rosterNames,
+      leagueUsers: usersRes || [],   // raw /users rows — the trade DM embeds them
     };
     _simData = { matchupsByWeek, futureWeeks, projectionsByWeek, muMap, sigmaMap, useFc, potentialPtsSoFar };
   }
@@ -1671,6 +1673,9 @@
       return `<div class="ta-propose ok">
         <div class="ta-propose-title">✓ Offer sent to ${others}</div>
         <div class="ta-propose-meta">${exp ? `Expires ${esc(fmtExpiry(exp))} · ` : ''}${sleeperLink}</div>
+        <div class="ta-propose-msg">${_propose.dm?.ok
+          ? '💬 Trade card sent to your DM with them'
+          : `⚠ DM not sent (${esc(_propose.dm?.msg || 'unknown error')}). The offer is still live; they’ll see it in the league’s trades.`}</div>
         <button class="ta-btn-secondary" onclick="closePropose()">Done</button>
       </div>`;
     }
@@ -1699,7 +1704,7 @@
     return `<div class="ta-propose">
       <div class="ta-propose-title">Send this offer in Sleeper?</div>
       <div class="ta-propose-sides">${sides}</div>
-      <div class="ta-propose-meta">2-day exploding offer (expires ~${esc(fmtExpiry(expiry))}). The other manager${_teamIds.length > 2 ? 's are' : ' is'} notified right away — to take it back, withdraw it in Sleeper.</div>
+      <div class="ta-propose-meta">2-day exploding offer (expires ~${esc(fmtExpiry(expiry))}). The other manager${_teamIds.length > 2 ? 's are' : ' is'} notified right away, with a trade card in your DM — to take it back, withdraw it in Sleeper.</div>
       <div class="ta-btn-row" style="margin-bottom:0;">
         <button class="ta-btn" onclick="sendPropose()">✓ Send Offer</button>
         <button class="ta-btn-secondary" onclick="closePropose()">Cancel</button>
@@ -1744,7 +1749,19 @@
         throw new Error(`No longer with the team sending them: ${stale.map(a => a.label).join(', ')}. Reload the page to pick up the latest rosters.`);
       }
       const tx = await sleeperProposeTrade({ apiBase: API, leagueId: lgId, assets });
-      _propose = { stage: 'sent', assets, tx };
+      // The trade is live from here on; the DM is best-effort and reported separately.
+      let dm;
+      try {
+        await sleeperSendTradeDm({
+          apiBase: API, tx, assets, leagueId: lgId, leagueName: _rawData.lgName,
+          leagueUsers: _rawData.leagueUsers, players: _rawData.players, myUserId: _myUserId,
+          rosterOwners: Object.fromEntries((rosters || []).map(r => [r.roster_id, r.owner_id])),
+        });
+        dm = { ok: true };
+      } catch (e) {
+        dm = { ok: false, msg: e.message };
+      }
+      _propose = { stage: 'sent', assets, tx, dm };
     } catch (e) {
       _propose = { stage: 'error', assets, msg: e.message };
     }
@@ -2006,6 +2023,7 @@
           const myRoster = _rawData.allRosters.find(r => r.owner_id === su.user_id);
           if (myRoster) {
             _myRosterId = myRoster.roster_id;
+            _myUserId   = su.user_id;
             const myTeam = _rawData.teams.find(t => t.rosterId === myRoster.roster_id);
             if (myTeam && !_teamIds.length) _teamIds.push(myTeam.rosterId);
           }

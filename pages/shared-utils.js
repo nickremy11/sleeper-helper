@@ -438,24 +438,172 @@ function sleeperProposeTradeBody(leagueId, assets, expiresAt) {
   };
 }
 
-// Sends the offer through the worker's GraphQL proxy, which uses the signed-in
-// user's stored token when no `token` is passed. Resolves to Sleeper's transaction
-// ({transaction_id, status:'proposed', settings.expires_at, …}); throws with
+// One Sleeper GraphQL call through the worker proxy, which uses the signed-in
+// user's stored token when no `token` is passed. Resolves to `data`; throws with
 // Sleeper's own error message when it refuses.
+async function sleeperGql({ apiBase, op, query, variables = {}, token }) {
+  const headers = { 'Content-Type': 'application/json', 'X-Sleeper-Graphql-Op': op };
+  if (token) headers['Authorization'] = token;
+  const r = await fetch(`${apiBase}/graphql`, {
+    method: 'POST', headers, credentials: 'include',
+    body: JSON.stringify({ operationName: op, variables, query }),
+  });
+  const json = await r.json().catch(() => null);
+  if (json?.errors?.length) throw new Error(json.errors[0].message || `Sleeper refused ${op}`);
+  if (!r.ok) throw new Error(`Sleeper HTTP ${r.status} (${op})`);
+  return json?.data;
+}
+
+// Sends the offer. Resolves to Sleeper's transaction
+// ({transaction_id, status:'proposed', settings.expires_at, …}).
 async function sleeperProposeTrade({ apiBase, leagueId, assets, token, expiresAt }) {
   const exp  = expiresAt ?? Math.floor(Date.now() / 1000) + SLEEPER_TRADE_EXPIRY_SECS;
   const body = sleeperProposeTradeBody(leagueId, assets, exp);
-  const headers = { 'Content-Type': 'application/json', 'X-Sleeper-Graphql-Op': 'propose_trade' };
-  if (token) headers['Authorization'] = token;
-  const r = await fetch(`${apiBase}/graphql`, {
-    method: 'POST', headers, credentials: 'include', body: JSON.stringify(body),
-  });
-  const json = await r.json().catch(() => null);
-  if (json?.errors?.length) throw new Error(json.errors[0].message || 'Sleeper refused the trade');
-  if (!r.ok) throw new Error('Sleeper HTTP ' + r.status);
-  const tx = json?.data?.propose_trade;
+  const data = await sleeperGql({ apiBase, op: body.operationName, query: body.query, variables: body.variables, token });
+  const tx = data?.propose_trade;
   if (!tx?.transaction_id) throw new Error('Sleeper did not confirm the trade');
   return tx;
+}
+
+// ── Trade DM ──
+// Proposing a trade does NOT message anyone — sleeper.com follows propose_trade
+// with two more calls, mirrored here from a capture:
+//   1. get_dm_by_members(members: [other user ids])  → the DM's dm_id, or nothing
+//      when you've never messaged them — then create_dm(dm_type:"single") makes one
+//   2. create_message(parent_type:"dm", attachment_type:"trade_dm", …) — the trade
+//      card, whose attachment is a key/value list:
+//        status                "proposed"
+//        transactions_by_roster JSON {rosterId: {adds:[player], drops, added_picks,
+//                                dropped_picks, added_budget, dropped_budget, status, user}}
+//                                — everything is keyed by the roster RECEIVING it; the
+//                                drops/dropped_* lists stay empty even for assets going out.
+//                                added_picks: {roster_id: ORIGINAL roster, season, round,
+//                                owner_id, previous_owner_id, original_owner_id} — all strings,
+//                                and the *_owner_id fields are USER ids, not roster ids.
+//                                added_budget: [{amount:"11"}] (no FAAB in our trades yet)
+//        transaction_id / league_id
+//        users_in_league_map   JSON {user_id: league user} — /league/{id}/users rows
+
+// Player fields the card carries, in Sleeper's order.
+const SLEEPER_DM_PLAYER_FIELDS = ['position','status','number','first_name','last_name','sport','team','player_id',
+  'fantasy_positions','team_abbr','team_changed_at','injury_status','years_exp','news_updated'];
+
+// opts = {tx, assets, leagueId, leagueUsers, rosterOwners:{rosterId: user_id}, players:{pid: Sleeper player}}
+function sleeperTradeDmAttachment({ tx, assets, leagueId, leagueUsers, rosterOwners, players }) {
+  const userById = Object.fromEntries((leagueUsers || []).map(u => [u.user_id, u]));
+  const rids = [...new Set(assets.flatMap(a => [a.from, a.to]))].sort((a, b) => a - b);
+  const byRoster = {};
+  for (const rid of rids) {
+    const user = userById[rosterOwners[rid]];
+    if (!user) throw new Error(`no league user for roster ${rid}`);
+    const adds = assets.filter(a => a.kind === 'player' && a.to === rid).map(a => {
+      const p = players[a.pid] || {};
+      const out = {};
+      for (const f of SLEEPER_DM_PLAYER_FIELDS) out[f] = p[f] ?? null;
+      out.player_id = String(a.pid);
+      return out;
+    });
+    const added_picks = assets.filter(a => a.kind === 'pick' && a.to === rid).map(a => ({
+      roster_id: String(a.orig), season: String(a.season), round: String(a.round),
+      owner_id: rosterOwners[a.to] ?? null, previous_owner_id: rosterOwners[a.from] ?? null,
+      original_owner_id: rosterOwners[a.orig] ?? null,
+    }));
+    byRoster[rid] = { adds, drops: [], added_picks, dropped_picks: [], added_budget: [], dropped_budget: [], status: 'proposed', user };
+  }
+  return {
+    k: ['status', 'transactions_by_roster', 'transaction_id', 'league_id', 'users_in_league_map'],
+    v: ['proposed', JSON.stringify(byRoster), String(tx.transaction_id), String(leagueId), JSON.stringify(userById)],
+  };
+}
+
+// Sends the trade card into the DM with the other manager(s). Call after
+// sleeperProposeTrade resolves; a failure here leaves the trade itself untouched.
+// opts = sleeperTradeDmAttachment's opts + {apiBase, token?, leagueName, myUserId}
+async function sleeperSendTradeDm(opts) {
+  const { apiBase, token, tx, assets, leagueName, leagueUsers, rosterOwners, myUserId } = opts;
+  const att = sleeperTradeDmAttachment(opts);
+  const me  = (leagueUsers || []).find(u => u.user_id === myUserId);
+  if (!me) throw new Error('couldn’t find you in this league’s users');
+  const others = [...new Set(assets.flatMap(a => [a.from, a.to]))]
+    .map(rid => rosterOwners[rid]).filter(uid => uid && uid !== myUserId);
+  if (!others.length || others.some(uid => !/^\d+$/.test(String(uid)))) throw new Error('couldn’t identify the other manager');
+
+  const dmData = await sleeperGql({ apiBase, token, op: 'get_dm_by_members', query: `query get_dm_by_members {
+        get_dm_by_members(members: ${JSON.stringify(others.map(String))}){
+          dm_id
+          dm_type
+          hidden_at
+          last_author_avatar
+          last_author_display_name
+          last_author_real_name
+          last_author_id
+          last_message_id
+          last_message_text
+          last_message_text_map
+          last_message_time
+          last_pinned_message_id
+          last_read_id
+          member_can_invite
+          recent_users
+          title
+        }
+      }` });
+  let dmId = dmData?.get_dm_by_members?.dm_id;
+  if (!dmId) {
+    // Never messaged them — sleeper.com creates the DM here. Only the one-on-one
+    // form has been captured, so a 3-team trade with no existing group DM stops.
+    if (others.length !== 1) throw new Error('no existing group DM with these managers');
+    const created = await sleeperGql({ apiBase, token, op: 'create_dm', query: `mutation create_dm {
+        create_dm(dm_type: "single", members: ${JSON.stringify(others.map(String))}){
+          dm_id
+          dm_type
+          last_author_avatar
+          last_author_display_name
+          last_author_real_name
+          last_author_id
+          last_message_id
+          last_message_text
+          last_message_text_map
+          last_message_time
+          last_pinned_message_id
+          last_read_id
+          member_can_invite
+          hidden_at
+          recent_users
+          title
+        }
+      }` });
+    dmId = created?.create_dm?.dm_id;
+  }
+  if (!dmId || !/^\d+$/.test(String(dmId))) throw new Error('Sleeper returned no DM with this manager');
+
+  const clientId = (crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`);
+  const data = await sleeperGql({ apiBase, token, op: 'create_message',
+    variables: { text: `@${me.display_name} has proposed a trade in ${leagueName}`, k_attachment_data: att.k, v_attachment_data: att.v },
+    query: `mutation create_message($text: String,$k_attachment_data: [String],$v_attachment_data: [String]) {
+        create_message(parent_id: "${dmId}",client_id: "${clientId}",parent_type: "dm",text: $text,shard_min: null,shard_max: null,attachment_type: "trade_dm",k_attachment_data: $k_attachment_data,v_attachment_data: $v_attachment_data) {
+          attachment
+          author_avatar
+          author_display_name
+          author_real_name
+          author_id
+          author_is_bot
+          author_role_id
+          client_id
+          created
+          message_id
+          parent_id
+          parent_type
+          pinned
+          reactions
+          user_reactions
+          text
+          text_map
+        }
+      }` });
+  const msg = data?.create_message;
+  if (!msg?.message_id) throw new Error('Sleeper did not confirm the message');
+  return msg;
 }
 
 // Trade assets from a Sleeper transaction (GraphQL league_transactions_filtered or
