@@ -1137,6 +1137,10 @@ async function renderTrades() {
           <div class="trade-arrow">⇄</div>
           <div><div class="trade-side-lbl">${esc(sides[1].name)}</div>${sides[1].items.map(i=>`<div class="${i.cls}">${esc(i.txt)}</div>`).join('')}</div>
         </div>
+        <div style="margin-top:10px;text-align:right;">
+          <a class="ghost-btn" style="text-decoration:none;display:inline-block;" target="_blank"
+             href="/trade-analyzer?league=${encodeURIComponent(t._lgId)}&t=${encodeURIComponent(tradeAssetsToParam(tradeAssetsFromSleeperTx(t)))}">⇄ Analyze</a>
+        </div>
       </div>`;
     }).join(''));
   } catch(e) { setC(errHtml(e)); }

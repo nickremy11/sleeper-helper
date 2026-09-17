@@ -85,6 +85,22 @@
     .ta-btn-secondary:hover { border-color: var(--gold); color: var(--gold); background: rgba(201,150,42,0.06); }
     .ta-btn-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 24px; }
     .ta-btn-note { font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--brown-light); font-style: italic; }
+    .ta-btn-note a { color: var(--gold-light); }
+
+    /* ── Propose in Sleeper ── */
+    .ta-propose {
+      background: var(--brown-dark); border: 1.5px solid var(--gold); border-radius: 3px;
+      padding: 14px 16px; margin-bottom: 20px; font-family: 'Crimson Text', serif; color: var(--parchment);
+    }
+    .ta-propose.ok  { border-color: #5cb85c; }
+    .ta-propose.err { border-color: #e05252; }
+    .ta-propose-title { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 0.95rem; color: var(--cream); margin-bottom: 10px; }
+    .ta-propose-sides { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 10px; }
+    .ta-propose-side { flex: 1 1 200px; min-width: 0; }
+    .ta-propose-item { font-size: 0.9rem; padding: 2px 0; }
+    .ta-propose-meta { font-size: 0.85rem; color: var(--brown-light); font-style: italic; margin-bottom: 12px; }
+    .ta-propose-meta a { color: var(--gold-light); }
+    .ta-propose-msg { font-size: 0.92rem; margin-bottom: 12px; }
 
     /* ── Add 3rd team dropdown ── */
     .ta-addteam-wrap { position: relative; }
@@ -318,6 +334,9 @@
   const isEspn  = lgId.startsWith('espn_');
   const espnNumId = isEspn ? lgId.replace('espn_', '') : null;
   const presetB = parseInt(_params.get('b') || '0') || null;
+  // ?t= — a whole trade to preload and analyze (Trades tab "Analyze"); format in
+  // shared-utils' tradeAssetsToParam.
+  const presetTrade = tradeAssetsFromParam(_params.get('t') || '');
 
   // A few leagues have no playoff bracket at all — the champion is simply whoever
   // scores the most total points across the full 17-week season. For those, the
@@ -338,6 +357,11 @@
   let _teamIds  = [];
   let _routes   = [];
   let _analysis = null;
+  let _myRosterId = null;   // the signed-in user's roster in this league (Sleeper only)
+  // "Propose in Sleeper" flow: null | {stage:'confirm'|'sending'|'sent'|'error', assets, tx?, msg?}.
+  // `assets` is snapshotted when the confirm opens, so what sends is exactly what was shown.
+  let _propose  = null;
+  let _presetNote = '';     // assets from ?t= that couldn't be placed on this page
 
   const SIDE_LABELS = ['A', 'B', 'C'];
   const SIDE_COLORS = ['#7ed07e', '#8eb8e5', '#e0b15c'];
@@ -1382,6 +1406,8 @@
     }
     _routes = _teamIds.map(() => new Map());
     _analysis = null;
+    _propose = null;
+    _presetNote = '';
     renderTeamSelect();
   }
 
@@ -1491,9 +1517,13 @@
         <button class="ta-btn-secondary" onclick="backToTeamSelect()">← Change Teams</button>
         ${addTeamHtml}
         <button class="ta-btn" onclick="analyzeClick()" ${hasAssets ? '' : 'disabled'}>Analyze Trade</button>
+        ${proposeBtnHtml(hasAssets)}
         <button class="ta-btn-secondary" onclick="clearTrade()">Clear</button>
         ${noteHtml}
       </div>
+      ${_presetNote ? `<div class="ta-btn-note" style="margin:-12px 0 16px;">${esc(_presetNote)}</div>` : ''}
+
+      ${renderProposePanel()}
 
       ${renderTradeSummary()}
 
@@ -1529,6 +1559,7 @@
     _teamIds.push(rid);
     _routes.push(new Map());
     _analysis = null;
+    _propose = null;
     renderTradeBuilder();
   }
 
@@ -1555,18 +1586,203 @@
       if (!otherSides.length) return;
       routes.set(key, _teamIds[otherSides[0]]); // default destination — the only other team, or the first when 3-way
     }
+    _propose = null;
     renderTradeBuilder();
   }
 
   function setAssetDest(sideIdx, key, destRid) {
     _routes[sideIdx].set(key, destRid);
+    _propose = null;
     renderTradeBuilder();
   }
 
   function clearTrade() {
     _routes = _teamIds.map(() => new Map());
     _analysis = null;
+    _propose = null;
+    _presetNote = '';
     renderTradeBuilder();
+  }
+
+  // ── Propose in Sleeper ─────────────────────────────────────────────────────
+  // Sends the builder's trade as a real Sleeper offer (2-day expiry) through
+  // shared-utils' sleeperProposeTrade. Sleeper leagues only, and only when the
+  // signed-in user is one of the teams — Sleeper makes the token's owner the proposer.
+
+  // The builder's selections as shared-utils trade assets, labelled for display.
+  function currentTradeAssets() {
+    const { teams } = _rawData;
+    const out = [];
+    _teamIds.forEach((rid, sideIdx) => {
+      const team = teams.find(t => t.rosterId === rid);
+      if (!team) return;
+      for (const [key, to] of _routes[sideIdx]) {
+        const pl = team.playerList.find(p => playerKey(p) === key);
+        if (pl) { out.push({ kind: 'player', pid: pl.pid, from: rid, to, label: pl.name }); continue; }
+        const k = team.pickList.find(pk => pickKey(pk) === key);
+        if (k) out.push({ kind: 'pick', season: k.season, round: k.round, orig: k.originalRosterId, from: rid, to,
+                          label: k.label + (k.viaName ? ` (via ${k.viaName})` : '') });
+      }
+    });
+    return out;
+  }
+
+  // Why the current trade can't be proposed, as display HTML — or null when it can.
+  function proposeBlocker(assets) {
+    const user = SharedAuth.getUser?.();
+    if (!user) return 'Sign in to propose this trade in Sleeper';
+    if (!user.has_token) return 'Add your Sleeper token in <a href="/myprofile">your profile</a> to propose in Sleeper';
+    if (_myRosterId == null) return 'Couldn’t find your team in this league';
+    if (!_teamIds.includes(_myRosterId)) return 'You’re not one of the teams in this trade';
+    if (!assets.length) return null; // nothing selected yet — the button is just disabled
+    const idle = _teamIds.filter(rid => !assets.some(a => a.from === rid || a.to === rid));
+    if (idle.length) {
+      const t = _rawData.teams.find(tm => tm.rosterId === idle[0]);
+      return `${esc(displayName(t))} isn’t sending or receiving anything`;
+    }
+    return null;
+  }
+
+  function proposeBtnHtml(hasAssets) {
+    if (isEspn || !hasAssets) return '';
+    const blocker = proposeBlocker(currentTradeAssets());
+    if (blocker) return `<span class="ta-btn-note">${blocker}</span>`;
+    const busy = _propose && _propose.stage !== 'error';
+    return `<button class="ta-btn" onclick="openPropose()" ${busy ? 'disabled' : ''}>Propose in Sleeper</button>`;
+  }
+
+  function fmtExpiry(secs) {
+    return new Date(secs * 1000).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  }
+
+  function renderProposePanel() {
+    if (!_propose) return '';
+    const { stage, assets } = _propose;
+    const { teams } = _rawData;
+    const nameOf = rid => esc(displayName(teams.find(t => t.rosterId === rid)));
+    const sleeperLink = `<a href="https://sleeper.com/leagues/${encodeURIComponent(lgId)}/trades" target="_blank" rel="noopener">View in Sleeper ↗</a>`;
+
+    if (stage === 'sending') {
+      return `<div class="ta-propose"><div class="ta-propose-msg">Checking rosters and sending to Sleeper…</div></div>`;
+    }
+    if (stage === 'sent') {
+      const exp = _propose.tx?.settings?.expires_at;
+      const others = _teamIds.filter(rid => rid !== _myRosterId).map(nameOf).join(' & ');
+      return `<div class="ta-propose ok">
+        <div class="ta-propose-title">✓ Offer sent to ${others}</div>
+        <div class="ta-propose-meta">${exp ? `Expires ${esc(fmtExpiry(exp))} · ` : ''}${sleeperLink}</div>
+        <button class="ta-btn-secondary" onclick="closePropose()">Done</button>
+      </div>`;
+    }
+    if (stage === 'error') {
+      return `<div class="ta-propose err">
+        <div class="ta-propose-title">Offer not sent</div>
+        <div class="ta-propose-msg">${esc(_propose.msg)}</div>
+        <div class="ta-btn-row" style="margin-bottom:0;">
+          <button class="ta-btn" onclick="openPropose()">Try Again</button>
+          <button class="ta-btn-secondary" onclick="closePropose()">Close</button>
+        </div>
+      </div>`;
+    }
+
+    // confirm — laid out by what each team RECEIVES, the way Sleeper shows an offer
+    const sides = _teamIds.map(rid => {
+      const got = assets.filter(a => a.to === rid);
+      return `<div class="ta-propose-side">
+        <div class="ta-summary-team-lbl" style="color:${SIDE_COLORS[_teamIds.indexOf(rid)]};">${nameOf(rid)}${rid === _myRosterId ? ' (you)' : ''} receives</div>
+        ${got.length
+          ? got.map(a => `<div class="ta-propose-item">${esc(a.label)}${_teamIds.length > 2 ? ` <span class="ta-summary-dest">from ${nameOf(a.from)}</span>` : ''}</div>`).join('')
+          : '<div class="ta-summary-empty">Nothing</div>'}
+      </div>`;
+    }).join('');
+    const expiry = Math.floor(Date.now() / 1000) + SLEEPER_TRADE_EXPIRY_SECS;
+    return `<div class="ta-propose">
+      <div class="ta-propose-title">Send this offer in Sleeper?</div>
+      <div class="ta-propose-sides">${sides}</div>
+      <div class="ta-propose-meta">2-day exploding offer (expires ~${esc(fmtExpiry(expiry))}). The other manager${_teamIds.length > 2 ? 's are' : ' is'} notified right away — to take it back, withdraw it in Sleeper.</div>
+      <div class="ta-btn-row" style="margin-bottom:0;">
+        <button class="ta-btn" onclick="sendPropose()">✓ Send Offer</button>
+        <button class="ta-btn-secondary" onclick="closePropose()">Cancel</button>
+      </div>
+    </div>`;
+  }
+
+  function openPropose() {
+    const assets = currentTradeAssets();
+    if (!assets.length || proposeBlocker(assets)) return;
+    _propose = { stage: 'confirm', assets };
+    renderTradeBuilder();
+  }
+
+  function closePropose() {
+    _propose = null;
+    renderTradeBuilder();
+  }
+
+  // Rosters were read when the page loaded; re-read them right before sending so a
+  // player or pick that has moved since can't go out in an offer Sleeper would
+  // reject (or, worse, one the other manager sees as nonsense).
+  async function sendPropose() {
+    if (_propose?.stage !== 'confirm') return;
+    const { assets } = _propose;
+    _propose = { stage: 'sending', assets };
+    renderTradeBuilder();
+    try {
+      const [rosters, traded] = await Promise.all([
+        fetch(`${API}/sleeper/league/${lgId}/rosters`).then(r => { if (!r.ok) throw new Error('Couldn’t re-check rosters (HTTP ' + r.status + ')'); return r.json(); }),
+        fetch(`${API}/sleeper/league/${lgId}/traded_picks`).then(r => { if (!r.ok) throw new Error('Couldn’t re-check picks (HTTP ' + r.status + ')'); return r.json(); }),
+      ]);
+      const stale = assets.filter(a => {
+        if (a.kind === 'player') {
+          const r = (rosters || []).find(x => x.roster_id === a.from);
+          return !(r?.players || []).map(String).includes(String(a.pid));
+        }
+        const owned = computePicksForRoster(a.from, rosters || [], traded || [], _rawData.season, Math.max(_rawData.numRounds, a.round));
+        return !owned.some(p => p.season === String(a.season) && p.round === a.round && p.originalRosterId === a.orig);
+      });
+      if (stale.length) {
+        throw new Error(`No longer with the team sending them: ${stale.map(a => a.label).join(', ')}. Reload the page to pick up the latest rosters.`);
+      }
+      const tx = await sleeperProposeTrade({ apiBase: API, leagueId: lgId, assets });
+      _propose = { stage: 'sent', assets, tx };
+    } catch (e) {
+      _propose = { stage: 'error', assets, msg: e.message };
+    }
+    renderTradeBuilder();
+  }
+
+  // Loads a ?t= trade into the builder. Assets the builder can't show (a kicker,
+  // a pick outside the rounds it tracks, a team with no roster value) are skipped
+  // and listed in _presetNote rather than silently dropped.
+  function applyPresetTrade(assets) {
+    const { teams, players } = _rawData;
+    let rids = [];
+    for (const a of assets) for (const r of [a.from, a.to]) if (!rids.includes(r)) rids.push(r);
+    if (rids.includes(_myRosterId)) rids = [_myRosterId, ...rids.filter(r => r !== _myRosterId)];
+    const nameOf = rid => displayName(teams.find(t => t.rosterId === rid) || { rosterId: rid });
+    if (rids.length > 3) { _presetNote = 'This trade involves more than 3 teams, which the analyzer can’t show.'; return false; }
+    if (rids.length < 2 || rids.some(r => !teams.some(t => t.rosterId === r))) {
+      _presetNote = 'Couldn’t load this trade — one of its teams isn’t in this league’s data.';
+      return false;
+    }
+    _teamIds = rids;
+    _routes  = rids.map(() => new Map());
+    const missing = [];
+    for (const a of assets) {
+      const sideIdx = _teamIds.indexOf(a.from);
+      const team = teams.find(t => t.rosterId === a.from);
+      if (a.kind === 'player') {
+        const pl = team.playerList.find(p => String(p.pid) === String(a.pid));
+        if (pl) _routes[sideIdx].set(playerKey(pl), a.to);
+        else missing.push(players[a.pid]?.full_name || ('player ' + a.pid));
+      } else {
+        const k = team.pickList.find(pk => pk.season === String(a.season) && pk.round === a.round && pk.originalRosterId === a.orig);
+        if (k) _routes[sideIdx].set(pickKey(k), a.to);
+        else missing.push(`${a.season} round ${a.round} pick (from ${nameOf(a.from)})`);
+      }
+    }
+    if (missing.length) _presetNote = `Not included in this analysis: ${missing.join(', ')}.`;
+    return _routes.some(r => r.size > 0);
   }
 
   function backToTeamSelect() { renderTeamSelect(); }
@@ -1782,15 +1998,24 @@
             if (myTeam) _teamIds.push(myTeam.rosterId);
           }
         } catch {}
-      } else if (user?.sleeper_username && !_teamIds.length) {
+      } else if (!isEspn && user?.sleeper_username) {
+        // _myRosterId is needed even when the teams are already chosen — it gates
+        // "Propose in Sleeper" and puts "you" first in a ?t= trade.
         try {
           const su = await fetch(`${API}/sleeper/user/${encodeURIComponent(user.sleeper_username)}`).then(r => r.json());
           const myRoster = _rawData.allRosters.find(r => r.owner_id === su.user_id);
           if (myRoster) {
+            _myRosterId = myRoster.roster_id;
             const myTeam = _rawData.teams.find(t => t.rosterId === myRoster.roster_id);
-            if (myTeam) _teamIds.push(myTeam.rosterId);
+            if (myTeam && !_teamIds.length) _teamIds.push(myTeam.rosterId);
           }
         } catch {}
+      }
+
+      // A whole trade passed in (Trades tab "Analyze") — load it and run the analysis.
+      if (presetTrade.length && !isEspn) {
+        if (applyPresetTrade(presetTrade)) { renderTradeBuilder(); analyzeClick(); return; }
+        _teamIds = _myRosterId != null && _rawData.teams.some(t => t.rosterId === _myRosterId) ? [_myRosterId] : [];
       }
 
       // If a partner was pre-selected (from analyzer), skip straight to builder

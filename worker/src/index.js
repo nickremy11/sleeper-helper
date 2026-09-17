@@ -1379,9 +1379,11 @@ async function handleGraphQL(request, env) {
 
   const text   = await upstream.text();
   const status = upstream.ok ? 200 : upstream.status;
+  // Per-request CORS: a signed-in caller on the ffhistorian.com apex sends its
+  // session cookie cross-origin, which the static `*` origin would reject.
   return new Response(text, {
     status,
-    headers: { ...CORS, 'Content-Type': 'application/json;charset=UTF-8' },
+    headers: { ...getCors(request), 'Content-Type': 'application/json;charset=UTF-8' },
   });
 }
 

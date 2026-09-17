@@ -365,3 +365,138 @@ async function crLoadAggregateAdp(opts) {
   return aggAdpMap;
 }
 
+
+// ── Sleeper trades ────────────────────────────────────────────────────────────
+// A trade is a flat list of assets, each moving between two roster ids:
+//   {kind:'player', pid, from, to}
+//   {kind:'pick', season, round, orig, from, to}   orig = the roster the pick originally belonged to
+// One shape for all three consumers: the Trades tab's "Analyze" deep link, the trade
+// analyzer's "Propose in Sleeper", and (next) mass offers. Callers may hang a `label`
+// on an asset for display; nothing here reads it.
+
+// Every offer this app sends is a 2-day exploding offer. Sleeper's own "2 Days"
+// option sends exactly send-time + 48h.
+const SLEEPER_TRADE_EXPIRY_SECS = 2 * 86400;
+
+// Sleeper's propose_trade, mirrored from a request captured on sleeper.com. The
+// players go in variables as parallel key/value arrays (k_adds[i] lands on roster
+// v_adds[i]; k_drops[i] leaves roster v_drops[i]); everything else is inlined into
+// the query, as Sleeper's client does:
+//   draft_picks   "orig,season,round,to,from"   — the same string the Trades tab parses
+//   waiver_budget "from,to,amount"               — no FAAB support yet, so always []
+//   expires_at    unix seconds
+// Inlined values are validated first, so nothing but digits reaches the query text.
+function sleeperProposeTradeBody(leagueId, assets, expiresAt) {
+  const lg = String(leagueId);
+  if (!/^\d+$/.test(lg)) throw new Error('Not a Sleeper league: ' + lg);
+  const rid = v => { const n = Number(v); if (!Number.isInteger(n) || n <= 0) throw new Error('Bad roster id: ' + v); return n; };
+  if (!assets?.length) throw new Error('Trade has no players or picks');
+  const players = [], picks = [];
+  for (const a of assets) {
+    const from = rid(a.from), to = rid(a.to);
+    if (from === to) throw new Error('An asset cannot move to the team sending it');
+    if (a.kind === 'player') {
+      if (!/^[A-Za-z0-9_]+$/.test(String(a.pid))) throw new Error('Bad player id: ' + a.pid);
+      players.push({ pid: String(a.pid), from, to });
+    } else if (a.kind === 'pick') {
+      if (!/^\d{4}$/.test(String(a.season))) throw new Error('Bad pick season: ' + a.season);
+      picks.push(`${rid(a.orig)},${a.season},${rid(a.round)},${to},${from}`);
+    } else {
+      throw new Error('Unknown trade asset: ' + a.kind);
+    }
+  }
+  const exp = Math.floor(Number(expiresAt));
+  if (!Number.isFinite(exp)) throw new Error('Bad expiry');
+  const query = `mutation propose_trade($k_adds: [String], $v_adds: [Int], $k_drops: [String], $v_drops: [Int]) {
+        propose_trade(league_id: "${lg}",draft_picks: ${JSON.stringify(picks)},k_adds: $k_adds,v_adds: $v_adds,k_drops: $k_drops,v_drops: $v_drops,waiver_budget: [],expires_at: ${exp}){
+          adds
+          consenter_ids
+          created
+          creator
+          drops
+          league_id
+          leg
+          metadata
+          roster_ids
+          settings
+          status
+          status_updated
+          transaction_id
+          draft_picks
+          type
+          player_map
+          waiver_budget
+        }
+      }`;
+  return {
+    operationName: 'propose_trade',
+    variables: {
+      k_adds:  players.map(p => p.pid), v_adds:  players.map(p => p.to),
+      k_drops: players.map(p => p.pid), v_drops: players.map(p => p.from),
+    },
+    query,
+  };
+}
+
+// Sends the offer through the worker's GraphQL proxy, which uses the signed-in
+// user's stored token when no `token` is passed. Resolves to Sleeper's transaction
+// ({transaction_id, status:'proposed', settings.expires_at, …}); throws with
+// Sleeper's own error message when it refuses.
+async function sleeperProposeTrade({ apiBase, leagueId, assets, token, expiresAt }) {
+  const exp  = expiresAt ?? Math.floor(Date.now() / 1000) + SLEEPER_TRADE_EXPIRY_SECS;
+  const body = sleeperProposeTradeBody(leagueId, assets, exp);
+  const headers = { 'Content-Type': 'application/json', 'X-Sleeper-Graphql-Op': 'propose_trade' };
+  if (token) headers['Authorization'] = token;
+  const r = await fetch(`${apiBase}/graphql`, {
+    method: 'POST', headers, credentials: 'include', body: JSON.stringify(body),
+  });
+  const json = await r.json().catch(() => null);
+  if (json?.errors?.length) throw new Error(json.errors[0].message || 'Sleeper refused the trade');
+  if (!r.ok) throw new Error('Sleeper HTTP ' + r.status);
+  const tx = json?.data?.propose_trade;
+  if (!tx?.transaction_id) throw new Error('Sleeper did not confirm the trade');
+  return tx;
+}
+
+// Trade assets from a Sleeper transaction (GraphQL league_transactions_filtered or
+// REST /transactions). Players: adds = where each lands, drops = where it left.
+// Picks come as "orig,season,round,to,from" strings from GraphQL, or as
+// {season, round, roster_id, owner_id, previous_owner_id} objects from REST.
+// FAAB is ignored.
+function tradeAssetsFromSleeperTx(tx) {
+  const out = [];
+  for (const [pid, to] of Object.entries(tx?.adds || {})) {
+    const from = tx.drops?.[pid];
+    if (from != null) out.push({ kind: 'player', pid: String(pid), from: Number(from), to: Number(to) });
+  }
+  for (const pk of (tx?.draft_picks || [])) {
+    if (typeof pk === 'string') {
+      const [orig, season, round, to, from] = pk.split(',');
+      out.push({ kind: 'pick', season: String(season), round: Number(round), orig: Number(orig), from: Number(from), to: Number(to) });
+    } else if (pk && typeof pk === 'object') {
+      out.push({ kind: 'pick', season: String(pk.season), round: Number(pk.round), orig: Number(pk.roster_id),
+                 from: Number(pk.previous_owner_id), to: Number(pk.owner_id) });
+    }
+  }
+  return out;
+}
+
+// Compact URL form of a trade, for /trade-analyzer?league={id}&t={param}:
+//   player  p{pid}~{from}~{to}
+//   pick    k{season}.{round}.{orig}~{from}~{to}
+// comma-joined. Unparseable tokens are dropped on read.
+function tradeAssetsToParam(assets) {
+  return (assets || []).map(a => a.kind === 'player'
+    ? `p${a.pid}~${a.from}~${a.to}`
+    : `k${a.season}.${a.round}.${a.orig}~${a.from}~${a.to}`).join(',');
+}
+function tradeAssetsFromParam(str) {
+  const out = [];
+  for (const tok of String(str || '').split(',')) {
+    let m = tok.match(/^p([A-Za-z0-9_]+)~(\d+)~(\d+)$/);
+    if (m) { out.push({ kind: 'player', pid: m[1], from: Number(m[2]), to: Number(m[3]) }); continue; }
+    m = tok.match(/^k(\d{4})\.(\d+)\.(\d+)~(\d+)~(\d+)$/);
+    if (m) out.push({ kind: 'pick', season: m[1], round: Number(m[2]), orig: Number(m[3]), from: Number(m[4]), to: Number(m[5]) });
+  }
+  return out;
+}
