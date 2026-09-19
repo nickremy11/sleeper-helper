@@ -8664,6 +8664,18 @@ function scoutSetRedraft(pos, field, val) {
   const n = parseInt(val, 10);
   if (!Number.isNaN(n) && n > 0) { SC.settings.redraft[pos][field] = n; scoutSaveSettings(); }
 }
+// The same two numbers as above, from the inline redraft pills — always for the
+// position currently selected, so the pills and the Settings panel edit one value.
+function scoutSetRedraftPos(field, n) {
+  SC.settings.redraft[SC.pos][field] = n;
+  scoutSaveSettings();
+  renderScout();
+}
+// Preset choices plus whatever is currently stored, so a hand-typed Settings value
+// (the defaults include 30 and 10) still shows up selected rather than nowhere.
+function scoutNumChoices(presets, cur) {
+  return [...new Set([...presets, cur])].sort((a, b) => a - b);
+}
 
 // Sleeper league type 2 = dynasty/keeper; everything else (redraft, best-ball) = redraft.
 function scoutLeagueFormat(lgId) {
@@ -8900,6 +8912,14 @@ async function renderScout() {
   );
 
   const rd = SC.settings.redraft[SC.pos];
+  // Redraft's two numbers ("≥ count inside top rank") are the whole question this
+  // format asks, so they're pills up front rather than only inside Settings.
+  const rdRankGrp = grp(`Counted as a top ${SC.pos} (by ${srcNoun})`,
+    scoutNumChoices([12, 24, 36, 48], rd.rank).map(n => pill(rd.rank, n, 'Top ' + n, `scoutSetRedraftPos('rank',${n})`)).join('')
+  );
+  const rdCountGrp = grp(`How many ${SC.pos}s make a surplus`,
+    scoutNumChoices([2, 3, 4, 5], rd.count).map(n => pill(rd.count, n, '≥ ' + n, `scoutSetRedraftPos('count',${n})`)).join('')
+  );
   const formatTabs = `
     <div style="display:flex;gap:8px;margin-bottom:14px;">
       <button class="ghost-btn${SC.format === 'dynasty' ? ' active' : ''}" style="${SC.format === 'dynasty' ? 'border-color:var(--gold);color:var(--gold);' : ''}" onclick="scoutSet('format','dynasty')">Dynasty</button>
@@ -8944,17 +8964,17 @@ async function renderScout() {
     ? `Find <strong>dynasty</strong> leagues where you are <strong>${SC.myStatus}</strong> and, ${modeLbl}, there’s a
        top-${SC.topN} ${SC.age === 'vet' ? 'veteran' : 'young'} ${SC.pos} by ${srcNoun}
        ${SC.mode === 'buy' ? 'on' : 'you could move to'} a ${SC.opp === 'either' ? 'rebuilding or contending' : SC.opp} opponent.`
-    : `Find <strong>redraft</strong> leagues where you are <strong>${SC.myStatus}</strong> and
+    : `Find <strong>redraft</strong> leagues where
        ${SC.mode === 'buy'
-         ? `a ${SC.opp === 'either' ? 'rebuilding or contending' : SC.opp} opponent is stacked at ${SC.pos} (≥ ${rd.count} in the top ${rd.rank} by ${srcNoun}) — a surplus to buy from.`
-         : `you are stacked at ${SC.pos} (≥ ${rd.count} in the top ${rd.rank} by ${srcNoun}) and could sell to a ${SC.opp === 'either' ? 'rebuilding or contending' : SC.opp} opponent.`}`;
+         ? `an opponent is stacked at ${SC.pos} (≥ ${rd.count} in the top ${rd.rank} by ${srcNoun}) — a surplus to buy from.`
+         : `you are stacked at ${SC.pos} (≥ ${rd.count} in the top ${rd.rank} by ${srcNoun}) — a surplus to sell from.`}`;
 
   setC(`
     <div class="section-head"><h2>Scout</h2><div class="section-head-line"></div></div>
     ${formatTabs}
     <div style="font-family:'Crimson Text',serif;font-style:italic;color:var(--brown-light);font-size:0.9rem;margin-bottom:16px;">${summary}</div>
     ${subTabs}
-    ${myGrp}${posGrp}${srcGrp}${SC.format === 'dynasty' ? topGrp + ageGrp : ''}${oppGrp}
+    ${SC.format === 'dynasty' ? myGrp : ''}${posGrp}${srcGrp}${SC.format === 'dynasty' ? topGrp + ageGrp + oppGrp : rdRankGrp + rdCountGrp}
     <div style="display:flex;gap:12px;align-items:center;margin:6px 0 4px;">
       ${runBtn}
       <button class="ghost-btn" onclick="scoutToggleSettings()">${SC.showSettings ? 'Hide' : 'Settings'}</button>
@@ -9059,11 +9079,16 @@ async function scoutRun() {
       if (!d || !d.rosterPlayers) continue;
       if (scoutLeagueFormat(lg.league_id) !== SC.format) { otherFormatCount++; continue; }
 
+      // Contender/rebuilder only gates DYNASTY. In redraft every team is playing for
+      // this year, so the tags carry no signal about who'd move a surplus — odds are
+      // still computed and shown on the cards, they just don't filter anything out.
       const myOdds  = d.allPlayoffOdds?.[d.myRosterId];
-      if (myOdds == null && !RS.prefs?.[lg.league_id]) noOddsCount++;
       const myClass = scoutClassify(myOdds, lg.league_id);
-      const want    = SC.myStatus === 'contending' ? 'contender' : 'rebuilder';
-      if (myClass !== want) continue;
+      if (SC.format === 'dynasty') {
+        if (myOdds == null && !RS.prefs?.[lg.league_id]) noOddsCount++;
+        const want = SC.myStatus === 'contending' ? 'contender' : 'rebuilder';
+        if (myClass !== want) continue;
+      }
 
       const scoring = S.leagueDetails[lg.league_id]?.scoring_settings || {};
       const fcKey   = SC.rankSrc === 'fc' ? scoutFcKey(S.leagueDetails[lg.league_id]) : '';
@@ -9098,7 +9123,7 @@ async function scoutRun() {
           const rid = Number(ridStr);
           if (rid === d.myRosterId) continue;
           const cls = scoutClassify(d.allPlayoffOdds?.[rid], lg.league_id);
-          if (!scoutOppMatches(cls)) continue;
+          if (SC.format === 'dynasty' && !scoutOppMatches(cls)) continue;
           const hits = hitsFor(pids);
           if (teamQualifies(hits)) teams.push({ rid, cls, odds: d.allPlayoffOdds?.[rid] ?? null, players: hits.map(mkPlayer).sort((a, b) => a.rank - b.rank) });
         }
@@ -9111,7 +9136,7 @@ async function scoutRun() {
           const rid = Number(ridStr);
           if (rid === d.myRosterId) continue;
           const cls = scoutClassify(d.allPlayoffOdds?.[rid], lg.league_id);
-          if (!scoutOppMatches(cls)) continue;
+          if (SC.format === 'dynasty' && !scoutOppMatches(cls)) continue;
           teams.push({ rid, cls, odds: d.allPlayoffOdds?.[rid] ?? null, players: [] });
         }
         if (teams.length) results.push({ lgId: lg.league_id, name: lg.name || 'Unnamed', myOdds, myClass, teams, myPlayers: mine.map(mkPlayer).sort((a, b) => a.rank - b.rank) });
