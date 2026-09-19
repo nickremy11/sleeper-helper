@@ -93,6 +93,16 @@ body::before {
 .mrg-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mrg-team { color: var(--brown-light); font-size: 0.6rem; flex-shrink: 0; }
 .mrg-tier { color: var(--gold); font-size: 0.58rem; flex-shrink: 0; min-width: 12px; text-align: right; opacity: 0.75; }
+/* vs-consensus delta. Fixed width so the tier column stays aligned down the
+   whole board whether a row has a delta or not. Its green/red sit alongside the
+   ownership highlight, which is a BACKGROUND — the arrow is what separates the
+   two readings, so keep the glyph. */
+.mrg-delta { flex-shrink: 0; min-width: 26px; text-align: right; font-size: 0.58rem;
+             font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.mrg-d-up   { color: #7fc97f; }
+.mrg-d-down { color: #e0837c; }
+.mrg-d-even { color: var(--brown-light); opacity: 0.55; font-weight: 400; }
+.mrg-d-none { color: var(--brown-light); opacity: 0.3;  font-weight: 400; }
 .mrg-on { background: rgba(95,174,95,0.18);  box-shadow: inset 3px 0 0 #5fae5f; }
 .mrg-on .mrg-name { color: #8fd08f; font-weight: 700; }
 .mrg-fa { background: rgba(235,195,55,0.28); box-shadow: inset 3px 0 0 #f0c93c; }

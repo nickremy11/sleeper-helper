@@ -19,6 +19,7 @@
  *   POST /api/graphql             → proxy to sleeper.com/graphql (authenticated)
  *   GET  /api/fantasycalc         → FantasyCalc values (KV-cached 24h; optional ?isDynasty=&numQbs=&ppr=&includePickValues=, default = dynasty/2QB/full-PPR)
  *   GET  /api/aggregate-adp       → JuiceBoxOne consensus ADP CSV, offense only (KV-cached 12h)
+ *   GET  /api/fantasypros/ros     → FantasyPros consensus rest-of-season ranks (?scoring=half|ppr|std, KV-cached 6h)
  *   GET  /api/espn/scoreboard     → NFL week schedule: team → kickoff ISO (KV-cached 5m)
  *   GET  /api/espn/games          → NFL week games with pairings [{home,away,kickoff}] (KV-cached 5m)
  *   GET  /api/espn/settings       → get ESPN league IDs + credential status (auth required)
@@ -59,6 +60,7 @@ const AGGREGATE_ADP_URL = 'https://docs.google.com/spreadsheets/d/1HTixsrRtIIpnU
 const PLAYERS_TTL   = 60 * 60 * 2;   // 2 hours
 const FC_TTL        = 60 * 60 * 24;  // 24 hours
 const AGG_ADP_TTL   = 60 * 60 * 12;  // 12 hours — a personal doc, refresh more often than FC in case it moves/breaks
+const FP_ROS_TTL    = 60 * 60 * 6;   // 6 hours — FantasyPros re-publishes ECR through the day, not just overnight
 const ESPN_TTL      = 60 * 5;        // 5 minutes (game times are stable but scores update live)
 const ROOM_TTL_MS   = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -137,6 +139,10 @@ export default {
 
     if (url.pathname === '/api/aggregate-adp' && request.method === 'GET') {
       return handleAggregateAdp(env);
+    }
+
+    if (url.pathname === '/api/fantasypros/ros' && request.method === 'GET') {
+      return handleFantasyProsRos(env, url);
     }
 
     if (url.pathname === '/api/espn/scoreboard' && request.method === 'GET') {
@@ -312,6 +318,97 @@ function parseCsvLine(line) {
   }
   out.push(cur);
   return out;
+}
+
+// ── FantasyPros rest-of-season consensus (ECR) ─────────────────────────────────
+// The public rankings page embeds the whole board as `var ecrData = {...}` — the
+// same JSON its own table renders from — so this is a JSON read, not an HTML
+// scrape: no markup parsing, and it survives any redesign of the table itself.
+// Returns [{name, team, pos, rank, posRank}]; name → Sleeper id matching happens
+// client-side, same pattern as the Clay projections and the aggregate ADP sheet.
+const FP_ROS_URLS = {
+  half: 'https://www.fantasypros.com/nfl/rankings/ros-half-point-ppr-overall.php',
+  ppr:  'https://www.fantasypros.com/nfl/rankings/ros-ppr-overall.php',
+  std:  'https://www.fantasypros.com/nfl/rankings/ros-overall.php',
+};
+
+async function handleFantasyProsRos(env, url) {
+  const scoring = (url?.searchParams.get('scoring') || 'half').toLowerCase();
+  const src = FP_ROS_URLS[scoring];
+  if (!src) return new Response('Unknown scoring — use half, ppr or std', { status: 400, headers: CORS });
+
+  const cacheKey = `fp_ros_${scoring}`;
+  const cached = await env.SLEEPER_KV.getWithMetadata(cacheKey, 'text');
+  if (cached.value) {
+    const age = cached.metadata?.cachedAt
+      ? Math.floor((Date.now() - cached.metadata.cachedAt) / 1000)
+      : 0;
+    return jsonRes(cached.value, { 'X-Cache': 'HIT', 'X-Cache-Age': String(age) });
+  }
+
+  const upstream = await fetch(src, { headers: { 'User-Agent': 'sleeper-helper/1.0' } });
+  if (!upstream.ok) return new Response('FantasyPros upstream error', { status: 502, headers: CORS });
+
+  let parsed;
+  try {
+    parsed = parseFantasyProsEcr(await upstream.text());
+  } catch (e) {
+    return new Response('FantasyPros parse failed: ' + (e && e.message || e), { status: 502, headers: CORS });
+  }
+  // An empty board means the page shape moved. Returning 502 rather than caching
+  // it keeps one bad fetch from blanking every caller's delta column for 6 hours.
+  if (!parsed.players.length) {
+    return new Response('FantasyPros returned no ranked players', { status: 502, headers: CORS });
+  }
+
+  const body = JSON.stringify({ scoring, ...parsed });
+  await env.SLEEPER_KV.put(cacheKey, body, { expirationTtl: FP_ROS_TTL, metadata: { cachedAt: Date.now() } });
+  return jsonRes(body, { 'X-Cache': 'MISS' });
+}
+
+function parseFantasyProsEcr(html) {
+  const at = html.indexOf('var ecrData');
+  if (at < 0) throw new Error('ecrData not found');
+  const start = html.indexOf('{', at);
+  if (start < 0) throw new Error('ecrData has no object');
+  // Brace-match rather than regex to the next `;` — player notes are free text
+  // and have carried both braces and semicolons.
+  let depth = 0, end = -1, inStr = false, quote = '';
+  for (let i = start; i < html.length; i++) {
+    const c = html[i];
+    if (inStr) {
+      if (c === '\\') i++;
+      else if (c === quote) inStr = false;
+      continue;
+    }
+    if (c === '"' || c === "'") { inStr = true; quote = c; continue; }
+    if (c === '{') depth++;
+    else if (c === '}' && --depth === 0) { end = i; break; }
+  }
+  if (end < 0) throw new Error('ecrData object never closed');
+
+  const data = JSON.parse(html.slice(start, end + 1));
+  const players = [];
+  for (const p of (data.players || [])) {
+    const rank = Number(p.rank_ecr);
+    if (!p.player_name || !Number.isFinite(rank)) continue;
+    players.push({
+      name: p.player_name,
+      team: p.player_team_id || '',
+      pos:  p.player_position_id || '',
+      rank,
+      // "RB7" → 7. FantasyPros leaves this empty for DST/K on some boards.
+      posRank: Number(String(p.pos_rank || '').replace(/\D+/g, '')) || null,
+    });
+  }
+  return {
+    // Its own stamp, not ours: the useful question is how stale the ECR is,
+    // which a cache-fill time would only answer by accident.
+    updated: Number(data.last_updated_ts) * 1000 || null,
+    experts: Number(data.total_experts) || null,
+    count: players.length,
+    players,
+  };
 }
 
 // ── ESPN Scoreboard ───────────────────────────────────────────────────────────

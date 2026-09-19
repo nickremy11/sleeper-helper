@@ -2253,7 +2253,13 @@ function renderWaivers() {
 // index.html has every piece of context the grid would otherwise fetch for
 // itself — player map, name index, FC values, identity — so hand them over.
 function mrgOpenFromWaivers() {
-  const leagues = S.leagues.map(lg => ({ id: lg.league_id, name: lg.name || lg.league_id, espn: lg.source === 'espn' }));
+  const leagues = S.leagues.map(lg => ({
+    id: lg.league_id, name: lg.name || lg.league_id, espn: lg.source === 'espn',
+    // Drives the grid's Auto consensus pick (FantasyCalc vs FantasyPros ROS).
+    // rsLeagueCategory is this app's one definition of the split, so use it
+    // rather than re-reading settings.type here.
+    dynasty: rsLeagueCategory(lg.league_id) === 'dynasty',
+  }));
   mrgInit({
     mount: 'mrg-root',
     apiBase: '/api',

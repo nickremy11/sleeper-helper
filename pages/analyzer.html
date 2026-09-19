@@ -2038,6 +2038,9 @@
       stickyTop: 0,
       leagueId: lgId,
       leagueName: (window._azMeta || {}).lgName || document.getElementById('league-title')?.textContent || 'This league',
+      // This page has no league list, so the grid can't read the format off one
+      // — it drives the grid's Auto consensus pick.
+      leagueDynasty: isDynasty,
       players: ctx.players || null,
       byName:  ctx.byName  || null,
       fcMap:   ctx.fcMap   || null,

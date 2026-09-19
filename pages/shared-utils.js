@@ -720,16 +720,40 @@ async function crLoadLeagueOwnership({ apiBase, leagueId, espn, espnId, season, 
 // FantasyCalc value, best first; without that the list would read alphabetically
 // inside each band, which looks like a ranking and isn't one.
 
+// Each cell also carries a VS-CONSENSUS delta — ▲/▼ and a number saying how far
+// your board is from the market's. The source follows the league's format:
+// FantasyCalc dynasty values for a dynasty league, FantasyPros rest-of-season
+// ECR for a redraft one (mrgConsSource), overridable with the Consensus pills.
+//
+// Both sides of that comparison are re-ranked over THE SAME SUBSET — your board
+// restricted to players the source covers (mrgApplyDeltas). Comparing your #140
+// of 150 against FantasyPros' #260 of 402 would show a huge negative delta that
+// is really just the two lists being different lengths; re-ranking makes the
+// number mean "relative to these same players, I'm N spots higher/lower", which
+// is the only reading that holds at the bottom of a board.
+//
+// Read it as a TIER signal, not a pick-by-pick one. My Ranks stores no order
+// inside a tier, so your position within a band is FantasyCalc's own ordering
+// (see above) — the delta is driven by which tier you put a player in, and
+// against FP ROS a slice of it is FantasyCalc's tiebreak rather than your view.
+
 const MRG_MYRANKS_API   = 'https://myranks.ffhistorian.com';
 const MRG_POS_COLS      = [['QB', 1], ['RB', 2], ['WR', 2], ['TE', 1]];   // [position, columns]
 const MRG_POS_KEYS      = new Set(['QB', 'RB', 'WR', 'TE']);
 const MRG_TRACK_MIN     = 170;   // px a track needs before names start ellipsizing
+const MRG_TRACK_MIN_CONS = 196;  // …and with the ▲/▼ column taking its share of the row
 const MRG_GAP           = 10;    // must match .mrg-wrap's gap
 const MRG_ROW_H         = 21;    // rendered height of one .mrg-cell
 const MRG_ALL_MIN_ROWS  = 15;    // a part shorter than this reads as a stub, not a column
 const MRG_ALL_MAX_PARTS = 10;
 const MRG_LS_SOURCE     = 'mrg_source';
 const MRG_LS_VIEW       = 'mrg_view';
+const MRG_LS_CONS       = 'mrg_cons';
+// FantasyPros publishes no half-PPR-per-league board, so one scoring is picked
+// for everyone. Half is the middle of the three and the one rest-of-season
+// consensus is most often quoted in.
+const MRG_FP_SCORING    = 'half';
+const MRG_CONS_PILLS    = [['auto', 'Auto'], ['fc', 'FantasyCalc'], ['fp', 'FP ROS'], ['off', 'Off']];
 
 const MRG = {
   mount: null,            // element id to render into
@@ -743,11 +767,14 @@ const MRG = {
   sources: null,          // [{id, label}] — the ranking-set dropdown
   sourceId: null, sourceName: '',
   view: 'all',
+  cons: 'auto',           // 'auto' | 'fc' | 'fp' | 'off' — which consensus the delta is against
+  leagueDynasty: null,    // host-supplied fallback when the league list carries no format
 
   rows: [],               // built by mrgBuildRows
   unmatched: 0,
 
   players: null, byName: null, fcMap: null,
+  fpMap: null, fpMeta: null, fpError: '',   // FantasyPros ROS: pid → ECR rank
   sleeperUserId: null, swid: null, season: null,
 
   rosters: {},            // lgId → {owned:Set, mine:Set} | null (null = load failed)
@@ -763,9 +790,14 @@ async function mrgInit(opts = {}) {
   Object.assign(MRG, {
     leagues: [], leagueId: null, leagueName: '', sources: null, sourceId: null, sourceName: '',
     rows: [], unmatched: 0, error: '', _sig: null,
+    // An earlier open that couldn't reach the consensus feed shouldn't poison
+    // this one: drop the failed map so it gets fetched again.
+    fpMap: MRG.fpError ? null : MRG.fpMap, fpError: '',
   }, opts);
   if (!MRG.view) MRG.view = 'all';
+  if (!MRG.cons) MRG.cons = 'auto';
   try { MRG.view = localStorage.getItem(MRG_LS_VIEW) || MRG.view; } catch {}
+  try { MRG.cons = localStorage.getItem(MRG_LS_CONS) || MRG.cons; } catch {}
   try { MRG.sourceId = MRG.sourceId || localStorage.getItem(MRG_LS_SOURCE); } catch {}
 
   mrgRender(`<div class="loading-state"><div class="spinner"></div>Loading rankings…</div>`);
@@ -776,7 +808,7 @@ async function mrgInit(opts = {}) {
     await mrgEnsureLeagues();
     await mrgLoadSources();
     await mrgLoadRanks();
-    await mrgEnsureRosters(MRG.leagueId);
+    await Promise.all([mrgEnsureRosters(MRG.leagueId), mrgEnsureCons()]);
   } catch (e) {
     MRG.error = e.message || String(e);
   }
@@ -858,7 +890,8 @@ async function mrgEnsureLeagues() {
   if (MRG.leagues?.length) {
     MRG.leagues = MRG.leagues.map(lg => lg.id
       ? lg
-      : { id: lg.league_id, name: lg.name || lg.league_id, espn: lg.source === 'espn' });
+      : { id: lg.league_id, name: lg.name || lg.league_id, espn: lg.source === 'espn',
+          dynasty: lg.source !== 'espn' && lg.settings?.type === 2 });
     return;
   }
   const out  = [];
@@ -871,7 +904,10 @@ async function mrgEnsureLeagues() {
       const season = MRG.season || (await fetch(`${MRG.apiBase}/sleeper/state/nfl`).then(r => r.json()))?.season;
       MRG.sleeperUserId = MRG.sleeperUserId || uid || null;
       const leagues = await fetch(`${MRG.apiBase}/sleeper/user/${uid}/leagues/nfl/${season}`).then(r => r.json());
-      for (const lg of (leagues || [])) out.push({ id: lg.league_id, name: lg.name || lg.league_id, espn: false });
+      for (const lg of (leagues || [])) out.push({
+        id: lg.league_id, name: lg.name || lg.league_id, espn: false,
+        dynasty: lg.settings?.type === 2,
+      });
     } catch {}
   }
   try {
@@ -881,7 +917,7 @@ async function mrgEnsureLeagues() {
       const found = await Promise.all(cfg.league_ids.map(id =>
         fetch(`${MRG.apiBase}/espn/fantasy/${id}?view=mSettings&view=mTeam`, { credentials: 'include' })
           .then(r => r.ok ? r.json() : null)
-          .then(d => d ? { id: 'espn_' + id, name: d.settings?.name || `ESPN ${id}`, espn: true } : null)
+          .then(d => d ? { id: 'espn_' + id, name: d.settings?.name || `ESPN ${id}`, espn: true, dynasty: false } : null)
           .catch(() => null)));
       for (const lg of found) if (lg) out.push(lg);
     }
@@ -890,7 +926,8 @@ async function mrgEnsureLeagues() {
   // out, or a league that's no longer in the Sleeper season) — it still has to
   // be selectable, since it's the one on screen.
   if (MRG.leagueId && !out.some(l => l.id === MRG.leagueId)) {
-    out.unshift({ id: MRG.leagueId, name: MRG.leagueName || 'This league', espn: String(MRG.leagueId).startsWith('espn_') });
+    out.unshift({ id: MRG.leagueId, name: MRG.leagueName || 'This league',
+                  espn: String(MRG.leagueId).startsWith('espn_'), dynasty: MRG.leagueDynasty });
   }
   MRG.leagues = out;
   if (!MRG.leagueId && out.length) MRG.leagueId = out[0].id;
@@ -994,13 +1031,16 @@ function mrgWidth() {
   const w = document.getElementById(MRG.mount)?.clientWidth || 0;
   return w > 320 ? w : Math.max(320, (window.innerWidth || 1200) - 64);
 }
-const mrgFits = tracks => (mrgWidth() - MRG_GAP * (tracks - 1)) / tracks >= MRG_TRACK_MIN;
+// The delta column eats into the name, so a track needs more room when it's on
+// — otherwise turning the consensus on silently starts ellipsizing every name.
+const mrgTrackMin = () => (mrgConsSource() ? MRG_TRACK_MIN_CONS : MRG_TRACK_MIN);
+const mrgFits = tracks => (mrgWidth() - MRG_GAP * (tracks - 1)) / tracks >= mrgTrackMin();
 
 // How many adjacent columns the ALL list is cut into. Enough that the whole
 // board fits one screenful if the viewport can hold it, capped by how many
 // tracks still show a full name and floored so no part is a stub.
 function mrgAllParts(n) {
-  const byWidth  = Math.max(1, Math.floor((mrgWidth() + MRG_GAP) / (MRG_TRACK_MIN + MRG_GAP)));
+  const byWidth  = Math.max(1, Math.floor((mrgWidth() + MRG_GAP) / (mrgTrackMin() + MRG_GAP)));
   const perScreen = Math.max(12, Math.floor(((window.innerHeight || 900) - 240) / MRG_ROW_H));
   let parts = Math.min(byWidth, Math.max(1, Math.ceil(n / perScreen)), MRG_ALL_MAX_PARTS);
   while (parts > 1 && n / parts < MRG_ALL_MIN_ROWS) parts--;
@@ -1026,6 +1066,96 @@ async function mrgEnsureRosters(lgId) {
   });
 }
 
+// ── Consensus (the ▲/▼ column) ───────────────────────────────────────────────
+// Which market to measure the board against. 'auto' follows the selected
+// league's format, because that's the only thing that makes one source right
+// and the other wrong: FantasyCalc prices a player's whole remaining career,
+// FantasyPros ROS prices the rest of this season, and reading a redraft league
+// off dynasty values would hand every 23-year-old a ▼ he hasn't earned.
+function mrgLeagueIsDynasty() {
+  const lg = (MRG.leagues || []).find(l => l.id === MRG.leagueId);
+  if (lg && lg.dynasty != null) return !!lg.dynasty;
+  if (lg?.espn) return false;
+  return MRG.leagueDynasty != null ? !!MRG.leagueDynasty : null;   // null = couldn't tell
+}
+
+function mrgConsSource() {
+  if (MRG.cons === 'off') return null;
+  if (MRG.cons === 'fc' || MRG.cons === 'fp') return MRG.cons;
+  const dyn = mrgLeagueIsDynasty();
+  // Unknown format falls to FantasyPros: a season-long consensus is the safer
+  // thing to show against a board we can't classify, and it's the one whose
+  // coverage gaps are visible (a missing player simply has no delta).
+  return dyn === true ? 'fc' : 'fp';
+}
+
+function mrgConsLabel(src) {
+  return src === 'fc' ? 'FantasyCalc dynasty value'
+       : src === 'fp' ? `FantasyPros ROS (${MRG_FP_SCORING === 'half' ? 'half PPR' : MRG_FP_SCORING.toUpperCase()})`
+       : '';
+}
+
+// Fetched lazily and only when something is actually comparing against it —
+// most opens of this grid are dynasty, and a redraft board is one pill away.
+async function mrgEnsureCons() {
+  if (mrgConsSource() !== 'fp' || MRG.fpMap) return;
+  MRG.fpError = '';
+  try {
+    const r = await fetch(`${MRG.apiBase}/fantasypros/ros?scoring=${MRG_FP_SCORING}`);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    const byName = MRG.byName || {}, map = {};
+    for (const p of (d.players || [])) {
+      const pid = byName[normName(p.name)];
+      // First one in wins: the list is already in rank order, so a duplicate
+      // name can only be a worse-ranked player of the same name.
+      if (pid && map[pid] == null) map[pid] = p.rank;
+    }
+    MRG.fpMap  = map;
+    MRG.fpMeta = { updated: d.updated || null, experts: d.experts || null, count: d.count || 0, matched: Object.keys(map).length };
+  } catch (e) {
+    // A dead consensus feed costs the delta column, never the grid.
+    MRG.fpMap  = {};
+    MRG.fpMeta = null;
+    MRG.fpError = 'rest-of-season consensus ranks could not be loaded — no deltas shown';
+  }
+}
+
+// The source's own ordering key for one row, LOWER IS BETTER, or null when the
+// source doesn't cover him. FantasyCalc is a value (negate it); FantasyPros is
+// already a rank. Nothing downstream knows which source it got.
+function mrgConsKey(r, src) {
+  if (!r.pid) return null;
+  if (src === 'fc') return r.fc > 0 ? -r.fc : null;
+  if (src === 'fp') return MRG.fpMap?.[String(r.pid)] ?? null;
+  return null;
+}
+
+// Writes `_delta` onto every row of one column: positive = I have him that many
+// spots HIGHER than the consensus does, null = not covered, so no claim.
+//
+// Both sides are ranked over the covered subset only. `list` is already in my
+// order, so my rank is just the position in the filtered list; the consensus
+// rank is the position after re-sorting that same filtered list by its key.
+function mrgApplyDeltas(list, src) {
+  for (const r of list) r._delta = null;
+  if (!src) return;
+  const covered = [];
+  for (const r of list) {
+    const k = mrgConsKey(r, src);
+    if (k != null) covered.push({ r, k });
+  }
+  covered.forEach((c, i) => { c.myRank = i + 1; });
+  [...covered].sort((a, b) => a.k - b.k).forEach((c, i) => { c.r._delta = (i + 1) - c.myRank; });
+}
+
+function mrgDeltaHtml(r) {
+  if (r._delta == null) return '<span class="mrg-delta mrg-d-none">·</span>';
+  if (r._delta === 0)   return '<span class="mrg-delta mrg-d-even">–</span>';
+  const up = r._delta > 0;
+  return `<span class="mrg-delta ${up ? 'mrg-d-up' : 'mrg-d-down'}">${up ? '▲' : '▼'}${Math.abs(r._delta)}</span>`;
+}
+
 // ── Handlers ─────────────────────────────────────────────────────────────────
 function mrgSetView(v) {
   MRG.view = v;
@@ -1034,9 +1164,25 @@ function mrgSetView(v) {
 }
 async function mrgSetLeague(id) {
   MRG.leagueId = id;
-  if (MRG.rosters[id] === undefined) {
+  // Under 'auto' the new league may want the other consensus, so both loads are
+  // conditional and both are cheap after the first time.
+  const needCons = mrgConsSource() === 'fp' && !MRG.fpMap;
+  if (MRG.rosters[id] === undefined || needCons) {
     mrgDraw('Loading rosters…');
-    await mrgEnsureRosters(id);
+    await Promise.all([mrgEnsureRosters(id), mrgEnsureCons()]);
+  }
+  mrgDraw();
+}
+
+async function mrgSetCons(v) {
+  MRG.cons = v;
+  try { localStorage.setItem(MRG_LS_CONS, v); } catch {}
+  // A failed fetch leaves an empty map so the grid stops waiting on it — which
+  // would also mean never retrying. Picking the pill again is the retry.
+  if (MRG.fpError) MRG.fpMap = null;
+  if (mrgConsSource() === 'fp' && !MRG.fpMap) {
+    mrgDraw('Loading consensus ranks…');
+    await mrgEnsureCons();
   }
   mrgDraw();
 }
@@ -1096,6 +1242,10 @@ function mrgDraw(busy = '') {
   const viewPills = [['all', 'All'], ['pos', 'By position']].map(([v, label]) =>
     `<button class="mrg-pill${MRG.view === v ? ' on' : ''}" onclick="mrgSetView('${v}')">${label}</button>`).join('');
 
+  const consSrc   = mrgConsSource();
+  const consPills = MRG_CONS_PILLS.map(([v, label]) =>
+    `<button class="mrg-pill${MRG.cons === v ? ' on' : ''}" onclick="mrgSetCons('${v}')">${label}</button>`).join('');
+
   const rost = MRG.leagueId ? MRG.rosters[MRG.leagueId] : undefined;
   // A league nobody has drafted yet reports almost the whole player pool as
   // free — which would paint the board yellow and mean nothing. Below this the
@@ -1123,17 +1273,31 @@ function mrgDraw(busy = '') {
              : MRG.unmatched   ? `<span class="mrg-note">${MRG.unmatched} ranked row${MRG.unmatched === 1 ? '' : 's'} matched no Sleeper player</span>`
              : '';
 
+  // Auto picked the source silently, so name it — otherwise a ▲ means nothing.
+  // A manual pill that disagrees with the league's format is called out, since
+  // dynasty values on a redraft board is a real answer to a different question.
+  const dyn = mrgLeagueIsDynasty();
+  const mismatch = consSrc && MRG.cons !== 'auto' && dyn != null
+    && ((consSrc === 'fc') !== (dyn === true));
+  const consNote = !consSrc ? ''
+    : MRG.fpError && consSrc === 'fp' ? `<span class="mrg-note err">${esc(MRG.fpError)}</span>`
+    : `<span class="mrg-note">▲▼ vs ${esc(mrgConsLabel(consSrc))}${
+        MRG.fpMeta?.updated && consSrc === 'fp'
+          ? ` · updated ${new Date(MRG.fpMeta.updated).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : ''
+      }${mismatch ? ` — this league is ${dyn ? 'dynasty' : 'redraft'}` : ''}</span>`;
+
   const controls = `<div class="mrg-controls">
       ${MRG.onClose ? `<button class="mrg-pill" onclick="mrgClose()">← Back</button>` : ''}
       <span class="mrg-lbl">Ranks</span>${srcSel}
       <span class="mrg-lbl">League</span>${lgSel}
       <span class="mrg-lbl">View</span>${viewPills}
+      <span class="mrg-lbl">Consensus</span>${consPills}
       <span style="flex:1;"></span>
       <span class="mrg-legend">
         <span><i class="mrg-sw-on"></i>my roster ${nMine}</span>
         <span><i class="mrg-sw-fa"></i>free agent ${nFa}</span>
       </span>
-    </div>${note ? `<div class="mrg-noterow">${note}</div>` : ''}`;
+    </div>${note || consNote ? `<div class="mrg-noterow">${[note, consNote].filter(Boolean).join(' <span class="mrg-note">·</span> ')}</div>` : ''}`;
 
   if (busy) { el.innerHTML = controls + `<div class="loading-state"><div class="spinner"></div>${esc(busy)}</div>`; return; }
   if (!MRG.rows.length) {
@@ -1173,6 +1337,10 @@ function mrgDraw(busy = '') {
       if (i > 0 && col.list[i]._tier !== col.list[i - 1]._tier) b ^= 1;
       bands.push(b);
     }
+    // Per column, so the positional view compares against the source's ordering
+    // of THAT position — which is what makes a QB's ▲ mean something next to a
+    // board where the overall list is mostly running backs.
+    mrgApplyDeltas(col.list, consSrc);
     const cell = (r, i) => {
       const st  = state(r);
       const cls = st === 'mine' ? ' mrg-on' : st === 'fa' ? ' mrg-fa' : st === 'unk' ? ' mrg-unk' : '';
@@ -1180,11 +1348,17 @@ function mrgDraw(busy = '') {
                    // In the positional view the tier shown is the recalculated
                    // one, so name the overall tier it came from too.
                    r._tier !== r.tier ? 'overall tier ' + r.tier : '',
+                   !consSrc ? ''
+                     : r._delta == null ? `not ranked by ${mrgConsLabel(consSrc)}`
+                     : r._delta === 0   ? `level with ${mrgConsLabel(consSrc)}`
+                     : `${Math.abs(r._delta)} spot${Math.abs(r._delta) === 1 ? '' : 's'} `
+                       + `${r._delta > 0 ? 'higher' : 'lower'} than ${mrgConsLabel(consSrc)}`,
                    st === 'unk' ? 'no Sleeper match' : ''].filter(Boolean).join(' · ');
       return `<div class="mrg-cell${bands[i] ? ' mrg-band' : ''}${cls}" title="${esc(tip)}">
         <span class="mrg-rank">${r._rank}</span>
         <span class="mrg-name">${esc(r.name)}</span>
         <span class="mrg-team">${esc(r.team)}</span>
+        ${consSrc ? mrgDeltaHtml(r) : ''}
         <span class="mrg-tier">${r._tier}</span>
       </div>`;
     };
