@@ -2016,8 +2016,20 @@
   let _azRanksOpen = false;
 
   function openRanksGrid() {
+    const content = document.getElementById('content');
+    // The grid lives in shared-utils.js. If that file is stale or missing (a
+    // browser cache holding the old copy, a deploy that shipped this page
+    // without it) every reference below throws AFTER #content has been cleared
+    // — which is a blank page with nothing to go on. Check first and say so.
+    // errHtml() comes from the same file, so this one message is inline.
+    if (typeof mrgInit !== 'function' || typeof MRG === 'undefined') {
+      content.innerHTML = '<div class="err-state">The ranks grid could not start:'
+        + ' <code>/shared-utils.js</code> is missing or out of date. Hard-refresh this page'
+        + ' (⌘⇧R / Ctrl-F5); if it persists, that file needs redeploying.</div>';
+      return;
+    }
     _azRanksOpen = true;
-    document.getElementById('content').innerHTML = '<div id="mrg-root"></div>';
+    content.innerHTML = '<div id="mrg-root"></div>';
     const ctx = window._azCtx || {};
     const opts = {
       mount: 'mrg-root',
@@ -2036,8 +2048,13 @@
     // changed — only the mount and the callbacks need re-attaching.
     // mrgSetLeague rather than a bare redraw: this page may be a DIFFERENT
     // league from the one the grid last had rosters for.
-    if (MRG.rows.length && MRG.sources) { Object.assign(MRG, opts); mrgSetLeague(lgId); }
-    else mrgInit(opts);
+    try {
+      if (MRG.rows.length && MRG.sources) { Object.assign(MRG, opts); mrgSetLeague(lgId); }
+      else mrgInit(opts);
+    } catch (e) {
+      _azRanksOpen = false;
+      content.innerHTML = errHtml(e);
+    }
   }
 
   function closeRanksGrid() {

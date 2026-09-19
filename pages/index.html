@@ -2226,8 +2226,21 @@ function renderWaivers() {
   // "Load Waivers" step to press. Re-entering the tab redraws what's already in
   // MRG rather than re-fetching a ranking set that hasn't changed.
   if (isMR) {
-    if (MRG.rows.length && MRG.sources) mrgSetLeague(MRG.leagueId);
-    else mrgOpenFromWaivers();
+    // Same guard as the analyzer's: without shared-utils.js every reference
+    // here throws and the mode renders as an empty panel with no explanation.
+    const root = document.getElementById('mrg-root');
+    if (typeof mrgInit !== 'function' || typeof MRG === 'undefined') {
+      if (root) root.innerHTML = '<div class="err-state">The ranks grid could not start:'
+        + ' <code>/shared-utils.js</code> is missing or out of date. Hard-refresh this page'
+        + ' (⌘⇧R / Ctrl-F5); if it persists, that file needs redeploying.</div>';
+      return;
+    }
+    try {
+      if (MRG.rows.length && MRG.sources) mrgSetLeague(MRG.leagueId);
+      else mrgOpenFromWaivers();
+    } catch (e) {
+      if (root) root.innerHTML = errHtml(e);
+    }
   }
 }
 
