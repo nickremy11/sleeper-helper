@@ -965,10 +965,6 @@
 
   // ─── Rendering ────────────────────────────────────────────────────────────────
 
-  function esc(s) {
-    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
-
   function posHtml(pos) {
     const cls = `auc-pos auc-pos-${pos || 'K'}`;
     return `<span class="${cls}">${esc(pos || '?')}</span>`;

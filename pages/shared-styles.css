@@ -51,3 +51,68 @@ body::before {
 .spinner { width: 26px; height: 26px; border: 3px solid var(--brown-mid); border-top-color: var(--gold); border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .err-state { background: var(--red); border: 1px solid #a02020; color: var(--cream); font-family: 'Crimson Text', serif; font-style: italic; font-size: 0.9rem; padding: 10px 14px; border-radius: 2px; margin-bottom: 12px; }
+
+/* ── MY RANKS GRID (mrg*) ──────────────────────────────────────────────────
+   A My Ranks set laid out as a grid with one league's ownership on it. Shared
+   by the Waivers tab and the League Analyzer, so it lives here rather than in
+   either page. Deliberately its OWN class family and not index.html's .rg-*:
+   the states differ (no red "benched", a plain cell for a player another team
+   owns) and the two existing grids shouldn't move when this one does. */
+.mrg-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+.mrg-lbl { font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.14em;
+           text-transform: uppercase; color: var(--brown-light); }
+.mrg-pill.on { border-color: var(--gold); color: var(--gold-light); }
+.mrg-noterow { margin-bottom: 10px; }
+.mrg-note { font-family: 'Crimson Text', serif; font-size: 0.8rem; font-style: italic; color: var(--brown-light); }
+.mrg-note.err { color: #c0504d; }
+.mrg-legend { display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+              font-family: 'Crimson Text', serif; font-size: 0.8rem; color: var(--brown-light); }
+.mrg-legend i { display: inline-block; width: 9px; height: 9px; margin-right: 4px; }
+.mrg-sw-on { background: rgba(95,174,95,0.6);  border-left: 3px solid #5fae5f; }
+.mrg-sw-fa { background: rgba(235,195,55,0.75); border-left: 3px solid #d6a82a; }
+
+.mrg-wrap { display: grid; grid-template-columns: repeat(var(--mrg-tracks, 4), minmax(0, 1fr));
+            gap: 10px; align-items: start; }
+.mrg-split { grid-column: span var(--mrg-parts, 2); }
+.mrg-parts { display: grid; grid-template-columns: repeat(var(--mrg-parts, 2), 1fr); }
+.mrg-part { min-width: 0; }
+.mrg-part + .mrg-part { border-left: 1px solid var(--brown-mid); }
+.mrg-col { min-width: 0; border: 1px solid var(--brown-mid); border-radius: 2px; background: var(--brown-dark); }
+.mrg-head { font-family: 'Rye', serif; font-size: 0.55rem; letter-spacing: 0.12em; text-transform: uppercase;
+            color: var(--gold); background: var(--brown-dark); padding: 6px 8px;
+            border-bottom: 1px solid var(--brown-mid); position: sticky; z-index: 5; }
+.mrg-head em { color: var(--brown-light); font-size: 0.5rem; font-style: normal; }
+.mrg-cell { display: flex; align-items: baseline; gap: 5px; padding: 2px 7px; font-size: 0.76rem;
+            font-family: 'Crimson Text', serif; color: var(--parchment);
+            border-bottom: 1px solid rgba(92,61,30,0.35); }
+.mrg-col > .mrg-cell:last-child, .mrg-part > .mrg-cell:last-child { border-bottom: none; }
+/* The tier band. Declared BEFORE the state colours so a highlight always wins. */
+.mrg-band { background: rgba(232,213,176,0.10); }
+.mrg-rank { color: var(--brown-light); font-size: 0.72rem; font-weight: 600;
+            min-width: 20px; text-align: right; flex-shrink: 0; }
+.mrg-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mrg-team { color: var(--brown-light); font-size: 0.6rem; flex-shrink: 0; }
+.mrg-tier { color: var(--gold); font-size: 0.58rem; flex-shrink: 0; min-width: 12px; text-align: right; opacity: 0.75; }
+.mrg-on { background: rgba(95,174,95,0.18);  box-shadow: inset 3px 0 0 #5fae5f; }
+.mrg-on .mrg-name { color: #8fd08f; font-weight: 700; }
+.mrg-fa { background: rgba(235,195,55,0.28); box-shadow: inset 3px 0 0 #f0c93c; }
+.mrg-fa .mrg-name { color: #f5da7a; }
+.mrg-unk .mrg-name { font-style: italic; color: var(--brown-light); }
+
+@media (max-width: 1200px) {
+  .mrg-wrap  { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mrg-split { grid-column: span 2; }
+  .mrg-parts { grid-template-columns: 1fr; }
+  .mrg-part + .mrg-part { border-left: none; }
+}
+@media (max-width: 700px) { .mrg-wrap { grid-template-columns: 1fr; } }
+/* Standalone, not index.html's .ghost-btn / select rules — the analyzer has
+   neither, and this grid renders identically on both pages. */
+.mrg-pill { background: none; border: 1px solid var(--brown-mid); color: var(--brown-light);
+            font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.15em; text-transform: uppercase;
+            padding: 6px 12px; cursor: pointer; border-radius: 2px; transition: border-color 0.2s, color 0.2s; }
+.mrg-pill:hover { border-color: var(--gold); color: var(--gold); }
+.mrg-select { max-width: 260px; background: var(--brown-dark); border: 1px solid var(--brown-mid);
+              color: var(--cream); font-family: 'Crimson Text', serif; font-size: 0.9rem;
+              padding: 6px 10px; border-radius: 2px; outline: none; cursor: pointer; }
+.mrg-select:focus { border-color: var(--gold); }

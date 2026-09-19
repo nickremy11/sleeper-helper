@@ -752,7 +752,7 @@ const PF = {
 
 // ── Waivers state ─────────────────────────────────────────────────────────────
 const WV = {
-  mode:               'dynasty', // 'dynasty' | 'redraft'
+  mode:               'dynasty', // 'dynasty' | 'redraft' | 'myranks'
   loaded:             false,
   fcMap:              {},
   rosteredByLeague:   {},  // {lgId: Set<pid>}
@@ -1042,7 +1042,7 @@ function sw(tab) {
 // The ranks grid and the redraft waiver grid are the views that earn more than
 // the site's 900px column. Waivers is mode-dependent, so wvSetMode re-applies it.
 function wvApplyWide(tab) {
-  const wide = tab === 'ranksgrid' || (tab === 'waivers' && WV.mode === 'redraft');
+  const wide = tab === 'ranksgrid' || (tab === 'waivers' && (WV.mode === 'redraft' || WV.mode === 'myranks'));
   document.querySelector('.main')?.classList.toggle('wide', wide);
 }
 
@@ -2185,7 +2185,8 @@ function pfCompareHtml(myData, theirData, theirName, lgId, theirRosterId) {
 
 function renderWaivers() {
   const isDyn = WV.mode === 'dynasty';
-  const uploadSection = !isDyn ? `
+  const isMR  = WV.mode === 'myranks';
+  const uploadSection = (!isDyn && !isMR) ? `
     <div class="wv-upload-row">
       <span class="filter-lbl-rs">Rankings CSV</span>
       <input type="file" id="wv-file" accept=".csv,.txt" class="wv-file-input" onchange="wvUploadRankings(this)" />
@@ -2201,12 +2202,16 @@ function renderWaivers() {
     <div class="wv-mode-bar">
       <span class="filter-lbl-rs">Mode</span>
       <button class="pos-pill${isDyn?' active':''}" onclick="wvSetMode('dynasty')">Dynasty</button>
-      <button class="pos-pill${!isDyn?' active':''}" onclick="wvSetMode('redraft')">Redraft</button>
+      <button class="pos-pill${WV.mode==='redraft'?' active':''}" onclick="wvSetMode('redraft')">Redraft</button>
+      <button class="pos-pill${isMR?' active':''}" onclick="wvSetMode('myranks')">vs My Ranks</button>
       <span style="font-family:'Crimson Text',serif;font-size:0.82rem;font-style:italic;color:var(--brown-light);margin-left:4px;">
-        ${isDyn ? 'Scans dynasty leagues · FC value ≥ 100 (TE ×2)' : 'Your ranking sheet as a grid, one redraft league at a time · guillotine leagues excluded'}
+        ${isDyn ? 'Scans dynasty leagues · FC value ≥ 100 (TE ×2)'
+        : isMR  ? 'A My Ranks set as a grid, one league at a time · green is your roster, yellow is a free agent'
+        :         'Your ranking sheet as a grid, one redraft league at a time · guillotine leagues excluded'}
       </span>
     </div>
     ${uploadSection}
+    ${isMR ? '<div id="mrg-root"></div>' : `
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
       <button class="setup-btn" id="wv-load-btn" onclick="loadWaiverData()" style="height:32px;">${WV.loaded ? 'Reload' : 'Load Waivers'}</button>
       <span class="setup-status" id="wv-load-status" style="margin:0;"></span>
@@ -2214,8 +2219,37 @@ function renderWaivers() {
     </div>
     <div id="wv-table-wrap">
       ${WV.loaded ? wvRenderTable() : `<div class="empty-state"><p>${isDyn ? 'Click Load Waivers to scan all leagues for available players' : 'Click Load Waivers to pull rosters, then pick a league'}</p></div>`}
-    </div>
+    </div>`}
   </div>`);
+
+  // The My Ranks grid loads itself (rankings, rosters, the lot) — there's no
+  // "Load Waivers" step to press. Re-entering the tab redraws what's already in
+  // MRG rather than re-fetching a ranking set that hasn't changed.
+  if (isMR) {
+    if (MRG.rows.length && MRG.sources) mrgSetLeague(MRG.leagueId);
+    else mrgOpenFromWaivers();
+  }
+}
+
+// index.html has every piece of context the grid would otherwise fetch for
+// itself — player map, name index, FC values, identity — so hand them over.
+function mrgOpenFromWaivers() {
+  const leagues = S.leagues.map(lg => ({ id: lg.league_id, name: lg.name || lg.league_id, espn: lg.source === 'espn' }));
+  mrgInit({
+    mount: 'mrg-root',
+    apiBase: '/api',
+    wideEl: '.main', wideClass: 'wide',
+    leagues,
+    leagueId: leagues.some(l => l.id === MRG.leagueId) ? MRG.leagueId : (leagues[0]?.id || null),
+    // Empty is not "loaded" — passing {} would make the grid skip its own fetch
+    // and then match nothing.
+    players: Object.keys(S.players || {}).length ? S.players : null,
+    byName:  Object.keys(S._playersByName || {}).length ? S._playersByName : null,
+    fcMap:   Object.keys(RS.fcMap || {}).length ? RS.fcMap : null,
+    sleeperUserId: S.userId || null,
+    swid:    S.espnSettings?.swid || null,
+    season:  S.nflState?.season || null,
+  });
 }
 
 // Leagues this tab scans. Guillotine leagues are Sleeper type 3, which
@@ -2314,53 +2348,26 @@ async function loadWaiverData() {
 // Set — an empty one reads as "nobody owns anyone", which would paint the whole
 // grid yellow and inflate every "# Available" count in the dynasty table.
 async function wvLoadLeagueRosters(lg) {
-  const fail = () => { WV.rosteredByLeague[lg.league_id] = null; WV.myByLeague[lg.league_id] = null; };
-  try {
-    if (lg.source === 'espn') {
-      const leagueId = S.leagueDetails[lg.league_id]?._espnId;
-      const season   = S.nflState?.season || new Date().getFullYear().toString();
-      const r = await fetch(`/api/espn/fantasy/${leagueId}?view=mRoster&view=mTeam&seasonId=${season}`, { credentials: 'include' });
-      if (!r.ok) { fail(); return; }
-      const d        = await r.json();
-      const rostered = new Set(), mine = new Set();
-      const swid     = S.espnSettings?.swid;
-      for (const team of (d.teams || [])) {
-        const isMine = !!swid && team.primaryOwner === swid;
-        for (const entry of (team.roster?.entries || [])) {
-          const pData = entry.playerPoolEntry?.playerPoolEntry?.player || entry.playerPoolEntry?.player;
-          if (!pData) continue;
-          const fullName = pData.fullName || `${pData.firstName||''} ${pData.lastName||''}`.trim();
-          const pid = S._playersByName[normName(fullName)];
-          if (!pid) continue;
-          rostered.add(pid);
-          if (isMine) mine.add(pid);
-        }
-      }
-      WV.rosteredByLeague[lg.league_id] = rostered;
-      WV.myByLeague[lg.league_id]       = mine;
-    } else {
-      // Sleeper: RS.leagueRosters has all teams — reuse if warm
-      const cached = RS.leagueRosters[lg.league_id];
-      let rosters;
-      if (cached?.length > 0) {
-        rosters = cached;
-      } else {
-        const r = await fetch(`/api/sleeper/league/${lg.league_id}/rosters`);
-        if (!r.ok) { fail(); return; }
-        rosters = await r.json() || [];
-      }
-      const rostered = new Set(), mine = new Set();
-      for (const roster of rosters) {
-        const isMine = roster.owner_id === S.userId;
-        for (const pid of (roster.players || [])) {
-          rostered.add(pid);
-          if (isMine) mine.add(pid);
-        }
-      }
-      WV.rosteredByLeague[lg.league_id] = rostered;
-      WV.myByLeague[lg.league_id]       = mine;
-    }
-  } catch { fail(); }
+  // crLoadLeagueOwnership (shared-utils.js) does the fetching and parsing —
+  // the My Ranks grid needs exactly the same two sets, and this ESPN player
+  // path is the kind of thing that drifts when it exists twice. It returns
+  // null on failure, which is what these maps must store: an empty Set reads
+  // as "nobody owns anyone" and would paint the grid yellow and inflate every
+  // "# Available" count.
+  const res = await crLoadLeagueOwnership({
+    apiBase: '/api',
+    leagueId: lg.league_id,
+    espn: lg.source === 'espn',
+    espnId: S.leagueDetails[lg.league_id]?._espnId,
+    season: S.nflState?.season,
+    swid: S.espnSettings?.swid,
+    byName: S._playersByName,
+    sleeperUserId: S.userId,
+    // Rostership may already hold every team for this league — skip the refetch.
+    rosters: RS.leagueRosters[lg.league_id],
+  });
+  WV.rosteredByLeague[lg.league_id] = res && res.owned;
+  WV.myByLeague[lg.league_id]       = res && res.mine;
 }
 
 function wvBuildRows() {
@@ -4948,7 +4955,7 @@ const GUIDE = [
     { name:'Player Finder',    tab:'player',
       desc:'Look up any player for his dynasty value and every roster in your leagues he sits on.' },
     { name:'Waivers',          tab:'waivers',    espn:true,
-      desc:'Dynasty: the best free agents left across all your leagues by FantasyCalc value. Redraft: your uploaded ranking sheet as a grid for one league, with your players in green and free agents in yellow.' },
+      desc:'Dynasty: the best free agents left across all your leagues by FantasyCalc value. Redraft: your uploaded ranking sheet as a grid for one league, with your players in green and free agents in yellow. vs My Ranks: any of your My Ranks tier boards as a grid over one league, overall or broken out by position.' },
     { name:'Open Trades',      tab:'trades',
       desc:'Every pending trade offer across every league in one list, with real player names instead of ID numbers.' },
     { name:'Trade Partners',   tab:'partners',
@@ -4964,7 +4971,7 @@ const GUIDE = [
   ]},
   { title: 'Standalone tools', note: 'Their own pages — shareable links you can send to a leaguemate.', items: [
     { name:'League Analyzer',      href:'/analyzer',        espn:true,
-      desc:'Every team in one league ranked by roster value, positional strength, draft capital and starter strength.' },
+      desc:'Every team in one league ranked by roster value, positional strength, draft capital and starter strength. "View vs Ranks" lays one of your My Ranks boards over the league instead.' },
     { name:'Trade Analyzer',       href:'/trade-analyzer',  espn:true, write:'Sends trades',
       desc:"Build a two- or three-team trade, see what it does to each roster's rank and playoff odds, and send it as an offer in Sleeper." },
     { name:'Auction Draft Tracker',href:'/auction',         espn:true,
@@ -8584,9 +8591,17 @@ const SC = {
   topN:     36,             // 12 | 24 | 36 | 48  (dynasty only)
   age:      'vet',          // 'young' | 'vet'    (dynasty only)
   opp:      'either',       // 'rebuilder' | 'contender' | 'either'
+  rankSrc:  'proj',         // 'proj' | 'myranks' | 'fc' — what "top N at the position" means
   settings: scoutLoadSettings(),
   showSettings: false,
-  projMode: 'projections', // 'projections' | 'adp' — set by scoutRun, drives the PPG display
+  projMode: 'projections', // 'projections' | 'adp' — set by scoutRun, drives the projection fallback
+  statsMap: null,           // {pid: Sleeper season stat line} — season-to-date actuals, for the PPG shown
+  rankSet:  'primary',      // which My Ranks set — 'primary' | 'set:<id>' | '<sharedId>'
+  rankSets: null,           // [{id,label}] — lazily listed by scoutLoadRankSets()
+  rankSetErr: '',
+  myRanks:  null,           // {pid: tier} for SC.myRanksOf, loaded on demand
+  myRanksOf: null,
+  fcCache:  {},             // fc param key → {pid: value}
   results:  null,           // [{lgId,name,myOdds,myClass,teams:[...],myPlayers:[...]}]
   skipNote: '',
   running:  false,
@@ -8661,23 +8676,165 @@ function scoutAgeBucket(pid, pos) {
   return age >= (SC.settings.vetAge[pos] ?? 99) ? 'vet' : 'young';
 }
 
-// Per-league positional projection ranks: {pid: {rank, ppg}} for QB/RB/WR/TE,
-// scored under this league's own scoring_settings. Mirrors analyzer.html's
-// buildGlobalPosRanks() using the shared crPlayerPpg().
-function scoutPosRanks(scoring, projCtx, mode) {
-  const ctx = { ...projCtx, mode, scoring: scoring || {}, players: S.players };
+// ── Scout ranking sources ─────────────────────────────────────────────────────
+// What "top 24 RBs" means is a choice, not a fact, so it's a user-facing one.
+// All three produce the same {pid: {rank, ppg, tier}} shape, so nothing
+// downstream of scoutPosRanks() branches on which was used.
+const SCOUT_RANK_SRC = {
+  proj:    { label: 'Projections', noun: 'PPG projections' },
+  myranks: { label: 'My Ranks',    noun: 'My Ranks tiers' },
+  fc:      { label: 'FantasyCalc', noun: 'FantasyCalc value' },
+};
+
+// Season-to-date actual stat lines, keyed by Sleeper id. One pull per session.
+async function scoutLoadStats() {
+  if (SC.statsMap) return SC.statsMap;
+  const season = S.nflState?.season || String(new Date().getFullYear());
+  try { SC.statsMap = await api('/stats/nfl/regular/' + season) || {}; }
+  catch (_) { SC.statsMap = {}; }
+  return SC.statsMap;
+}
+
+// The PPG a player has ACTUALLY scored so far, under this league's own settings.
+// crScoreSleeper divides its line by `gp`, so a season-total stat line comes back
+// per-game for free — and with no scoring_settings it falls back to full PPR,
+// which is exactly the behaviour we want for a league we couldn't read. Null
+// before anyone has played (preseason), so the display just omits it rather than
+// printing a confident 0.0.
+function scoutActualPpg(pid, scoring) {
+  const line = SC.statsMap?.[pid];
+  if (!line || !(line.gp > 0)) return null;
+  const v = crScoreSleeper(line, scoring || {});
+  return v > 0 ? v : null;
+}
+
+// My Ranks lives on its own worker + subdomain, but shares this app's session
+// cookie (Domain=.ffhistorian.com) and allows helper.ffhistorian.com in its CORS
+// allowlist — so a signed-in user needs no extra setup here. The set ids and the
+// endpoint shapes behind them are the Draft Tracker's (loadFromMyRanks) and the
+// My Ranks grid's (mrgLoadSources/mrgFetchRanks); this is the same picker, one
+// selection deep. It keeps its own copy rather than calling mrgLoadSources()
+// because that writes MRG.sourceId — the Waivers grid's live selection — and
+// mrgFetchRanks() resolves a bare 'primary' id only out of that same state.
+function scoutRankSetUrl(id) {
+  if (id.startsWith('primary:')) return MYRANKS_API + '/api/myranks/data?owner_id=' + encodeURIComponent(id.slice(8));
+  if (id === 'primary')          return MYRANKS_API + '/api/myranks/data';
+  if (id.startsWith('set:'))     return MYRANKS_API + '/api/myranks/sets/' + id.slice(4) + '/data';
+  return MYRANKS_API + '/api/myranks/sets/' + id + '/data';   // shared named set
+}
+
+// Populates the ranking-set <select> after renderScout() has written it.
+async function scoutLoadRankSets() {
+  const sel = document.getElementById('scout-rankset');
+  if (!sel) return;
+  if (!SC.rankSets) {
+    try {
+      const [dataRes, setsRes] = await Promise.all([
+        fetch(MYRANKS_API + '/api/myranks/data', { credentials: 'include' }),
+        fetch(MYRANKS_API + '/api/myranks/sets', { credentials: 'include' }),
+      ]);
+      if (!dataRes.ok || !setsRes.ok) throw new Error(dataRes.status === 401 ? 'Sign in to use My Ranks' : 'Could not load My Ranks');
+      const [data, sets] = await Promise.all([dataRes.json(), setsRes.json()]);
+      const opts = [];
+      if (data.rankings?.length) opts.push({ id: 'primary', label: 'My Rankings' });
+      for (const st of (sets.sets || [])) opts.push({ id: 'set:' + st.id, label: st.name });
+      for (const st of (sets.sharedSets || [])) opts.push({
+        id: String(st.id),
+        label: st.is_primary ? (st.owner_name ? st.owner_name + "'s Rankings" : 'Shared Rankings')
+                             : (st.owner_name ? `${st.name} (${st.owner_name})` : st.name),
+      });
+      SC.rankSets = opts;
+    } catch (e) { SC.rankSets = []; SC.rankSetErr = e.message; }
+  }
+  if (!SC.rankSets.length) {
+    sel.outerHTML = `<span style="font-family:'Crimson Text',serif;font-style:italic;color:var(--brown-light);font-size:0.85rem;">${esc(SC.rankSetErr || 'No ranking sets found')} — set them up at <a href="https://myranks.ffhistorian.com" target="_blank" style="color:var(--gold);">My Ranks</a></span>`;
+    return;
+  }
+  if (!SC.rankSets.some(o => o.id === SC.rankSet)) SC.rankSet = SC.rankSets[0].id;
+  sel.innerHTML = SC.rankSets.map(o => `<option value="${esc(o.id)}"${o.id === SC.rankSet ? ' selected' : ''}>${esc(o.label)}</option>`).join('');
+}
+function scoutSetRankSet(id) { SC.rankSet = id; SC.myRanks = null; }
+
+async function scoutLoadMyRanks() {
+  if (SC.myRanks && SC.myRanksOf === SC.rankSet) return SC.myRanks;
+  let r;
+  try { r = await fetch(scoutRankSetUrl(SC.rankSet), { credentials: 'include' }); }
+  catch (_) { throw new Error('Could not reach My Ranks (myranks.ffhistorian.com).'); }
+  if (r.status === 401) throw new Error('Sign in to rank by My Ranks.');
+  if (!r.ok) throw new Error('Could not load My Ranks (HTTP ' + r.status + ').');
+  const data = await r.json();
+  const map = {};
+  for (const row of (data.rankings || [])) {
+    const pid  = lsMatchRankRow(row.player_name, row.team);
+    const tier = Number(row.tier);
+    if (!pid || !(tier > 0)) continue;
+    if (map[pid] == null || tier < map[pid]) map[pid] = tier;
+  }
+  if (!Object.keys(map).length) throw new Error('That ranking set has no tiers this app could match to Sleeper players.');
+  SC.myRanks = map;
+  SC.myRanksOf = SC.rankSet;
+  return map;
+}
+
+// FantasyCalc params derived from the league — superflex and PPR, and dynasty vs
+// redraft so the dynasty tab prices players the way that format actually values
+// them. Deliberately NOT team count: that would fan ~70 leagues out into ~70
+// upstream pulls for a difference that never reorders a position. Six keys, max.
+function scoutFcKey(lg) {
+  const rp  = lg?.roster_positions || [];
+  const sf  = rp.includes('SUPER_FLEX') || rp.filter(p => p === 'QB').length >= 2;
+  const rec = Number(lg?.scoring_settings?.rec ?? 1);
+  const ppr = rec >= 0.75 ? '1' : rec >= 0.25 ? '0.5' : '0';
+  return `${lg?.settings?.type === 2}|${sf ? 2 : 1}|${ppr}`;
+}
+async function scoutLoadFc(key) {
+  if (SC.fcCache[key]) return SC.fcCache[key];
+  const [dyn, numQbs, ppr] = key.split('|');
+  const base = IS_LOCAL ? 'https://helper.ffhistorian.com/api' : '/api';
+  const r = await fetch(`${base}/fantasycalc?isDynasty=${dyn}&numQbs=${numQbs}&ppr=${ppr}&includePickValues=false`);
+  if (!r.ok) throw new Error('FantasyCalc unavailable (HTTP ' + r.status + ').');
+  const rows  = await r.json();
+  const field = dyn === 'true' ? 'value' : 'redraftValue';
+  const map   = {};
+  for (const item of (rows || [])) {
+    const sid = item.player?.sleeperId || item.player?.maybeSleeperID;
+    const val = item[field] ?? item.value;
+    if (sid && val > 0) map[String(sid)] = val;
+  }
+  SC.fcCache[key] = map;
+  return map;
+}
+
+// Per-league positional ranks: {pid: {rank, ppg, tier}} for QB/RB/WR/TE.
+// Three orderings, one shape:
+//   proj    — projected PPG under this league's scoring_settings (crPlayerPpg)
+//   myranks — your My Ranks tier; the tier is all My Ranks stores, so projected
+//             PPG breaks ties inside one (otherwise a 15-player tier would cut
+//             off alphabetically at "top 24")
+//   fc      — FantasyCalc value for the league's format
+// `ppg` is ALWAYS the season-to-date actual, scored to the league — it's the
+// number you'd quote in a trade DM, so it has to read the same whichever
+// ordering surfaced the player.
+function scoutPosRanks(scoring, opts) {
+  const ctx = { ...opts.projCtx, mode: opts.mode, scoring: scoring || {}, players: S.players };
+  const src = opts.rankSrc;
   const byPos = { QB: [], RB: [], WR: [], TE: [] };
   for (const [pid, p] of Object.entries(S.players)) {
     const pos = (p.position || '').toUpperCase();
     if (!byPos[pos]) continue;
-    const ppg = crPlayerPpg(pid, ctx);
-    if (!(ppg > 0)) continue;
-    byPos[pos].push({ pid, ppg });
+    const proj = src === 'fc' ? 0 : crPlayerPpg(pid, ctx);   // unused by the FC ordering
+    const tier = opts.myRanks?.[pid] ?? null;
+    const fc   = opts.fcMap?.[pid] ?? 0;
+    if (src === 'myranks' ? !(tier > 0) : src === 'fc' ? !(fc > 0) : !(proj > 0)) continue;
+    byPos[pos].push({ pid, proj, tier, fc });
   }
+  const cmp = src === 'myranks' ? (a, b) => (a.tier - b.tier) || (b.proj - a.proj)
+            : src === 'fc'      ? (a, b) => b.fc - a.fc
+            :                     (a, b) => b.proj - a.proj;
   const rank = {};
   for (const pos of ['QB', 'RB', 'WR', 'TE']) {
-    byPos[pos].sort((a, b) => b.ppg - a.ppg);
-    byPos[pos].forEach((e, i) => { rank[e.pid] = { rank: i + 1, ppg: e.ppg }; });
+    byPos[pos].sort(cmp);
+    byPos[pos].forEach((e, i) => { rank[e.pid] = { rank: i + 1, ppg: scoutActualPpg(e.pid, scoring), tier: e.tier }; });
   }
   return rank;
 }
@@ -8699,7 +8856,14 @@ async function renderScout() {
     SC.mode === 'buy' ? 'Position you want' : 'Position you’re selling',
     ['QB', 'RB', 'WR', 'TE'].map(p => pill(SC.pos, p, p, `scoutSet('pos','${p}')`)).join('')
   );
-  const topGrp = grp('Top in PPG projections',
+  const srcNoun = SCOUT_RANK_SRC[SC.rankSrc].noun;
+  const setPicker = SC.rankSrc === 'myranks'
+    ? `<select id="scout-rankset" onchange="scoutSetRankSet(this.value)" style="background:rgba(255,255,255,0.06);border:1px solid var(--brown-mid);color:var(--cream);font-family:'Crimson Text',serif;font-size:0.9rem;padding:4px 6px;border-radius:2px;"><option>Loading…</option></select>`
+    : '';
+  const srcGrp = grp('Rank players by',
+    Object.entries(SCOUT_RANK_SRC).map(([k, v]) => pill(SC.rankSrc, k, v.label, `scoutSet('rankSrc','${k}')`)).join('') + setPicker
+  );
+  const topGrp = grp('Top in ' + srcNoun,
     [12, 24, 36, 48].map(n => pill(SC.topN, n, 'Top ' + n, `scoutSet('topN',${n})`)).join('')
   );
   const ageGrp = grp('Player age',
@@ -8738,7 +8902,7 @@ async function renderScout() {
         ${['QB', 'RB', 'WR', 'TE'].map(p => `<label style="font-family:'Crimson Text',serif;color:var(--parchment);font-size:0.9rem;">${p} ${numInput(s.vetAge[p], `scoutSetVetAge('${p}',this.value)`)}</label>`).join('')}
       </div>`;
   const rdSettings = `
-      <div class="setup-label-rye" style="margin-bottom:10px;">Redraft — positional surplus (≥ count players inside top rank by PPG)</div>
+      <div class="setup-label-rye" style="margin-bottom:10px;">Redraft — positional surplus (≥ count players inside top rank, by the ranking source above)</div>
       <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:16px;">
         ${['QB', 'RB', 'WR', 'TE'].map(p => `<label style="font-family:'Crimson Text',serif;color:var(--parchment);font-size:0.9rem;">${p}: ≥ ${numInput(s.redraft[p].count, `scoutSetRedraft('${p}','count',this.value)`, 44)} in top ${numInput(s.redraft[p].rank, `scoutSetRedraft('${p}','rank',this.value)`, 48)}</label>`).join('')}
       </div>`;
@@ -8759,19 +8923,19 @@ async function renderScout() {
 
   const summary = SC.format === 'dynasty'
     ? `Find <strong>dynasty</strong> leagues where you are <strong>${SC.myStatus}</strong> and, ${modeLbl}, there’s a
-       top-${SC.topN} ${SC.age === 'vet' ? 'veteran' : 'young'} ${SC.pos}
+       top-${SC.topN} ${SC.age === 'vet' ? 'veteran' : 'young'} ${SC.pos} by ${srcNoun}
        ${SC.mode === 'buy' ? 'on' : 'you could move to'} a ${SC.opp === 'either' ? 'rebuilding or contending' : SC.opp} opponent.`
     : `Find <strong>redraft</strong> leagues where you are <strong>${SC.myStatus}</strong> and
        ${SC.mode === 'buy'
-         ? `a ${SC.opp === 'either' ? 'rebuilding or contending' : SC.opp} opponent is stacked at ${SC.pos} (≥ ${rd.count} in the top ${rd.rank} PPG) — a surplus to buy from.`
-         : `you are stacked at ${SC.pos} (≥ ${rd.count} in the top ${rd.rank} PPG) and could sell to a ${SC.opp === 'either' ? 'rebuilding or contending' : SC.opp} opponent.`}`;
+         ? `a ${SC.opp === 'either' ? 'rebuilding or contending' : SC.opp} opponent is stacked at ${SC.pos} (≥ ${rd.count} in the top ${rd.rank} by ${srcNoun}) — a surplus to buy from.`
+         : `you are stacked at ${SC.pos} (≥ ${rd.count} in the top ${rd.rank} by ${srcNoun}) and could sell to a ${SC.opp === 'either' ? 'rebuilding or contending' : SC.opp} opponent.`}`;
 
   setC(`
     <div class="section-head"><h2>Scout</h2><div class="section-head-line"></div></div>
     ${formatTabs}
     <div style="font-family:'Crimson Text',serif;font-style:italic;color:var(--brown-light);font-size:0.9rem;margin-bottom:16px;">${summary}</div>
     ${subTabs}
-    ${myGrp}${posGrp}${SC.format === 'dynasty' ? topGrp + ageGrp : ''}${oppGrp}
+    ${myGrp}${posGrp}${srcGrp}${SC.format === 'dynasty' ? topGrp + ageGrp : ''}${oppGrp}
     <div style="display:flex;gap:12px;align-items:center;margin:6px 0 4px;">
       ${runBtn}
       <button class="ghost-btn" onclick="scoutToggleSettings()">${SC.showSettings ? 'Hide' : 'Settings'}</button>
@@ -8782,6 +8946,7 @@ async function renderScout() {
     <div id="scout-results" style="margin-top:18px;"></div>
   `);
   scoutDrawResults();
+  if (SC.rankSrc === 'myranks') scoutLoadRankSets();
 }
 
 async function scoutRun() {
@@ -8826,7 +8991,7 @@ async function scoutRun() {
       await lsSimulateAllLeagues();
     }
 
-    SC.progress = 'Ranking players by projection…';
+    SC.progress = 'Ranking players by ' + SCOUT_RANK_SRC[SC.rankSrc].noun + '…';
     renderScout();
 
     const season = S.nflState?.season || String(new Date().getFullYear());
@@ -8847,8 +9012,26 @@ async function scoutRun() {
     }
 
     SC.projMode = mode;
+
+    // Season-to-date actuals back the PPG shown on every row, whichever source
+    // ordered the players. The ranking source's own data loads once, up front —
+    // the per-league loop below is synchronous.
+    const sleeperLeagues = S.leagues.filter(lg => lg.source !== 'espn');
+    await scoutLoadStats();
+    let myRanksMap = null;
+    if (SC.rankSrc === 'myranks') {
+      SC.progress = 'Loading My Ranks…';
+      renderScout();
+      myRanksMap = await scoutLoadMyRanks();
+    } else if (SC.rankSrc === 'fc') {
+      SC.progress = 'Loading FantasyCalc values…';
+      renderScout();
+      const keys = [...new Set(sleeperLeagues.map(lg => scoutFcKey(S.leagueDetails[lg.league_id])))];
+      await Promise.all(keys.map(k => scoutLoadFc(k)));
+    }
+
     const results = [];
-    const ranksCache = {};   // stringified scoring_settings → pos-rank map (many leagues share a config)
+    const ranksCache = {};   // mode + source + scoring_settings → pos-rank map (many leagues share a config)
     let noOddsCount = 0, espnCount = 0, otherFormatCount = 0;
     const rdCfg = SC.settings.redraft[SC.pos];   // redraft surplus config for the chosen position
     for (const lg of S.leagues) {
@@ -8864,18 +9047,22 @@ async function scoutRun() {
       if (myClass !== want) continue;
 
       const scoring = S.leagueDetails[lg.league_id]?.scoring_settings || {};
-      const ckey    = mode + '|' + JSON.stringify(scoring);
-      const ranks   = ranksCache[ckey] || (ranksCache[ckey] = scoutPosRanks(scoring, projCtx, mode));
+      const fcKey   = SC.rankSrc === 'fc' ? scoutFcKey(S.leagueDetails[lg.league_id]) : '';
+      const ckey    = [mode, SC.rankSrc, fcKey, JSON.stringify(scoring)].join('|');
+      const ranks   = ranksCache[ckey] || (ranksCache[ckey] = scoutPosRanks(scoring, {
+        projCtx, mode, rankSrc: SC.rankSrc, myRanks: myRanksMap, fcMap: SC.fcCache[fcKey],
+      }));
       const posOf   = pid => (S.players[pid]?.position || '').toUpperCase();
       const mkPlayer = pid => ({
         pid, name: S.players[pid]?.full_name || pid,
-        rank: ranks[pid].rank, ppg: ranks[pid].ppg,
+        rank: ranks[pid].rank, ppg: ranks[pid].ppg, tier: ranks[pid].tier,
         age: S.players[pid]?.age ?? null, team: S.players[pid]?.team || 'FA',
       });
 
       // Which of a roster's players at the chosen position count as a "hit".
       // Dynasty: top-N rank + young/veteran age bucket. Redraft: inside top rank
-      // by PPG (the count threshold is applied per-team below).
+      // (the count threshold is applied per-team below). Both read whichever
+      // ordering SC.rankSrc selected — rank means the same thing either way.
       const hitsFor = pids => (pids || []).filter(pid => {
         if (posOf(pid) !== SC.pos) return false;
         const r = ranks[pid];
@@ -8933,6 +9120,7 @@ async function scoutRun() {
       otherFormatCount ? `${otherFormatCount} ${SC.format === 'dynasty' ? 'redraft' : 'dynasty'} league${otherFormatCount !== 1 ? 's' : ''} not searched (switch format above)` : '',
       noOddsCount ? `${noOddsCount} league${noOddsCount !== 1 ? 's' : ''} skipped (no playoff odds yet — set a Root For Me pref or wait for projections)` : '',
       espnCount ? `${espnCount} ESPN league${espnCount !== 1 ? 's' : ''} not searched (Sleeper only for now)` : '',
+      SC.rankSrc !== 'fc' && mode === 'adp' ? 'projections unavailable — ranked by ADP instead' : '',
     ].filter(Boolean).join(' · ');
     SC.progress = '';
   } catch (e) {
@@ -8952,8 +9140,9 @@ function scoutClassBadge(cls, odds) {
 
 function scoutPlayerLine(p) {
   const bits = [`${SC.pos}${p.rank}`];
+  if (SC.rankSrc === 'myranks' && p.tier != null) bits.push('tier ' + p.tier);
   if (SC.format === 'dynasty' && p.age != null) bits.push('age ' + p.age);
-  if (SC.projMode === 'projections' && p.ppg > 0) bits.push(p.ppg.toFixed(1) + ' PPG');
+  if (p.ppg > 0) bits.push(p.ppg.toFixed(1) + ' PPG');
   bits.push(p.team);
   return `<span style="font-family:'Crimson Text',serif;color:var(--parchment);font-size:0.92rem;">
     <strong>${esc(p.name)}</strong>

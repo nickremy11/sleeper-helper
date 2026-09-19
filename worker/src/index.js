@@ -1404,6 +1404,11 @@ const PROXY_CACHE_RULES = [
   // that hopping between pages costs nothing, short enough that a live score is
   // never more than a minute behind. No KV copy — it would outlive that window.
   { re: /^\/league\/\d+\/matchups\/\d+$/,           browser: 60 },
+  // Season-to-date actual stats — ~1MB of every player's totals, pulled once per
+  // Scout run to price players on real PPG rather than projections. It moves only
+  // as games finish, so 15 minutes is well inside "current" while keeping a cold
+  // run from re-fetching a megabyte per tab.
+  { re: /^\/stats\/nfl\/[a-z]+\/\d{4}$/,              browser: 900, kv: 900 },
 ];
 
 function proxyCacheRule(path) {

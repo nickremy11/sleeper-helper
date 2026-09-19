@@ -9,6 +9,10 @@
   <link rel="stylesheet" href="/shared-styles.css">
   <style>
     .az-wrap { max-width: 1060px; margin: 0 auto; padding: 24px 16px 60px; }
+    /* The My Ranks grid lays a whole ranking board out side by side — it needs
+       far more than the analyzer's reading column. Mirrors index.html's
+       .main.wide so the same grid gets the same room on both pages. */
+    .az-wrap.az-wide { max-width: max(1600px, min(2200px, 97vw)); }
 
     /* ── Banner league name ── */
     .az-league-title {
@@ -359,6 +363,7 @@
             <div id="az-targets-content"></div>
           </div>
         </div>
+        <button id="az-ranks-btn" class="az-switcher-btn" onclick="openRanksGrid()">▦ View vs Ranks</button>
         <div class="az-switcher-wrap">
           <button class="az-switcher-btn" onclick="toggleSwitcher(event)">⇅ Switch League</button>
           <div id="az-switcher-panel" class="az-switcher-panel" style="display:none;">
@@ -1438,7 +1443,7 @@
       allRosters,
       lgName, season: nflSeason, formatFlags, numTeams,
       numStartersPerTeam, is2TE, nextSeason,
-      crCtx: { players, byName, rosterPositions: rp, scoring: scoringSettings, season: nflSeason },
+      crCtx: { players, byName, fcMap, rosterPositions: rp, scoring: scoringSettings, season: nflSeason },
     };
   }
 
@@ -1646,7 +1651,7 @@
       teams, lgName, season: nflSeason, formatFlags: [], numTeams,
       // Prefer the real lineup slot counts; fall back to the guessed generic
       // shape only if settings parsing came back empty for some reason.
-      crCtx: { players, byName, rosterPositions: espnRosterPositions.length ? espnRosterPositions : crEspnLineup, scoring: espnScoring, season: nflSeason },
+      crCtx: { players, byName, fcMap, rosterPositions: espnRosterPositions.length ? espnRosterPositions : crEspnLineup, scoring: espnScoring, season: nflSeason },
     };
   }
 
@@ -1694,7 +1699,7 @@
     window._azTeams = teams;
     window._azCtx   = crCtx;
     window._azMeta  = {
-      numTeams, formatFlags,
+      numTeams, formatFlags, lgName,
       numStartersPerTeam: numStartersPerTeam || 0,
       is2TE:              is2TE              || false,
       nextSeason:         nextSeason         || String(new Date().getFullYear() + 1),
@@ -1998,8 +2003,47 @@
   window.addEventListener('resize', () => {
     if (azNarrow() === _azWasNarrow) return;
     _azWasNarrow = azNarrow();
+    // The ranks grid owns #content while it's open and re-allocates its own
+    // columns on resize — re-rendering the team cards under it would wipe it.
+    if (_azRanksOpen) return;
     if ((window._azTeams || []).length) renderAll();
   });
+
+  // ── My Ranks grid ────────────────────────────────────────────────────────────
+  // Swaps the team cards for one of the user's My Ranks sets laid over a league's
+  // rosters. The grid itself lives in shared-utils.js (mrg*) — this page only
+  // hands it context and takes #content back when it closes.
+  let _azRanksOpen = false;
+
+  function openRanksGrid() {
+    _azRanksOpen = true;
+    document.getElementById('content').innerHTML = '<div id="mrg-root"></div>';
+    const ctx = window._azCtx || {};
+    const opts = {
+      mount: 'mrg-root',
+      apiBase: API,
+      wideEl: '.az-wrap', wideClass: 'az-wide',
+      stickyTop: 0,
+      leagueId: lgId,
+      leagueName: (window._azMeta || {}).lgName || document.getElementById('league-title')?.textContent || 'This league',
+      players: ctx.players || null,
+      byName:  ctx.byName  || null,
+      fcMap:   ctx.fcMap   || null,
+      season:  ctx.season  || null,
+      onClose: closeRanksGrid,
+    };
+    // Reopening after a close shouldn't re-fetch a ranking set that hasn't
+    // changed — only the mount and the callbacks need re-attaching.
+    // mrgSetLeague rather than a bare redraw: this page may be a DIFFERENT
+    // league from the one the grid last had rosters for.
+    if (MRG.rows.length && MRG.sources) { Object.assign(MRG, opts); mrgSetLeague(lgId); }
+    else mrgInit(opts);
+  }
+
+  function closeRanksGrid() {
+    _azRanksOpen = false;
+    renderAll();
+  }
 
   document.addEventListener('click', e => {
     const panel = document.getElementById('az-switcher-panel');
