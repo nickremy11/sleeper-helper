@@ -855,18 +855,28 @@ async function mrbSelectSource(id, ctx = {}) {
   return mrbLoad({ ...ctx, sourceId: id });
 }
 
-// "RB12 · #27". Returns '' for anyone the set does not rank, so a caller can
-// concatenate it unconditionally.
-function mrbBadge(pid) {
+// "RB12 · #27", or just "RB12" with opts.posOnly. Returns '' for anyone the set
+// does not rank, so a caller can concatenate it unconditionally.
+//
+// analyzer.html passes posOnly: its roster rows are narrow (they sit inside a
+// team card, several to a screen) and carrying both numbers pushed long names
+// into an ellipsis. The positional rank is the one that reads at a glance
+// there; the overall still rides along in the tooltip. trade-analyzer.html has
+// the width for both, so it shows both.
+function mrbBadge(pid, opts = {}) {
   const e = pid == null ? null : MRB.index?.[String(pid)];
   if (!e) return '';
-  const pr    = e.pos && e.posRank ? `${e.pos}${e.posRank}` : '';
+  const pr = e.pos && e.posRank ? `${e.pos}${e.posRank}` : '';
+  // posOnly with no positional rank leaves nothing to draw — an empty badge
+  // would still take the row's gap and spacer.
+  if (opts.posOnly && !pr) return '';
   const title = `My Ranks${MRB.sourceLabel ? ' · ' + MRB.sourceLabel : ''}`
               + `${e.tier ? ` · tier ${e.tier}` : ''}`
               + `${pr ? ` · ${pr}` : ''} · overall #${e.overall}`;
   return `<span class="mrb-badge" title="${esc(title)}">`
-       + (pr ? `<b>${pr}</b><i>·</i>` : '')
-       + `#${e.overall}</span>`;
+       + (pr ? `<b>${pr}</b>` : '')
+       + (opts.posOnly ? '' : (pr ? '<i>·</i>' : '') + `#${e.overall}`)
+       + `</span>`;
 }
 
 // The <select> of ranking sets. `onchange` is the name of a page-level handler

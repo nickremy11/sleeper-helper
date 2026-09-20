@@ -1967,7 +1967,10 @@
           // The rank reads against the NAME, not against the value column — so
           // when there is one the name stops stretching and a spacer pushes the
           // value right instead (same idiom as the lineup rows in index.html).
-          const badge  = mrbBadge(p.pid);
+          // POSITIONAL RANK ONLY here: these rows are narrow and carrying the
+          // overall too was pushing long names into an ellipsis. The overall is
+          // in the tooltip, and trade-analyzer.html still shows both.
+          const badge  = mrbBadge(p.pid, { posOnly: true });
           return `<div class="pf-player-row${p.isStarter ? ' starter' : ''}${badge ? ' pf-ranked' : ''}">
             ${p.isStarter ? `<span style="color:var(--gold);font-size:0.68rem;flex-shrink:0;">★</span>` : `<span style="min-width:12px;flex-shrink:0;"></span>`}
             <span class="pf-player-name">${esc(p.name)}</span>
