@@ -131,7 +131,12 @@ body::before {
    "RB12 · #27" beside a player's name in analyzer.html / trade-analyzer.html.
    Deliberately quiet: it is an identifier sitting next to a value, so it must
    never out-read the value column it is explaining. */
-.mrb-badge { flex-shrink: 0; font-family: 'Crimson Text', serif; font-size: 0.66rem;
+/* Positional rank, overall rank and the value column all read at ONE size —
+   they are three numbers on the same row, and a smaller badge made the ranks
+   look like a footnote to the value rather than a peer of it. The host row sets
+   --mrb-size to whatever its own value column uses. */
+.mrb-badge { flex-shrink: 0; font-family: 'Crimson Text', serif;
+             font-size: var(--mrb-size, 0.78rem);
              color: var(--brown-light); letter-spacing: 0.02em; white-space: nowrap;
              opacity: 0.85; cursor: help; }
 .mrb-badge b { font-weight: 600; color: var(--gold-light); }
