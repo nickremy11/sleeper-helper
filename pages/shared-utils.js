@@ -1134,9 +1134,17 @@ function mrgConsKey(r, src) {
 // Writes `_delta` onto every row of one column: positive = I have him that many
 // spots HIGHER than the consensus does, null = not covered, so no claim.
 //
-// Both sides are ranked over the covered subset only. `list` is already in my
-// order, so my rank is just the position in the filtered list; the consensus
-// rank is the position after re-sorting that same filtered list by its key.
+// Both sides are ranked over the covered subset only. The consensus rank is the
+// position after re-sorting that subset by its key. My rank is the tier's
+// MIDPOINT: the players in a My Ranks tier are UNORDERED, so a tier holding
+// positions 1-3 makes all three of them rank 2.
+//
+// The midpoint is what keeps the delta honest. Ranking them 1, 2, 3 would
+// measure the FantasyCalc tiebreak that put them in that within-tier order (see
+// the note on mrgBuildRows) — not an opinion the board ever expressed. Collapsed
+// to a midpoint, a tier's deltas spread around 0 exactly as far as the consensus
+// disagrees with the TIER, which is the only claim the board is making, and the
+// spread still shows which member of the tier the market likes most.
 function mrgApplyDeltas(list, src) {
   for (const r of list) r._delta = null;
   if (!src) return;
@@ -1145,8 +1153,25 @@ function mrgApplyDeltas(list, src) {
     const k = mrgConsKey(r, src);
     if (k != null) covered.push({ r, k });
   }
-  covered.forEach((c, i) => { c.myRank = i + 1; });
-  [...covered].sort((a, b) => a.k - b.k).forEach((c, i) => { c.r._delta = (i + 1) - c.myRank; });
+
+  // Midpoint per run of equal tier. Positions are counted within `covered`, so
+  // a tier whose other members aren't priced by the source doesn't drag the
+  // midpoint somewhere the comparison can't see.
+  for (let i = 0; i < covered.length; ) {
+    let j = i;
+    while (j < covered.length && covered[j].r._tier === covered[i].r._tier) j++;
+    const mid = (i + 1 + j) / 2;   // positions i+1 … j
+    for (let k = i; k < j; k++) covered[k].my = mid;
+    i = j;
+  }
+  // A delta is a whole number of spots or it isn't a spot count, and an
+  // even-sized tier puts every one of its midpoints on a .5 — so round, but
+  // round a HALF toward zero. Math.round takes .5 upward, which would hand a
+  // two-player tier the consensus agrees with a ▲1 and a 0 instead of the two
+  // zeroes it earned; toward zero, half a spot of disagreement reads as level.
+  const spots = d => Math.abs(d % 1) === 0.5 ? Math.trunc(d) : Math.round(d);
+  [...covered].sort((a, b) => a.k - b.k)
+    .forEach((c, i) => { c.r._delta = spots((i + 1) - c.my); });
 }
 
 function mrgDeltaHtml(r) {
@@ -1284,7 +1309,11 @@ function mrgDraw(busy = '') {
     : `<span class="mrg-note">▲▼ vs ${esc(mrgConsLabel(consSrc))}${
         MRG.fpMeta?.updated && consSrc === 'fp'
           ? ` · updated ${new Date(MRG.fpMeta.updated).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : ''
-      }${mismatch ? ` — this league is ${dyn ? 'dynasty' : 'redraft'}` : ''}</span>`;
+      }${mismatch ? ` — this league is ${dyn ? 'dynasty' : 'redraft'}` : ''
+      // Spelled out because the midpoint rule is genuinely surprising: three
+      // players in one tier reading ▼1 · – · ▲1 looks like a board that ordered
+      // them when it didn't. It's the consensus doing the ordering, not you.
+      }, comparing each tier as a block</span>`;
 
   const controls = `<div class="mrg-controls">
       ${MRG.onClose ? `<button class="mrg-pill" onclick="mrgClose()">← Back</button>` : ''}
