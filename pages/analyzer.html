@@ -8,7 +8,12 @@
   <link href="https://fonts.googleapis.com/css2?family=Rye&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/shared-styles.css">
   <style>
-    .az-wrap { max-width: 1060px; margin: 0 auto; padding: 24px 16px 60px; }
+    /* Viewport-relative so a wide screen actually gets used — the roster
+       columns inside the cards are what needs the room (player names were
+       ellipsizing at the old flat 1060px). Capped so the ranking table above
+       them, whose columns are all fixed px but one, does not stretch into
+       mostly-gap on a very wide monitor. */
+    .az-wrap { max-width: min(1500px, 96vw); margin: 0 auto; padding: 24px 16px 60px; }
     /* The My Ranks grid lays a whole ranking board out side by side — it needs
        far more than the analyzer's reading column. Mirrors index.html's
        .main.wide so the same grid gets the same room on both pages. */
@@ -127,9 +132,14 @@
     details.az-card[open] .az-chevron { transform: rotate(90deg); }
 
     /* ── Card body ── */
+    /* auto-FIT, not auto-fill: auto-fill keeps the empty tracks it created, so a
+       league with no picks (redraft — no PICK section) left a dead column's
+       worth of width on the right while the four position columns stayed
+       narrow. auto-fit collapses the unused tracks and lets the sections that
+       do exist absorb the space. Identical when every track is filled. */
     .az-card-body {
       padding: 14px 16px 16px; border-top: 1px solid rgba(255,255,255,0.06);
-      display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 0 16px;
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0 16px;
     }
     .az-pos-section { margin-bottom: 14px; }
     .az-pos-header {
