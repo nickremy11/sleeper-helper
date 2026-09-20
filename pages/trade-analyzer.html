@@ -491,24 +491,40 @@
       else if (/\b5(th)?\b/.test(name) || /fifth/.test(name))  round = 5;
       else if (/\b6(th)?\b/.test(name) || /sixth/.test(name))  round = 6;
       if (!round) continue;
-      let q = 'mid';
-      if (/early/.test(name)) q = 'early'; else if (/late/.test(name)) q = 'late';
-      map[`${year}_${round}_${q}`] = item.value;
-      if (!map[`${year}_${round}`] || item.value > map[`${year}_${round}`]) map[`${year}_${round}`] = item.value;
+      // Qualified ("2027 1st (Mid)") and unqualified ("2027 1st") entries are
+      // keyed separately — defaulting the unqualified one to `mid` overwrote
+      // the real Mid value with the lower generic one. Mirrors analyzer.html.
+      const q = /early/.test(name)   ? 'early'
+              : /late/.test(name)    ? 'late'
+              : /\bmid\b/.test(name) ? 'mid'
+              : null;
+      if (q) map[`${year}_${round}_${q}`] = item.value;
+      else   map[`${year}_${round}`]      = item.value;
     }
     return map;
   }
 
-  function getPickValue(season, round, origRosterId, ridToSlot, numTeams, fcPickMap) {
+  // Playoff odds -> likely slot band. Same thresholds the old value multiplier
+  // used, so the "who is bad" judgement is unchanged. Mirrors analyzer.html.
+  const pickQualForOdds = o => (o >= 0.70 ? 'late' : o >= 0.30 ? 'mid' : 'early');
+  const fcHasQuals = (fcPickMap, season) =>
+    ['early', 'mid', 'late'].some(q => fcPickMap[`${season}_1_${q}`] != null);
+
+  // qualOverride forces the band instead of deriving it from the CURRENT
+  // season's draft order, which says nothing about a future season.
+  function getPickValue(season, round, origRosterId, ridToSlot, numTeams, fcPickMap, qualOverride) {
     if (round > 4) return 0;
-    const slot = ridToSlot?.[String(origRosterId)];
-    let q = 'mid';
-    if (slot && numTeams > 0) {
-      const third = Math.ceil(numTeams / 3);
-      if (slot <= third) q = 'early'; else if (slot > numTeams - third) q = 'late';
+    let q = qualOverride || null;
+    if (!q) {
+      q = 'mid';
+      const slot = ridToSlot?.[String(origRosterId)];
+      if (slot && numTeams > 0) {
+        const third = Math.ceil(numTeams / 3);
+        if (slot <= third) q = 'early'; else if (slot > numTeams - third) q = 'late';
+      }
     }
-    return fcPickMap[`${season}_${round}_${q}`] || fcPickMap[`${season}_${round}_mid`]
-        || fcPickMap[`${season}_${round}_early`] || fcPickMap[`${season}_${round}`] || 0;
+    return fcPickMap[`${season}_${round}_${q}`] || fcPickMap[`${season}_${round}`]
+        || fcPickMap[`${season}_${round}_mid`] || fcPickMap[`${season}_${round}_early`] || 0;
   }
 
   // opts.redraft: read FantasyCalc's redraftValue instead of its dynasty value
@@ -941,7 +957,13 @@
       ({ odds: playoffOdds, top2: top2Odds, last: lastOdds } = runSimulation(simTeams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams, potentialPtsSoFar, { pointsOnly: isPointsOnly }));
     }
 
+    // Next-year picks are re-valued off the original team's playoff odds. FC
+    // now publishes real Early/Mid/Late entries for the upcoming rookie draft,
+    // so this re-reads the priced value for the implied band; the old
+    // ×2.0/×1.4/×1.0 multiplier was a stand-in for that data and could push a
+    // 1st above FC's own "(Early)" price. Kept only for an unbanded season.
     const nextSeason = String(parseInt(nflSeason) + 1);
+    const nextBanded = fcHasQuals(fcPickMap, nextSeason);
     for (const t of teams) {
       t.playoffOdds   = playoffOdds[t.rosterId] ?? null;
       t.top2Odds      = top2Odds[t.rosterId] ?? null;
@@ -952,7 +974,15 @@
           // "Good team" proxy for pick value: playoff odds normally, or top-3
           // points odds in a points-only league.
           const o = isPointsOnly ? top2Odds[pick.originalRosterId] : playoffOdds[pick.originalRosterId];
-          if (o != null) pick.val = Math.round(pick.val * (o >= 0.70 ? 1.0 : o >= 0.30 ? 1.4 : 2.0));
+          if (o != null) {
+            if (nextBanded) {
+              const banded = getPickValue(pick.season, pick.round, pick.originalRosterId,
+                                          ridToSlot, numTeams, fcPickMap, pickQualForOdds(o));
+              if (banded > 0) pick.val = banded;
+            } else {
+              pick.val = Math.round(pick.val * (o >= 0.70 ? 1.0 : o >= 0.30 ? 1.4 : 2.0));
+            }
+          }
         }
         adj += pick.val;
       }

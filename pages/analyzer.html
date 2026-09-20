@@ -615,32 +615,55 @@
       else if (/\b5(th)?\b/.test(name) || /fifth/.test(name))  round = 5;
       else if (/\b6(th)?\b/.test(name) || /sixth/.test(name))  round = 6;
       if (!round) continue;
-      let q = 'mid';
-      if (/early/.test(name)) q = 'early';
-      else if (/late/.test(name)) q = 'late';
-      map[`${year}_${round}_${q}`] = item.value;
-      if (!map[`${year}_${round}`] || item.value > map[`${year}_${round}`]) {
-        map[`${year}_${round}`] = item.value;
-      }
+      // FC ships BOTH qualified entries ("2027 1st (Mid)") and one unqualified
+      // entry ("2027 1st") per round. Defaulting the unqualified one to `mid`
+      // overwrote the real Mid value with the lower generic one, so they're
+      // keyed separately now. The bare key also used to hold the MAX across
+      // qualifiers — i.e. the Early price — which quietly overvalued every pick
+      // that fell through to it; it's FC's own neutral price instead.
+      const q = /early/.test(name)   ? 'early'
+              : /late/.test(name)    ? 'late'
+              : /\bmid\b/.test(name) ? 'mid'
+              : null;
+      if (q) map[`${year}_${round}_${q}`] = item.value;
+      else   map[`${year}_${round}`]      = item.value;
     }
     console.log('[Analyzer] FC pick map built:', Object.keys(map).length, 'entries');
     return map;
   }
 
-  function getPickValue(season, round, origRosterId, ridToSlot, numTeams, fcPickMap) {
+  // Playoff odds -> the slot band that team's own pick is likely to land in.
+  // Same thresholds the old value multiplier used (>=70% / >=30%), so the "who
+  // is bad" judgement is unchanged — only what it buys you is.
+  const pickQualForOdds = o => (o >= 0.70 ? 'late' : o >= 0.30 ? 'mid' : 'early');
+
+  // Does FC publish Early/Mid/Late for this season yet? It only does so for the
+  // upcoming rookie class; everything further out is one flat price per round.
+  const fcHasQuals = (fcPickMap, season) =>
+    ['early', 'mid', 'late'].some(q => fcPickMap[`${season}_1_${q}`] != null);
+
+  // qualOverride: 'early' | 'mid' | 'late' — forces the band instead of deriving
+  // it from the CURRENT season's draft order, which says nothing about a future
+  // season. Next-year picks pass the band implied by the original team's playoff
+  // odds; see the re-valuation pass in loadSleeper().
+  function getPickValue(season, round, origRosterId, ridToSlot, numTeams, fcPickMap, qualOverride) {
     if (round > 4) return 0;
-    const slot = ridToSlot?.[String(origRosterId)];
-    let q = 'mid';
-    if (slot && numTeams > 0) {
-      const third = Math.ceil(numTeams / 3);
-      if (slot <= third) q = 'early';
-      else if (slot > numTeams - third) q = 'late';
+    let q = qualOverride || null;
+    if (!q) {
+      q = 'mid';
+      const slot = ridToSlot?.[String(origRosterId)];
+      if (slot && numTeams > 0) {
+        const third = Math.ceil(numTeams / 3);
+        if (slot <= third) q = 'early';
+        else if (slot > numTeams - third) q = 'late';
+      }
     }
-    // Try FC pick map first (real values), fall back to 0
+    // Real banded value first, then FC's own unqualified price for the round,
+    // then the remaining bands as a last resort.
     return fcPickMap[`${season}_${round}_${q}`]
+        || fcPickMap[`${season}_${round}`]
         || fcPickMap[`${season}_${round}_mid`]
         || fcPickMap[`${season}_${round}_early`]
-        || fcPickMap[`${season}_${round}`]
         || 0;
   }
 
@@ -1432,20 +1455,36 @@
     }
 
     // Re-value next-year picks based on original team's playoff odds
-    // (bad team → likely early pick → more valuable)
+    // (bad team → likely early pick → more valuable).
+    //
+    // FantasyCalc now publishes real Early/Mid/Late entries for the upcoming
+    // rookie draft, so this re-READS the priced value for the implied band
+    // rather than scaling a neutral one. The old ×2.0 / ×1.4 / ×1.0 multiplier
+    // was a stand-in for exactly that data and it overshot badly: a 0%-odds
+    // team's 1st came out at 2 × the unqualified price, well ABOVE FC's own
+    // "(Early)" entry, which is the ceiling for that pick. The multiplier is
+    // kept only as the fallback for a season FC hasn't banded yet.
     const _nextSeason = String(parseInt(nflSeason) + 1);
+    const _nextBanded = fcHasQuals(fcPickMap, _nextSeason);
     // "Good team" proxy for pick re-valuation: playoff odds normally, or the
     // top-3-points odds in a points-only league (where #1 odds are tiny for all).
     const _oddsMap = {};
     for (const t of teams) _oddsMap[t.rosterId] = (isPointsOnly ? t.top2Odds : t.playoffOdds) ?? null;
+    console.log('[Analyzer picks]', _nextSeason, _nextBanded ? 'using FC Early/Mid/Late values' : 'FC has no bands — falling back to the odds multiplier');
     for (const t of teams) {
       let _adj = 0;
       for (const pick of t.pickList) {
         if (pick.season === _nextSeason && pick.originalRosterId != null) {
           const origOdds = _oddsMap[pick.originalRosterId];
           if (origOdds != null) {
-            const mult = origOdds >= 0.70 ? 1.0 : origOdds >= 0.30 ? 1.4 : 2.0;
-            pick.val = Math.round(pick.val * mult);
+            if (_nextBanded) {
+              const banded = getPickValue(pick.season, pick.round, pick.originalRosterId,
+                                          ridToSlot, numTeams, fcPickMap, pickQualForOdds(origOdds));
+              if (banded > 0) pick.val = banded;
+            } else {
+              const mult = origOdds >= 0.70 ? 1.0 : origOdds >= 0.30 ? 1.4 : 2.0;
+              pick.val = Math.round(pick.val * mult);
+            }
           }
         }
         _adj += pick.val;
