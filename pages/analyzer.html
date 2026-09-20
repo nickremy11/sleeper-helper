@@ -235,6 +235,11 @@
     .az-switcher-item:hover { background: rgba(255,255,255,0.06); color: var(--cream); }
     .az-switcher-item.current { color: var(--gold-light); font-weight: 600; background: rgba(201,150,42,0.07); pointer-events: none; }
     .az-switcher-empty { padding: 12px 14px; font-family: 'Crimson Text', serif; font-size: 0.86rem; color: var(--brown-light); font-style: italic; }
+    /* Matches the (ESPN) tag trade-analyzer.html's league picker already uses. */
+    .az-switcher-tag {
+      font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.1em;
+      color: var(--brown-light); margin-left: 7px; vertical-align: middle;
+    }
 
     /* ── Trade Targets button + panel ── */
     .az-targets-wrap { position: relative; }
@@ -2052,6 +2057,7 @@
 
   let _switcherLoaded = false;
   let _switcherLeagues = [];
+  let _switcherErr     = '';   // one source failed; the other's leagues still list
 
   function toggleSwitcher(e) {
     e.stopPropagation();
@@ -2537,38 +2543,78 @@
       }).join('');
   }
 
+  // BOTH sources, gathered independently. The page has always been able to open
+  // an ESPN league (`/analyzer?league=espn_{id}` routes to loadEspn) — only this
+  // dropdown could not list one, so ESPN leagues were reachable from League
+  // Summaries but not from inside the analyzer. Mirrors trade-analyzer.html's
+  // loadPickerLeagues(), which already did both.
+  //
+  // Each source gets its own try/catch on purpose: the old single wrapper let a
+  // Sleeper error replace the WHOLE list, which would now hide working ESPN
+  // leagues. A failure is reported as a line above whatever did load.
   async function loadSwitcherLeagues() {
     const list = document.getElementById('az-switcher-list');
     const user = SharedAuth.getUser?.();
-    const username = user?.sleeper_username;
-    if (!username) {
-      list.innerHTML = '<div class="az-switcher-empty">Sign in and set your Sleeper username in your profile to switch leagues.</div>';
+    if (!user) {
+      list.innerHTML = '<div class="az-switcher-empty">Sign in to switch leagues.</div>';
       return;
     }
     list.innerHTML = '<div class="az-switcher-empty">Loading…</div>';
-    try {
-      const [nflRes, sleeperUser] = await Promise.all([
-        fetch(`${API}/sleeper/state/nfl`).then(r => r.json()),
-        fetch(`${API}/sleeper/user/${encodeURIComponent(username)}`).then(r => r.json()),
-      ]);
-      const season  = nflRes?.season || String(new Date().getFullYear());
-      const leagues = await fetch(`${API}/sleeper/user/${sleeperUser.user_id}/leagues/nfl/${season}`).then(r => r.json());
-      _switcherLeagues = (leagues || []).map(lg => ({ id: lg.league_id, name: lg.name || lg.league_id }));
-      _switcherLoaded  = true;
-      filterSwitcher(document.getElementById('az-switcher-search')?.value || '');
-    } catch(e) {
-      list.innerHTML = `<div class="az-switcher-empty">Error loading leagues: ${esc(String(e.message))}</div>`;
+
+    const found = [], errs = [];
+
+    // A user with ESPN leagues and no Sleeper username is a real case — this is
+    // skipped rather than being the early return it used to be.
+    if (user.sleeper_username) {
+      try {
+        const [nflRes, sleeperUser] = await Promise.all([
+          fetch(`${API}/sleeper/state/nfl`).then(r => r.json()),
+          fetch(`${API}/sleeper/user/${encodeURIComponent(user.sleeper_username)}`).then(r => r.json()),
+        ]);
+        const season  = nflRes?.season || String(new Date().getFullYear());
+        const leagues = await fetch(`${API}/sleeper/user/${sleeperUser.user_id}/leagues/nfl/${season}`).then(r => r.json());
+        for (const lg of (leagues || [])) found.push({ id: lg.league_id, name: lg.name || lg.league_id, espn: false });
+      } catch (e) { errs.push('Sleeper: ' + (e.message || e)); }
     }
+
+    // Ids carry the `espn_` prefix the rest of the page routes on, so the link
+    // this builds needs no special-casing downstream.
+    try {
+      const cfg = await fetch(`${API}/espn/settings`, { credentials: 'include' }).then(r => r.ok ? r.json() : null);
+      if (cfg?.has_credentials && cfg.league_ids?.length) {
+        const espnLeagues = await Promise.all(cfg.league_ids.map(id =>
+          fetch(`${API}/espn/fantasy/${id}?view=mSettings&view=mTeam`, { credentials: 'include' })
+            .then(r => r.ok ? r.json() : null)
+            .then(d => d ? { id: 'espn_' + id, name: d.settings?.name || `ESPN ${id}`, espn: true } : null)
+            .catch(() => null)   // one dead league must not drop the rest
+        ));
+        for (const lg of espnLeagues) if (lg) found.push(lg);
+      }
+    } catch (e) { errs.push('ESPN: ' + (e.message || e)); }
+
+    _switcherLeagues = found;
+    _switcherErr     = errs.join(' · ');
+    _switcherLoaded  = true;
+    filterSwitcher(document.getElementById('az-switcher-search')?.value || '');
   }
 
   function filterSwitcher(q) {
     const list     = document.getElementById('az-switcher-list');
     const term     = q.toLowerCase();
     const filtered = term ? _switcherLeagues.filter(l => l.name.toLowerCase().includes(term)) : _switcherLeagues;
-    if (!filtered.length) { list.innerHTML = '<div class="az-switcher-empty">No matches</div>'; return; }
-    list.innerHTML = filtered.map(lg => {
+    const errLine  = _switcherErr ? `<div class="az-switcher-empty">${esc(_switcherErr)}</div>` : '';
+    if (!filtered.length) {
+      // An empty list with nothing typed means neither source is configured —
+      // say which, rather than the old bare "No matches" that read as a bug.
+      list.innerHTML = errLine || `<div class="az-switcher-empty">${term
+        ? 'No matches'
+        : 'No leagues found — add your Sleeper username or ESPN credentials in your profile.'}</div>`;
+      return;
+    }
+    list.innerHTML = errLine + filtered.map(lg => {
       const cur = lg.id === lgId;
-      return `<a class="az-switcher-item${cur ? ' current' : ''}" href="/analyzer?league=${encodeURIComponent(lg.id)}">${esc(lg.name)}</a>`;
+      const tag = lg.espn ? '<span class="az-switcher-tag">ESPN</span>' : '';
+      return `<a class="az-switcher-item${cur ? ' current' : ''}" href="/analyzer?league=${encodeURIComponent(lg.id)}">${esc(lg.name)}${tag}</a>`;
     }).join('');
   }
 
