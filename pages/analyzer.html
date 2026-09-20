@@ -156,6 +156,8 @@
     .pf-player-row.starter { background: rgba(255,255,255,0.055); border-left-color: var(--gold); }
     .pf-player-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .pf-player-val  { font-size: 0.8rem; color: var(--brown-light); flex-shrink: 0; }
+    .pf-player-row.pf-ranked .pf-player-name { flex: 0 1 auto; }
+    .pf-gap { flex: 1 1 auto; min-width: 8px; }
     .pf-player-via  { font-size: 0.7rem; color: var(--brown-light); font-style: italic; }
 
     .az-badge { font-family: 'Rye', serif; font-size: 0.57rem; letter-spacing: 0.12em; text-transform: uppercase; padding: 6px 14px; border: 1.5px solid; border-radius: 2px; display: inline-block; }
@@ -380,6 +382,11 @@
   <script src="/shared-auth.js"></script>
   <script>
   'use strict';
+
+  // A stale cached /shared-utils.js can predate the My Ranks badges (mrb*).
+  // Every badge call site is unconditional, so stub it rather than let a
+  // ReferenceError take the whole page down — same defence the ranks grid uses.
+  if (typeof mrbBadge !== 'function') window.mrbBadge = () => '';
 
   const API = window.location.hostname === 'ffhistorian.com'
     ? 'https://helper.ffhistorian.com/api'
@@ -1717,6 +1724,50 @@
 
     window._azRanks = computeRanks(teams);
     renderAll();
+    azLoadMyRanks();   // non-blocking — badges appear on the redraw
+  }
+
+  // ── My Ranks badges ───────────────────────────────────────────────────────────
+  // "RB12 · #27" beside each player, off one of your My Ranks sets. Purely an
+  // identifier: FantasyCalc still drives every value on this page, because the
+  // roster totals are SUMS and a rank cannot be summed. The set is remembered
+  // per format (mrbSourceKey), so a dynasty league and a redraft league can sit
+  // on different boards without either one re-pointing the other.
+  function azMrbCtx() {
+    const c = window._azCtx || {};
+    return { dynasty: isDynasty, players: c.players, byName: c.byName, fcMap: c.fcMap };
+  }
+
+  async function azLoadMyRanks() {
+    if (typeof mrbLoad !== 'function') return;   // stale cached shared-utils.js
+    await mrbLoad(azMrbCtx());
+    azRedraw();
+  }
+
+  window.azSetRankSource = async function (id) {
+    await mrbSelectSource(id, azMrbCtx());
+    azRedraw();
+  };
+
+  // renderAll() paints the team cards into #content, which is the same box the
+  // ranks grid takes over — so a badge load that finishes while the grid is up
+  // must not redraw, exactly as the narrow-breakpoint resize handler must not.
+  // The grid reads its own board, so it loses nothing by being left alone.
+  function azRedraw() { if (!_azRanksOpen) renderAll(); }
+
+  // Signed out, or no sets built yet, renders nothing at all — this is an extra
+  // read on the page, never a call to action.
+  function azRankSourceBar() {
+    if (typeof MRB === 'undefined' || !MRB.sources?.length) return '';
+    const n = Object.keys(MRB.index || {}).length;
+    const note = MRB.error ? esc(MRB.error)
+      : !n ? 'no players in this set matched'
+      : `${n} ranked${MRB.unmatched ? ` · ${MRB.unmatched} unmatched` : ''} · ${isDynasty ? 'dynasty' : 'redraft'} board`;
+    return `<div class="mrb-bar" style="margin:8px 0 2px;">
+      <label>My Ranks</label>
+      ${mrbSourceSelectHtml('azSetRankSource')}
+      <span class="mrb-note">${note}</span>
+    </div>`;
   }
 
   async function azLoadIdentity(allRosters) {
@@ -1789,7 +1840,7 @@
       ${keeperBadge}${bbBadge}
       <span class="az-flag">${numTeams} Teams</span>
       ${(formatFlags || []).map(f => `<span class="az-flag${f.hi ? ' az-flag-hi' : ''}">${f.label}</span>`).join('')}
-    </div>`;
+    </div>` + azRankSourceBar();
 
     // Column definitions (header + rank cells must match exactly)
     const posCols = ['QB','RB','WR','TE'];
@@ -1912,9 +1963,14 @@
         const rkBadge = rk ? `<span class="az-pos-rank-badge" style="background:${rkBg};">${rk}</span>` : '';
         const rows = posPlayers.map(p => {
           const valStr = p.val > 0 ? Number(p.val).toLocaleString() : '—';
-          return `<div class="pf-player-row${p.isStarter ? ' starter' : ''}">
+          // The rank reads against the NAME, not against the value column — so
+          // when there is one the name stops stretching and a spacer pushes the
+          // value right instead (same idiom as the lineup rows in index.html).
+          const badge  = mrbBadge(p.pid);
+          return `<div class="pf-player-row${p.isStarter ? ' starter' : ''}${badge ? ' pf-ranked' : ''}">
             ${p.isStarter ? `<span style="color:var(--gold);font-size:0.68rem;flex-shrink:0;">★</span>` : `<span style="min-width:12px;flex-shrink:0;"></span>`}
             <span class="pf-player-name">${esc(p.name)}</span>
+            ${badge ? badge + '<span class="pf-gap"></span>' : ''}
             <span class="pf-player-val">${valStr}</span>
           </div>`;
         }).join('');

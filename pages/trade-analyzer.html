@@ -181,6 +181,8 @@
     .ta-asset-name { font-family: 'Crimson Text', serif; font-size: 0.88rem; color: var(--parchment); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .ta-asset-via  { font-style: italic; font-size: 0.72rem; color: var(--brown-light); }
     .ta-asset-val  { font-family: 'Crimson Text', serif; font-size: 0.78rem; color: var(--brown-light); white-space: nowrap; flex-shrink: 0; }
+    .ta-asset-row.ta-ranked .ta-asset-name { flex: 0 1 auto; }
+    .ta-gap { flex: 1 1 auto; min-width: 8px; }
 
     /* ── Per-asset destination picker (3-team trades) ── */
     .ta-dest-row { display: flex; gap: 6px; padding: 0 14px 7px 37px; flex-wrap: wrap; }
@@ -325,6 +327,11 @@
   <script>
   'use strict';
 
+  // A stale cached /shared-utils.js can predate the My Ranks badges (mrb*).
+  // Every badge call site is unconditional, so stub it rather than let a
+  // ReferenceError take the whole page down — same defence the ranks grid uses.
+  if (typeof mrbBadge !== 'function') window.mrbBadge = () => '';
+
   const API = window.location.hostname === 'ffhistorian.com'
     ? 'https://helper.ffhistorian.com/api'
     : '/api';
@@ -357,6 +364,7 @@
   let _teamIds  = [];
   let _routes   = [];
   let _analysis = null;
+  let _painted  = false;   // init has chosen and rendered a view — see taRedraw()
   let _myRosterId = null;   // the signed-in user's roster in this league (Sleeper only)
   let _myUserId   = null;   // …and their Sleeper user id (the trade DM's author)
   // "Propose in Sleeper" flow: null | {stage:'confirm'|'sending'|'sent'|'error', assets, tx?, msg?}.
@@ -747,7 +755,7 @@
     const nflSeason  = nflRes?.season || String(new Date().getFullYear());
     const fcMap      = buildFcMap(fcRes, { redraft: !isDynasty });
     const fcPickMap  = buildPickValueMap(fcRes);
-    const { players } = buildPlayerMap(playersRes);
+    const { players, byName } = buildPlayerMap(playersRes);   // byName feeds the My Ranks badge index
 
     const userMap = {};
     for (const u of (usersRes || [])) {
@@ -954,7 +962,7 @@
       teams: simTeams, lgName, category, season: nflSeason,
       formatFlags: buildFormatFlags(leagueRes || {}),
       numTeams, playoffTeams, hasIDP,
-      allRosters, tradedPicks, players, fcMap, fcPickMap, ridToSlot, numRounds,
+      allRosters, tradedPicks, players, byName, fcMap, fcPickMap, ridToSlot, numRounds,
       rp, scoringSettings, rosterNames,
       leagueUsers: usersRes || [],   // raw /users rows — the trade DM embeds them
     };
@@ -1125,7 +1133,7 @@
       teams: simTeams, lgName, category: 'redraft', season: nflSeason,
       formatFlags: buildFormatFlags({ scoring_settings: scoringSettings, roster_positions: rp }),
       numTeams, playoffTeams, hasIDP: false,
-      players, fcMap, rp, scoringSettings,
+      players, byName, fcMap, rp, scoringSettings,
       espnPrimaryOwnerByTeamId,
     };
     _simData = { matchupsByWeek, futureWeeks, projectionsByWeek, muMap, sigmaMap, useFc, potentialPtsSoFar };
@@ -1243,6 +1251,53 @@
       <span class="az-badge ${badgeCls}">${badgeLbl}</span>
       <span class="az-flag">${numTeams} Teams</span>
       ${(formatFlags || []).map(f => `<span class="az-flag${f.hi ? ' az-flag-hi' : ''}">${f.label}</span>`).join('')}
+    </div>` + taRankSourceBar();
+  }
+
+  // ── My Ranks badges ─────────────────────────────────────────────────────────
+  // "RB12 · #27" beside each tradeable player, off one of your My Ranks sets.
+  // An identifier only — FantasyCalc still prices both sides of the trade,
+  // because the balance bar compares SUMS and a rank cannot be summed. The set
+  // is remembered per format, so a dynasty league and a redraft league can sit
+  // on different boards (mrbSourceKey in shared-utils.js).
+  function taMrbCtx() {
+    const d = _rawData || {};
+    return { dynasty: d.category === 'dynasty', players: d.players, byName: d.byName, fcMap: d.fcMap };
+  }
+
+  async function taLoadMyRanks() {
+    if (typeof mrbLoad !== 'function' || !_rawData) return;   // stale shared-utils.js
+    await mrbLoad(taMrbCtx());
+    taRedraw();
+  }
+
+  // Whichever view is up — the badges show in both. renderTradeBuilder() keeps
+  // `_analysis`, so redrawing under a finished analysis does not discard it.
+  // Does nothing before init has painted once: the badge fetch is started early
+  // and could otherwise land first and render a view init is about to replace.
+  function taRedraw() {
+    if (!_painted) return;
+    if (_teamIds.length >= 2) renderTradeBuilder();
+    else renderTeamSelect();
+  }
+
+  window.taSetRankSource = async function (id) {
+    await mrbSelectSource(id, taMrbCtx());
+    taRedraw();
+  };
+
+  // Renders nothing when signed out or when no sets exist — an extra read on
+  // the page, never a call to action.
+  function taRankSourceBar() {
+    if (typeof MRB === 'undefined' || !MRB.sources?.length) return '';
+    const n = Object.keys(MRB.index || {}).length;
+    const note = MRB.error ? esc(MRB.error)
+      : !n ? 'no players in this set matched'
+      : `${n} ranked${MRB.unmatched ? ` · ${MRB.unmatched} unmatched` : ''} · ${MRB.format} board`;
+    return `<div class="mrb-bar" style="margin:8px 0 2px;">
+      <label>My Ranks</label>
+      ${mrbSourceSelectHtml('taSetRankSource')}
+      <span class="mrb-note">${note}</span>
     </div>`;
   }
 
@@ -1449,9 +1504,13 @@
     const playerSections = POS_ORDER.filter(p => byPos[p]?.length).map(pos => {
       const rows = byPos[pos].map(pl => {
         const key = playerKey(pl); const sel = routes.has(key);
-        return `<div class="ta-asset-row${sel ? ' selected' : ''}" onclick="toggleAsset(${sideIdx},'${key}')">
+        // My Ranks identifier beside the name. The name stops stretching when
+        // there is one so the rank reads against it, not against the value.
+        const badge = mrbBadge(pl.pid);
+        return `<div class="ta-asset-row${sel ? ' selected' : ''}${badge ? ' ta-ranked' : ''}" onclick="toggleAsset(${sideIdx},'${key}')">
           <div class="ta-check"></div>
           <span class="ta-asset-name">${esc(pl.name)}</span>
+          ${badge ? badge + '<span class="ta-gap"></span>' : ''}
           <span class="ta-asset-val">${pl.val > 0 ? Number(Math.round(pl.val)).toLocaleString() : '—'}</span>
         </div>${sel ? destPickerHtml(key) : ''}`;
       }).join('');
@@ -2004,6 +2063,10 @@
       document.getElementById('league-title').textContent = _rawData.lgName + ' · ' + _rawData.season;
       document.title = 'Trade Analyzer — ' + _rawData.lgName;
 
+      // Badges are non-blocking and land on a redraw. Kicked off HERE, ahead of
+      // every branch below — the preset-trade path renders and returns early.
+      taLoadMyRanks();
+
       // Auto-detect user's team as Team A
       const user = SharedAuth.getUser?.();
       if (isEspn && !_teamIds.length) {
@@ -2032,7 +2095,7 @@
 
       // A whole trade passed in (Trades tab "Analyze") — load it and run the analysis.
       if (presetTrade.length && !isEspn) {
-        if (applyPresetTrade(presetTrade)) { renderTradeBuilder(); analyzeClick(); return; }
+        if (applyPresetTrade(presetTrade)) { _painted = true; renderTradeBuilder(); analyzeClick(); return; }
         _teamIds = _myRosterId != null && _rawData.teams.some(t => t.rosterId === _myRosterId) ? [_myRosterId] : [];
       }
 
@@ -2043,6 +2106,7 @@
       }
       _routes = _teamIds.map(() => new Map());
 
+      _painted = true;
       if (_teamIds.length >= 2) renderTradeBuilder();
       else renderTeamSelect();
     } catch(e) {

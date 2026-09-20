@@ -699,6 +699,187 @@ async function crLoadLeagueOwnership({ apiBase, leagueId, espn, espnId, season, 
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// MY RANKS BADGES (mrb*)
+// ════════════════════════════════════════════════════════════════════════════
+// "RB12 · #27" beside a player's name, read off one of your My Ranks sets, on
+// the two standalone pages that value rosters — analyzer.html and
+// trade-analyzer.html. It is an IDENTIFIER, not a valuation: FantasyCalc still
+// drives every number those pages sum, because a rank is ordinal and a roster
+// total is a sum (WR1 + WR2 is not 3). This just says where your own board has
+// the player, next to the market's price for him.
+//
+// The set is picked PER FORMAT and remembered per format (mrbSourceKey): a
+// dynasty league and a redraft league want different boards, and choosing one
+// must not re-point the other. My Ranks has no dynasty/redraft flag of its own
+// — a set is just {id, name} — so "the dynasty source" means whichever named
+// set you pick while looking at a dynasty league.
+//
+// HOW PRECISE THE NUMBER IS. My Ranks stores a tier per player and nothing
+// else, so the order INSIDE a tier is the FantasyCalc tiebreak, not an opinion
+// your board ever expressed — the same fact the grid's delta handles by
+// comparing tier midpoints. Here the overall number is a locator rather than a
+// measurement, so it is shown as-is and the tier rides along in the tooltip;
+// read a gap of a few spots inside one tier as noise.
+
+const MRB_LS_PREFIX = 'mrb_source_';   // + 'dynasty' | 'redraft'
+
+const MRB = {
+  sources:     null,   // [{id, label, rankings?}] — fetched once per page
+  index:       {},     // {pid: {overall, posRank, tier, pos}}
+  cache:       {},     // {sourceId: index} — switching back does not refetch
+  sourceId:    null,
+  sourceLabel: '',
+  format:      'redraft',
+  unmatched:   0,
+  error:       null,
+};
+
+// The set list from myranks.ffhistorian.com. Pure — it RETURNS the list rather
+// than assigning it, so the grid (mrgLoadSources) and the badges share one
+// definition of the id scheme instead of drifting apart.
+async function mrbFetchSources() {
+  const [dataRes, setsRes] = await Promise.all([
+    fetch(MRG_MYRANKS_API + '/api/myranks/data',  { credentials: 'include' }),
+    fetch(MRG_MYRANKS_API + '/api/myranks/sets',  { credentials: 'include' }),
+  ]);
+  if (!dataRes.ok || !setsRes.ok) throw new Error('Could not load your My Ranks sets — sign in at myranks.ffhistorian.com');
+  const [data, sets] = await Promise.all([dataRes.json(), setsRes.json()]);
+
+  const out = [];
+  if (data.rankings?.length) out.push({ id: 'primary', label: 'My Rankings', rankings: data.rankings });
+  for (const s of (sets.sets || [])) out.push({ id: 'set:' + s.id, label: s.name });
+  for (const s of (sets.sharedSets || [])) {
+    out.push({
+      id: String(s.id),
+      label: s.is_primary
+        ? (s.owner_name ? `${s.owner_name}'s Rankings` : 'Shared Rankings')
+        : (s.owner_name ? `${s.name} (${s.owner_name})` : s.name),
+    });
+  }
+  return out;
+}
+
+// One set's rows. `sources` is consulted first because the primary board
+// already arrived inline with the list.
+async function mrbFetchRanksFor(id, sources) {
+  const src = (sources || []).find(s => s.id === id);
+  if (src?.rankings) return src.rankings;
+  const url = id.startsWith('primary:') ? `/api/myranks/data?owner_id=${encodeURIComponent(id.slice(8))}`
+            : id.startsWith('set:')     ? `/api/myranks/sets/${id.slice(4)}/data`
+            :                             `/api/myranks/sets/${id}/data`;
+  const r = await fetch(MRG_MYRANKS_API + url, { credentials: 'include' });
+  if (!r.ok) throw new Error('Could not load that ranking set');
+  return (await r.json()).rankings || [];
+}
+
+// THE ordering rule for a My Ranks set, in one place: tier, then FantasyCalc
+// value descending, then name. Without the FantasyCalc tiebreak a tier would
+// read alphabetically, which looks like a ranking and is not one. Rows come
+// back carrying `overall` (1..N over the whole set) and `posRank` (1..N within
+// the player's position) — the two numbers the badge shows.
+function mrbRankRows(rankings, ctx = {}) {
+  const byName = ctx.byName || {}, players = ctx.players || {}, fc = ctx.fcMap || {};
+  const rows = (rankings || []).map(r => {
+    const pid = byName[normName(r.player_name)] || null;
+    const p   = pid ? players[pid] : null;
+    return {
+      pid,
+      name: p?.full_name || r.player_name,
+      team: p?.team || r.team || '',
+      pos:  crNormPos(p?.position) || crNormPos(r.position) || null,
+      tier: Number(r.tier) || 0,
+      fc:   pid ? (fc[String(pid)] ?? 0) : 0,
+    };
+  });
+  rows.sort((a, b) => a.tier !== b.tier ? a.tier - b.tier
+                    : b.fc   !== a.fc   ? b.fc - a.fc
+                    : a.name.localeCompare(b.name));
+  const posN = {};
+  rows.forEach((r, i) => {
+    r.overall = i + 1;
+    r.posRank = r.pos ? (posN[r.pos] = (posN[r.pos] || 0) + 1) : null;
+  });
+  return rows;
+}
+
+// Ranked rows → {pid: {overall, posRank, tier, pos}}. First row for a pid wins;
+// a set listing someone twice is a data error, not two ranks.
+function mrbIndexRows(rows) {
+  const idx = {};
+  for (const r of rows) {
+    const k = r.pid ? String(r.pid) : '';
+    if (k && !idx[k]) idx[k] = { overall: r.overall, posRank: r.posRank, tier: r.tier, pos: r.pos };
+  }
+  return idx;
+}
+
+function mrbSourceKey(format) { return MRB_LS_PREFIX + (format === 'dynasty' ? 'dynasty' : 'redraft'); }
+
+function mrbStoredSource(format) {
+  try { return localStorage.getItem(mrbSourceKey(format)) || null; } catch (_) { return null; }
+}
+
+// Load the badge index for one league format. Safe to call repeatedly: the set
+// list is fetched once per page and an already-indexed set is served from
+// MRB.cache. Never throws — a signed-out user or a dead feed leaves an empty
+// index and a message in MRB.error, and every badge simply renders as ''.
+// ctx: {dynasty, players, byName, fcMap, sourceId?}
+async function mrbLoad(ctx = {}) {
+  const format = ctx.dynasty ? 'dynasty' : 'redraft';
+  MRB.format = format;
+  MRB.error  = null;
+  try {
+    if (!MRB.sources) MRB.sources = await mrbFetchSources();
+    if (!MRB.sources.length) { MRB.index = {}; MRB.sourceId = null; MRB.sourceLabel = ''; return MRB; }
+
+    let id = ctx.sourceId || mrbStoredSource(format);
+    if (!id || !MRB.sources.some(s => s.id === id)) id = MRB.sources[0].id;
+    MRB.sourceId    = id;
+    MRB.sourceLabel = MRB.sources.find(s => s.id === id)?.label || '';
+
+    if (MRB.cache[id]) { MRB.index = MRB.cache[id].index; MRB.unmatched = MRB.cache[id].unmatched; return MRB; }
+    const rows = mrbRankRows(await mrbFetchRanksFor(id, MRB.sources), ctx);
+    MRB.index      = mrbIndexRows(rows);
+    MRB.unmatched  = rows.filter(r => !r.pid).length;
+    MRB.cache[id]  = { index: MRB.index, unmatched: MRB.unmatched };
+  } catch (e) {
+    MRB.error = e.message || String(e);
+    MRB.index = {};
+  }
+  return MRB;
+}
+
+// Remember the chosen set for this format, then reload it.
+async function mrbSelectSource(id, ctx = {}) {
+  try { localStorage.setItem(mrbSourceKey(ctx.dynasty ? 'dynasty' : 'redraft'), id); } catch (_) {}
+  return mrbLoad({ ...ctx, sourceId: id });
+}
+
+// "RB12 · #27". Returns '' for anyone the set does not rank, so a caller can
+// concatenate it unconditionally.
+function mrbBadge(pid) {
+  const e = pid == null ? null : MRB.index?.[String(pid)];
+  if (!e) return '';
+  const pr    = e.pos && e.posRank ? `${e.pos}${e.posRank}` : '';
+  const title = `My Ranks${MRB.sourceLabel ? ' · ' + MRB.sourceLabel : ''}`
+              + `${e.tier ? ` · tier ${e.tier}` : ''}`
+              + `${pr ? ` · ${pr}` : ''} · overall #${e.overall}`;
+  return `<span class="mrb-badge" title="${esc(title)}">`
+       + (pr ? `<b>${pr}</b><i>·</i>` : '')
+       + `#${e.overall}</span>`;
+}
+
+// The <select> of ranking sets. `onchange` is the name of a page-level handler
+// taking the new id; the page owns the reload + redraw because only it knows
+// what to redraw.
+function mrbSourceSelectHtml(onchange, cls = 'mrb-select') {
+  if (!MRB.sources?.length) return '';
+  const opts = MRB.sources.map(s =>
+    `<option value="${esc(s.id)}"${s.id === MRB.sourceId ? ' selected' : ''}>${esc(s.label)}</option>`).join('');
+  return `<select class="${cls}" onchange="${onchange}(this.value)">${opts}</select>`;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // MY RANKS GRID (mrg*)
 // ════════════════════════════════════════════════════════════════════════════
 // A ranking set from myranks.ffhistorian.com, laid out as a grid with ONE
@@ -936,39 +1117,15 @@ async function mrgEnsureLeagues() {
 // ── Ranking sets ─────────────────────────────────────────────────────────────
 // Same id scheme the Draft Tracker's picker uses: 'primary' | 'primary:{userId}'
 // (a board shared with me) | 'set:{id}' (mine) | '{id}' (a named set shared with me).
+// Both of these are the mrb* definitions — the set-id scheme and the fetch
+// shape live once (see MY RANKS BADGES) so the grid and the badges cannot drift.
 async function mrgLoadSources() {
-  const [dataRes, setsRes] = await Promise.all([
-    fetch(MRG_MYRANKS_API + '/api/myranks/data',  { credentials: 'include' }),
-    fetch(MRG_MYRANKS_API + '/api/myranks/sets',  { credentials: 'include' }),
-  ]);
-  if (!dataRes.ok || !setsRes.ok) throw new Error('Could not load your My Ranks sets — sign in at myranks.ffhistorian.com');
-  const [data, sets] = await Promise.all([dataRes.json(), setsRes.json()]);
-
-  const out = [];
-  if (data.rankings?.length) out.push({ id: 'primary', label: 'My Rankings', rankings: data.rankings });
-  for (const s of (sets.sets || [])) out.push({ id: 'set:' + s.id, label: s.name });
-  for (const s of (sets.sharedSets || [])) {
-    out.push({
-      id: String(s.id),
-      label: s.is_primary
-        ? (s.owner_name ? `${s.owner_name}'s Rankings` : 'Shared Rankings')
-        : (s.owner_name ? `${s.name} (${s.owner_name})` : s.name),
-    });
-  }
+  const out = await mrbFetchSources();
   MRG.sources = out;
   if (!out.some(s => s.id === MRG.sourceId)) MRG.sourceId = out[0]?.id || null;
 }
 
-async function mrgFetchRanks(id) {
-  const src = (MRG.sources || []).find(s => s.id === id);
-  if (src?.rankings) return src.rankings;
-  const url = id.startsWith('primary:') ? `/api/myranks/data?owner_id=${encodeURIComponent(id.slice(8))}`
-            : id.startsWith('set:')     ? `/api/myranks/sets/${id.slice(4)}/data`
-            :                             `/api/myranks/sets/${id}/data`;
-  const r = await fetch(MRG_MYRANKS_API + url, { credentials: 'include' });
-  if (!r.ok) throw new Error('Could not load that ranking set');
-  return (await r.json()).rankings || [];
-}
+function mrgFetchRanks(id) { return mrbFetchRanksFor(id, MRG.sources); }
 
 async function mrgLoadRanks() {
   if (!MRG.sourceId) { MRG.rows = []; return; }
@@ -978,25 +1135,11 @@ async function mrgLoadRanks() {
   MRG.unmatched = MRG.rows.filter(r => !r.pid).length;
 }
 
+// Tier → FantasyCalc desc → name, and the `overall` that falls out of it. The
+// rule itself is mrbRankRows (see MY RANKS BADGES); this just feeds it MRG's
+// context. Rows also carry `posRank`, which the grid does not use.
 function mrgBuildRows(rankings) {
-  const byName = MRG.byName || {}, players = MRG.players || {}, fc = MRG.fcMap || {};
-  const rows = (rankings || []).map(r => {
-    const pid = byName[normName(r.player_name)] || null;
-    const p   = pid ? players[pid] : null;
-    return {
-      pid,
-      name: p?.full_name || r.player_name,
-      team: p?.team || r.team || '',
-      pos:  crNormPos(p?.position) || crNormPos(r.position) || null,
-      tier: Number(r.tier) || 0,
-      fc:   pid ? (fc[String(pid)] ?? 0) : 0,
-    };
-  });
-  rows.sort((a, b) => a.tier !== b.tier ? a.tier - b.tier
-                    : b.fc   !== a.fc   ? b.fc - a.fc
-                    : a.name.localeCompare(b.name));
-  rows.forEach((r, i) => { r.overall = i + 1; });
-  return rows;
+  return mrbRankRows(rankings, { byName: MRG.byName, players: MRG.players, fcMap: MRG.fcMap });
 }
 
 // ── Columns ──────────────────────────────────────────────────────────────────

@@ -126,3 +126,22 @@ body::before {
               color: var(--cream); font-family: 'Crimson Text', serif; font-size: 0.9rem;
               padding: 6px 10px; border-radius: 2px; outline: none; cursor: pointer; }
 .mrg-select:focus { border-color: var(--gold); }
+
+/* ── My Ranks badges (mrb*) ────────────────────────────────────────────────
+   "RB12 · #27" beside a player's name in analyzer.html / trade-analyzer.html.
+   Deliberately quiet: it is an identifier sitting next to a value, so it must
+   never out-read the value column it is explaining. */
+.mrb-badge { flex-shrink: 0; font-family: 'Crimson Text', serif; font-size: 0.66rem;
+             color: var(--brown-light); letter-spacing: 0.02em; white-space: nowrap;
+             opacity: 0.85; cursor: help; }
+.mrb-badge b { font-weight: 600; color: var(--gold-light); }
+.mrb-badge i { font-style: normal; opacity: 0.45; margin: 0 3px; }
+.mrb-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+           font-family: 'Crimson Text', serif; font-size: 0.78rem; color: var(--brown-light); }
+.mrb-bar label { font-family: 'Rye', serif; font-size: 0.46rem; letter-spacing: 0.15em;
+                 text-transform: uppercase; color: var(--brown-light); }
+.mrb-note { font-style: italic; opacity: 0.7; }
+.mrb-select { max-width: 240px; background: var(--brown-dark); border: 1px solid var(--brown-mid);
+              color: var(--cream); font-family: 'Crimson Text', serif; font-size: 0.82rem;
+              padding: 4px 8px; border-radius: 2px; outline: none; cursor: pointer; }
+.mrb-select:focus { border-color: var(--gold); }
