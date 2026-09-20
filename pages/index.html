@@ -4985,7 +4985,7 @@ const GUIDE = [
       desc:'Every pending trade offer across every league in one list, with real player names instead of ID numbers.' },
     { name:'Trade Partners',   tab:'partners',
       desc:"Type another manager's name and see every league you share with them." },
-    { name:'Scout',            tab:'scout',
+    { name:'Scout',            tab:'scout',      espn:true,
       desc:"Hunts for trade openings — where you're contending and someone's rebuilding, or who's stacked at a position." },
     { name:'Mass Offers',      tab:'offers',     write:'Sends trades',
       desc:'Shop one of your players to a whole league, or bid a draft pick for a player in every league he is on — review each offer, then send them all.' },
@@ -7242,8 +7242,12 @@ async function lsLoadEspnLeague(lg) {
     });
     const standing = sorted.findIndex(t => t.id === myTeam.id) + 1;
 
-    const rosterPlayers = {}, rosterStats = {};
+    const rosterPlayers = {}, rosterStats = {}, rosterNames = {};
     for (const t of teams) {
+      // ESPN's modern shape is a single `name`; older payloads split it into
+      // location + nickname. Scout renders these on its result cards — ESPN has
+      // no /users endpoint to resolve a team id against the way Sleeper does.
+      rosterNames[t.id] = t.name || [t.location, t.nickname].filter(Boolean).join(' ') || ('Team ' + t.id);
       const pids = [];
       for (const entry of (t.roster?.entries || [])) {
         const pl  = entry.playerPoolEntry?.playerPoolEntry?.player || entry.playerPoolEntry?.player;
@@ -7280,7 +7284,7 @@ async function lsLoadEspnLeague(lg) {
       losses: rec.losses || 0,
       myRosterId: myTeam.id,
       apWins: null, apLosses: null,
-      rosterPlayers, rosterStats,
+      rosterPlayers, rosterStats, rosterNames,
       median: false, banked, weekly,
       _espn: { id: espnId, settings: d.settings, schedule },
     };
@@ -8684,8 +8688,13 @@ function scoutNumChoices(presets, cur) {
 }
 
 // Sleeper league type 2 = dynasty/keeper; everything else (redraft, best-ball) = redraft.
+// ESPN has no dynasty concept in anything this app can read, so every ESPN league
+// is redraft — said explicitly rather than relying on the undefined settings.type
+// falling through, since that reads as an accident.
 function scoutLeagueFormat(lgId) {
-  return S.leagueDetails[lgId]?.settings?.type === 2 ? 'dynasty' : 'redraft';
+  const detail = S.leagueDetails[lgId];
+  if (detail?.source === 'espn' || String(lgId).startsWith('espn_')) return 'redraft';
+  return detail?.settings?.type === 2 ? 'dynasty' : 'redraft';
 }
 
 // playoff-odds fraction (0-1) → 'contender' | 'rebuilder' | 'middle'
@@ -8840,6 +8849,25 @@ async function scoutLoadFc(key) {
   }
   SC.fcCache[key] = map;
   return map;
+}
+
+// One league → the two format facts every ranking source needs: the scoring map
+// PPG is computed under, and the FantasyCalc key. Sleeper reads its league
+// detail; ESPN's equivalents come out of crParseEspnScoring — the same parser
+// the playoff-odds sim, the analyzer and the trade analyzer already use, so a
+// TE-premium or superflex ESPN league ranks the way it actually scores. ESPN is
+// always redraft, hence the hardcoded `false` in the FC key.
+function scoutLeagueCtx(lg) {
+  if (lg.source === 'espn') {
+    const p   = crParseEspnScoring(LS.leagueData[lg.league_id]?._espn?.settings);
+    const rec = Number(p.ppr ?? 1);
+    return {
+      scoring: p.scoring || {},
+      fcKey:   `false|${p.numQbs >= 2 ? 2 : 1}|${rec >= 0.75 ? '1' : rec >= 0.25 ? '0.5' : '0'}`,
+    };
+  }
+  const detail = S.leagueDetails[lg.league_id];
+  return { scoring: detail?.scoring_settings || {}, fcKey: scoutFcKey(detail) };
 }
 
 // Per-league positional ranks: {pid: {rank, ppg, tier}} for QB/RB/WR/TE.
@@ -9024,10 +9052,18 @@ async function scoutRun() {
       .filter(lg => lg.source !== 'espn' && !S.leagueDetails[lg.league_id])
       .map(lg => api('/league/' + lg.league_id).then(dd => { if (dd) S.leagueDetails[lg.league_id] = dd; }).catch(() => {})));
 
-    // Playoff odds — run the shared sim if any Sleeper league still lacks a
-    // per-roster odds map (lsDrawTable is a no-op while this tab is active).
+    // ESPN leagues are appended to S.leagues asynchronously by loadEspnLeagues(),
+    // so one can arrive after lsLoadData() already ran and have no LS.leagueData
+    // entry at all. Same backfill League Summaries does for itself.
+    await Promise.all(S.leagues
+      .filter(lg => lg.source === 'espn' && !LS.leagueData[lg.league_id])
+      .map(lg => lsLoadEspnLeague(lg)));
+
+    // Playoff odds — run the shared sim if any league still lacks a per-roster
+    // odds map (lsDrawTable is a no-op while this tab is active). ESPN leagues
+    // are simulated by the same code path off their real ESPN schedule.
     const needsOdds = S.leagues.some(lg =>
-      lg.source !== 'espn' && LS.leagueData[lg.league_id] && !LS.leagueData[lg.league_id].allPlayoffOdds
+      LS.leagueData[lg.league_id] && !LS.leagueData[lg.league_id].allPlayoffOdds
     );
     if (needsOdds) {
       SC.progress = 'Simulating playoff odds — up to a minute the first time, instant afterward…';
@@ -9061,7 +9097,6 @@ async function scoutRun() {
     // Season-to-date actuals back the PPG shown on every row, whichever source
     // ordered the players. The ranking source's own data loads once, up front —
     // the per-league loop below is synchronous.
-    const sleeperLeagues = S.leagues.filter(lg => lg.source !== 'espn');
     await scoutLoadStats();
     let myRanksMap = null;
     if (SC.rankSrc === 'myranks') {
@@ -9071,18 +9106,17 @@ async function scoutRun() {
     } else if (SC.rankSrc === 'fc') {
       SC.progress = 'Loading FantasyCalc values…';
       renderScout();
-      const keys = [...new Set(sleeperLeagues.map(lg => scoutFcKey(S.leagueDetails[lg.league_id])))];
+      const keys = [...new Set(S.leagues.map(lg => scoutLeagueCtx(lg).fcKey))];
       await Promise.all(keys.map(k => scoutLoadFc(k)));
     }
 
     const results = [];
     const ranksCache = {};   // mode + source + scoring_settings → pos-rank map (many leagues share a config)
-    let noOddsCount = 0, espnCount = 0, otherFormatCount = 0;
+    let noOddsCount = 0, unreadCount = 0, otherFormatCount = 0;
     const rdCfg = SC.settings.redraft[SC.pos];   // redraft surplus config for the chosen position
     for (const lg of S.leagues) {
-      if (lg.source === 'espn') { espnCount++; continue; }   // Sleeper only for v1
       const d = LS.leagueData[lg.league_id];
-      if (!d || !d.rosterPlayers) continue;
+      if (!d || !d.rosterPlayers) { unreadCount++; continue; }
       if (scoutLeagueFormat(lg.league_id) !== SC.format) { otherFormatCount++; continue; }
 
       // Contender/rebuilder only gates DYNASTY. In redraft every team is playing for
@@ -9096,8 +9130,9 @@ async function scoutRun() {
         if (myClass !== want) continue;
       }
 
-      const scoring = S.leagueDetails[lg.league_id]?.scoring_settings || {};
-      const fcKey   = SC.rankSrc === 'fc' ? scoutFcKey(S.leagueDetails[lg.league_id]) : '';
+      const lgCtx   = scoutLeagueCtx(lg);
+      const scoring = lgCtx.scoring;
+      const fcKey   = SC.rankSrc === 'fc' ? lgCtx.fcKey : '';
       const ckey    = [mode, SC.rankSrc, fcKey, JSON.stringify(scoring)].join('|');
       const ranks   = ranksCache[ckey] || (ranksCache[ckey] = scoutPosRanks(scoring, {
         projCtx, mode, rankSrc: SC.rankSrc, myRanks: myRanksMap, fcMap: SC.fcCache[fcKey],
@@ -9133,7 +9168,7 @@ async function scoutRun() {
           const hits = hitsFor(pids);
           if (teamQualifies(hits)) teams.push({ rid, cls, odds: d.allPlayoffOdds?.[rid] ?? null, players: hits.map(mkPlayer).sort((a, b) => a.rank - b.rank) });
         }
-        if (teams.length) results.push({ lgId: lg.league_id, name: lg.name || 'Unnamed', myOdds, myClass, teams, myPlayers: [] });
+        if (teams.length) results.push({ lgId: lg.league_id, name: lg.name || 'Unnamed', isEspn: lg.source === 'espn', myOdds, myClass, teams, myPlayers: [] });
       } else {
         const mine = hitsFor(d.rosterPlayers[d.myRosterId]);
         if (!teamQualifies(mine)) continue;
@@ -9145,7 +9180,7 @@ async function scoutRun() {
           if (SC.format === 'dynasty' && !scoutOppMatches(cls)) continue;
           teams.push({ rid, cls, odds: d.allPlayoffOdds?.[rid] ?? null, players: [] });
         }
-        if (teams.length) results.push({ lgId: lg.league_id, name: lg.name || 'Unnamed', myOdds, myClass, teams, myPlayers: mine.map(mkPlayer).sort((a, b) => a.rank - b.rank) });
+        if (teams.length) results.push({ lgId: lg.league_id, name: lg.name || 'Unnamed', isEspn: lg.source === 'espn', myOdds, myClass, teams, myPlayers: mine.map(mkPlayer).sort((a, b) => a.rank - b.rank) });
       }
     }
 
@@ -9154,6 +9189,9 @@ async function scoutRun() {
     renderScout();
     await Promise.all(results.map(async res => {
       if (SC.rosterMeta[res.lgId]) return;
+      // ESPN publishes no /users equivalent — the team names came down with the
+      // roster load, so there is nothing to fetch here.
+      if (res.isEspn) { SC.rosterMeta[res.lgId] = LS.leagueData[res.lgId]?.rosterNames || {}; return; }
       try {
         const users = await api('/league/' + res.lgId + '/users') || [];
         const byUser = {};
@@ -9169,7 +9207,7 @@ async function scoutRun() {
     SC.skipNote = [
       otherFormatCount ? `${otherFormatCount} ${SC.format === 'dynasty' ? 'redraft' : 'dynasty'} league${otherFormatCount !== 1 ? 's' : ''} not searched (switch format above)` : '',
       noOddsCount ? `${noOddsCount} league${noOddsCount !== 1 ? 's' : ''} skipped (no playoff odds yet — set a Root For Me pref or wait for projections)` : '',
-      espnCount ? `${espnCount} ESPN league${espnCount !== 1 ? 's' : ''} not searched (Sleeper only for now)` : '',
+      unreadCount ? `${unreadCount} league${unreadCount !== 1 ? 's' : ''} skipped (couldn’t read your team — check credentials for ESPN leagues)` : '',
       SC.rankSrc !== 'fc' && mode === 'adp' ? 'projections unavailable — ranked by ADP instead' : '',
     ].filter(Boolean).join(' · ');
     SC.progress = '';
@@ -9219,6 +9257,7 @@ function scoutDrawResults() {
     const head = `
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
         <a href="/analyzer?league=${encodeURIComponent(res.lgId)}" class="card-link">${esc(res.name)}</a>
+        ${res.isEspn ? '<span class="badge badge-outline">ESPN</span>' : ''}
         ${scoutClassBadge(res.myClass, res.myOdds)}
       </div>`;
 
