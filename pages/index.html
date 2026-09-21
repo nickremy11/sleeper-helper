@@ -489,6 +489,8 @@ a.row-link.ls-contender-name { color: var(--gold-light); font-weight: 700; }
 .mo-offer-title { flex: 1; min-width: 0; font-family: 'Playfair Display', serif; font-weight: 700; color: var(--cream); font-size: 0.95rem; }
 .mo-offer-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; margin: 6px 0 0 26px; }
 .mo-side-lbl { font-family: 'Rye', serif; font-size: 0.48rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold); margin-bottom: 2px; }
+.mo-ctx { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 3px 0 0 26px; }
+.mo-ctx-rec { font-family: 'Playfair Display', serif; font-size: 0.85rem; color: var(--parchment); }
 .mo-offer .mo-note { margin: 4px 0 0 26px; }
 .mo-status { margin: 6px 0 0 26px; font-size: 0.9rem; }
 .mo-ok  { color: #7ed07e; }
@@ -1247,6 +1249,7 @@ const MO = {
   err: '',
   data: {},           // {lgId: {league, rosters, users, traded, drafts}} — users/traded/drafts loaded on build
   rostersAt: 0, loadingRosters: false, _rosterP: null,
+  oddsLoading: false, oddsErr: '',   // the opt-in playoff-odds load — see moLoadOdds
 };
 const MO_TTL          = 5 * 60 * 1000;
 const MO_PICK_SEASONS = 3;     // future seasons of picks considered tradeable
@@ -1375,6 +1378,73 @@ function moAssetLabel(d, a) {
 }
 function moAssetKey(a) {
   return a.kind === 'player' ? `p~${a.pid}~${a.from}` : `k~${a.season}~${a.round}~${a.orig}~${a.from}`;
+}
+
+// ── Who am I offering this to? ──
+// Deciding which of 11 managers to shop a player to is a question about their
+// season, so every offer row carries the other team's record and playoff odds.
+
+// Record is free — it's in the roster rows moLoadRosters already has.
+// A 0-0 team is preseason, where a record is noise rather than context.
+function moTeamRecord(d, rid) {
+  const st = (d?.rosters || []).find(r => r.roster_id === rid)?.settings;
+  if (!st) return null;
+  const w = st.wins || 0, l = st.losses || 0, t = st.ties || 0;
+  if (!w && !l && !t) return null;
+  return t ? `${w}-${l}-${t}` : `${w}-${l}`;
+}
+
+// Odds are League Summaries' simulation — its full per-roster map, the same one
+// Scout reads. Present for free once Summaries or Scout has run this session (or
+// its 24h cache was restored); null otherwise, which moLoadOdds is the opt-in for.
+function moTeamOdds(lgId, rid) {
+  const o = LS.leagueData[lgId]?.allPlayoffOdds?.[rid];
+  return o == null || Number.isNaN(o) ? null : o;
+}
+
+// Contender/rebuilder wording and colour come from scoutClassify + scoutClassBadge
+// so a team reads the same here as it does on a Scout card, against the same
+// user-configured thresholds. Called only with real odds — "Middle —" is not context.
+function moContextHtml(d, o) {
+  const rec  = moTeamRecord(d, o.rid);
+  const odds = moTeamOdds(o.lgId, o.rid);
+  const bits = [];
+  if (rec) bits.push(`<span class="mo-ctx-rec">${rec}</span>`);
+  // No odds is said once, by the header's "add playoff odds" link — a row each
+  // would be a dozen identical lines saying nothing about this team.
+  if (odds != null) bits.push(scoutClassBadge(scoutClassify(odds, o.lgId), odds));
+  return bits.length ? `<div class="mo-ctx">${bits.join('')}</div>` : '';
+}
+
+function moOfferLeagueIds() { return [...new Set(MO.offers.map(o => o.lgId))]; }
+function moOddsMissing()    { return moOfferLeagueIds().filter(id => !LS.leagueData[id]?.allPlayoffOdds).length; }
+
+// Runs the one copy of the simulation (League Summaries'), exactly the way Scout
+// drives it — lsLoadData for the inputs, the 24h localStorage cache reused, and a
+// re-sim only for what the cache didn't cover. It's an all-leagues job (ESPN
+// included, though offers are Sleeper-only) and a cold run is up to a minute, so
+// it's opt-in here rather than something building a list of offers waits on.
+async function moLoadOdds() {
+  if (MO.oddsLoading || MO.sending) return;
+  MO.oddsLoading = true; MO.oddsErr = ''; moDraw();
+  try {
+    if (!LS.loaded) { await lsLoadData(); LS.loaded = true; }
+    lsRestoreOddsCache();
+    if (moOddsMissing()) {
+      // lsSimulateAllLeagues no-ops while a run is already in flight (League
+      // Summaries'), so awaiting it would look like a failure rather than a wait.
+      if (LS.oddsLoading) {
+        MO.oddsErr = 'Odds are already being calculated — try again in a moment';
+      } else {
+        LS._oddsUseCache = true;
+        await lsSimulateAllLeagues();
+        if (moOddsMissing()) MO.oddsErr = LS.oddsError || 'Odds couldn’t be calculated for every league in this list';
+      }
+    }
+  } catch (e) {
+    MO.oddsErr = e.message || String(e);
+  }
+  MO.oddsLoading = false; moDraw();
 }
 
 // ── League lists ──
@@ -1630,6 +1700,7 @@ function moOfferHtml(o) {
       <div class="mo-offer-title">${title}</div>
       ${locked ? '' : `<button class="ghost-btn" onclick="moToggleEdit(${o.id})">${MO.editId === o.id ? 'Done' : 'Edit'}</button>`}
     </div>
+    ${moContextHtml(d, o)}
     <div class="mo-offer-sides">
       <div><div class="mo-side-lbl">You send</div>${list(send)}</div>
       <div><div class="mo-side-lbl">You get</div>${list(get)}</div>
@@ -1766,10 +1837,19 @@ function moDraw() {
     if (MO.building) {
       html += loading('Building offers…');
     } else if (MO.offers.length) {
+      // Each row carries the other manager's record; playoff odds need the shared
+      // simulation, offered here rather than run behind the user's back.
+      const missing = moOddsMissing();
+      const oddsCtl = MO.oddsLoading
+        ? ' · <span class="mo-meta">simulating playoff odds — up to a minute the first time…</span>'
+        : missing && !MO.sending
+          ? ` · <a href="#" onclick="moLoadOdds();return false;">add playoff odds</a>`
+          : '';
       html += step(4, 'Review and send', `
         <div class="mo-intro" style="margin:0 0 8px;">${MO.offers.length} offer${MO.offers.length === 1 ? '' : 's'} ·
           <a href="#" onclick="moSelectAll(true);return false;">select all</a> ·
-          <a href="#" onclick="moSelectAll(false);return false;">none</a></div>
+          <a href="#" onclick="moSelectAll(false);return false;">none</a>${oddsCtl}
+          ${MO.oddsErr ? `<span class="mo-bad"> · ${esc(MO.oddsErr)}</span>` : ''}</div>
         <div class="mo-list">${MO.offers.map(moOfferHtml).join('')}</div>
         ${moBarHtml()}`);
     }
