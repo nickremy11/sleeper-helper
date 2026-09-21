@@ -358,8 +358,8 @@ function renderSetup() {
 // ── Step 1: Username + League ─────────────────────────────────────────────────
 
 function renderStep1() {
-  const sorted = [...D.leagues].sort((a, b) => a.name.localeCompare(b.name));
-  const options = sorted.map(lg => {
+  // Sleeper's own league order, as everywhere else in the toolset — not alphabetical.
+  const options = D.leagues.map(lg => {
     const sel = D.selLeague?.league_id === lg.league_id ? 'selected' : '';
     return `<option value="${esc(lg.league_id)}" ${sel}>${esc(lg.name)} — ${lg.total_rosters || '?'} teams · ${lg.season || ''}</option>`;
   }).join('');

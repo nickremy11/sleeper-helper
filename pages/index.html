@@ -1911,9 +1911,9 @@ function pfRenderResults() {
     }
     if (!found) free.push({ name: rd.lg.name, lgId: rd.lg.league_id });
   }
-  mine.sort((a,b)   => a.lgName.localeCompare(b.lgName));
-  theirs.sort((a,b) => a.lgName.localeCompare(b.lgName));
-  free.sort((a,b)   => a.name.localeCompare(b.name));
+  // No sort: PF.allRosterData is built by mapping S.leagues, so each list already
+  // reads in Sleeper's own league order (ESPN appended) — the order every other
+  // league listing in the app uses. Alphabetizing here made this the odd one out.
 
   // Trade targets: leagues where I have player 2 AND someone else has player 1
   let tradeTargets = [];
