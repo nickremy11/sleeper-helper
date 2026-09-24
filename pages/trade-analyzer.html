@@ -674,8 +674,14 @@
 
   // opts.pointsOnly: rank by total points scored (not W/L). count → #1 in points,
   // count2 → top opts.topCount (default 3) in points, countLast → fewest points.
+  // opts.median: the league plays a second game each week against the league
+  // median (Sleeper `league_average_match`), so every week awards TWO wins, not
+  // one. Leaving this out was why this page disagreed with League Summaries and
+  // analyzer.html on median leagues — banked records already count two games a
+  // week, so simulating one made the start of the season count double.
   function runSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams, potentialPtsSoFar = {}, opts = {}, N = 5000) {
     const pointsOnly = !!opts.pointsOnly;
+    const median     = !!opts.median;
     const topCount   = opts.topCount || 3;
     const count = {}, count2 = {}, countLast = {};
     for (const t of teams) { count[t.rosterId] = 0; count2[t.rosterId] = 0; countLast[t.rosterId] = 0; }
@@ -688,6 +694,7 @@
           if (!m.matchup_id) continue;
           (groups[m.matchup_id] = groups[m.matchup_id] || []).push(m);
         }
+        const weekScores = [];
         for (const pair of Object.values(groups)) {
           if (pair.length !== 2) continue;
           const [a, b] = pair;
@@ -700,6 +707,11 @@
           potPts[b.roster_id] = (potPts[b.roster_id] || 0) + sB;
           if      (sA > sB) wins[a.roster_id] = (wins[a.roster_id] || 0) + 1;
           else if (sB > sA) wins[b.roster_id] = (wins[b.roster_id] || 0) + 1;
+          weekScores.push([a.roster_id, sA], [b.roster_id, sB]);
+        }
+        if (median && weekScores.length > 1) {
+          const cut = weekScores.map(x => x[1]).sort((x, y) => y - x)[Math.floor(weekScores.length / 2)];
+          for (const [rid, s] of weekScores) if (s > cut) wins[rid] = (wins[rid] || 0) + 1;
         }
       }
       const ranked = pointsOnly
@@ -814,7 +826,10 @@
     const playoffWeekStart   = leagueRes?.settings?.playoff_week_start ?? 15;
     // Points-only leagues run the full 17-week season with no bracket (and often
     // report playoff_week_start as 0), so simulate all 17 weeks.
-    const regularSeasonWeeks = isPointsOnly ? 17 : (playoffWeekStart - 1);
+    const regularSeasonWeeks = isPointsOnly ? 17 : Math.max(1, playoffWeekStart - 1);
+    // Median ("league average match") leagues play two games a week — the sim has
+    // to award both, or this page's odds drift from League Summaries / analyzer.html.
+    const isMedian           = leagueRes?.settings?.league_average_match === 1;
 
     const rosterNames = {};
     for (const r of allRosters) {
@@ -880,12 +895,35 @@
         fetch(`${API}/sleeper/league/${lgId}/matchups/${w}`).then(r => r.ok ? r.json() : []).catch(() => [])
       )
     );
+    // How many weeks are already INSIDE the teams' win/loss records. Simulate from
+    // exactly this count rather than from which weeks have points on the board:
+    // Sleeper flips its own state.week on Tuesday but processes records separately,
+    // so a week can be fully scored while nobody's record includes it yet (or the
+    // reverse, mid-week). Simulating a week that's already in the record
+    // double-counts it; skipping one that isn't throws a real result away — and
+    // either way this page reports different odds than the other two. A median
+    // league banks two games a week. Points-only leagues keep no meaningful
+    // in-platform W/L record, so they stay on the points-based detection.
+    const bankedWeeks = isPointsOnly ? null : Math.round(
+      Math.max(0, ...allRosters.map(r =>
+        (r.settings?.wins || 0) + (r.settings?.losses || 0) + (r.settings?.ties || 0)))
+      / (isMedian ? 2 : 1));
+
     const matchupsByWeek = {};
     const futureWeeks = [];
     matchupWeeks.forEach((matchups, idx) => {
       const week = idx + 1;
       matchupsByWeek[week] = matchups || [];
-      if (!(matchups || []).some(m => (m.points ?? 0) > 0)) futureWeeks.push(week);
+      const scored = (matchups || []).some(m => (m.points ?? 0) > 0);
+      const banked = bankedWeeks == null ? scored : (scored && week <= bankedWeeks);
+      if (!banked) futureWeeks.push(week);
+    });
+    // Mirrors analyzer.html's '[Analyzer odds] week accounting' and index.html's
+    // '[playoff odds] week accounting' — compare these first when the three disagree.
+    console.log('[Trade analyzer odds] week accounting', {
+      lgId, regularSeasonWeeks, isMedian, bankedWeeks,
+      playedWeeks: regularSeasonWeeks - futureWeeks.length, futureWeeks,
+      playoffTeams, numTeams,
     });
 
     // Best-ball-equivalent points banked so far, from real players_points on already-played weeks
@@ -954,7 +992,7 @@
           }
         }
       }
-      ({ odds: playoffOdds, top2: top2Odds, last: lastOdds } = runSimulation(simTeams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams, potentialPtsSoFar, { pointsOnly: isPointsOnly }));
+      ({ odds: playoffOdds, top2: top2Odds, last: lastOdds } = runSimulation(simTeams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams, potentialPtsSoFar, { pointsOnly: isPointsOnly, median: isMedian }));
     }
 
     // Next-year picks are re-valued off the original team's playoff odds. FC
@@ -997,7 +1035,7 @@
       rp, scoringSettings, rosterNames,
       leagueUsers: usersRes || [],   // raw /users rows — the trade DM embeds them
     };
-    _simData = { matchupsByWeek, futureWeeks, projectionsByWeek, muMap, sigmaMap, useFc, potentialPtsSoFar };
+    _simData = { matchupsByWeek, futureWeeks, projectionsByWeek, muMap, sigmaMap, useFc, potentialPtsSoFar, median: isMedian };
   }
 
   // ── ESPN load ────────────────────────────────────────────────────────────────
@@ -1193,7 +1231,7 @@
 
   function executeTradeAnalysis() {
     const { teams, players, rp, scoringSettings, fcMap } = _rawData;
-    const { matchupsByWeek, futureWeeks, projectionsByWeek, muMap, sigmaMap, useFc, potentialPtsSoFar } = _simData;
+    const { matchupsByWeek, futureWeeks, projectionsByWeek, muMap, sigmaMap, useFc, potentialPtsSoFar, median: isMedian } = _simData;
 
     const cloned = teams.map(t => ({ ...t, playerList: t.playerList.map(p => ({...p})), pickList: t.pickList.map(p => ({...p})) }));
     const cSides = _teamIds.map(rid => cloned.find(t => t.rosterId === rid));
@@ -1245,7 +1283,7 @@
       }
 
       const simTeams = cloned.filter(t => t.overall > 0 || t.wins > 0 || t.losses > 0);
-      const after = runSimulation(simTeams, matchupsByWeek, newMu, newSigma, futureWeeks, _rawData.playoffTeams, potentialPtsSoFar, { pointsOnly: isPointsOnly });
+      const after = runSimulation(simTeams, matchupsByWeek, newMu, newSigma, futureWeeks, _rawData.playoffTeams, potentialPtsSoFar, { pointsOnly: isPointsOnly, median: isMedian });
       afterOddsMap = after.odds; afterTop2Map = after.top2; afterLastMap = after.last;
     }
 
