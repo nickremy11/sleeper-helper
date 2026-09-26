@@ -365,22 +365,19 @@ footer a:hover { color: var(--gold); }
 .rg-fa  { background: rgba(235,195,55,0.28); box-shadow: inset 3px 0 0 #f0c93c; }
 .rg-fa  .rg-name { color: #f5da7a; }
 .rg-pill.on { border-color: var(--gold); color: var(--gold-light); }
-/* Starters the grid can't show. A thin strip rather than a card: it's a footnote
-   to the grid, and on a full lineup it is often empty. The two groups are
-   separated because they mean opposite things — one is settled, one is a gap in
-   what the sheet covers. */
-.rg-unranked { display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap;
-               padding: 7px 10px; margin-bottom: 10px; font-size: 0.7rem; color: var(--parchment);
-               background: rgba(0,0,0,0.2); border: 1px dashed var(--brown-mid); border-radius: 2px; }
-.rg-un-hd { font-family: 'Rye', serif; font-size: 0.45rem; letter-spacing: 0.12em;
-            text-transform: uppercase; color: var(--gold); flex-shrink: 0; }
+/* Starters the grid can't show. A plain line of text on the cream page, not a
+   panel — it's a footnote to the grid, and every colour here belongs to the
+   light background it actually sits on (the .rg-* rules above are for the dark
+   columns). The two groups are named separately because they mean opposite
+   things: one is settled, one is a gap in what the sheet covers. */
+.rg-unranked { display: flex; gap: 18px; align-items: baseline; flex-wrap: wrap;
+               margin-bottom: 12px; font-size: 0.8rem; color: var(--brown-dark); }
 .rg-un-grp { display: inline-flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
-.rg-un-grp b { font-family: 'Rye', serif; font-size: 0.45rem; letter-spacing: 0.1em;
-               text-transform: uppercase; color: var(--brown-light); font-weight: 400; }
-.rg-un-p em { font-style: normal; color: var(--gold-light); font-size: 0.66rem; margin-left: 3px; }
+.rg-un-grp b { color: var(--brown-mid); font-weight: 700; }
+.rg-un-p em { font-style: normal; color: var(--brown-light); margin-left: 3px; }
 .rg-un-p em::before { content: '('; }
 .rg-un-p em::after  { content: ')'; }
-.rg-un-sep { color: var(--brown-mid); }
+.rg-un-sep { color: var(--brown-light); }
 /* Waiver grid only. Owned-by-someone-else is the majority state, so it recedes
    rather than getting a colour of its own — the point of the view is that the
    yellow and green rows are the only ones that pop. Unmatched rows can't be
@@ -5291,12 +5288,11 @@ function rgUnrankedHtml(fix, mode, inGrid) {
   const played = rows.filter(e => e.played);
   const rest   = rows.filter(e => !e.played);
   const group = (label, list, tip) => list.length
-    ? `<span class="rg-un-grp" title="${esc(tip)}"><b>${label}</b>${list.map(name).join('<span class="rg-un-sep">·</span>')}</span>`
+    ? `<span class="rg-un-grp" title="${esc(tip)}"><b>${label}:</b>${list.map(name).join('<span class="rg-un-sep">·</span>')}</span>`
     : '';
   return `<div class="rg-unranked">
-      <span class="rg-un-hd">Starters not in the grid</span>
       ${group('Already played', played, 'His game has kicked off — weekly sheets drop players once they play. The number is what he actually scored in this league.')}
-      ${group('Not on the sheet', rest, 'Not ranked by the uploaded sheet, or a position this grid does not lay out (K, D/ST, IDP) — usually a format difference, not a missing player.')}
+      ${group('Not ranked', rest, 'Not ranked by the uploaded sheet, or a position this grid does not lay out (K, D/ST, IDP) — usually a format difference, not a missing player.')}
     </div>`;
 }
 
