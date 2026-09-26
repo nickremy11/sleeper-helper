@@ -234,6 +234,31 @@ footer a:hover { color: var(--gold); }
    keeps two adjacent bare numbers legible on a card with no header row. */
 .diff-ppg { font-size: 0.82rem; min-width: 52px; text-align: right; flex-shrink: 0; color: var(--parchment); }
 .diff-ppg em { font-style: normal; font-size: 0.55rem; letter-spacing: 0.04em; color: var(--brown-light); margin-left: 2px; }
+/* Click a lineup row to open every replacement the slot could take. The caret is
+   the only affordance on the row itself, so it stays visible rather than
+   appearing on hover — on a card with 10 rows a hover-only hint is never found. */
+.diff-row.diff-click { cursor: pointer; }
+.diff-row.diff-click:hover { background: rgba(212,175,55,0.07); }
+.diff-caret { color: var(--brown-light); font-size: 0.6rem; flex-shrink: 0; width: 10px; text-align: right; }
+.diff-row.slot-open { background: rgba(212,175,55,0.09); }
+.diff-row.slot-open .diff-caret { color: var(--gold-light); }
+.lc-opts { background: rgba(0,0,0,0.22); border-bottom: 1px dashed rgba(255,255,255,0.07); }
+.lc-opts-empty { padding: 8px 16px; font-size: 0.68rem; color: #d08a30; }
+.lc-opts-note { padding: 6px 16px; font-size: 0.6rem; color: var(--brown-light); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.lc-opts-list { max-height: 320px; overflow-y: auto; }
+.lc-opt { display: flex; align-items: center; gap: 8px; padding: 5px 16px; font-family: 'Crimson Text', serif; font-size: 0.85rem; border-bottom: 1px dashed rgba(255,255,255,0.06); }
+.lc-opt:last-child { border-bottom: none; }
+.lc-opt.hdr { font-family: 'Rye', serif; font-size: 0.45rem; letter-spacing: 0.12em; color: var(--gold); text-transform: uppercase; background: rgba(0,0,0,0.25); }
+.lc-opt.hdr span { color: var(--gold); font-size: inherit; }
+/* The player currently in the slot, kept at the top as the baseline every row
+   below is being compared against — the whole point of opening the list. */
+.lc-opt.cur { background: rgba(95,174,95,0.10); }
+.lc-opt:not(.hdr):not(.cur):hover { background: rgba(212,175,55,0.08); }
+.lc-opt-name { color: var(--parchment); flex: 1; min-width: 0; }
+.lc-opt-pos { color: var(--brown-light); font-size: 0.65rem; width: 54px; flex-shrink: 0; }
+.lc-opt-num { font-size: 0.72rem; width: 46px; text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.lc-opt-rank { color: var(--gold-light); font-size: 0.7rem; width: 56px; text-align: right; flex-shrink: 0; }
+.lc-opt-act { width: 62px; text-align: right; flex-shrink: 0; }
 /* Injury swap — search suggestions, per-league blocks, candidate chooser */
 .lsw-sug { display: flex; align-items: center; gap: 8px; padding: 6px 10px; cursor: pointer; font-family: 'Crimson Text', serif; font-size: 0.85rem; border-bottom: 1px dashed rgba(255,255,255,0.07); }
 .lsw-sug:last-child { border-bottom: none; }
@@ -324,6 +349,12 @@ footer a:hover { color: var(--gold); }
 .rg-rank { color: var(--brown-light); font-size: 0.74rem; font-weight: 600; min-width: 22px; text-align: right; flex-shrink: 0; }
 .rg-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rg-opp { color: var(--brown-light); font-size: 0.62rem; flex-shrink: 0; }
+/* Season-to-date PPG on a grid cell, scored to the selected league. Same size as
+   the rank and the opponent — it's a third piece of small context on a dense row,
+   not a number to weigh against the sheet's own ordering. Parchment rather than
+   --brown-light so it doesn't read as part of the opponent beside it. */
+.rg-ppg { color: var(--parchment); font-size: 0.62rem; flex-shrink: 0; opacity: 0.85;
+          min-width: 24px; text-align: right; font-variant-numeric: tabular-nums; }
 .rg-on  { background: rgba(95,174,95,0.18);  box-shadow: inset 3px 0 0 #5fae5f; }
 .rg-on  .rg-name { color: #8fd08f; font-weight: 700; }
 .rg-off { background: rgba(192,80,77,0.16); box-shadow: inset 3px 0 0 #c0504d; }
@@ -378,6 +409,11 @@ footer a:hover { color: var(--gold); }
   .diff-slot { width: 56px; }
   .diff-ppg { min-width: 34px; }
   .diff-ppg em { display: none; }
+  .lc-opt { padding: 5px 12px; gap: 6px; }
+  .lc-opt-pos { width: 44px; }
+  .lc-opt-rank { width: 44px; }
+  .lc-opt-num { width: 38px; }
+  .lc-opt-act { width: 40px; }
 
   /* Rostership: freeze the Player column, drop Exp, tighten */
   .rs-table { font-size: 0.86rem; }
@@ -2850,6 +2886,7 @@ const LU = {
   byGameTime: true,         // order interchangeable slots so flex never locks earlier than a position slot
   faOn: true,               // free-agent watch (redraft only) — see lsFaUpgrades
   weekOverride: null,       // {from, to} — self-expiring manual week, see lsWeekFor
+  openSlot: null,           // {leagueId, slotIdx} — the one row showing its replacement options
   _cache: null,             // { at, week, lineups, proj, kick } — see LU_CACHE_TTL
 };
 try { LU.faOn = localStorage.getItem('lu_fa_watch') !== '0'; } catch(_) {}
@@ -3674,6 +3711,7 @@ function lsSummaryMeta(fix, idx) {
 // Render the slot rows for a card. mode 'current' shows live starters with proj
 // points; mode 'diff' shows each change inline (strikethrough → replacement).
 function lsBodyRows(fix, mode) {
+  const idx  = LU.lineups.indexOf(fix);
   const pc   = lsPtsCtx(fix);
   const prop = (fix._shown && lsProposal(fix, fix._shown)) || fix.starters;
   const have = lsHaveProj();
@@ -3725,15 +3763,158 @@ function lsBodyRows(fix, mode) {
     const pid  = mode === 'diff' ? pr : cur;
     const inj  = injuryBadge(S.players[pid]?.injury_status);
     const lock = lsLocked(pid);
-    return `<div class="diff-row"${lock ? ' style="opacity:0.62;"' : ''}>
+    // Every current-mode row opens its own replacement list. Not offered on a
+    // diff row: those rows are showing a proposal, and the slot indices there
+    // describe what WOULD be set, not what is.
+    const click = mode !== 'diff' && idx >= 0;
+    const open  = click && lsSlotOpen(fix, i);
+    return `<div class="diff-row${click ? ' diff-click' : ''}${open ? ' slot-open' : ''}"${lock ? ' style="opacity:0.62;"' : ''}${click ? ` onclick="lsToggleSlot(${idx},${i})"` : ''}>
       <span class="diff-slot">${esc(slot)}</span>
       <span style="color:var(--parchment);flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${lock ? '<span title="Game has started — this slot is locked" style="color:var(--brown-light);">🔒 </span>' : ''}${esc(lsPlayerName(pid))}${inj ? ' ' + inj : ''}</span>
       ${rankCells(pid)}
       <span style="flex:1;"></span>
       ${ppgCell(pid)}
       ${ptsCell(pid)}
-    </div>`;
+      ${click ? `<span class="diff-caret" title="Show every player who could take this slot">${open ? '▾' : '▸'}</span>` : ''}
+    </div>${open ? lsSlotOptionsHtml(fix, idx, i) : ''}`;
   }).join('');
+}
+
+// ── Slot options: every replacement for one slot, inline on the card ─────────
+// The Injury Swap answers "this player is out — fix him in all 70 leagues". This
+// answers the other half of the same question: "in THIS league, what else could
+// play this slot, and how do those options actually compare?" Same candidate
+// generator (lswCandidates — promotions included), same numbers as the row above
+// it, so the two views can never disagree about what is eligible.
+function lsSlotOpen(fix, slotIdx) {
+  return !!LU.openSlot && LU.openSlot.leagueId === fix.leagueId && LU.openSlot.slotIdx === slotIdx;
+}
+
+function lsToggleSlot(idx, slotIdx) {
+  const fix = LU.lineups[idx];
+  if (!fix) return;
+  LU.openSlot = lsSlotOpen(fix, slotIdx) ? null : { leagueId: fix.leagueId, slotIdx };
+  // Only this card's body is redrawn, so an open <details> elsewhere — and the
+  // injury-swap search box above the cards — is left exactly as it was.
+  const body = document.getElementById('lc-body-' + idx);
+  if (body) body.innerHTML = lsBodyRows(fix, fix._shown ? 'diff' : 'current');
+}
+
+function lsSlotOptionsHtml(fix, idx, slotIdx) {
+  const pc    = lsPtsCtx(fix);
+  const slot  = fix.rosterPositions[slotIdx];
+  const cur   = String(fix.starters[slotIdx] || '0');
+  const cands = lswCandidates(fix, slotIdx);
+  // Clicks inside the panel must not bubble to the row, which would close it.
+  const wrap  = h => `<div class="lc-opts" onclick="event.stopPropagation()">${h}</div>`;
+
+  if (!cands.length) {
+    return wrap(`<div class="lc-opts-empty">${lsLocked(cur)
+      ? '🔒 His game has already started — this slot is locked and can no longer be changed.'
+      : `Nobody on the bench is eligible for a ${esc(slot)} slot.`}</div>`);
+  }
+
+  const haveProj = lsHaveProj();
+  const canSwap  = lsCanWrite() && !fix._espn;
+  const num = v => v === null ? '–' : v.toFixed(1);
+  const ppgOf = pid => {
+    const v = playerSeasonPpg(pid, pc.scoring);
+    return { v, gp: v === null ? 0 : playerSeasonGp(pid) };
+  };
+
+  // One row shape for the incumbent and the candidates alike, so the columns line
+  // up and the comparison is the only thing the eye has to do.
+  const row = (pid, opts) => {
+    const p    = S.players[pid] || {};
+    const pg   = ppgOf(pid);
+    const pts  = lsPlayerPts(pid, pc);
+    const inj  = injuryBadge(p.injury_status);
+    const lbl  = lswRankLabel(pid, opts.landSlot || slot, !!opts.mixed);
+    return `<div class="lc-opt${opts.cls || ''}">
+      <span class="lc-opt-name">${opts.tag || ''}${esc(lsPlayerName(pid))}${inj ? ' ' + inj : ''}${opts.via || ''}</span>
+      <span class="lc-opt-pos">${esc(lsNormPos(p.position) || '')}${p.team ? ' ' + esc(p.team) : ''}</span>
+      <span class="lc-opt-rank" style="${lbl ? '' : 'color:var(--brown-mid);'}">${lbl ? esc(lbl) : '—'}</span>
+      <span class="lc-opt-num" style="color:var(--parchment);"${pg.v === null ? '' : ` title="${pg.v.toFixed(1)} over ${pg.gp} game${pg.gp === 1 ? '' : 's'} played"`}>${num(pg.v)}</span>
+      <span class="lc-opt-num" style="color:var(--gold-light);">${haveProj ? pts.toFixed(1) : '–'}</span>
+      <span class="lc-opt-act">${opts.action || ''}</span>
+    </div>`;
+  };
+
+  const head = `<div class="lc-opt hdr">
+      <span class="lc-opt-name">${esc(slot)} — options</span>
+      <span class="lc-opt-pos">Pos</span>
+      <span class="lc-opt-rank">Rank</span>
+      <span class="lc-opt-num" title="Season-to-date PPG in this league's scoring">PPG</span>
+      <span class="lc-opt-num">Proj</span>
+      <span class="lc-opt-act"></span>
+    </div>`;
+
+  const curRow = cur === '0' ? '' : row(cur, { cls: ' cur', tag: '<span style="color:#5fae5f;">▸ </span>' });
+
+  const list = cands.map(c => {
+    const landSlot = fix.rosterPositions[c.moves[c.moves.length - 1][0]];
+    // A promotion moves two slots, so say which — otherwise an RB appearing as a
+    // replacement for a TE reads as a bug rather than as the flex shuffle it is.
+    const via = c.via
+      ? `<span style="display:block;font-size:0.6rem;color:var(--gold-light);">↳ ${esc(lsPlayerName(c.via.pid))} moves ${esc(c.via.slot)} → ${esc(slot)}</span>`
+      : '';
+    const action = canSwap
+      ? `<button class="ghost-btn" style="font-size:0.5rem;padding:2px 6px;" title="Start him in this slot" onclick="lsSlotSwap(${idx},${slotIdx},'${c.pid}')">⇄ Start</button>`
+      : '';
+    return row(c.pid, { via, action, landSlot, mixed: c.mixed });
+  }).join('');
+
+  // Why the numbers may not run in order, said once: the list is ordered by the
+  // sheet, and PPG is what he HAS done — they are allowed to disagree.
+  const note = `<div class="lc-opts-note">
+      <span>${cands.length} option${cands.length === 1 ? '' : 's'} · ordered by the ranking sheet${lsHaveRankings() ? '' : ' (none loaded — ordered by projection)'}</span>
+      ${fix._espn ? '<span>read-only — set it in ESPN</span>'
+        : lsCanWrite() ? '' : '<span>preview only — <a href="/myprofile" style="color:var(--gold-light);">add a Sleeper token</a> to start one</span>'}
+      ${cur === '0' ? '' : `<span style="margin-left:auto;"><a href="#lu-swap-q" style="color:var(--gold-light);" onclick="event.preventDefault();lsSwapEverywhere('${cur}')">Replace him in every league →</a></span>`}
+    </div>`;
+
+  return wrap(`${head}${curRow}<div class="lc-opts-list">${list}</div>${note}
+    <div id="lc-opts-msg-${idx}" style="padding:0 16px 6px;font-size:0.62rem;"></div>`);
+}
+
+// Hand this player to the cross-league Injury Swap panel above the cards. The
+// panel is rendered there and nowhere near the row that was clicked, so the
+// scroll is part of the action — without it the click looks like it did nothing.
+function lsSwapEverywhere(pid) {
+  lswPick(pid);
+  document.getElementById('lu-swap-q')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// Start one candidate in one slot. The same one-league write the injury-swap
+// panel does (lswPlanFor → lsPutStarters), minus the cross-league bookkeeping:
+// the plan is rebuilt against the LIVE lineup here too, so an Optimize applied
+// since the panel opened can't leave a stale slot index behind.
+async function lsSlotSwap(idx, slotIdx, pid) {
+  const fix = LU.lineups[idx];
+  if (!fix || fix._espn || !lsCanWrite()) return false;
+  const msg = document.getElementById('lc-opts-msg-' + idx);
+  const say = (c, t) => { if (msg) msg.innerHTML = `<span style="color:${c};">${t}</span>`; };
+  const plan = lswPlanFor(fix, slotIdx, pid);
+  if (!plan) { say('#c0504d', '✗ ' + esc(lsPlayerName(pid)) + ' is no longer an option for this slot'); return false; }
+  say('var(--brown-light)', 'applying…');
+  const next = fix.starters.map(String);
+  plan.moves.forEach(([k, p]) => { next[k] = String(p); });
+  try {
+    const ok = await lsPutStarters(fix, next);
+    LU.openSlot = null;                       // the slot he was in is now his
+    const body = document.getElementById('lc-body-' + idx);
+    if (body) body.innerHTML = lsBodyRows(fix, 'current');
+    const meta = document.getElementById('lc-meta-' + idx);
+    if (meta) meta.outerHTML = lsSummaryMeta(fix, idx);
+    const box = document.getElementById('lc-opt-' + idx);
+    if (box) box.innerHTML = `<div style="padding:6px 16px;font-size:0.65rem;color:${ok ? '#5fae5f' : '#d08a30'};">${ok
+      ? '✓ ' + esc(lsPlayerName(pid)) + ' is now starting at ' + esc(fix.rosterPositions[slotIdx])
+      : '⚠ saved but Sleeper returned a different lineup'}</div>`;
+    return ok;
+  } catch (e) {
+    say('#c0504d', '✗ ' + esc(e.message || 'failed'));
+    return false;
+  }
 }
 
 // Show an optimal lineup as an in-place diff inside the card, plus Apply/Cancel.
@@ -5103,6 +5284,14 @@ function rgDraw() {
 
   const starters = rgStarterSet(fix, RG.mode);
   const rostered = fix ? new Set((fix.players || []).map(String)) : new Set();
+  // Season-to-date PPG, scored to the SELECTED league — the same helper and the
+  // same league scoring the lineup rows use, so a player reads identically in
+  // both views. With no league loaded lsPtsCtx hands back an empty map, which
+  // playerSeasonPpg falls back to full PPR for; the grid's own cells are too
+  // small to label that, so the column is simply dropped in that case rather
+  // than showing a number scored to nobody's league.
+  const rgPc  = lsPtsCtx(fix);
+  const rgPpg = fix ? pid => playerSeasonPpg(pid, rgPc.scoring) : () => null;
   // Every player owned by ANYONE in the league — the complement is the free-agent
   // pool. Already on the fixture (the FA watch uses the same set), and null when
   // the league looks pre-draft, which switches the highlight off rather than
@@ -5161,9 +5350,14 @@ function rgDraw() {
       const cls = pid && starters?.has(pid)                    ? ' rg-on'
                 : pid && rostered.has(pid)                     ? ' rg-off'
                 : pid && leagueOwned && !leagueOwned.has(pid)  ? ' rg-fa' : '';
+      // Empty for anyone who hasn't played — a bye-week row or an undrafted rookie
+      // leaves the gap rather than claiming 0.0, exactly as on a lineup card.
+      const ppg = pid ? rgPpg(pid) : null;
+      const gp  = ppg === null ? 0 : playerSeasonGp(pid);
       return `<div class="rg-cell${bands[i] ? ' rg-tier-b' : ''}${cls}">
         <span class="rg-rank">${r.rank}</span>
         <span class="rg-name">${esc(r.name)}</span>
+        ${ppg === null ? '' : `<span class="rg-ppg" title="Season PPG in this league's scoring — ${ppg.toFixed(1)} over ${gp} game${gp === 1 ? '' : 's'} played">${ppg.toFixed(1)}</span>`}
         <span class="rg-opp">${esc(r.opp || '')}</span>
       </div>`;
     };
@@ -5196,7 +5390,7 @@ const GUIDE = [
     { name:'Rostership',       tab:'rostership', espn:true,
       desc:'How many of your leagues each player is on, so you can see your real exposure at a glance.' },
     { name:'Lineup Checker',   tab:'lineups',    espn:true, write:'Sets lineups',
-      desc:'Flags empty slots and hurt starters everywhere, builds the best lineup, and sets it in Sleeper in one click. Search an injured starter to bench him in every league he is in at once.' },
+      desc:'Flags empty slots and hurt starters everywhere, builds the best lineup, and sets it in Sleeper in one click. Click any row to see every replacement for that slot with its PPG, projection and rank. Search an injured starter to bench him in every league he is in at once.' },
     { name:'Weekly Ranks Grid',tab:'ranksgrid',  espn:true,
       desc:"Your own ranking sheet as seven position columns, with one league's roster painted on it — green starting, red benched." },
     { name:'Player Finder',    tab:'player',
