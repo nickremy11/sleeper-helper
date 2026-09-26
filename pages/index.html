@@ -365,6 +365,22 @@ footer a:hover { color: var(--gold); }
 .rg-fa  { background: rgba(235,195,55,0.28); box-shadow: inset 3px 0 0 #f0c93c; }
 .rg-fa  .rg-name { color: #f5da7a; }
 .rg-pill.on { border-color: var(--gold); color: var(--gold-light); }
+/* Starters the grid can't show. A thin strip rather than a card: it's a footnote
+   to the grid, and on a full lineup it is often empty. The two groups are
+   separated because they mean opposite things — one is settled, one is a gap in
+   what the sheet covers. */
+.rg-unranked { display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap;
+               padding: 7px 10px; margin-bottom: 10px; font-size: 0.7rem; color: var(--parchment);
+               background: rgba(0,0,0,0.2); border: 1px dashed var(--brown-mid); border-radius: 2px; }
+.rg-un-hd { font-family: 'Rye', serif; font-size: 0.45rem; letter-spacing: 0.12em;
+            text-transform: uppercase; color: var(--gold); flex-shrink: 0; }
+.rg-un-grp { display: inline-flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+.rg-un-grp b { font-family: 'Rye', serif; font-size: 0.45rem; letter-spacing: 0.1em;
+               text-transform: uppercase; color: var(--brown-light); font-weight: 400; }
+.rg-un-p em { font-style: normal; color: var(--gold-light); font-size: 0.66rem; margin-left: 3px; }
+.rg-un-p em::before { content: '('; }
+.rg-un-p em::after  { content: ')'; }
+.rg-un-sep { color: var(--brown-mid); }
 /* Waiver grid only. Owned-by-someone-else is the majority state, so it recedes
    rather than getting a colour of its own — the point of the view is that the
    yellow and green rows are the only ones that pop. Unmatched rows can't be
@@ -3120,6 +3136,16 @@ function lsPlayerPts(pid, pc) {
   return lsComputeProjPts(LU.proj[pid], pc?.scoring || {});
 }
 
+// What a player has ACTUALLY scored this week, in this league's scoring — not a
+// projection. Both loaders put it on the fixture as `_pts` (Sleeper's
+// players_points off the week's matchup; ESPN's statSourceId-0 appliedTotal), so
+// nothing here branches on the source. Null when the league didn't publish one,
+// which is the normal state before kickoff.
+function lsActualPts(pid, fix) {
+  const v = fix?._pts?.[String(pid)];
+  return typeof v === 'number' ? v : null;
+}
+
 // Positions the lineup optimizer understands. rsNormPos deliberately drops K and
 // DEF (Rostership has no use for them); lineups do, so widen it here only.
 function lsNormPos(raw) {
@@ -4871,12 +4897,21 @@ async function lsLoadEspnLineup(lg, week) {
   }
 
   const players = [], inSlot = [], espnIdToPid = {};
+  // What each player has actually scored this week. Same shape as Sleeper's
+  // players_points, read off the stat line mRoster already carries — statSourceId
+  // 0 is REAL (1 is the projection lsEspnProjLine reads), and appliedTotal is
+  // already scored with this league's settings. Best-effort: a view that omits
+  // `stats` just leaves the map empty, which reads as "no score yet".
+  const weekPts = {};
   for (const e of (myTeam.roster?.entries || [])) {
     const pl  = e.playerPoolEntry?.playerPoolEntry?.player || e.playerPoolEntry?.player;
     const pid = lsEspnPid(pl);
     if (!pid) continue;
     players.push(String(pid));
     if (pl?.id != null) espnIdToPid[String(pl.id)] = String(pid);
+    const act = (pl?.stats || []).find(st =>
+      st.statSourceId === 0 && Number(st.scoringPeriodId) === Number(week) && typeof st.appliedTotal === 'number');
+    if (act) weekPts[String(pid)] = act.appliedTotal;
     const slot = LU_ESPN_SLOT[e.lineupSlotId];
     if (slot && slot !== 'BN' && slot !== 'IR') inSlot.push({ slot, pid: String(pid) });
   }
@@ -4919,6 +4954,7 @@ async function lsLoadEspnLineup(lg, week) {
     // report most of the NFL as available.
     rostered: rostered.size >= (d.teams || []).length * 8 ? rostered : null,
     _redraft: true,            // ESPN has no dynasty concept here
+    _pts: Object.keys(weekPts).length ? weekPts : null,
     _espnProj: espnProj,
     _espn: true,               // read-only: never written back, never bulk-applied
   };
@@ -4981,10 +5017,15 @@ async function lsEnsureLineupData(force = false) {
       // mine.starters (from /rosters) is the generic roster lineup and can lag a
       // week-specific change — so prefer the matchup starters for week w.
       let starters = mine.starters || [];
+      // players_points rides along on that same matchup object — what each player
+      // has ACTUALLY scored this week, already in the league's own scoring. Free,
+      // and the only place this app can read a live weekly score.
+      let weekPts = null;
       try {
         const matchups = await api('/league/' + lg.league_id + '/matchups/' + w + '?_=' + Date.now());
         const mm = matchups?.find(m => m.roster_id === mine.roster_id);
         if (mm?.starters?.length === rosterPositions.length) starters = mm.starters;
+        if (mm?.players_points && typeof mm.players_points === 'object') weekPts = mm.players_points;
       } catch(_) {}
       if (!starters.length || starters.length !== rosterPositions.length) return null;
 
@@ -4996,6 +5037,7 @@ async function lsEnsureLineupData(force = false) {
         scoringSettings: detail?.scoring_settings || {},
         rostered: rostered.size >= (rosters || []).length * 8 ? rostered : null,
         _redraft: rsLeagueCategory(lg.league_id) === 'redraft',
+        _pts: weekPts,             // {pid: points scored this week} — see lsActualPts
       };
     } catch(_) { return null; }
   }));
@@ -5195,12 +5237,67 @@ async function renderRanksGrid(force = false) {
 function rgSetLeague(v) { RG.leagueIdx = parseInt(v, 10) || 0; rgDraw(); }
 function rgSetMode(m)   { RG.mode = m; rgDraw(); }
 
-// The set of players counted as starting under the selected mode.
-function rgStarterSet(fix, mode) {
+// The players counted as starting under the selected mode, in slot order. The
+// grid only needs the set, but the unranked-starters line needs them in lineup
+// order, so both read one list rather than deriving the same thing twice.
+function rgStarterList(fix, mode) {
   if (!fix) return null;
-  if (mode === 'current') return new Set(fix.starters.map(String));
+  if (mode === 'current') return fix.starters.map(String);
   const prop = lsProposal(fix, mode === 'ranks' ? 'ranks' : 'projections');
-  return prop ? new Set(prop.map(String)) : null;
+  return prop ? prop.map(String) : null;
+}
+
+function rgStarterSet(fix, mode) {
+  const list = rgStarterList(fix, mode);
+  return list ? new Set(list) : null;
+}
+
+// Starters who appear nowhere in the grid, which is worth saying out loud: the
+// grid is the whole sheet, so a starter missing from it is invisible rather than
+// merely low. Two different reasons, and the line separates them because they
+// mean opposite things:
+//   · his game has kicked off — weekly sheets drop players once they've played,
+//     so his actual score is shown in parentheses and there is nothing to do;
+//   · he simply isn't on the sheet — usually a format thing (K, D/ST and IDP are
+//     parsed but not laid out here; a sheet may not cover them at all), and worth
+//     knowing because the grid can't tell you anything about that slot.
+// `inGrid` is the pids actually rendered, not LU.ranks.byPid, so a ranked kicker
+// counts as missing too — he is, from this view's point of view.
+function rgUnrankedStarters(fix, mode, inGrid) {
+  const list = rgStarterList(fix, mode);
+  if (!fix || !list) return [];
+  const seen = new Set();
+  return list.map((pid, i) => ({ pid: String(pid), slot: fix.rosterPositions[i] }))
+    .filter(({ pid }) => {
+      if (pid === '0' || inGrid.has(pid) || seen.has(pid)) return false;
+      seen.add(pid);
+      return true;
+    })
+    .map(e => ({ ...e, played: lsLocked(e.pid), pts: lsActualPts(e.pid, fix) }));
+}
+
+function rgUnrankedHtml(fix, mode, inGrid) {
+  const rows = rgUnrankedStarters(fix, mode, inGrid);
+  if (!rows.length) return '';
+  const name = e => {
+    const p = S.players[e.pid] || {};
+    const pos = lsNormPos(p.position) || '';
+    // Slot and position are the same word for a dedicated slot — say it once.
+    const tip = [e.slot || '', pos === e.slot ? '' : pos].filter(Boolean).join(' · ');
+    return `<span class="rg-un-p" title="${esc(tip)}">${esc(lsPlayerName(e.pid))}`
+      + (e.played ? `<em>${e.pts === null ? 'played' : e.pts.toFixed(1)}</em>` : '')
+      + `</span>`;
+  };
+  const played = rows.filter(e => e.played);
+  const rest   = rows.filter(e => !e.played);
+  const group = (label, list, tip) => list.length
+    ? `<span class="rg-un-grp" title="${esc(tip)}"><b>${label}</b>${list.map(name).join('<span class="rg-un-sep">·</span>')}</span>`
+    : '';
+  return `<div class="rg-unranked">
+      <span class="rg-un-hd">Starters not in the grid</span>
+      ${group('Already played', played, 'His game has kicked off — weekly sheets drop players once they play. The number is what he actually scored in this league.')}
+      ${group('Not on the sheet', rest, 'Not ranked by the uploaded sheet, or a position this grid does not lay out (K, D/ST, IDP) — usually a format difference, not a missing player.')}
+    </div>`;
 }
 
 // The grid's real content width. Measured rather than derived from
@@ -5327,6 +5424,12 @@ function rgDraw() {
   // a short block doesn't leave an empty track. Passed as a custom property
   // rather than an inline grid-template-columns, which would outrank the
   // responsive overrides.
+  // Every pid the grid actually renders — the basis for "which of my starters
+  // aren't here", and deliberately taken from the columns rather than from
+  // LU.ranks.byPid, which also holds the K and DEF blocks RG_COLS leaves out.
+  const inGrid = new Set();
+  for (const [key] of RG_COLS) for (const r of (cols[key] || [])) if (r.pid) inGrid.add(String(r.pid));
+
   const alloc = rgAllocParts(cols, rgWidth());
   const tracks = alloc.tracks;
   RG._sig = rgPartsSig(alloc.parts);
@@ -5373,7 +5476,7 @@ function rgDraw() {
       <div class="rg-head" style="top:${navH}px;">${esc(label)} <em>${list.length}</em></div>${body}</div>`;
   }).join('')}</div>`;
 
-  setC(`<div>${head}${controls}${grid}</div>`);
+  setC(`<div>${head}${controls}${rgUnrankedHtml(fix, RG.mode, inGrid)}${grid}</div>`);
 }
 
 // ── 4c. Field Guide ──────────────────────────────────────────────────────────
