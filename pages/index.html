@@ -617,6 +617,7 @@ a.row-link.ls-contender-name { color: var(--gold-light); font-weight: 700; }
 .pf-trade-list { margin-bottom: 6px; }
 .pf-trade-card { background: var(--brown-dark); border: 1px solid var(--brown-mid); border-radius: 2px; margin-bottom: 4px; transition: border-color 0.15s; }
 .pf-trade-card:hover { border-color: rgba(201,150,42,0.5); }
+.pf-trade-header .pf-odds { margin-left: auto; }
 .pf-trade-header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; user-select: none; }
 .pf-trade-chevron { font-size: 0.9rem; color: var(--brown-light); transition: transform 0.2s; flex-shrink: 0; display: inline-block; }
 .pf-trade-chevron.open { transform: rotate(90deg); color: var(--gold); }
@@ -822,6 +823,7 @@ const PF = {
   fcMap:         null,   // FantasyCalc values (lazy-loaded on first comparison open)
   expanded:      null,   // lgId of currently expanded Trade Targets comparison panel
   expandedOther: null,   // lgId of currently expanded "On other rosters" comparison panel
+  oddsLoading:   false,  // League Summaries' sim running for the listed teams' odds (pfLoadOdds)
 };
 
 // ── Waivers state ─────────────────────────────────────────────────────────────
@@ -1485,28 +1487,14 @@ function moContextHtml(d, o) {
 function moOfferLeagueIds() { return [...new Set(MO.offers.map(o => o.lgId))]; }
 function moOddsMissing()    { return moOfferLeagueIds().filter(id => !LS.leagueData[id]?.allPlayoffOdds).length; }
 
-// Runs the one copy of the simulation (League Summaries'), exactly the way Scout
-// drives it — lsLoadData for the inputs, the 24h localStorage cache reused, and a
-// re-sim only for what the cache didn't cover. It's an all-leagues job (ESPN
-// included, though offers are Sleeper-only) and a cold run is up to a minute, so
-// it's opt-in here rather than something building a list of offers waits on.
+// Started automatically once the offer list is built, so every row has the other
+// team's odds on screen before anything is sent. The list itself never waits on
+// it — rows render with their record first and the odds fill in.
 async function moLoadOdds() {
   if (MO.oddsLoading || MO.sending) return;
   MO.oddsLoading = true; MO.oddsErr = ''; moDraw();
   try {
-    if (!LS.loaded) { await lsLoadData(); LS.loaded = true; }
-    lsRestoreOddsCache();
-    if (moOddsMissing()) {
-      // lsSimulateAllLeagues no-ops while a run is already in flight (League
-      // Summaries'), so awaiting it would look like a failure rather than a wait.
-      if (LS.oddsLoading) {
-        MO.oddsErr = 'Odds are already being calculated — try again in a moment';
-      } else {
-        LS._oddsUseCache = true;
-        await lsSimulateAllLeagues();
-        if (moOddsMissing()) MO.oddsErr = LS.oddsError || 'Odds couldn’t be calculated for every league in this list';
-      }
-    }
+    MO.oddsErr = await lsEnsureOddsFor(moOfferLeagueIds());
   } catch (e) {
     MO.oddsErr = e.message || String(e);
   }
@@ -1581,6 +1569,7 @@ async function moBuild() {
   }
   MO.building = false;
   moDraw();
+  if (MO.offers.length && moOddsMissing()) moLoadOdds();
 }
 
 // ── Send ──
@@ -1903,13 +1892,13 @@ function moDraw() {
     if (MO.building) {
       html += loading('Building offers…');
     } else if (MO.offers.length) {
-      // Each row carries the other manager's record; playoff odds need the shared
-      // simulation, offered here rather than run behind the user's back.
+      // Each row carries the other manager's record and playoff odds. Odds load on
+      // their own after a build (moLoadOdds); the link is only the retry.
       const missing = moOddsMissing();
       const oddsCtl = MO.oddsLoading
         ? ' · <span class="mo-meta">simulating playoff odds — up to a minute the first time…</span>'
         : missing && !MO.sending
-          ? ` · <a href="#" onclick="moLoadOdds();return false;">add playoff odds</a>`
+          ? ` · <a href="#" onclick="moLoadOdds();return false;">retry playoff odds</a>`
           : '';
       html += step(4, 'Review and send', `
         <div class="mo-intro" style="margin:0 0 8px;">${MO.offers.length} offer${MO.offers.length === 1 ? '' : 's'} ·
@@ -2035,7 +2024,37 @@ async function pfSelectPlayer(pid) {
     ));
     await statsP;
     pfRenderResults();
+    pfLoadOdds();
   } catch(e) { r.innerHTML = errHtml(e); }
+}
+
+// ── Playoff odds beside every team ──
+// Whether the owner is contending or selling is the first thing to know before
+// making an offer, so each team listed carries League Summaries' playoff odds —
+// the same per-roster map and the same Contender/Rebuilder badge Mass Offers and
+// Scout show. The list renders straight away; odds paint into the .pf-odds slots
+// when the sim (cached for 24h, up to a minute cold) is done, without a re-render
+// that would collapse any open roster comparison.
+async function pfLoadOdds() {
+  const ids = [...new Set((PF.allRosterData || []).filter(Boolean).map(rd => rd.lg.league_id))];
+  if (!ids.length || PF.oddsLoading) return pfPaintOdds();
+  PF.oddsLoading = true; pfPaintOdds();
+  try { await lsEnsureOddsFor(ids); } catch (e) { console.error('[Player Finder odds]', e); }
+  PF.oddsLoading = false; pfPaintOdds();
+}
+
+function pfOddsSlot(lgId, rid) {
+  return `<span class="pf-odds" data-lg="${esc(lgId)}" data-rid="${rid}"></span>`;
+}
+
+function pfPaintOdds() {
+  if (S.tab !== 'player') return;
+  for (const el of document.querySelectorAll('.pf-odds')) {
+    const odds = moTeamOdds(el.dataset.lg, Number(el.dataset.rid));
+    el.innerHTML = odds != null
+      ? scoutClassBadge(scoutClassify(odds, el.dataset.lg), odds)
+      : PF.oddsLoading ? '<span class="card-meta">odds…</span>' : '';
+  }
 }
 
 function pfRenderResults() {
@@ -2051,7 +2070,7 @@ function pfRenderResults() {
       if (!roster.players?.includes(pid)) continue;
       found = true;
       if (roster.owner_id === S.userId) {
-        mine.push({ lgName: rd.lg.name, lgId: rd.lg.league_id, starter: roster.starters?.includes(pid) });
+        mine.push({ lgName: rd.lg.name, lgId: rd.lg.league_id, rid: roster.roster_id, starter: roster.starters?.includes(pid) });
       } else {
         theirs.push({ lgName: rd.lg.name, lgId: rd.lg.league_id, ownerName: rd.uMap[roster.owner_id] || 'Unknown', theirRosterId: roster.roster_id });
       }
@@ -2116,7 +2135,7 @@ function pfRenderResults() {
     ${mine.length ? `<div class="sect">On your roster</div><div class="pf-mine">${mine.map(f=>`
       <div class="data-row">
         <a href="https://sleeper.com/leagues/${esc(f.lgId)}/team" target="_blank" class="row-link">${esc(f.lgName)}</a>
-        <span style="display:flex;align-items:center;gap:6px;">${injuryBadge(player.injury_status)}<span class="badge ${f.starter?'badge-green':'badge-outline'}">${f.starter?'Starting':'Bench'}</span></span>
+        <span style="display:flex;align-items:center;gap:6px;">${pfOddsSlot(f.lgId, f.rid)}${injuryBadge(player.injury_status)}<span class="badge ${f.starter?'badge-green':'badge-outline'}">${f.starter?'Starting':'Bench'}</span></span>
       </div>`).join('')}</div>` : ''}
 
     ${theirs.length ? `<div class="sect">On other rosters</div><div class="pf-trade-list">${theirs.map(f => `
@@ -2125,6 +2144,7 @@ function pfRenderResults() {
           <span class="pf-trade-chevron" id="pf-or-chev-${esc(f.lgId)}">›</span>
           <span style="font-family:'Crimson Text',serif;font-size:0.95rem;color:var(--parchment);">${esc(f.lgName)}</span>
           <span class="card-meta">${esc(f.ownerName)}</span>
+          ${pfOddsSlot(f.lgId, f.theirRosterId)}
         </div>
         <div id="pf-or-compare-${esc(f.lgId)}" style="display:none;"></div>
       </div>`).join('')}</div>` : ''}
@@ -2137,6 +2157,7 @@ function pfRenderResults() {
 
     ${!mine.length && !theirs.length ? '<div class="empty-state" style="margin-top:12px;"><p>Player not found on any roster</p></div>' : ''}
   </div>`;
+  pfPaintOdds();
 }
 
 function pfTradeTargetsHtml(targets, targetPlayer, myPlayer) {
@@ -2151,6 +2172,7 @@ function pfTradeTargetsHtml(targets, targetPlayer, myPlayer) {
         <span class="pf-trade-chevron" id="pf-chev-${esc(t.lgId)}">›</span>
         <span style="font-family:'Crimson Text',serif;font-size:0.95rem;color:var(--parchment);">${esc(t.lgName)}</span>
         <span class="card-meta">vs. ${esc(t.ownerName)}</span>
+        ${pfOddsSlot(t.lgId, t.theirRosterId)}
       </div>
       <div id="pf-compare-${esc(t.lgId)}" style="display:none;"></div>
     </div>`).join('')}
@@ -8072,6 +8094,23 @@ function lsRestoreOddsCache() {
     LS.oddsLoaded = true;
     lsRecapSnapshot();
   }
+}
+
+// Make sure League Summaries' per-roster odds (d.allPlayoffOdds) exist for these
+// leagues — the one simulation, driven the way Scout drives it: lsLoadData for
+// the inputs, the 24h localStorage cache reused, a re-sim only for what the
+// cache didn't cover. Waits out a run already in flight (lsSimulateAllLeagues
+// no-ops during one, so awaiting it directly would read as a failure). Returns
+// '' on success, else a message. Used by Mass Offers and Player Finder.
+async function lsEnsureOddsFor(lgIds) {
+  const missing = () => lgIds.filter(id => !LS.leagueData[id]?.allPlayoffOdds).length;
+  if (!LS.loaded) { await lsLoadData(); LS.loaded = true; }
+  lsRestoreOddsCache();
+  if (!missing()) return '';
+  while (LS.oddsLoading) await new Promise(r => setTimeout(r, 500));
+  lsRestoreOddsCache();
+  if (missing()) { LS._oddsUseCache = true; await lsSimulateAllLeagues(); }
+  return missing() ? (LS.oddsError || 'Playoff odds couldn’t be calculated for every league') : '';
 }
 
 async function lsSimulateAllLeagues() {

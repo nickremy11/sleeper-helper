@@ -98,6 +98,8 @@
     .ta-propose-sides { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 10px; }
     .ta-propose-side { flex: 1 1 200px; min-width: 0; }
     .ta-propose-item { font-size: 0.9rem; padding: 2px 0; }
+    .ta-propose-odds { font-size: 0.82rem; color: var(--brown-light); margin: -2px 0 4px; }
+    .ta-odds-chip { white-space: nowrap; }
     .ta-propose-meta { font-size: 0.85rem; color: var(--brown-light); font-style: italic; margin-bottom: 12px; }
     .ta-propose-meta a { color: var(--gold-light); }
     .ta-propose-msg { font-size: 0.92rem; margin-bottom: 12px; }
@@ -404,6 +406,16 @@
       color:  p >= 0.70 ? '#5cb85c' : p >= 0.30 ? 'var(--gold-light)' : '#e05252',
       weight: (p >= 0.70 || p < 0.30) ? '700' : '400',
     };
+  }
+
+  // A team's CURRENT playoff odds as an inline chip — shown wherever a team is
+  // picked or an offer is about to go out, so who you're dealing with (contender
+  // or seller) is on screen before the trade is analyzed or sent. Reads the
+  // loader's own sim (t.playoffOdds), so it's free and matches the results table.
+  function teamOddsHtml(t, bare = false) {
+    if (t?.playoffOdds == null) return '';
+    const f = fmtOdds(t.playoffOdds);
+    return `<span class="ta-odds-chip" style="color:${f.color};font-weight:${f.weight};">${f.label}${bare ? '' : isPointsOnly ? ' most pts' : ' playoffs'}</span>`;
   }
 
   // Same shape as fmtOdds, but inverted — for last-place odds, LOW is good (green), HIGH is bad (red).
@@ -1501,7 +1513,7 @@
         ${badge}
         <div class="ta-team-name">${esc(displayName(t))}</div>
         ${t.teamName ? `<div class="ta-team-owner">${esc(t.teamName)}</div>` : ''}
-        <div class="ta-team-record">${t.wins}-${t.losses} · #${ovrR} Overall</div>
+        <div class="ta-team-record">${t.wins}-${t.losses} · #${ovrR} Overall${t.playoffOdds != null ? ' · ' + teamOddsHtml(t) : ''}</div>
       </div>`;
     }).join('');
 
@@ -1609,7 +1621,7 @@
         <div class="ta-panel-dot ${dotCls}"></div>
         <div class="ta-panel-hdr-info">
           <div class="ta-panel-title">${esc(displayName(team))}</div>
-          <div class="ta-panel-sub">${team.teamName ? esc(team.teamName) + ' · ' : ''}${team.wins}-${team.losses} · Sends ${routes.size} asset${routes.size !== 1 ? 's' : ''}</div>
+          <div class="ta-panel-sub">${team.teamName ? esc(team.teamName) + ' · ' : ''}${team.wins}-${team.losses}${team.playoffOdds != null ? ' · ' + teamOddsHtml(team) : ''} · Sends ${routes.size} asset${routes.size !== 1 ? 's' : ''}</div>
         </div>
         ${selVal > 0 ? `<div class="ta-panel-total">~${Number(Math.round(selVal)).toLocaleString()}</div>` : ''}
       </div>
@@ -1818,11 +1830,22 @@
       </div>`;
     }
 
+    // Each side's playoff odds now — and, when this exact trade has been analyzed
+    // (any builder change clears _analysis), what the sim says they become.
+    const oddsLine = rid => {
+      const t = teams.find(tm => tm.rosterId === rid);
+      if (t?.playoffOdds == null) return '';
+      const after = _analysis?.perTeam?.find(pt => pt.rosterId === rid)?.afterOdds;
+      const a = after != null ? fmtOdds(after) : null;
+      return `<div class="ta-propose-odds">${isPointsOnly ? 'Most-points odds' : 'Playoff odds'} ${teamOddsHtml(t, true)}${a ? ` → <span style="color:${a.color};font-weight:${a.weight};">${a.label}</span>` : ''}</div>`;
+    };
+
     // confirm — laid out by what each team RECEIVES, the way Sleeper shows an offer
     const sides = _teamIds.map(rid => {
       const got = assets.filter(a => a.to === rid);
       return `<div class="ta-propose-side">
         <div class="ta-summary-team-lbl" style="color:${SIDE_COLORS[_teamIds.indexOf(rid)]};">${nameOf(rid)}${rid === _myRosterId ? ' (you)' : ''} receives</div>
+        ${oddsLine(rid)}
         ${got.length
           ? got.map(a => `<div class="ta-propose-item">${esc(a.label)}${_teamIds.length > 2 ? ` <span class="ta-summary-dest">from ${nameOf(a.from)}</span>` : ''}</div>`).join('')
           : '<div class="ta-summary-empty">Nothing</div>'}
