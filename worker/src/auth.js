@@ -16,8 +16,6 @@ const OTP_TTL_MS       = 15 * 60 * 1000;  // code validity window
 const OTP_RESEND_MS    = 45 * 1000;       // min gap between sends
 const OTP_MAX_ATTEMPTS = 5;
 
-const ADMIN_EMAIL = 'remdogmillionaire22@gmail.com';
-
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
   'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
@@ -94,8 +92,9 @@ async function sendMail(env, { to, subject, html, text }) {
 }
 
 async function notifyAdmin(env, subject, text) {
+  if (!env.ADMIN_EMAIL) { console.warn('notifyAdmin skipped: ADMIN_EMAIL secret not set'); return; }
   try {
-    await resendSend(env, { to: ADMIN_EMAIL, from: 'Sleeper Helper <alerts@ffhistorian.com>', subject, text, html: `<p>${text}</p>` });
+    await resendSend(env, { to: env.ADMIN_EMAIL, from: 'Sleeper Helper <alerts@ffhistorian.com>', subject, text, html: `<p>${text}</p>` });
   } catch (e) {
     console.error('notifyAdmin failed:', e);
   }
