@@ -173,6 +173,8 @@ async function deleteUserAccount(userId, env) {
   await env.DB.batch([
     env.DB.prepare('DELETE FROM league_preferences WHERE user_id = ?').bind(userId),
     env.DB.prepare('DELETE FROM espn_settings WHERE user_id = ?').bind(userId),
+    env.DB.prepare('DELETE FROM roi_seasons WHERE user_id = ?').bind(userId),
+    env.DB.prepare('DELETE FROM roi_leagues WHERE user_id = ?').bind(userId),
     env.DB.prepare('DELETE FROM user_rankings WHERE user_id = ?').bind(userId),
     env.DB.prepare('DELETE FROM user_tier_picks WHERE user_id = ?').bind(userId),
     env.DB.prepare('DELETE FROM named_ranking_players WHERE set_id IN (SELECT id FROM named_ranking_sets WHERE owner_user_id = ?)').bind(userId),

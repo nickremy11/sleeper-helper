@@ -27,6 +27,8 @@
  *   GET  /api/espn/fantasy/:id    → proxy ESPN fantasy API using stored credentials (auth required)
  *   GET  /api/rootforme/prefs     → get league preferences for logged-in user
  *   POST /api/rootforme/prefs     → save league preferences for logged-in user
+ *   GET  /api/roi                 → ROI Tracker ledger (leagues + seasons) for logged-in user
+ *   POST /api/roi                 → upsert/delete ROI leagues + seasons
  *   GET  /api/eliteffl/picks            → all Elite FFL draft-history rows (public)
  *   POST /api/eliteffl/picks            → create one row (admin only)
  *   POST /api/eliteffl/picks/import     → bulk-insert rows for a season (admin only)
@@ -167,6 +169,10 @@ export default {
 
     if (url.pathname === '/api/rootforme/prefs') {
       return handleRootformePrefs(request, env);
+    }
+
+    if (url.pathname === '/api/roi') {
+      return handleRoi(request, env);
     }
 
     if (url.pathname.startsWith('/api/eliteffl/')) {
@@ -583,6 +589,86 @@ async function handleRootformePrefs(request, env) {
   }
 
   return new Response('Method not allowed', { status: 405, headers: CORS });
+}
+
+// ── ROI Tracker ───────────────────────────────────────────────────────────────
+// One account's ledger: GET returns everything; POST upserts whole rows (the
+// client holds the full state, so a row is always sent complete) and applies
+// deletes. Per-user data — no-store, credentialed CORS.
+
+const ROI_MAX_STMTS = 3000;
+
+function roiNum(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+function roiInt(v) { const n = roiNum(v); return n === null ? null : Math.round(n); }
+function roiId(v) { const s = String(v ?? ''); return /^[A-Za-z0-9_-]{1,64}$/.test(s) ? s : null; }
+
+async function handleRoi(request, env) {
+  const cors = getCors(request);
+  const res  = (data, status = 200) => new Response(JSON.stringify(data), {
+    status, headers: { ...cors, 'Content-Type': 'application/json;charset=UTF-8', 'Cache-Control': 'no-store' },
+  });
+  const user = await getAuthUser(request, env);
+  if (!user) return res({ error: 'Not authenticated' }, 401);
+  const uid = user.user_id;
+
+  if (request.method === 'GET') {
+    const [lg, ss] = await env.DB.batch([
+      env.DB.prepare('SELECT id, name, platform, buy_in, hidden FROM roi_leagues WHERE user_id = ?').bind(uid),
+      env.DB.prepare('SELECT league_id, season, ext_id, dues, winnings, finish, auto_finish, auto_of FROM roi_seasons WHERE user_id = ?').bind(uid),
+    ]);
+    return res({ leagues: lg.results || [], seasons: ss.results || [] });
+  }
+
+  if (request.method !== 'POST') return res({ error: 'Method not allowed' }, 405);
+
+  let body;
+  try { body = await request.json(); } catch { return res({ error: 'Invalid JSON' }, 400); }
+  const now   = Date.now();
+  const stmts = [];
+
+  for (const id of (body.deleteLeagues || [])) {
+    const lid = roiId(id);
+    if (!lid) continue;
+    stmts.push(env.DB.prepare('DELETE FROM roi_seasons WHERE user_id = ? AND league_id = ?').bind(uid, lid));
+    stmts.push(env.DB.prepare('DELETE FROM roi_leagues WHERE user_id = ? AND id = ?').bind(uid, lid));
+  }
+  for (const d of (body.deleteSeasons || [])) {
+    const lid = roiId(d?.league_id), yr = roiInt(d?.season);
+    if (!lid || yr === null) continue;
+    stmts.push(env.DB.prepare('DELETE FROM roi_seasons WHERE user_id = ? AND league_id = ? AND season = ?').bind(uid, lid, yr));
+  }
+  for (const l of (body.leagues || [])) {
+    const id = roiId(l?.id);
+    if (!id) continue;
+    const name     = String(l.name || '').trim().slice(0, 120) || 'Untitled league';
+    const platform = l.platform === 'sleeper' || l.platform === 'espn' ? l.platform : null;
+    stmts.push(env.DB.prepare(
+      `INSERT INTO roi_leagues (user_id, id, name, platform, buy_in, hidden, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(user_id, id) DO UPDATE SET name=excluded.name, platform=excluded.platform,
+         buy_in=excluded.buy_in, hidden=excluded.hidden, updated_at=excluded.updated_at`
+    ).bind(uid, id, name, platform, roiNum(l.buy_in), l.hidden ? 1 : 0, now));
+  }
+  for (const s of (body.seasons || [])) {
+    const lid = roiId(s?.league_id), yr = roiInt(s?.season);
+    if (!lid || yr === null || yr < 1990 || yr > 2100) continue;
+    const ext = s.ext_id ? String(s.ext_id).slice(0, 64) : null;
+    stmts.push(env.DB.prepare(
+      `INSERT INTO roi_seasons (user_id, league_id, season, ext_id, dues, winnings, finish, auto_finish, auto_of, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(user_id, league_id, season) DO UPDATE SET ext_id=excluded.ext_id, dues=excluded.dues,
+         winnings=excluded.winnings, finish=excluded.finish, auto_finish=excluded.auto_finish,
+         auto_of=excluded.auto_of, updated_at=excluded.updated_at`
+    ).bind(uid, lid, yr, ext, roiNum(s.dues), roiNum(s.winnings), roiInt(s.finish), roiInt(s.auto_finish), roiInt(s.auto_of), now));
+  }
+
+  if (stmts.length > ROI_MAX_STMTS) return res({ error: 'Too many rows in one save' }, 413);
+  for (let i = 0; i < stmts.length; i += 100) await env.DB.batch(stmts.slice(i, i + 100));
+  return res({ ok: true, written: stmts.length });
 }
 
 // ── Elite FFL — Draft History + Keeper Options ─────────────────────────────────

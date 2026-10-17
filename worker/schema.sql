@@ -53,6 +53,39 @@ CREATE TABLE IF NOT EXISTS league_preferences (
   PRIMARY KEY (user_id, league_id)
 );
 
+-- ── ROI Tracker ──────────────────────────────────────────────────────────────
+-- A league is one row however many seasons it runs; its seasons are joined to
+-- it by roi_seasons.league_id. `id` is client-generated. `platform` is
+-- 'sleeper' | 'espn' | NULL (entered by hand / CSV only).
+CREATE TABLE IF NOT EXISTS roi_leagues (
+  user_id    TEXT    NOT NULL,
+  id         TEXT    NOT NULL,
+  name       TEXT    NOT NULL,
+  platform   TEXT,
+  buy_in     REAL,               -- the league's usual price, shown beside the name
+  hidden     INTEGER NOT NULL DEFAULT 0,   -- 1 = left out of every total
+  updated_at INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, id)
+);
+
+-- One row = "I was in this league that year". A missing row is a year I wasn't.
+-- dues NULL = not paid yet (0 is a real, paid-nothing value). finish is the
+-- hand-entered placing; auto_finish is what Sleeper/ESPN reported, stored once
+-- the season is complete so it's never re-fetched. Shown: finish ?? auto_finish.
+CREATE TABLE IF NOT EXISTS roi_seasons (
+  user_id     TEXT    NOT NULL,
+  league_id   TEXT    NOT NULL,
+  season      INTEGER NOT NULL,
+  ext_id      TEXT,              -- that season's Sleeper league_id, or espn_{id}
+  dues        REAL,
+  winnings    REAL,
+  finish      INTEGER,
+  auto_finish INTEGER,
+  auto_of     INTEGER,           -- teams in the league when auto_finish was read
+  updated_at  INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, league_id, season)
+);
+
 -- ── My Ranks tables ───────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS user_rankings (
