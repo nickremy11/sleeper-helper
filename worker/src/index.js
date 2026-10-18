@@ -38,6 +38,7 @@
  *   POST /api/eliteffl/keeper-options           → create one row (admin only)
  *   POST /api/eliteffl/keeper-options/import    → bulk-insert rows (admin only)
  *   PUT/DELETE /api/eliteffl/keeper-options/:id → edit/remove one row (admin only)
+ *   data.ffhistorian.com/*        → Site Lead stats explorer (page + /api/data/*), see src/data.js
  *   POST /api/dispersal           → create dispersal room
  *   *    /api/dispersal/:id/*     → forward to DispersalRoom Durable Object
  *
@@ -51,6 +52,7 @@
 
 export { DispersalRoom } from './dispersal.js';
 import { handleAuth, getAuthUser, decryptStoredToken, requireAdmin } from './auth.js';
+import { handleDataSite } from './data.js';
 
 const SLEEPER_BASE  = 'https://api.sleeper.app/v1';
 const SLEEPER_GQL   = 'https://sleeper.com/graphql';
@@ -108,6 +110,12 @@ const CORS = getCors(null);
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    // data.ffhistorian.com is admin-only and same-origin — it never shares the
+    // CORS / OPTIONS handling below. See src/data.js.
+    if (url.hostname === 'data.ffhistorian.com') {
+      return handleDataSite(request, env, url);
+    }
 
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: getCors(request) });

@@ -9,8 +9,18 @@ workers_dev        = false
 # Only /api/* on the subdomain hits this Worker.
 # Everything else (static HTML) is served by Pages.
 routes = [
-  { pattern = "helper.ffhistorian.com/api/*", zone_name = "ffhistorian.com" }
+  { pattern = "helper.ffhistorian.com/api/*", zone_name = "ffhistorian.com" },
+  # The whole data.ffhistorian.com host is this Worker (page + API), so the
+  # admin gate runs before anything is served. custom_domain makes wrangler
+  # create the DNS record + certificate itself on deploy.
+  { pattern = "data.ffhistorian.com", custom_domain = true }
 ]
+
+# src/data-page.html is imported as a string by src/data.js.
+[[rules]]
+type        = "Text"
+globs       = ["**/*.html"]
+fallthrough = true
 
 # ── D1 Database ───────────────────────────────────────────────────────────────
 # Run: wrangler d1 create sleeper-helper-db  →  paste database_id below

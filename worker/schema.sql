@@ -269,3 +269,21 @@ CREATE TABLE IF NOT EXISTS eliteffl_keeper_options (
 );
 
 CREATE INDEX IF NOT EXISTS idx_eliteffl_keeper_owner ON eliteffl_keeper_options(owner);
+
+-- data.ffhistorian.com — Site Lead stats explorer (src/data.js). One row per
+-- player-season per source; not user-keyed (single admin), so it is NOT in
+-- deleteUserAccount(). `data` is a JSON object of metric → number|string,
+-- empty cells omitted (absent = no data, never 0). Imports MERGE via json_patch.
+-- player_key = normalized name + '|' + position (PlayerProfiler exports carry no id).
+CREATE TABLE IF NOT EXISTS data_player_seasons (
+  source      TEXT    NOT NULL,   -- 'pp' (PlayerProfiler) | 'nflverse'
+  season      INTEGER NOT NULL,
+  player_key  TEXT    NOT NULL,
+  name        TEXT    NOT NULL,
+  position    TEXT,
+  data        TEXT    NOT NULL,
+  updated_at  INTEGER NOT NULL,
+  PRIMARY KEY (source, season, player_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_data_ps_season ON data_player_seasons(season);

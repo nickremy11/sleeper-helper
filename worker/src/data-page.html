@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Data Room</title>
+<link href="https://fonts.googleapis.com/css2?family=Rye&family=Playfair+Display:ital@1&family=Crimson+Text:wght@400;600&display=swap" rel="stylesheet" />
+<style>
+:root {
+  --cream: #f5ead6; --parchment: #e8d5b0; --brown-dark: #2a1a0e; --brown-mid: #5c3d1e;
+  --brown-light: #8b5e2e; --green: #2d4a1e; --green-light: #4a7a2f; --red: #8b1a1a;
+  --gold: #c9962a; --gold-light: #e8b84b; --ink: #1a1008;
+  --num: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--cream); color: var(--ink); font-family: 'Crimson Text', Georgia, serif; min-height: 100vh; }
+
+.banner { background: var(--green); border-bottom: 6px double var(--gold); }
+.banner-inner { max-width: 1600px; margin: 0 auto; padding: 18px 24px 14px; }
+.banner a { font-family: 'Rye', serif; font-size: .55rem; letter-spacing: .3em; text-transform: uppercase; color: var(--gold-light); text-decoration: none; opacity: .7; }
+.banner h1 { font-family: 'Rye', serif; font-size: clamp(1.2rem, 3vw, 1.7rem); color: var(--cream); margin-top: 6px; }
+.banner h1 span { color: var(--gold-light); }
+.banner p { font-family: 'Playfair Display', serif; font-style: italic; font-size: .85rem; color: var(--parchment); opacity: .75; margin-top: 4px; }
+
+.main { max-width: 1600px; margin: 0 auto; padding: 20px 24px 60px; }
+
+.panel { background: var(--brown-dark); border: 2px solid var(--brown-mid); box-shadow: 4px 4px 0 var(--brown-mid); color: var(--parchment); padding: 14px 18px; margin-bottom: 18px; }
+.panel > summary { cursor: pointer; font-family: 'Rye', serif; font-size: .62rem; letter-spacing: .18em; text-transform: uppercase; color: var(--gold-light); list-style: none; }
+.panel > summary::-webkit-details-marker { display: none; }
+.panel > summary::before { content: '▸ '; }
+.panel[open] > summary::before { content: '▾ '; }
+.panel-body { margin-top: 12px; display: grid; gap: 12px; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.lbl { font-family: 'Rye', serif; font-size: .5rem; letter-spacing: .15em; text-transform: uppercase; color: var(--gold); min-width: 64px; }
+.note { font-size: .9rem; font-style: italic; color: var(--brown-light); }
+.panel .note { color: var(--parchment); opacity: .75; }
+.err { color: #e07a6a; font-style: normal; }
+.ok  { color: var(--gold-light); font-style: normal; }
+
+select, input[type=text], input[type=number] {
+  font-family: var(--num); font-size: .85rem; padding: 5px 8px; border: 1px solid var(--brown-light);
+  background: var(--cream); color: var(--ink); border-radius: 2px;
+}
+input[type=file] { font-family: var(--num); font-size: .8rem; color: var(--parchment); max-width: 100%; }
+.btn {
+  font-family: 'Rye', serif; font-size: .52rem; letter-spacing: .14em; text-transform: uppercase;
+  background: var(--green); color: var(--gold-light); border: 1px solid var(--gold); padding: 7px 14px; cursor: pointer; border-radius: 2px;
+}
+.btn:hover:not(:disabled) { background: var(--gold); color: var(--brown-dark); }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.btn.del { background: transparent; border-color: var(--red); color: #e07a6a; padding: 3px 8px; }
+.btn.del:hover:not(:disabled) { background: var(--red); color: var(--cream); }
+
+.pill {
+  font-family: var(--num); font-size: .75rem; padding: 3px 10px; border: 1px solid var(--brown-light);
+  background: transparent; color: var(--brown-mid); cursor: pointer; border-radius: 999px;
+}
+.pill.on { background: var(--green); border-color: var(--green); color: var(--gold-light); }
+.pill:hover { border-color: var(--gold); }
+
+.slices { display: flex; flex-wrap: wrap; gap: 8px; }
+.slice { display: inline-flex; align-items: center; gap: 8px; font-family: var(--num); font-size: .78rem; background: rgba(255,255,255,.05); padding: 4px 6px 4px 10px; border: 1px solid var(--brown-mid); }
+
+.toolbar { display: grid; gap: 10px; margin-bottom: 12px; }
+.count { font-family: var(--num); font-size: .8rem; color: var(--brown-light); }
+
+/* The table scrolls inside its own box, both ways, so the page never does —
+   and the header row + player column stay pinned while it does. */
+.tbl-wrap { overflow: auto; max-height: calc(100vh - 120px); border: 2px solid var(--brown-mid); background: #fffaf0; }
+table { border-collapse: separate; border-spacing: 0; font-family: var(--num); font-size: .78rem; font-variant-numeric: tabular-nums; }
+th, td { padding: 5px 9px; white-space: nowrap; border-bottom: 1px solid #eadfca; text-align: right; }
+th { position: sticky; top: 0; z-index: 2; background: var(--brown-dark); color: var(--parchment); font-weight: 600; cursor: pointer; user-select: none; vertical-align: bottom; border-bottom: 2px solid var(--gold); }
+th:hover { color: var(--gold-light); }
+th.sorted { color: var(--gold-light); }
+th .grp { display: block; font-size: .6rem; font-weight: 400; color: var(--gold); opacity: .8; letter-spacing: .04em; text-transform: uppercase; }
+th.txt, td.txt { text-align: left; }
+th:first-child, td:first-child { position: sticky; left: 0; z-index: 1; text-align: left; }
+th:first-child { z-index: 3; }
+td:first-child { background: #fffaf0; font-weight: 600; border-right: 1px solid #eadfca; }
+tbody tr:nth-child(even) td { background: #f8efdd; }
+tbody tr:hover td { background: #f1e2c2; }
+td.null { color: #c9b996; }
+td.nv { color: var(--green-light); font-style: italic; }   /* filled from nflverse, not PlayerProfiler */
+.more { display: block; margin: 12px auto 0; }
+.empty { padding: 40px; text-align: center; font-style: italic; color: var(--brown-light); }
+
+@media (max-width: 640px) {
+  .banner-inner, .main { padding-left: 16px; padding-right: 16px; }
+  .lbl { min-width: 0; width: 100%; }
+}
+</style>
+</head>
+<body>
+<header class="banner"><div class="banner-inner">
+  <a href="https://helper.ffhistorian.com/">← Helper</a>
+  <h1>Data <span>Room</span></h1>
+  <p>Player seasons from PlayerProfiler, gaps filled from nflverse</p>
+</div></header>
+
+<main class="main">
+  <details class="panel" id="import-panel">
+    <summary>Import CSVs</summary>
+    <div class="panel-body">
+      <div class="row">
+        <span class="lbl">Source</span>
+        <select id="imp-source">
+          <option value="pp">PlayerProfiler</option>
+          <option value="nflverse">nflverse</option>
+        </select>
+        <span class="lbl">Season</span>
+        <input type="number" id="imp-season" placeholder="from file" min="1999" max="2100" style="width:110px" />
+        <span class="note">only used when a file has no season column</span>
+      </div>
+      <div class="row">
+        <span class="lbl">Files</span>
+        <input type="file" id="imp-files" accept=".csv,text/csv" multiple />
+      </div>
+      <div id="imp-preview" class="note"></div>
+      <div class="row">
+        <button class="btn" id="imp-go" disabled>Import</button>
+        <span id="imp-status" class="note"></span>
+      </div>
+      <div class="row" style="align-items:flex-start">
+        <span class="lbl">Stored</span>
+        <div class="slices" id="slices"><span class="note">Loading…</span></div>
+      </div>
+    </div>
+  </details>
+
+  <div class="toolbar">
+    <div class="row">
+      <input type="text" id="f-search" placeholder="Search player…" style="width:200px" />
+      <span class="lbl" style="min-width:0">Min targets</span>
+      <input type="number" id="f-mintgt" min="0" placeholder="0" style="width:80px" />
+      <button class="btn" id="export-btn">Export CSV</button>
+      <span class="count" id="count"></span>
+    </div>
+    <div class="row"><span class="lbl">Position</span><span id="f-pos" class="row"></span></div>
+    <div class="row"><span class="lbl">Season</span><span id="f-season" class="row"></span></div>
+  </div>
+
+  <div class="tbl-wrap" id="tbl-wrap"><div class="empty">Loading…</div></div>
+  <button class="btn more" id="more-btn" hidden>Show more</button>
+</main>
+
+<script>
+// ── Column format ────────────────────────────────────────────────────────────
+// THE display order. `key` is the CSV header lowercased with spaces → `_`
+// (normHeader). Anything imported that is not listed here is still stored and
+// shown, appended after these in the order first seen. `txt` = left-aligned
+// text column. Reorder, relabel or regroup freely — nothing else depends on it.
+const COLUMNS = [
+  { key: 'name',            label: 'Player',  txt: true },
+  { key: 'season',          label: 'Season' },
+  { key: 'position',        label: 'Pos',     txt: true },
+  // PlayerProfiler's current_team is where he plays NOW, not that season's team.
+  { key: 'current_team',    label: 'Current Team', txt: true },
+  { key: 'status',          label: 'Status',  txt: true },
+
+  { key: 'targets',                       group: 'Volume',  label: 'Tgt' },
+  { key: 'receptions',                    group: 'Volume',  label: 'Rec' },
+  { key: 'receiving_yards',               group: 'Volume',  label: 'Yds' },
+  { key: 'receiving_touchdowns',          group: 'Volume',  label: 'TD' },
+  { key: 'routes_run',                    group: 'Volume',  label: 'Routes' },
+
+  { key: 'yards_per_route_run',           group: 'Routes',  label: 'YPRR' },
+  { key: 'target_rate',                   group: 'Routes',  label: 'TPRR' },
+  { key: 'first_downs_per_route_run',     group: 'Routes',  label: '1D/RR' },
+  { key: 'route_participation',           group: 'Routes',  label: 'Route %' },
+
+  { key: 'target_share',                  group: 'Share',   label: 'Tgt %' },
+  { key: 'first_read_target_share',       group: 'Share',   label: '1st Read %' },
+  { key: 'air_yards_share',               group: 'Share',   label: 'Air Yd %' },
+  { key: 'red_zone_target_share',         group: 'Share',   label: 'RZ Tgt %' },
+
+  { key: 'target_rate_vs_man',            group: 'Man',     label: 'TPRR' },
+  { key: 'receptions_vs_man',             group: 'Man',     label: 'Rec' },
+  { key: 'receiving_yards_vs_man',        group: 'Man',     label: 'Yds' },
+  { key: 'target_rate_vs_zone',           group: 'Zone',    label: 'TPRR' },
+  { key: 'receptions_vs_zone',            group: 'Zone',    label: 'Rec' },
+  { key: 'receiving_yards_vs_zone',       group: 'Zone',    label: 'Yds' },
+
+  { key: 'slot_rate',                     group: 'Alignment', label: 'Slot %' },
+  { key: 'slot_snaps',                    group: 'Alignment', label: 'Slot Snaps' },
+
+  { key: 'yards_per_reception',           group: 'Efficiency', label: 'Y/R' },
+  { key: 'yards_per_target',              group: 'Efficiency', label: 'Y/Tgt' },
+  { key: 'yards_after_catch_per_reception', group: 'Efficiency', label: 'YAC/R' },
+  { key: 'catch_rate',                    group: 'Efficiency', label: 'Catch %' },
+  { key: 'catchable_target_rate',         group: 'Efficiency', label: 'Catchable %' },
+  { key: 'epa_per_target',                group: 'Efficiency', label: 'EPA/Tgt' },
+  { key: 'yards_per_team_pass_attempt',   group: 'Efficiency', label: 'Yds/Team Att' },
+
+  { key: 'average_target_distance',       group: 'Depth',   label: 'aDOT' },
+  { key: 'unrealized_air_yards',          group: 'Depth',   label: 'Unrealized AY' },
+];
+
+// Identity columns: recognised by any of these headers, stored outside `data`.
+const ID_HEADERS = {
+  name:     ['name', 'player', 'player_name', 'full_name'],
+  position: ['position', 'pos'],
+  season:   ['season', 'year'],
+};
+
+const PAGE_SIZE   = 300;
+const IMPORT_CHUNK = 250;
+const LS_FILTERS  = 'data_room_filters_v1';
+
+// ── State ────────────────────────────────────────────────────────────────────
+const D = {
+  rows: [],          // merged: {season, key, name, pos, cells:{k:v}, nv:Set<k>}
+  extraCols: [],     // imported keys COLUMNS doesn't list
+  pending: null,     // parsed import, awaiting the Import click
+  sort: { key: 'targets', dir: -1 },
+  shown: PAGE_SIZE,
+  f: { search: '', minTgt: '', pos: new Set(), seasons: new Set() },
+};
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+// ── CSV ──────────────────────────────────────────────────────────────────────
+function parseCsv(text) {
+  text = text.replace(/^﻿/, '');
+  const rows = []; let row = [], cell = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; }
+      else cell += c;
+    } else if (c === '"') q = true;
+    else if (c === ',') { row.push(cell); cell = ''; }
+    else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(cell); cell = '';
+      if (row.some(v => v !== '')) rows.push(row);
+      row = [];
+    } else cell += c;
+  }
+  row.push(cell);
+  if (row.some(v => v !== '')) rows.push(row);
+  return rows;
+}
+
+const normHeader = h => h.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+
+// PlayerProfiler exports carry no player id, so a player is his normalised name
+// + position. Suffixes and punctuation go so "D.J. Moore Jr." and "DJ Moore"
+// land on one key when an nflverse file spells him differently.
+function playerKey(name, pos) {
+  const n = name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[.'’]/g, '').replace(/\b(jr|sr|ii|iii|iv|v)\b/g, '')
+    .replace(/[^a-z0-9]+/g, ' ').trim();
+  return n + '|' + (pos || '').toUpperCase();
+}
+
+// '' → absent (never 0). Numbers lose thousands separators and a trailing %.
+function cellValue(raw) {
+  const s = raw.trim();
+  if (!s) return undefined;
+  const n = s.replace(/,/g, '').replace(/%$/, '');
+  return /^-?\d*\.?\d+$/.test(n) ? Number(n) : s;
+}
+
+function parseImport(fileTexts, seasonFallback) {
+  const out = [], problems = [], cols = new Set(), seasons = new Set();
+  for (const { name: file, text } of fileTexts) {
+    const grid = parseCsv(text);
+    if (grid.length < 2) { problems.push(`${file}: no data rows`); continue; }
+    const hdr = grid[0].map(normHeader);
+    const idx = {};
+    for (const [k, alts] of Object.entries(ID_HEADERS)) idx[k] = hdr.findIndex(h => alts.includes(h));
+    if (idx.name < 0) { problems.push(`${file}: no name/player column`); continue; }
+    if (idx.season < 0 && !seasonFallback) { problems.push(`${file}: no season column — enter a season above`); continue; }
+    let skipped = 0;
+    for (const r of grid.slice(1)) {
+      const name = (r[idx.name] || '').trim();
+      const season = idx.season >= 0 ? parseInt(r[idx.season], 10) : seasonFallback;
+      if (!name || !(season >= 1999 && season <= 2100)) { skipped++; continue; }
+      const pos = idx.position >= 0 ? (r[idx.position] || '').trim().toUpperCase() : '';
+      const data = {};
+      hdr.forEach((h, i) => {
+        if (!h || i === idx.name || i === idx.season || i === idx.position) return;
+        const v = cellValue(r[i] ?? '');
+        if (v !== undefined) { data[h] = v; cols.add(h); }
+      });
+      out.push({ season, key: playerKey(name, pos), name, pos, data });
+      seasons.add(season);
+    }
+    if (skipped) problems.push(`${file}: ${skipped} row(s) skipped (no name or season)`);
+  }
+  return { rows: out, problems, cols: [...cols], seasons: [...seasons].sort() };
+}
+
+// ── API ──────────────────────────────────────────────────────────────────────
+async function apiJson(path, opts) {
+  const r = await fetch(path, { credentials: 'same-origin', ...opts });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+  return j;
+}
+const apiPost = (path, body) => apiJson(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+// ── Load + merge ─────────────────────────────────────────────────────────────
+// One merged row per (season, player). PlayerProfiler wins; nflverse only fills
+// cells PlayerProfiler left empty, and those cells are remembered in `nv` so
+// they render distinguishably.
+function mergeRows(raw) {
+  const by = new Map(), slices = new Map(), seen = new Set(COLUMNS.map(c => c.key)), extra = [];
+  raw.sort((a, b) => (a.source === 'pp') - (b.source === 'pp'));   // nflverse first, pp overlays
+  for (const r of raw) {
+    const sk = r.source + '|' + r.season;
+    slices.set(sk, (slices.get(sk) || 0) + 1);
+    const id = r.season + '|' + r.key;
+    let m = by.get(id);
+    if (!m) { m = { season: r.season, key: r.key, name: r.name, pos: r.pos, cells: {}, nv: new Set() }; by.set(id, m); }
+    if (r.source === 'pp') { m.name = r.name; m.pos = r.pos || m.pos; }
+    for (const [k, v] of Object.entries(r.data)) {
+      if (!seen.has(k)) { seen.add(k); extra.push(k); }
+      if (r.source === 'pp') { m.cells[k] = v; m.nv.delete(k); }
+      else { m.cells[k] = v; m.nv.add(k); }
+    }
+  }
+  for (const m of by.values()) { m.cells.name = m.name; m.cells.season = m.season; m.cells.position = m.pos; }
+  return { rows: [...by.values()], extra, slices };
+}
+
+async function loadAll() {
+  try {
+    const { rows } = await apiJson('/api/data/rows');
+    const m = mergeRows(rows);
+    D.rows = m.rows; D.extraCols = m.extra;
+    drawSlices(m.slices);
+    drawFilters();
+    draw();
+    if (!rows.length) $('import-panel').open = true;
+  } catch (e) {
+    $('tbl-wrap').innerHTML = `<div class="empty err">Couldn't load data: ${esc(e.message)}</div>`;
+    $('slices').innerHTML = '';
+  }
+}
+
+// ── Import UI ────────────────────────────────────────────────────────────────
+async function onFiles() {
+  const files = [...$('imp-files').files];
+  D.pending = null; $('imp-go').disabled = true; $('imp-status').textContent = '';
+  if (!files.length) { $('imp-preview').innerHTML = ''; return; }
+  const texts = await Promise.all(files.map(async f => ({ name: f.name, text: await f.text() })));
+  const p = parseImport(texts, parseInt($('imp-season').value, 10) || null);
+  const known = new Set(COLUMNS.map(c => c.key));
+  const unlisted = p.cols.filter(c => !known.has(c));
+  $('imp-preview').innerHTML =
+    `<span class="ok">${p.rows.length} rows</span> · seasons ${p.seasons.join(', ') || '—'} · ${p.cols.length} metric columns` +
+    (unlisted.length ? `<br>Not in COLUMNS (shown at the end): ${esc(unlisted.join(', '))}` : '') +
+    p.problems.map(x => `<br><span class="err">${esc(x)}</span>`).join('');
+  if (p.rows.length) { D.pending = p; $('imp-go').disabled = false; }
+}
+
+async function doImport() {
+  const p = D.pending; if (!p) return;
+  const source = $('imp-source').value;
+  $('imp-go').disabled = true;
+  try {
+    for (let i = 0; i < p.rows.length; i += IMPORT_CHUNK) {
+      $('imp-status').textContent = `Writing ${Math.min(i + IMPORT_CHUNK, p.rows.length)} / ${p.rows.length}…`;
+      await apiPost('/api/data/import', { source, rows: p.rows.slice(i, i + IMPORT_CHUNK) });
+    }
+    $('imp-status').innerHTML = `<span class="ok">Imported ${p.rows.length} rows.</span>`;
+    $('imp-files').value = ''; D.pending = null; $('imp-preview').innerHTML = '';
+    await loadAll();
+  } catch (e) {
+    $('imp-status').innerHTML = `<span class="err">Import failed: ${esc(e.message)}</span> — rows before the failure were saved; re-importing the file is safe (it merges).`;
+    $('imp-go').disabled = false;
+  }
+}
+
+function drawSlices(slices) {
+  const label = { pp: 'PlayerProfiler', nflverse: 'nflverse' };
+  const items = [...slices.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  $('slices').innerHTML = items.length ? items.map(([sk, n]) => {
+    const [src, season] = sk.split('|');
+    return `<span class="slice">${esc(label[src] || src)} ${season} · ${n}
+      <button class="btn del" data-src="${esc(src)}" data-season="${season}">Delete</button></span>`;
+  }).join('') : '<span class="note">Nothing imported yet.</span>';
+}
+
+async function onDeleteSlice(btn) {
+  const { src, season } = btn.dataset;
+  if (!confirm(`Delete every ${src} row for ${season}?`)) return;
+  btn.disabled = true;
+  try { await apiPost('/api/data/delete', { source: src, season: Number(season) }); await loadAll(); }
+  catch (e) { alert('Delete failed: ' + e.message); btn.disabled = false; }
+}
+
+// ── Filters ──────────────────────────────────────────────────────────────────
+function saveFilters() {
+  try {
+    localStorage.setItem(LS_FILTERS, JSON.stringify({
+      search: D.f.search, minTgt: D.f.minTgt, pos: [...D.f.pos], seasons: [...D.f.seasons], sort: D.sort,
+    }));
+  } catch {}
+}
+function loadFilters() {
+  try {
+    const s = JSON.parse(localStorage.getItem(LS_FILTERS) || 'null');
+    if (!s) return;
+    D.f.search = s.search || ''; D.f.minTgt = s.minTgt ?? '';
+    D.f.pos = new Set(s.pos || []); D.f.seasons = new Set(s.seasons || []);
+    if (s.sort?.key) D.sort = s.sort;
+  } catch {}
+  $('f-search').value = D.f.search; $('f-mintgt').value = D.f.minTgt;
+}
+
+// Empty set = no filter. A stored selection that no longer exists in the data
+// (a deleted season) is dropped so it can't silently filter everything out.
+function drawFilters() {
+  const poss = [...new Set(D.rows.map(r => r.pos).filter(Boolean))].sort();
+  const seasons = [...new Set(D.rows.map(r => r.season))].sort((a, b) => b - a);
+  D.f.pos = new Set([...D.f.pos].filter(p => poss.includes(p)));
+  D.f.seasons = new Set([...D.f.seasons].filter(s => seasons.includes(s)));
+  const pills = (vals, set, kind) => vals.map(v =>
+    `<button class="pill ${set.has(v) ? 'on' : ''}" data-kind="${kind}" data-v="${esc(v)}">${esc(v)}</button>`).join('');
+  $('f-pos').innerHTML = pills(poss, D.f.pos, 'pos') || '<span class="note">—</span>';
+  $('f-season').innerHTML = pills(seasons, D.f.seasons, 'season') || '<span class="note">—</span>';
+}
+
+function onPill(btn) {
+  const set = btn.dataset.kind === 'pos' ? D.f.pos : D.f.seasons;
+  const v = btn.dataset.kind === 'pos' ? btn.dataset.v : Number(btn.dataset.v);
+  set.has(v) ? set.delete(v) : set.add(v);
+  btn.classList.toggle('on');
+  D.shown = PAGE_SIZE; saveFilters(); draw();
+}
+
+function filtered() {
+  const q = D.f.search.trim().toLowerCase();
+  const minT = parseFloat(D.f.minTgt);
+  return D.rows.filter(r =>
+    (!q || r.name.toLowerCase().includes(q)) &&
+    (!D.f.pos.size || D.f.pos.has(r.pos)) &&
+    (!D.f.seasons.size || D.f.seasons.has(r.season)) &&
+    (!(minT > 0) || (typeof r.cells.targets === 'number' && r.cells.targets >= minT))
+  );
+}
+
+// ── Table ────────────────────────────────────────────────────────────────────
+function activeColumns() {
+  const present = new Set(['name', 'season', 'position']);
+  for (const r of D.rows) for (const k in r.cells) present.add(k);
+  const listed = COLUMNS.filter(c => present.has(c.key));
+  return listed.concat(D.extraCols.map(k => ({ key: k, label: k.replace(/_/g, ' '), group: 'Other' })));
+}
+
+// Missing values sink to the bottom in BOTH directions — otherwise sorting
+// 2016 by YPRR descending would lead with a wall of blanks.
+function sortRows(rows) {
+  const { key, dir } = D.sort;
+  return rows.sort((a, b) => {
+    const x = a.cells[key], y = b.cells[key];
+    const xn = x === undefined || x === null, yn = y === undefined || y === null;
+    if (xn || yn) return xn - yn;
+    if (typeof x === 'number' && typeof y === 'number') return (x - y) * dir || a.name.localeCompare(b.name);
+    return String(x).localeCompare(String(y)) * dir;
+  });
+}
+
+let _view = [], _cols = [];
+function draw() {
+  _cols = activeColumns();
+  _view = sortRows(filtered());
+  $('count').textContent = `${_view.length.toLocaleString()} of ${D.rows.length.toLocaleString()} player-seasons`;
+  if (!D.rows.length) { $('tbl-wrap').innerHTML = '<div class="empty">Nothing imported yet — open “Import CSVs” above.</div>'; $('more-btn').hidden = true; return; }
+  if (!_view.length) { $('tbl-wrap').innerHTML = '<div class="empty">No rows match these filters.</div>'; $('more-btn').hidden = true; return; }
+
+  const head = '<tr>' + _cols.map(c => {
+    const on = D.sort.key === c.key;
+    return `<th class="${c.txt ? 'txt' : ''} ${on ? 'sorted' : ''}" data-k="${esc(c.key)}" title="${esc(c.key)}">` +
+      (c.group ? `<span class="grp">${esc(c.group)}</span>` : '<span class="grp">&nbsp;</span>') +
+      esc(c.label) + (on ? (D.sort.dir < 0 ? ' ▾' : ' ▴') : '') + '</th>';
+  }).join('') + '</tr>';
+
+  const body = _view.slice(0, D.shown).map(r => '<tr>' + _cols.map(c => {
+    const v = r.cells[c.key];
+    if (v === undefined || v === null) return `<td class="null ${c.txt ? 'txt' : ''}">–</td>`;
+    const cls = (c.txt ? 'txt ' : '') + (r.nv.has(c.key) ? 'nv' : '');
+    return `<td class="${cls}"${r.nv.has(c.key) ? ' title="from nflverse"' : ''}>${esc(v)}</td>`;
+  }).join('') + '</tr>').join('');
+
+  $('tbl-wrap').innerHTML = `<table><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  const more = _view.length - D.shown;
+  $('more-btn').hidden = more <= 0;
+  $('more-btn').textContent = `Show ${Math.min(more, PAGE_SIZE)} more (${more} hidden)`;
+}
+
+function onSort(th) {
+  const k = th.dataset.k;
+  const col = _cols.find(c => c.key === k);
+  // First click: numbers high → low, text A → Z. Second click reverses.
+  D.sort = D.sort.key === k ? { key: k, dir: -D.sort.dir } : { key: k, dir: col?.txt ? 1 : -1 };
+  D.shown = PAGE_SIZE; saveFilters(); draw();
+}
+
+function exportCsv() {
+  const q = v => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const lines = [_cols.map(c => q(c.key)).join(',')]
+    .concat(_view.map(r => _cols.map(c => q(r.cells[c.key])).join(',')));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' }));
+  a.download = 'data-room-export.csv';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+// ── Wiring ───────────────────────────────────────────────────────────────────
+let _searchT;
+$('f-search').addEventListener('input', e => {
+  clearTimeout(_searchT);
+  _searchT = setTimeout(() => { D.f.search = e.target.value; D.shown = PAGE_SIZE; saveFilters(); draw(); }, 150);
+});
+$('f-mintgt').addEventListener('input', e => { D.f.minTgt = e.target.value; D.shown = PAGE_SIZE; saveFilters(); draw(); });
+$('f-pos').addEventListener('click', e => { const b = e.target.closest('.pill'); if (b) onPill(b); });
+$('f-season').addEventListener('click', e => { const b = e.target.closest('.pill'); if (b) onPill(b); });
+$('tbl-wrap').addEventListener('click', e => { const th = e.target.closest('th'); if (th) onSort(th); });
+$('more-btn').addEventListener('click', () => { D.shown += PAGE_SIZE; draw(); });
+$('export-btn').addEventListener('click', exportCsv);
+$('imp-files').addEventListener('change', onFiles);
+$('imp-season').addEventListener('change', onFiles);
+$('imp-go').addEventListener('click', doImport);
+$('slices').addEventListener('click', e => { const b = e.target.closest('.btn.del'); if (b) onDeleteSlice(b); });
+
+loadFilters();
+loadAll();
+</script>
+</body>
+</html>
