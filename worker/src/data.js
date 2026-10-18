@@ -10,6 +10,7 @@
  *   GET  /api/data/rows     → every stored player-season row (?season= optional)
  *   POST /api/data/import   → upsert a chunk of rows, MERGING into existing data
  *   POST /api/data/delete   → drop one {source, season} slice
+ *   GET  /api/data/nflverse → nflverse season stats CSV for ?season= (raw pass-through)
  *
  * Same-origin only — no CORS headers, so nothing else can read these responses.
  * POSTs are protected by the session cookie's SameSite=Strict.
@@ -60,6 +61,7 @@ export async function handleDataSite(request, env, url) {
     if (path === '/api/data/rows'   && request.method === 'GET')  return listRows(env, url);
     if (path === '/api/data/import' && request.method === 'POST') return importRows(request, env);
     if (path === '/api/data/delete' && request.method === 'POST') return deleteSlice(request, env);
+    if (path === '/api/data/nflverse' && request.method === 'GET') return nflverseCsv(url);
     return json({ error: 'Not found' }, 404);
   }
 
@@ -132,6 +134,20 @@ async function importRows(request, env) {
   }
   await env.DB.batch(stmts);
   return json({ ok: true, written: stmts.length });
+}
+
+// Raw pass-through of nflverse's per-season regular-season player stats CSV
+// (~800KB). Parsed and mapped in the page (parseNflverse) so the Worker does no
+// CSV work; same-origin, which is the only reason this proxy exists (GitHub's
+// release downloads send no CORS headers).
+async function nflverseCsv(url) {
+  const season = parseInt(url.searchParams.get('season'), 10);
+  if (!(season >= 1999 && season <= 2100)) return json({ error: 'Need season' }, 400);
+  const src = `https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_reg_${season}.csv`;
+  const r = await fetch(src, { cf: { cacheTtl: 6 * 3600, cacheEverything: true } });
+  if (r.status === 404) return json({ error: `nflverse has no ${season} file` }, 404);
+  if (!r.ok) return json({ error: `nflverse HTTP ${r.status}` }, 502);
+  return new Response(r.body, { headers: { 'Content-Type': 'text/csv;charset=UTF-8', ...NO_STORE } });
 }
 
 async function deleteSlice(request, env) {

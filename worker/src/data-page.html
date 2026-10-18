@@ -121,6 +121,15 @@ td.nv { color: var(--green-light); font-style: italic; }   /* filled from nflver
         <button class="btn" id="imp-go" disabled>Import</button>
         <span id="imp-status" class="note"></span>
       </div>
+      <div class="row">
+        <span class="lbl">nflverse</span>
+        <input type="number" id="nv-from" value="2016" min="1999" max="2100" style="width:90px" />
+        <span class="note">to</span>
+        <input type="number" id="nv-to" min="1999" max="2100" style="width:90px" />
+        <button class="btn" id="nv-go">Pull nflverse</button>
+        <span id="nv-status" class="note"></span>
+      </div>
+      <div id="nv-report" class="note"></div>
       <div class="row" style="align-items:flex-start">
         <span class="lbl">Stored</span>
         <div class="slices" id="slices"><span class="note">Loading…</span></div>
@@ -133,6 +142,7 @@ td.nv { color: var(--green-light); font-style: italic; }   /* filled from nflver
       <input type="text" id="f-search" placeholder="Search player…" style="width:200px" />
       <span class="lbl" style="min-width:0">Min targets</span>
       <input type="number" id="f-mintgt" min="0" placeholder="0" style="width:80px" />
+      <button class="pill" id="nv-toggle" title="Stored nflverse rows are kept either way; this only decides whether the table uses them">nflverse: off</button>
       <button class="btn" id="export-btn">Export CSV</button>
       <span class="count" id="count"></span>
     </div>
@@ -154,14 +164,17 @@ const COLUMNS = [
   { key: 'name',            label: 'Player',  txt: true },
   { key: 'season',          label: 'Season' },
   { key: 'position',        label: 'Pos',     txt: true },
-  // PlayerProfiler's current_team is where he plays NOW, not that season's team.
-  { key: 'current_team',    label: 'Current Team', txt: true },
-  { key: 'status',          label: 'Status',  txt: true },
+  // The team THAT season — nflverse's recent_team (last team, for a mid-season
+  // trade). PlayerProfiler's current_team is where he plays now, and is kept
+  // at the end only as a label; it must never stand in for this.
+  { key: 'team',            label: 'Team',    txt: true },
+  { key: 'games',           label: 'G' },
 
   { key: 'targets',                       group: 'Volume',  label: 'Tgt' },
   { key: 'receptions',                    group: 'Volume',  label: 'Rec' },
   { key: 'receiving_yards',               group: 'Volume',  label: 'Yds' },
   { key: 'receiving_touchdowns',          group: 'Volume',  label: 'TD' },
+  { key: 'receiving_first_downs',         group: 'Volume',  label: '1D' },
   { key: 'routes_run',                    group: 'Volume',  label: 'Routes' },
 
   { key: 'yards_per_route_run',           group: 'Routes',  label: 'YPRR' },
@@ -194,7 +207,42 @@ const COLUMNS = [
 
   { key: 'average_target_distance',       group: 'Depth',   label: 'aDOT' },
   { key: 'unrealized_air_yards',          group: 'Depth',   label: 'Unrealized AY' },
+
+  // nflverse-only columns (see NFLVERSE_MAP). Its shares are divided by the
+  // team's FULL season, PlayerProfiler's by the games he played — so they are
+  // separate columns, never gap-fillers for target_share / air_yards_share.
+  { key: 'nv_target_share',               group: 'nflverse', label: 'Tgt %' },
+  { key: 'nv_air_yards_share',            group: 'nflverse', label: 'Air Yd %' },
+  { key: 'wopr',                          group: 'nflverse', label: 'WOPR' },
+  { key: 'racr',                          group: 'nflverse', label: 'RACR' },
+  { key: 'receiving_air_yards',           group: 'nflverse', label: 'Air Yds' },
+  { key: 'receiving_yards_after_catch',   group: 'nflverse', label: 'YAC' },
+  { key: 'receiving_epa',                 group: 'nflverse', label: 'Rec EPA' },
+
+  { key: 'current_team',    label: 'Current Team', txt: true },
+  { key: 'status',          label: 'Status',  txt: true },
 ];
+
+// nflverse stats_player_reg_{season}.csv column → our key. Counting stats map
+// onto PlayerProfiler's names so they fill PP's gaps; `scale` turns a 0-1
+// fraction into the percent PlayerProfiler uses.
+const NFLVERSE_MAP = {
+  recent_team:                 { key: 'team' },
+  games:                       { key: 'games' },
+  targets:                     { key: 'targets' },
+  receptions:                  { key: 'receptions' },
+  receiving_yards:             { key: 'receiving_yards' },
+  receiving_tds:               { key: 'receiving_touchdowns' },
+  receiving_first_downs:       { key: 'receiving_first_downs' },
+  receiving_air_yards:         { key: 'receiving_air_yards' },
+  receiving_yards_after_catch: { key: 'receiving_yards_after_catch' },
+  receiving_epa:               { key: 'receiving_epa' },
+  wopr:                        { key: 'wopr' },
+  racr:                        { key: 'racr' },
+  target_share:                { key: 'nv_target_share', scale: 100 },
+  air_yards_share:             { key: 'nv_air_yards_share', scale: 100 },
+};
+const NFLVERSE_POS = new Set(['WR', 'TE', 'RB']);
 
 // Identity columns: recognised by any of these headers, stored outside `data`.
 const ID_HEADERS = {
@@ -209,6 +257,8 @@ const LS_FILTERS  = 'data_room_filters_v1';
 
 // ── State ────────────────────────────────────────────────────────────────────
 const D = {
+  raw: [],           // every stored row, both sources, as /api/data/rows returned it
+  useNv: false,      // merge nflverse into the table? Off by default — PlayerProfiler only
   rows: [],          // merged: {season, key, name, pos, cells:{k:v}, nv:Set<k>}
   extraCols: [],     // imported keys COLUMNS doesn't list
   pending: null,     // parsed import, awaiting the Import click
@@ -252,8 +302,15 @@ function playerKey(name, pos) {
   const n = name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/[.'’]/g, '').replace(/\b(jr|sr|ii|iii|iv|v)\b/g, '')
     .replace(/[^a-z0-9]+/g, ' ').trim();
-  return n + '|' + (pos || '').toUpperCase();
+  return (NAME_ALIASES[n] || n) + '|' + (pos || '').toUpperCase();
 }
+
+// Normalised name → the one both sources should share. Add a line whenever the
+// nflverse pull reports a receiver with no PlayerProfiler match. Changing this
+// re-keys rows only on the NEXT import, so re-import the affected seasons.
+const NAME_ALIASES = {
+  'chosen robbie anderson': 'robbie chosen',   // PP's display name vs nflverse's
+};
 
 // '' → absent (never 0). Numbers lose thousands separators and a trailing %.
 function cellValue(raw) {
@@ -293,6 +350,33 @@ function parseImport(fileTexts, seasonFallback) {
   return { rows: out, problems, cols: [...cols], seasons: [...seasons].sort() };
 }
 
+// One nflverse season file → import rows. WR/TE/RB with at least one target
+// only — the file has every player who touched the field (~1,900 a season).
+function parseNflverse(text) {
+  const grid = parseCsv(text);
+  const hdr = grid[0] || [];
+  const at = k => hdr.indexOf(k);
+  const iName = at('player_display_name'), iPos = at('position'), iSeason = at('season'), iTgt = at('targets');
+  if (iName < 0 || iSeason < 0) throw new Error('nflverse file has an unexpected layout');
+  const out = [];
+  for (const r of grid.slice(1)) {
+    const pos = (r[iPos] || '').toUpperCase();
+    if (!NFLVERSE_POS.has(pos) || !(Number(r[iTgt]) > 0)) continue;
+    const name = r[iName].trim(), season = parseInt(r[iSeason], 10);
+    if (!name || !season) continue;
+    const data = {};
+    for (const [col, m] of Object.entries(NFLVERSE_MAP)) {
+      const i = at(col); if (i < 0) continue;
+      let v = cellValue(r[i] ?? '');
+      if (v === undefined) continue;
+      if (typeof v === 'number') v = Math.round(v * (m.scale || 1) * 1000) / 1000;
+      data[m.key] = v;
+    }
+    out.push({ season, key: playerKey(name, pos), name, pos, data });
+  }
+  return out;
+}
+
 // ── API ──────────────────────────────────────────────────────────────────────
 async function apiJson(path, opts) {
   const r = await fetch(path, { credentials: 'same-origin', ...opts });
@@ -314,7 +398,8 @@ function mergeRows(raw) {
     slices.set(sk, (slices.get(sk) || 0) + 1);
     const id = r.season + '|' + r.key;
     let m = by.get(id);
-    if (!m) { m = { season: r.season, key: r.key, name: r.name, pos: r.pos, cells: {}, nv: new Set() }; by.set(id, m); }
+    if (!m) { m = { season: r.season, key: r.key, name: r.name, pos: r.pos, cells: {}, nv: new Set(), srcs: new Set() }; by.set(id, m); }
+    m.srcs.add(r.source);
     if (r.source === 'pp') { m.name = r.name; m.pos = r.pos || m.pos; }
     for (const [k, v] of Object.entries(r.data)) {
       if (!seen.has(k)) { seen.add(k); extra.push(k); }
@@ -326,14 +411,30 @@ function mergeRows(raw) {
   return { rows: [...by.values()], extra, slices };
 }
 
+// The slice list always counts both sources; only the TABLE honours D.useNv,
+// so an nflverse pull is visible as stored even while it's switched off.
+function remerge() {
+  const all = mergeRows(D.raw.slice());
+  const m = D.useNv ? all : mergeRows(D.raw.filter(r => r.source === 'pp'));
+  D.rows = m.rows; D.extraCols = m.extra;
+  drawSlices(all.slices);
+  $('nv-toggle').classList.toggle('on', D.useNv);
+  $('nv-toggle').textContent = D.useNv ? 'nflverse: filling gaps' : 'nflverse: off';
+  drawFilters();
+  draw();
+}
+
+function toggleNv() {
+  D.useNv = !D.useNv;
+  try { localStorage.setItem('data_room_use_nv', D.useNv ? '1' : '0'); } catch {}
+  D.shown = PAGE_SIZE; remerge();
+}
+
 async function loadAll() {
   try {
     const { rows } = await apiJson('/api/data/rows');
-    const m = mergeRows(rows);
-    D.rows = m.rows; D.extraCols = m.extra;
-    drawSlices(m.slices);
-    drawFilters();
-    draw();
+    D.raw = rows;
+    remerge();
     if (!rows.length) $('import-panel').open = true;
   } catch (e) {
     $('tbl-wrap').innerHTML = `<div class="empty err">Couldn't load data: ${esc(e.message)}</div>`;
@@ -357,15 +458,19 @@ async function onFiles() {
   if (p.rows.length) { D.pending = p; $('imp-go').disabled = false; }
 }
 
+async function writeRows(source, rows, onProgress) {
+  for (let i = 0; i < rows.length; i += IMPORT_CHUNK) {
+    onProgress(Math.min(i + IMPORT_CHUNK, rows.length), rows.length);
+    await apiPost('/api/data/import', { source, rows: rows.slice(i, i + IMPORT_CHUNK) });
+  }
+}
+
 async function doImport() {
   const p = D.pending; if (!p) return;
   const source = $('imp-source').value;
   $('imp-go').disabled = true;
   try {
-    for (let i = 0; i < p.rows.length; i += IMPORT_CHUNK) {
-      $('imp-status').textContent = `Writing ${Math.min(i + IMPORT_CHUNK, p.rows.length)} / ${p.rows.length}…`;
-      await apiPost('/api/data/import', { source, rows: p.rows.slice(i, i + IMPORT_CHUNK) });
-    }
+    await writeRows(source, p.rows, (n, t) => { $('imp-status').textContent = `Writing ${n} / ${t}…`; });
     $('imp-status').innerHTML = `<span class="ok">Imported ${p.rows.length} rows.</span>`;
     $('imp-files').value = ''; D.pending = null; $('imp-preview').innerHTML = '';
     await loadAll();
@@ -373,6 +478,43 @@ async function doImport() {
     $('imp-status').innerHTML = `<span class="err">Import failed: ${esc(e.message)}</span> — rows before the failure were saved; re-importing the file is safe (it merges).`;
     $('imp-go').disabled = false;
   }
+}
+
+// Pulls each season's nflverse file through the Worker and imports it. The
+// report lists real receivers nflverse has that matched NO PlayerProfiler row
+// in a season PlayerProfiler covers — almost always a spelling difference
+// (PlayerProfiler's "Chosen Robbie Anderson"), which would otherwise show up
+// as two half-empty rows for one player.
+const NV_REPORT_MIN_TGT = 30;
+async function pullNflverse() {
+  const from = parseInt($('nv-from').value, 10), to = parseInt($('nv-to').value, 10) || from;
+  if (!(from >= 1999) || to < from) { $('nv-status').innerHTML = '<span class="err">Pick a season range</span>'; return; }
+  $('nv-go').disabled = true; $('nv-report').innerHTML = '';
+  const pulled = [], failed = [];
+  for (let s = from; s <= to; s++) {
+    try {
+      $('nv-status').textContent = `${s}: downloading…`;
+      const r = await fetch(`/api/data/nflverse?season=${s}`, { credentials: 'same-origin' });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `HTTP ${r.status}`);
+      const rows = parseNflverse(await r.text());
+      await writeRows('nflverse', rows, (n, t) => { $('nv-status').textContent = `${s}: writing ${n} / ${t}…`; });
+      pulled.push({ season: s, rows });
+    } catch (e) { failed.push(`${s}: ${e.message}`); }
+  }
+  $('nv-go').disabled = false;
+  $('nv-status').innerHTML = `<span class="ok">Pulled ${pulled.length} season(s).</span>` +
+    failed.map(f => `<br><span class="err">${esc(f)}</span>`).join('');
+  await loadAll();
+
+  const ppKeys = new Set(D.rows.filter(r => r.srcs.has('pp')).map(r => r.season + '|' + r.key));
+  const ppSeasons = new Set(D.rows.filter(r => r.srcs.has('pp')).map(r => r.season));
+  const lines = pulled.filter(p => ppSeasons.has(p.season)).map(p => {
+    const miss = p.rows.filter(r => r.data.targets >= NV_REPORT_MIN_TGT && !ppKeys.has(p.season + '|' + r.key));
+    return miss.length ? `${p.season}: ${miss.map(r => esc(`${r.name} (${r.pos}, ${r.data.targets} tgt)`)).join(', ')}` : '';
+  }).filter(Boolean);
+  $('nv-report').innerHTML = lines.length
+    ? `<span class="err">No PlayerProfiler match (≥${NV_REPORT_MIN_TGT} targets) — likely a name spelled differently:</span><br>` + lines.join('<br>')
+    : (pulled.some(p => ppSeasons.has(p.season)) ? `<span class="ok">Every nflverse receiver with ≥${NV_REPORT_MIN_TGT} targets matched a PlayerProfiler row.</span>` : '');
 }
 
 function drawSlices(slices) {
@@ -527,7 +669,12 @@ $('export-btn').addEventListener('click', exportCsv);
 $('imp-files').addEventListener('change', onFiles);
 $('imp-season').addEventListener('change', onFiles);
 $('imp-go').addEventListener('click', doImport);
+$('nv-go').addEventListener('click', pullNflverse);
+$('nv-to').value = new Date().getFullYear() - 1;   // last completed season; the current one is partial
 $('slices').addEventListener('click', e => { const b = e.target.closest('.btn.del'); if (b) onDeleteSlice(b); });
+
+$('nv-toggle').addEventListener('click', toggleNv);
+try { D.useNv = localStorage.getItem('data_room_use_nv') === '1'; } catch {}
 
 loadFilters();
 loadAll();
