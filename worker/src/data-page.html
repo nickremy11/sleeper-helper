@@ -83,6 +83,25 @@ tbody tr:hover td { background: #f1e2c2; }
 td.null { color: #c9b996; }
 td.nv { color: var(--green-light); font-style: italic; }   /* filled from nflverse, not PlayerProfiler */
 .more { display: block; margin: 12px auto 0; }
+.conds { display: grid; gap: 6px; }
+.cond { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.cond select[data-f="op"] { width: 52px; }
+
+/* Column reorder — headers and panel chips share the drop markers. */
+th[draggable="true"] { cursor: grab; }
+.dragging { opacity: .4; }
+th.drop-before { box-shadow: inset 3px 0 0 var(--gold-light); }
+th.drop-after  { box-shadow: inset -3px 0 0 var(--gold-light); }
+.cols-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.colchip {
+  display: inline-flex; align-items: center; gap: 6px; cursor: grab; user-select: none;
+  font-family: var(--num); font-size: .76rem; padding: 4px 9px; background: rgba(255,255,255,.05);
+  border: 1px solid var(--brown-mid); color: var(--parchment);
+}
+.colchip:has(input:not(:checked)) { opacity: .45; }
+.colchip .cg { font-size: .62rem; text-transform: uppercase; letter-spacing: .04em; color: var(--gold); }
+.colchip.drop-before { box-shadow: -3px 0 0 var(--gold-light); }
+.colchip.drop-after  { box-shadow: 3px 0 0 var(--gold-light); }
 .empty { padding: 40px; text-align: center; font-style: italic; color: var(--brown-light); }
 
 @media (max-width: 640px) {
@@ -137,17 +156,34 @@ td.nv { color: var(--green-light); font-style: italic; }   /* filled from nflver
     </div>
   </details>
 
+  <details class="panel" id="cols-panel">
+    <summary>Columns</summary>
+    <div class="panel-body">
+      <div class="note">Drag to reorder, here or by dragging a table header. Untick to hide. Saved in this browser.</div>
+      <div class="cols-list" id="cols-list"></div>
+      <div class="row"><button class="btn" id="cols-reset">Reset to default</button></div>
+    </div>
+  </details>
+
   <div class="toolbar">
     <div class="row">
       <input type="text" id="f-search" placeholder="Search player…" style="width:200px" />
-      <span class="lbl" style="min-width:0">Min targets</span>
-      <input type="number" id="f-mintgt" min="0" placeholder="0" style="width:80px" />
+      <span class="lbl" style="min-width:0">Min routes</span>
+      <input type="number" id="f-minroutes" min="0" placeholder="0" style="width:80px" />
       <button class="pill" id="nv-toggle" title="Stored nflverse rows are kept either way; this only decides whether the table uses them">nflverse: off</button>
       <button class="btn" id="export-btn">Export CSV</button>
       <span class="count" id="count"></span>
     </div>
     <div class="row"><span class="lbl">Position</span><span id="f-pos" class="row"></span></div>
     <div class="row"><span class="lbl">Season</span><span id="f-season" class="row"></span></div>
+    <div class="row" style="align-items:flex-start">
+      <span class="lbl">Filters</span>
+      <div class="conds">
+        <div id="f-conds" class="conds"></div>
+        <div class="row"><button class="pill" id="cond-add">+ Add filter</button>
+          <button class="pill" id="cond-clear" hidden>Clear filters</button></div>
+      </div>
+    </div>
   </div>
 
   <div class="tbl-wrap" id="tbl-wrap"><div class="empty">Loading…</div></div>
@@ -156,72 +192,98 @@ td.nv { color: var(--green-light); font-style: italic; }   /* filled from nflver
 
 <script>
 // ── Column format ────────────────────────────────────────────────────────────
-// THE display order. `key` is the CSV header lowercased with spaces → `_`
-// (normHeader). Anything imported that is not listed here is still stored and
-// shown, appended after these in the order first seen. `txt` = left-aligned
-// text column. Reorder, relabel or regroup freely — nothing else depends on it.
+// The DEFAULT display order (drag headers or use the Columns panel to override
+// it per browser — that order is saved in localStorage, see colState). `key` is
+// the CSV header lowercased with spaces → `_` (normHeader). Anything imported
+// that isn't listed is still shown, appended at the end.
+//   txt  — left-aligned text, no number formatting
+//   fmt  — 'int' (0 dp) · 'pct' (1 dp; a column whose season values are all
+//          0–1 fractions is scaled ×100 first, see normalizeCells) · 'd1' · 'd2'
 const COLUMNS = [
   { key: 'name',            label: 'Player',  txt: true },
   { key: 'season',          label: 'Season' },
   { key: 'position',        label: 'Pos',     txt: true },
-  // The team THAT season — nflverse's recent_team (last team, for a mid-season
-  // trade). PlayerProfiler's current_team is where he plays now, and is kept
-  // at the end only as a label; it must never stand in for this.
+  // The team THAT season as an abbreviation (nflverse's recent_team — the last
+  // team in a traded season). Full names are abbreviated by TEAM_ABBR.
   { key: 'team',            label: 'Team',    txt: true },
-  { key: 'games',           label: 'G' },
+  { key: 'games',           label: 'G',       fmt: 'int' },
+  // Derived in normalizeCells — receiving-only PPR: (Rec + Yds×0.1 + TD×6) / G.
+  { key: 'fppg',            label: 'FPPG',    fmt: 'd1' },
 
-  { key: 'targets',                       group: 'Volume',  label: 'Tgt' },
-  { key: 'receptions',                    group: 'Volume',  label: 'Rec' },
-  { key: 'receiving_yards',               group: 'Volume',  label: 'Yds' },
-  { key: 'receiving_touchdowns',          group: 'Volume',  label: 'TD' },
-  { key: 'receiving_first_downs',         group: 'Volume',  label: '1D' },
-  { key: 'routes_run',                    group: 'Volume',  label: 'Routes' },
+  { key: 'targets',                       group: 'Volume',  label: 'Tgt',    fmt: 'int' },
+  { key: 'receptions',                    group: 'Volume',  label: 'Rec',    fmt: 'int' },
+  { key: 'receiving_yards',               group: 'Volume',  label: 'Yds',    fmt: 'int' },
+  { key: 'receiving_touchdowns',          group: 'Volume',  label: 'TD',     fmt: 'int' },
+  { key: 'receiving_first_downs',         group: 'Volume',  label: '1D',     fmt: 'int' },
+  { key: 'routes_run',                    group: 'Volume',  label: 'Routes', fmt: 'int' },
 
-  { key: 'yards_per_route_run',           group: 'Routes',  label: 'YPRR' },
-  { key: 'target_rate',                   group: 'Routes',  label: 'TPRR' },
-  { key: 'first_downs_per_route_run',     group: 'Routes',  label: '1D/RR' },
-  { key: 'route_participation',           group: 'Routes',  label: 'Route %' },
+  { key: 'yards_per_route_run',           group: 'Routes',  label: 'YPRR',    fmt: 'd2' },
+  { key: 'target_rate',                   group: 'Routes',  label: 'TPRR %',  fmt: 'pct' },
+  { key: 'first_downs_per_route_run',     group: 'Routes',  label: '1D/RR %', fmt: 'pct' },
+  { key: 'route_participation',           group: 'Routes',  label: 'Route %', fmt: 'pct' },
 
-  { key: 'target_share',                  group: 'Share',   label: 'Tgt %' },
-  { key: 'first_read_target_share',       group: 'Share',   label: '1st Read %' },
-  { key: 'air_yards_share',               group: 'Share',   label: 'Air Yd %' },
-  { key: 'red_zone_target_share',         group: 'Share',   label: 'RZ Tgt %' },
+  { key: 'target_share',                  group: 'Share',   label: 'Tgt %',      fmt: 'pct' },
+  { key: 'first_read_target_share',       group: 'Share',   label: '1st Read %', fmt: 'pct' },
+  { key: 'air_yards_share',               group: 'Share',   label: 'Air Yd %',   fmt: 'pct' },
+  { key: 'red_zone_target_share',         group: 'Share',   label: 'RZ Tgt %',   fmt: 'pct' },
 
-  { key: 'target_rate_vs_man',            group: 'Man',     label: 'TPRR' },
-  { key: 'receptions_vs_man',             group: 'Man',     label: 'Rec' },
-  { key: 'receiving_yards_vs_man',        group: 'Man',     label: 'Yds' },
-  { key: 'target_rate_vs_zone',           group: 'Zone',    label: 'TPRR' },
-  { key: 'receptions_vs_zone',            group: 'Zone',    label: 'Rec' },
-  { key: 'receiving_yards_vs_zone',       group: 'Zone',    label: 'Yds' },
+  { key: 'target_rate_vs_man',            group: 'Man',     label: 'TPRR %', fmt: 'pct' },
+  { key: 'receptions_vs_man',             group: 'Man',     label: 'Rec',    fmt: 'int' },
+  { key: 'receiving_yards_vs_man',        group: 'Man',     label: 'Yds',    fmt: 'int' },
+  { key: 'target_rate_vs_zone',           group: 'Zone',    label: 'TPRR %', fmt: 'pct' },
+  { key: 'receptions_vs_zone',            group: 'Zone',    label: 'Rec',    fmt: 'int' },
+  { key: 'receiving_yards_vs_zone',       group: 'Zone',    label: 'Yds',    fmt: 'int' },
 
-  { key: 'slot_rate',                     group: 'Alignment', label: 'Slot %' },
-  { key: 'slot_snaps',                    group: 'Alignment', label: 'Slot Snaps' },
+  { key: 'slot_rate',                     group: 'Alignment', label: 'Slot %',     fmt: 'pct' },
+  { key: 'slot_snaps',                    group: 'Alignment', label: 'Slot Snaps', fmt: 'int' },
 
-  { key: 'yards_per_reception',           group: 'Efficiency', label: 'Y/R' },
-  { key: 'yards_per_target',              group: 'Efficiency', label: 'Y/Tgt' },
-  { key: 'yards_after_catch_per_reception', group: 'Efficiency', label: 'YAC/R' },
-  { key: 'catch_rate',                    group: 'Efficiency', label: 'Catch %' },
-  { key: 'catchable_target_rate',         group: 'Efficiency', label: 'Catchable %' },
-  { key: 'epa_per_target',                group: 'Efficiency', label: 'EPA/Tgt' },
-  { key: 'yards_per_team_pass_attempt',   group: 'Efficiency', label: 'Yds/Team Att' },
+  { key: 'yards_per_reception',           group: 'Efficiency', label: 'Y/R',          fmt: 'd1' },
+  { key: 'yards_per_target',              group: 'Efficiency', label: 'Y/Tgt',        fmt: 'd1' },
+  { key: 'yards_after_catch_per_reception', group: 'Efficiency', label: 'YAC/R',      fmt: 'd1' },
+  { key: 'catch_rate',                    group: 'Efficiency', label: 'Catch %',      fmt: 'pct' },
+  { key: 'catchable_target_rate',         group: 'Efficiency', label: 'Catchable %',  fmt: 'pct' },
+  { key: 'epa_per_target',                group: 'Efficiency', label: 'EPA/Tgt',      fmt: 'd2' },
+  { key: 'yards_per_team_pass_attempt',   group: 'Efficiency', label: 'Yds/Team Att', fmt: 'd2' },
 
-  { key: 'average_target_distance',       group: 'Depth',   label: 'aDOT' },
-  { key: 'unrealized_air_yards',          group: 'Depth',   label: 'Unrealized AY' },
+  { key: 'average_target_distance',       group: 'Depth',   label: 'aDOT',          fmt: 'd1' },
+  { key: 'unrealized_air_yards',          group: 'Depth',   label: 'Unrealized AY', fmt: 'int' },
 
   // nflverse-only columns (see NFLVERSE_MAP). Its shares are divided by the
   // team's FULL season, PlayerProfiler's by the games he played — so they are
   // separate columns, never gap-fillers for target_share / air_yards_share.
-  { key: 'nv_target_share',               group: 'nflverse', label: 'Tgt %' },
-  { key: 'nv_air_yards_share',            group: 'nflverse', label: 'Air Yd %' },
-  { key: 'wopr',                          group: 'nflverse', label: 'WOPR' },
-  { key: 'racr',                          group: 'nflverse', label: 'RACR' },
-  { key: 'receiving_air_yards',           group: 'nflverse', label: 'Air Yds' },
-  { key: 'receiving_yards_after_catch',   group: 'nflverse', label: 'YAC' },
-  { key: 'receiving_epa',                 group: 'nflverse', label: 'Rec EPA' },
-
-  { key: 'current_team',    label: 'Current Team', txt: true },
-  { key: 'status',          label: 'Status',  txt: true },
+  // WOPR / RACR are ~0–1 ratios, so 1 dp would erase them — 2 dp on purpose.
+  { key: 'nv_target_share',               group: 'nflverse', label: 'Tgt %',    fmt: 'pct' },
+  { key: 'nv_air_yards_share',            group: 'nflverse', label: 'Air Yd %', fmt: 'pct' },
+  { key: 'wopr',                          group: 'nflverse', label: 'WOPR',     fmt: 'd2' },
+  { key: 'racr',                          group: 'nflverse', label: 'RACR',     fmt: 'd2' },
+  { key: 'receiving_air_yards',           group: 'nflverse', label: 'Air Yds',  fmt: 'int' },
+  { key: 'receiving_yards_after_catch',   group: 'nflverse', label: 'YAC',      fmt: 'int' },
+  { key: 'receiving_epa',                 group: 'nflverse', label: 'Rec EPA',  fmt: 'd1' },
 ];
+
+// Stored but never shown. PlayerProfiler's current_team is where a player is
+// TODAY (Mike Evans 2016 → 49ers), which reads as a wrong season team; status
+// (active/retired) is also as of today and says nothing about the season.
+// Header spellings a report might use for games played; folded into `games`
+// (deriveFantasy), so the original column is hidden rather than shown twice.
+const GAMES_ALIASES = ['games_played', 'gp', 'g'];
+const HIDDEN_KEYS = new Set(['current_team', 'status', ...GAMES_ALIASES]);
+
+// Full team name → the abbreviation nflverse uses, so a PlayerProfiler report
+// that carries a season team as a full name lines up with nflverse's. Includes
+// the pre-move names (SD / STL / OAK) since those seasons are in range.
+const TEAM_ABBR = {
+  'arizona cardinals': 'ARI', 'atlanta falcons': 'ATL', 'baltimore ravens': 'BAL', 'buffalo bills': 'BUF',
+  'carolina panthers': 'CAR', 'chicago bears': 'CHI', 'cincinnati bengals': 'CIN', 'cleveland browns': 'CLE',
+  'dallas cowboys': 'DAL', 'denver broncos': 'DEN', 'detroit lions': 'DET', 'green bay packers': 'GB',
+  'houston texans': 'HOU', 'indianapolis colts': 'IND', 'jacksonville jaguars': 'JAX', 'kansas city chiefs': 'KC',
+  'las vegas raiders': 'LV', 'oakland raiders': 'OAK', 'los angeles chargers': 'LAC', 'san diego chargers': 'SD',
+  'los angeles rams': 'LA', 'st louis rams': 'STL', 'st. louis rams': 'STL', 'miami dolphins': 'MIA',
+  'minnesota vikings': 'MIN', 'new england patriots': 'NE', 'new orleans saints': 'NO', 'new york giants': 'NYG',
+  'new york jets': 'NYJ', 'philadelphia eagles': 'PHI', 'pittsburgh steelers': 'PIT', 'san francisco 49ers': 'SF',
+  'seattle seahawks': 'SEA', 'tampa bay buccaneers': 'TB', 'tennessee titans': 'TEN',
+  'washington commanders': 'WAS', 'washington football team': 'WAS', 'washington redskins': 'WAS',
+};
 
 // nflverse stats_player_reg_{season}.csv column → our key. Counting stats map
 // onto PlayerProfiler's names so they fill PP's gaps; `scale` turns a 0-1
@@ -264,7 +326,8 @@ const D = {
   pending: null,     // parsed import, awaiting the Import click
   sort: { key: 'targets', dir: -1 },
   shown: PAGE_SIZE,
-  f: { search: '', minTgt: '', pos: new Set(), seasons: new Set() },
+  // conds: [{key, op, val}] — every one must pass (AND). val is the raw input text.
+  f: { search: '', minRoutes: '', pos: new Set(), seasons: new Set(), conds: [] },
 };
 
 const $ = id => document.getElementById(id);
@@ -411,16 +474,65 @@ function mergeRows(raw) {
   return { rows: [...by.values()], extra, slices };
 }
 
+// Runs on the merged cells, so sorting, filtering and export all see the same
+// numbers the table shows.
+//  · pct columns: a source may store a rate as a 0–1 fraction (0.245) or as a
+//    percent (24.5). Decided per column PER SEASON — if every value that season
+//    is within ±1 it's a fraction and gets ×100. Per season because a format
+//    change between PlayerProfiler years would otherwise sort 0.25 below 3.1.
+//  · team: full names → abbreviations.
+function normalizeCells(rows) {
+  const pctKeys = COLUMNS.filter(c => c.fmt === 'pct').map(c => c.key);
+  const bySeason = new Map();
+  for (const r of rows) {
+    if (!bySeason.has(r.season)) bySeason.set(r.season, []);
+    bySeason.get(r.season).push(r);
+    const t = r.cells.team;
+    if (typeof t === 'string') r.cells.team = TEAM_ABBR[t.trim().toLowerCase()] || t.trim().toUpperCase();
+    deriveFantasy(r);
+  }
+  for (const list of bySeason.values()) {
+    for (const k of pctKeys) {
+      const vals = list.map(r => r.cells[k]).filter(v => typeof v === 'number');
+      if (vals.length && vals.every(v => Math.abs(v) <= 1)) {
+        for (const r of list) if (typeof r.cells[k] === 'number') r.cells[k] = r.cells[k] * 100;
+      }
+    }
+  }
+}
+
+// Standard PPR, receiving only (no rushing — an RB's FPPG here undercounts him):
+//   FPPG = (receptions×1 + receiving yards×0.1 + receiving TDs×6) / games played
+// PlayerProfiler leaves a zero-TD season's TD cell BLANK (Aaron Burbridge 2016:
+// 7 rec, TD ""), so a row with receptions and no TD value is a 0-TD season and
+// is written as 0 — otherwise FPPG would be blank for every player who didn't
+// score. Needs games: from a games/G column if the report has one, else from
+// nflverse when that's switched on. No games → no FPPG, never a guess.
+function deriveFantasy(r) {
+  const c = r.cells;
+  if (typeof c.games !== 'number') {
+    const k = GAMES_ALIASES.find(a => typeof c[a] === 'number');
+    if (k) { c.games = c[k]; if (r.nv.has(k)) r.nv.add('games'); }
+  }
+  if (typeof c.receptions === 'number' && c.receiving_touchdowns === undefined) c.receiving_touchdowns = 0;
+  if (typeof c.receptions !== 'number' || !(c.games > 0)) return;
+  c.fppg = (c.receptions + (c.receiving_yards || 0) * 0.1 + c.receiving_touchdowns * 6) / c.games;
+  if (['games', 'receptions', 'receiving_yards', 'receiving_touchdowns'].some(k => r.nv.has(k))) r.nv.add('fppg');
+}
+
 // The slice list always counts both sources; only the TABLE honours D.useNv,
 // so an nflverse pull is visible as stored even while it's switched off.
 function remerge() {
   const all = mergeRows(D.raw.slice());
   const m = D.useNv ? all : mergeRows(D.raw.filter(r => r.source === 'pp'));
-  D.rows = m.rows; D.extraCols = m.extra;
+  D.rows = m.rows; D.extraCols = m.extra.filter(k => !HIDDEN_KEYS.has(k));
+  normalizeCells(D.rows);
   drawSlices(all.slices);
+  drawColsPanel();
   $('nv-toggle').classList.toggle('on', D.useNv);
   $('nv-toggle').textContent = D.useNv ? 'nflverse: filling gaps' : 'nflverse: off';
   drawFilters();
+  drawConds();
   draw();
 }
 
@@ -450,7 +562,7 @@ async function onFiles() {
   const texts = await Promise.all(files.map(async f => ({ name: f.name, text: await f.text() })));
   const p = parseImport(texts, parseInt($('imp-season').value, 10) || null);
   const known = new Set(COLUMNS.map(c => c.key));
-  const unlisted = p.cols.filter(c => !known.has(c));
+  const unlisted = p.cols.filter(c => !known.has(c) && !HIDDEN_KEYS.has(c));
   $('imp-preview').innerHTML =
     `<span class="ok">${p.rows.length} rows</span> · seasons ${p.seasons.join(', ') || '—'} · ${p.cols.length} metric columns` +
     (unlisted.length ? `<br>Not in COLUMNS (shown at the end): ${esc(unlisted.join(', '))}` : '') +
@@ -539,7 +651,8 @@ async function onDeleteSlice(btn) {
 function saveFilters() {
   try {
     localStorage.setItem(LS_FILTERS, JSON.stringify({
-      search: D.f.search, minTgt: D.f.minTgt, pos: [...D.f.pos], seasons: [...D.f.seasons], sort: D.sort,
+      search: D.f.search, minRoutes: D.f.minRoutes, pos: [...D.f.pos], seasons: [...D.f.seasons],
+      conds: D.f.conds, sort: D.sort,
     }));
   } catch {}
 }
@@ -547,11 +660,12 @@ function loadFilters() {
   try {
     const s = JSON.parse(localStorage.getItem(LS_FILTERS) || 'null');
     if (!s) return;
-    D.f.search = s.search || ''; D.f.minTgt = s.minTgt ?? '';
+    D.f.search = s.search || ''; D.f.minRoutes = s.minRoutes ?? '';
+    D.f.conds = Array.isArray(s.conds) ? s.conds.filter(c => c && c.key && COND_OPS[c.op]) : [];
     D.f.pos = new Set(s.pos || []); D.f.seasons = new Set(s.seasons || []);
     if (s.sort?.key) D.sort = s.sort;
   } catch {}
-  $('f-search').value = D.f.search; $('f-mintgt').value = D.f.minTgt;
+  $('f-search').value = D.f.search; $('f-minroutes').value = D.f.minRoutes;
 }
 
 // Empty set = no filter. A stored selection that no longer exists in the data
@@ -575,23 +689,191 @@ function onPill(btn) {
   D.shown = PAGE_SIZE; saveFilters(); draw();
 }
 
-function filtered() {
-  const q = D.f.search.trim().toLowerCase();
-  const minT = parseFloat(D.f.minTgt);
-  return D.rows.filter(r =>
-    (!q || r.name.toLowerCase().includes(q)) &&
-    (!D.f.pos.size || D.f.pos.has(r.pos)) &&
-    (!D.f.seasons.size || D.f.seasons.has(r.season)) &&
-    (!(minT > 0) || (typeof r.cells.targets === 'number' && r.cells.targets >= minT))
-  );
+// ── Stat filters ─────────────────────────────────────────────────────────────
+// Compared on the DISPLAYED value — rounded to the column's own precision — so
+// "YPRR = 2.1" matches a cell showing 2.10 and "Catch % = 66.7" matches 66.7,
+// not only an exact float the source happened to store.
+const COND_OPS = {
+  '>':  (a, b) => a > b,  '≥': (a, b) => a >= b,
+  '<':  (a, b) => a < b,  '≤': (a, b) => a <= b,
+  '=':  (a, b) => a === b,
+};
+const fmtDp = c => c?.fmt === 'int' ? 0 : c?.fmt === 'd2' ? 2 : 1;
+const roundTo = (v, dp) => Math.round(v * 10 ** dp) / 10 ** dp;
+
+const numericColumns = () => allColumns().filter(c => !c.txt && c.key !== 'season');
+
+function drawConds() {
+  const cols = numericColumns();
+  const opts = sel => cols.map(c =>
+    `<option value="${esc(c.key)}" ${c.key === sel ? 'selected' : ''}>${esc(c.group ? c.group + ' · ' + c.label : c.label)}</option>`).join('');
+  $('f-conds').innerHTML = D.f.conds.map((c, i) => `<div class="cond" data-i="${i}">
+      <select data-f="key">${cols.some(x => x.key === c.key) ? '' : `<option value="${esc(c.key)}" selected>${esc(c.key)} (no data)</option>`}${opts(c.key)}</select>
+      <select data-f="op">${Object.keys(COND_OPS).map(o => `<option ${o === c.op ? 'selected' : ''}>${o}</option>`).join('')}</select>
+      <input type="number" step="any" data-f="val" value="${esc(c.val)}" placeholder="value" style="width:90px" />
+      <button class="pill" data-f="del" title="Remove">×</button>
+    </div>`).join('');
+  $('cond-clear').hidden = !D.f.conds.length;
 }
 
-// ── Table ────────────────────────────────────────────────────────────────────
-function activeColumns() {
+function addCond() {
+  const first = numericColumns().find(c => c.key === 'yards_per_route_run') || numericColumns()[0];
+  if (!first) return;
+  D.f.conds.push({ key: first.key, op: '>', val: '' });
+  drawConds(); saveFilters();
+  $('f-conds').lastElementChild?.querySelector('input')?.focus();
+}
+
+// Edits redraw the TABLE only, never the condition rows — re-rendering them
+// would steal focus from the number box mid-typing.
+function onCondEdit(e) {
+  const row = e.target.closest('.cond'); if (!row) return;
+  const i = Number(row.dataset.i), f = e.target.dataset.f;
+  if (f === 'del') { D.f.conds.splice(i, 1); drawConds(); }
+  else if (f) D.f.conds[i][f] = e.target.value;
+  D.shown = PAGE_SIZE; saveFilters(); draw();
+}
+
+// A condition with no number yet is inactive, not a filter that matches nothing.
+function activeConds() {
+  const byKey = new Map(allColumns().map(c => [c.key, c]));
+  const out = D.f.conds
+    .filter(c => c.val !== '' && Number.isFinite(Number(c.val)))
+    .map(c => ({ key: c.key, test: COND_OPS[c.op], val: Number(c.val), dp: fmtDp(byKey.get(c.key)) }));
+  const minR = parseFloat(D.f.minRoutes);
+  if (minR > 0) out.push({ key: 'routes_run', test: COND_OPS['≥'], val: minR, dp: 0 });
+  return out;
+}
+
+// A row with NO value for a filtered stat is excluded — an unknown can't be
+// shown to pass "YPRR > 2". Those rows are counted separately (D.missingCount)
+// because the biggest group is whole seasons PlayerProfiler doesn't chart:
+// a Min routes threshold empties 2016, and that should say so, not look broken.
+function filtered() {
+  const q = D.f.search.trim().toLowerCase();
+  const conds = activeConds();
+  let missing = 0;
+  const out = D.rows.filter(r => {
+    if (q && !r.name.toLowerCase().includes(q)) return false;
+    if (D.f.pos.size && !D.f.pos.has(r.pos)) return false;
+    if (D.f.seasons.size && !D.f.seasons.has(r.season)) return false;
+    let gap = false;
+    for (const c of conds) {
+      const v = r.cells[c.key];
+      if (typeof v !== 'number') { gap = true; continue; }
+      if (!c.test(roundTo(v, c.dp), c.val)) return false;
+    }
+    if (gap) { missing++; return false; }
+    return true;
+  });
+  D.missingCount = missing;
+  return out;
+}
+
+// ── Columns: order + visibility ──────────────────────────────────────────────
+// colState.order is the user's drag order; keys it doesn't mention (a column
+// imported after the order was saved) follow in COLUMNS order. Player is pinned
+// first — it's the sticky column, so it can't be dragged or hidden.
+const LS_COLS = 'data_room_cols_v1';
+let colState = { order: [], hidden: [] };
+try { colState = { order: [], hidden: [], ...JSON.parse(localStorage.getItem(LS_COLS) || '{}') }; } catch {}
+const saveCols = () => { try { localStorage.setItem(LS_COLS, JSON.stringify(colState)); } catch {} };
+
+// Every column that has data, in display order, hidden ones included.
+function allColumns() {
   const present = new Set(['name', 'season', 'position']);
   for (const r of D.rows) for (const k in r.cells) present.add(k);
-  const listed = COLUMNS.filter(c => present.has(c.key));
-  return listed.concat(D.extraCols.map(k => ({ key: k, label: k.replace(/_/g, ' '), group: 'Other' })));
+  const base = COLUMNS.filter(c => present.has(c.key)).concat(D.extraCols.map(k => {
+    // Unlisted columns: whole numbers stay whole, anything else gets 1 dp.
+    const ints = D.rows.every(r => { const v = r.cells[k]; return typeof v !== 'number' || Number.isInteger(v); });
+    const txt = D.rows.some(r => typeof r.cells[k] === 'string');
+    return { key: k, label: k.replace(/_/g, ' '), group: 'Other', txt, fmt: txt ? undefined : ints ? 'int' : 'd1' };
+  }));
+  const rank = new Map(colState.order.map((k, i) => [k, i]));
+  const pinned = base.filter(c => c.key === 'name');
+  const rest = base.filter(c => c.key !== 'name');
+  const known = rest.filter(c => rank.has(c.key)).sort((a, b) => rank.get(a.key) - rank.get(b.key));
+  return pinned.concat(known, rest.filter(c => !rank.has(c.key)));
+}
+
+function activeColumns() {
+  const hidden = new Set(colState.hidden);
+  return allColumns().filter(c => !hidden.has(c.key));
+}
+
+function moveColumn(key, targetKey, after) {
+  if (key === targetKey || key === 'name' || targetKey === 'name') return;
+  const order = allColumns().map(c => c.key).filter(k => k !== 'name' && k !== key);
+  const i = order.indexOf(targetKey);
+  if (i < 0) return;
+  order.splice(after ? i + 1 : i, 0, key);
+  colState.order = order; saveCols();
+  draw(); drawColsPanel();
+}
+
+function toggleColumn(key, show) {
+  const h = new Set(colState.hidden);
+  show ? h.delete(key) : h.add(key);
+  colState.hidden = [...h]; saveCols(); draw();
+}
+
+function resetColumns() {
+  colState = { order: [], hidden: [] }; saveCols(); draw(); drawColsPanel();
+}
+
+function drawColsPanel() {
+  const hidden = new Set(colState.hidden);
+  $('cols-list').innerHTML = allColumns().filter(c => c.key !== 'name').map(c =>
+    `<label class="colchip" draggable="true" data-k="${esc(c.key)}">` +
+    `<input type="checkbox" ${hidden.has(c.key) ? '' : 'checked'} data-col="${esc(c.key)}" />` +
+    (c.group ? `<span class="cg">${esc(c.group)}</span>` : '') + esc(c.label) + '</label>'
+  ).join('');
+}
+
+// One drag implementation for both the table headers and the panel's chips:
+// drop on the left half of a target = before it, right half = after.
+let _dragKey = null;
+function dragTarget(e) {
+  const el = e.target.closest('[data-k]');
+  return el && el.dataset.k !== 'name' && el.dataset.k !== _dragKey ? el : null;
+}
+function clearDropMarks() {
+  document.querySelectorAll('.drop-before, .drop-after, .dragging')
+    .forEach(el => el.classList.remove('drop-before', 'drop-after', 'dragging'));
+}
+function onDragStart(e) {
+  const el = e.target.closest('[data-k]');
+  if (!el || el.dataset.k === 'name') return;
+  _dragKey = el.dataset.k;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', _dragKey);
+  el.classList.add('dragging');
+}
+function onDragOver(e) {
+  if (!_dragKey) return;
+  const el = dragTarget(e);
+  document.querySelectorAll('.drop-before, .drop-after').forEach(x => { if (x !== el) x.classList.remove('drop-before', 'drop-after'); });
+  if (!el) return;
+  e.preventDefault();
+  const r = el.getBoundingClientRect(), after = e.clientX > r.left + r.width / 2;
+  el.classList.toggle('drop-after', after);
+  el.classList.toggle('drop-before', !after);
+}
+function onDrop(e) {
+  const el = dragTarget(e);
+  if (_dragKey && el) {
+    e.preventDefault();
+    moveColumn(_dragKey, el.dataset.k, el.classList.contains('drop-after'));
+  }
+  _dragKey = null; clearDropMarks();
+}
+function onDragEnd() { _dragKey = null; clearDropMarks(); }
+
+// ── Table ────────────────────────────────────────────────────────────────────
+function fmtCell(c, v) {
+  if (typeof v !== 'number' || !c.fmt) return String(v);
+  const s = c.fmt === 'int' ? String(Math.round(v)) : v.toFixed(c.fmt === 'd2' ? 2 : 1);
+  return Number(s) === 0 ? s.replace(/^-/, '') : s;   // no "-0.0"
 }
 
 // Missing values sink to the bottom in BOTH directions — otherwise sorting
@@ -611,13 +893,15 @@ let _view = [], _cols = [];
 function draw() {
   _cols = activeColumns();
   _view = sortRows(filtered());
-  $('count').textContent = `${_view.length.toLocaleString()} of ${D.rows.length.toLocaleString()} player-seasons`;
+  $('count').textContent = `${_view.length.toLocaleString()} of ${D.rows.length.toLocaleString()} player-seasons` +
+    (D.missingCount ? ` · ${D.missingCount.toLocaleString()} more have no data for a filtered stat` : '');
   if (!D.rows.length) { $('tbl-wrap').innerHTML = '<div class="empty">Nothing imported yet — open “Import CSVs” above.</div>'; $('more-btn').hidden = true; return; }
   if (!_view.length) { $('tbl-wrap').innerHTML = '<div class="empty">No rows match these filters.</div>'; $('more-btn').hidden = true; return; }
 
   const head = '<tr>' + _cols.map(c => {
     const on = D.sort.key === c.key;
-    return `<th class="${c.txt ? 'txt' : ''} ${on ? 'sorted' : ''}" data-k="${esc(c.key)}" title="${esc(c.key)}">` +
+    return `<th class="${c.txt ? 'txt' : ''} ${on ? 'sorted' : ''}" data-k="${esc(c.key)}"` +
+      (c.key === 'name' ? '' : ' draggable="true"') + ` title="${esc(c.key)} — click to sort, drag to move">` +
       (c.group ? `<span class="grp">${esc(c.group)}</span>` : '<span class="grp">&nbsp;</span>') +
       esc(c.label) + (on ? (D.sort.dir < 0 ? ' ▾' : ' ▴') : '') + '</th>';
   }).join('') + '</tr>';
@@ -626,7 +910,7 @@ function draw() {
     const v = r.cells[c.key];
     if (v === undefined || v === null) return `<td class="null ${c.txt ? 'txt' : ''}">–</td>`;
     const cls = (c.txt ? 'txt ' : '') + (r.nv.has(c.key) ? 'nv' : '');
-    return `<td class="${cls}"${r.nv.has(c.key) ? ' title="from nflverse"' : ''}>${esc(v)}</td>`;
+    return `<td class="${cls}"${r.nv.has(c.key) ? ' title="from nflverse"' : ''}>${esc(fmtCell(c, v))}</td>`;
   }).join('') + '</tr>').join('');
 
   $('tbl-wrap').innerHTML = `<table><thead>${head}</thead><tbody>${body}</tbody></table>`;
@@ -660,11 +944,24 @@ $('f-search').addEventListener('input', e => {
   clearTimeout(_searchT);
   _searchT = setTimeout(() => { D.f.search = e.target.value; D.shown = PAGE_SIZE; saveFilters(); draw(); }, 150);
 });
-$('f-mintgt').addEventListener('input', e => { D.f.minTgt = e.target.value; D.shown = PAGE_SIZE; saveFilters(); draw(); });
+$('f-minroutes').addEventListener('input', e => { D.f.minRoutes = e.target.value; D.shown = PAGE_SIZE; saveFilters(); draw(); });
+$('f-conds').addEventListener('input', onCondEdit);
+$('f-conds').addEventListener('change', onCondEdit);
+$('f-conds').addEventListener('click', e => { if (e.target.dataset.f === 'del') onCondEdit(e); });
+$('cond-add').addEventListener('click', addCond);
+$('cond-clear').addEventListener('click', () => { D.f.conds = []; drawConds(); D.shown = PAGE_SIZE; saveFilters(); draw(); });
 $('f-pos').addEventListener('click', e => { const b = e.target.closest('.pill'); if (b) onPill(b); });
 $('f-season').addEventListener('click', e => { const b = e.target.closest('.pill'); if (b) onPill(b); });
 $('tbl-wrap').addEventListener('click', e => { const th = e.target.closest('th'); if (th) onSort(th); });
 $('more-btn').addEventListener('click', () => { D.shown += PAGE_SIZE; draw(); });
+for (const id of ['tbl-wrap', 'cols-list']) {
+  $(id).addEventListener('dragstart', onDragStart);
+  $(id).addEventListener('dragover', onDragOver);
+  $(id).addEventListener('drop', onDrop);
+  $(id).addEventListener('dragend', onDragEnd);
+}
+$('cols-list').addEventListener('change', e => { const k = e.target.dataset.col; if (k) toggleColumn(k, e.target.checked); });
+$('cols-reset').addEventListener('click', resetColumns);
 $('export-btn').addEventListener('click', exportCsv);
 $('imp-files').addEventListener('change', onFiles);
 $('imp-season').addEventListener('change', onFiles);
