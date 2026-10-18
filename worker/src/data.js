@@ -11,6 +11,7 @@
  *   POST /api/data/import   → upsert a chunk of rows, MERGING into existing data
  *   POST /api/data/delete   → drop one {source, season} slice
  *   GET  /api/data/nflverse → nflverse season stats CSV for ?season= (raw pass-through)
+ *   POST /api/data/sumer    → SumerSports man/zone receiving table (raw pass-through)
  *
  * Same-origin only — no CORS headers, so nothing else can read these responses.
  * POSTs are protected by the session cookie's SameSite=Strict.
@@ -19,7 +20,7 @@
 import { requireAdmin } from './auth.js';
 import DATA_PAGE_HTML from './data-page.html';
 
-const SOURCES        = new Set(['pp', 'nflverse']);   // PlayerProfiler, nflverse
+const SOURCES        = new Set(['pp', 'nflverse', 'sumer']);   // PlayerProfiler, nflverse, SumerSports
 const MAX_IMPORT     = 500;                           // rows per POST — the page chunks below this
 const MAX_ROW_BYTES  = 20000;
 
@@ -62,6 +63,7 @@ export async function handleDataSite(request, env, url) {
     if (path === '/api/data/import' && request.method === 'POST') return importRows(request, env);
     if (path === '/api/data/delete' && request.method === 'POST') return deleteSlice(request, env);
     if (path === '/api/data/nflverse' && request.method === 'GET') return nflverseCsv(url);
+    if (path === '/api/data/sumer'    && request.method === 'POST') return sumerTable(request);
     return json({ error: 'Not found' }, 404);
   }
 
@@ -148,6 +150,42 @@ async function nflverseCsv(url) {
   if (r.status === 404) return json({ error: `nflverse has no ${season} file` }, 404);
   if (!r.ok) return json({ error: `nflverse HTTP ${r.status}` }, 502);
   return new Response(r.body, { headers: { 'Content-Type': 'text/csv;charset=UTF-8', ...NO_STORE } });
+}
+
+// SumerSports' player tables load through a Next.js server action: a POST to
+// the position page with a `next-action` header naming the action. That id is
+// the one fragile part — Sumer mints a new one when it redeploys — so the page
+// supplies it (pasted from a "Copy as cURL" of Sumer's own request) instead of
+// it being hardcoded here. Body args, as captured from sumersports.com:
+//   [page, season, limit, sort, {manZone:[VS_MAN|VS_ZONE]}, minPlays]
+// minPlays 1 = everyone; the site's own default of 10 drops part-time players.
+// Coverage splits exist 2022 onward; earlier seasons return no rows.
+const SUMER_PAGES  = new Set(['wide-receiver', 'tight-end', 'running-back']);
+const SUMER_COVS   = new Set(['VS_MAN', 'VS_ZONE']);
+const SUMER_LIMIT  = 500;
+async function sumerTable(request) {
+  let b;
+  try { b = await request.json(); } catch { return json({ error: 'Bad JSON' }, 400); }
+  const season = parseInt(b?.season, 10);
+  if (!SUMER_PAGES.has(b?.page) || !SUMER_COVS.has(b?.cov) || !(season >= 2000 && season <= 2100)) {
+    return json({ error: 'Need page, season, cov' }, 400);
+  }
+  if (!/^[0-9a-f]{20,80}$/.test(b?.action || '')) return json({ error: 'Missing or malformed Sumer request id' }, 400);
+  const r = await fetch(`https://sumersports.com/players/${b.page}/`, {
+    method: 'POST',
+    headers: {
+      'accept': 'text/x-component',
+      'content-type': 'text/plain;charset=UTF-8',
+      'next-action': b.action,
+      'origin': 'https://sumersports.com',
+      'referer': `https://sumersports.com/players/${b.page}/`,
+      'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36',
+    },
+    body: JSON.stringify([b.page, season, SUMER_LIMIT, [{ receivingYards: 'DESC' }], { manZone: [b.cov] }, 1]),
+  });
+  const text = await r.text();
+  if (!r.ok) return json({ error: `Sumer HTTP ${r.status} — the request id has probably expired` }, 502);
+  return new Response(text, { headers: { 'Content-Type': 'text/plain;charset=UTF-8', ...NO_STORE } });
 }
 
 async function deleteSlice(request, env) {

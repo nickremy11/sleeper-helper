@@ -149,6 +149,20 @@ th.drop-after  { box-shadow: inset -3px 0 0 var(--gold-light); }
         <span id="nv-status" class="note"></span>
       </div>
       <div id="nv-report" class="note"></div>
+      <div class="row">
+        <span class="lbl">Sumer</span>
+        <input type="number" id="sm-from" value="2022" min="2022" max="2100" style="width:90px" />
+        <span class="note">to</span>
+        <input type="number" id="sm-to" min="2022" max="2100" style="width:90px" />
+        <button class="btn" id="sm-go">Pull man/zone</button>
+        <span id="sm-status" class="note"></span>
+      </div>
+      <div class="row">
+        <span class="lbl">Sumer id</span>
+        <input type="text" id="sm-id" placeholder="request id — or paste a whole “Copy as cURL”" style="flex:1;min-width:220px" />
+        <span class="note">only needed when a pull says the id expired</span>
+      </div>
+      <div id="sm-report" class="note"></div>
       <div class="row" style="align-items:flex-start">
         <span class="lbl">Stored</span>
         <div class="slices" id="slices"><span class="note">Loading…</span></div>
@@ -170,7 +184,7 @@ th.drop-after  { box-shadow: inset -3px 0 0 var(--gold-light); }
       <input type="text" id="f-search" placeholder="Search player…" style="width:200px" />
       <span class="lbl" style="min-width:0">Min routes</span>
       <input type="number" id="f-minroutes" min="0" placeholder="0" style="width:80px" />
-      <button class="pill" id="nv-toggle" title="Stored nflverse rows are kept either way; this only decides whether the table uses them">nflverse: off</button>
+      <button class="pill" id="nv-toggle" title="Whether nflverse STATS fill PlayerProfiler's gaps. Team and G come from nflverse either way.">nflverse: off</button>
       <button class="btn" id="export-btn">Export CSV</button>
       <span class="count" id="count"></span>
     </div>
@@ -233,6 +247,21 @@ const COLUMNS = [
   { key: 'target_rate_vs_zone',           group: 'Zone',    label: 'TPRR %', fmt: 'pct' },
   { key: 'receptions_vs_zone',            group: 'Zone',    label: 'Rec',    fmt: 'int' },
   { key: 'receiving_yards_vs_zone',       group: 'Zone',    label: 'Yds',    fmt: 'int' },
+
+  // SumerSports (2022+, pullSumer). Its OWN man/zone split, self-consistent —
+  // kept apart from PlayerProfiler's Man/Zone columns because the two chart
+  // coverage differently (see parseSumer). PlayerProfiler's reports have no
+  // routes vs man/zone, so YPRR by coverage only exists here.
+  { key: 'sm_routes_vs_man',              group: 'Man · Sumer',  label: 'Routes', fmt: 'int' },
+  { key: 'sm_yprr_vs_man',                group: 'Man · Sumer',  label: 'YPRR',   fmt: 'd2' },
+  { key: 'sm_tprr_vs_man',                group: 'Man · Sumer',  label: 'TPRR %', fmt: 'pct' },
+  { key: 'sm_rec_vs_man',                 group: 'Man · Sumer',  label: 'Rec',    fmt: 'int' },
+  { key: 'sm_yds_vs_man',                 group: 'Man · Sumer',  label: 'Yds',    fmt: 'int' },
+  { key: 'sm_routes_vs_zone',             group: 'Zone · Sumer', label: 'Routes', fmt: 'int' },
+  { key: 'sm_yprr_vs_zone',               group: 'Zone · Sumer', label: 'YPRR',   fmt: 'd2' },
+  { key: 'sm_tprr_vs_zone',               group: 'Zone · Sumer', label: 'TPRR %', fmt: 'pct' },
+  { key: 'sm_rec_vs_zone',                group: 'Zone · Sumer', label: 'Rec',    fmt: 'int' },
+  { key: 'sm_yds_vs_zone',                group: 'Zone · Sumer', label: 'Yds',    fmt: 'int' },
 
   { key: 'slot_rate',                     group: 'Alignment', label: 'Slot %',     fmt: 'pct' },
   { key: 'slot_snaps',                    group: 'Alignment', label: 'Slot Snaps', fmt: 'int' },
@@ -304,7 +333,6 @@ const NFLVERSE_MAP = {
   target_share:                { key: 'nv_target_share', scale: 100 },
   air_yards_share:             { key: 'nv_air_yards_share', scale: 100 },
 };
-const NFLVERSE_POS = new Set(['WR', 'TE', 'RB']);
 
 // Identity columns: recognised by any of these headers, stored outside `data`.
 const ID_HEADERS = {
@@ -365,15 +393,57 @@ function playerKey(name, pos) {
   const n = name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/[.'’]/g, '').replace(/\b(jr|sr|ii|iii|iv|v)\b/g, '')
     .replace(/[^a-z0-9]+/g, ' ').trim();
-  return (NAME_ALIASES[n] || n) + '|' + (pos || '').toUpperCase();
+  return n + '|' + (pos || '').toUpperCase();   // aliases are applied on load — see canonRows
 }
 
-// Normalised name → the one both sources should share. Add a line whenever the
-// nflverse pull reports a receiver with no PlayerProfiler match. Changing this
-// re-keys rows only on the NEXT import, so re-import the affected seasons.
+// Normalised name → the one both sources should share (nflverse's spelling).
+// Add a line whenever the nflverse pull reports a receiver with no match.
+// Applied when the page LOADS (canonRows), not only at import, so a new line
+// takes effect on reload — no re-import needed.
 const NAME_ALIASES = {
-  'chosen robbie anderson': 'robbie chosen',   // PP's display name vs nflverse's
+  'chosen robbie anderson': 'robbie chosen',
+  'chigoziem okonkwo':      'chig okonkwo',
+  'gabriel davis':          'gabe davis',
+  'ben watson':             'benjamin watson',
+  'olabisi johnson':        'bisi johnson',
+  'dwayne eskridge':        'dee eskridge',
+  'charles d johnson':      'charles johnson',
+  'walter powell':          'walt powell',
+  'jody fortson':           'joseph fortson',
 };
+const canonKey = key => {
+  const i = key.lastIndexOf('|');
+  const n = key.slice(0, i);
+  return (NAME_ALIASES[n] || n) + key.slice(i);
+};
+const keyName = key => key.slice(0, key.lastIndexOf('|'));
+
+// Re-keys stored rows so the two sources line up, without touching what's stored:
+//  1. aliases (canonKey) on every row;
+//  2. an nflverse row with no PlayerProfiler row at its name|POS that season is
+//     matched on NAME ALONE — when exactly one PP row and exactly one leftover
+//     nflverse (or Sumer) row carry that name. nflverse files a player under his roster
+//     position (Malcolm Perry 2020 = RB, Travis Hunter = CB) where PlayerProfiler
+//     has him at WR; uniqueness on both sides keeps two different Mike Williamses
+//     from being merged.
+function canonRows(raw) {
+  const rows = raw.map(r => ({ ...r, key: canonKey(r.key) }));
+  const ppByKey = new Set(), ppByName = new Map(), nvLeft = new Map();
+  for (const r of rows) if (r.source === 'pp') {
+    ppByKey.add(r.season + '|' + r.key);
+    const nk = r.season + '|' + keyName(r.key);
+    ppByName.set(nk, ppByName.has(nk) ? null : r.key);   // null = ambiguous
+  }
+  for (const r of rows) if (r.source !== 'pp' && !ppByKey.has(r.season + '|' + r.key)) {
+    const nk = r.source + '|' + r.season + '|' + keyName(r.key);   // per source: each matched on its own
+    nvLeft.set(nk, (nvLeft.get(nk) || []).concat(r));
+  }
+  for (const [nk, list] of nvLeft) {
+    const ppKey = ppByName.get(nk.slice(nk.indexOf('|') + 1));
+    if (ppKey && list.length === 1) list[0].key = ppKey;
+  }
+  return rows;
+}
 
 // '' → absent (never 0). Numbers lose thousands separators and a trailing %.
 function cellValue(raw) {
@@ -413,8 +483,10 @@ function parseImport(fileTexts, seasonFallback) {
   return { rows: out, problems, cols: [...cols], seasons: [...seasons].sort() };
 }
 
-// One nflverse season file → import rows. WR/TE/RB with at least one target
-// only — the file has every player who touched the field (~1,900 a season).
+// One nflverse season file → import rows: anyone with at least one target
+// (~500 a season of the ~1,900 in the file). Deliberately NOT filtered by
+// position — nflverse files players under their roster position, so a WR
+// PlayerProfiler charts can be an RB, FB or CB here (Travis Hunter = CB).
 function parseNflverse(text) {
   const grid = parseCsv(text);
   const hdr = grid[0] || [];
@@ -424,7 +496,7 @@ function parseNflverse(text) {
   const out = [];
   for (const r of grid.slice(1)) {
     const pos = (r[iPos] || '').toUpperCase();
-    if (!NFLVERSE_POS.has(pos) || !(Number(r[iTgt]) > 0)) continue;
+    if (!(Number(r[iTgt]) > 0)) continue;
     const name = r[iName].trim(), season = parseInt(r[iSeason], 10);
     if (!name || !season) continue;
     const data = {};
@@ -450,24 +522,28 @@ async function apiJson(path, opts) {
 const apiPost = (path, body) => apiJson(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
 // ── Load + merge ─────────────────────────────────────────────────────────────
-// One merged row per (season, player). PlayerProfiler wins; nflverse only fills
-// cells PlayerProfiler left empty, and those cells are remembered in `nv` so
-// they render distinguishably.
+// One merged row per (season, player). Applied lowest rank first so a higher
+// source overwrites: PlayerProfiler > Sumer > nflverse. Cells a lower source
+// supplied are remembered (`nv` nflverse, `sm` Sumer) so they render
+// distinguishably.
+const SOURCE_RANK = { nflverse: 0, sumer: 1, pp: 2 };
 function mergeRows(raw) {
   const by = new Map(), slices = new Map(), seen = new Set(COLUMNS.map(c => c.key)), extra = [];
-  raw.sort((a, b) => (a.source === 'pp') - (b.source === 'pp'));   // nflverse first, pp overlays
+  raw.sort((a, b) => SOURCE_RANK[a.source] - SOURCE_RANK[b.source]);
   for (const r of raw) {
     const sk = r.source + '|' + r.season;
     slices.set(sk, (slices.get(sk) || 0) + 1);
     const id = r.season + '|' + r.key;
     let m = by.get(id);
-    if (!m) { m = { season: r.season, key: r.key, name: r.name, pos: r.pos, cells: {}, nv: new Set(), srcs: new Set() }; by.set(id, m); }
+    if (!m) { m = { season: r.season, key: r.key, name: r.name, pos: r.pos, cells: {}, nv: new Set(), sm: new Set(), srcs: new Set() }; by.set(id, m); }
     m.srcs.add(r.source);
     if (r.source === 'pp') { m.name = r.name; m.pos = r.pos || m.pos; }
     for (const [k, v] of Object.entries(r.data)) {
       if (!seen.has(k)) { seen.add(k); extra.push(k); }
-      if (r.source === 'pp') { m.cells[k] = v; m.nv.delete(k); }
-      else { m.cells[k] = v; m.nv.add(k); }
+      m.cells[k] = v;
+      m.nv.delete(k); m.sm.delete(k);
+      if (r.source === 'nflverse') m.nv.add(k);
+      else if (r.source === 'sumer') m.sm.add(k);
     }
   }
   for (const m of by.values()) { m.cells.name = m.name; m.cells.season = m.season; m.cells.position = m.pos; }
@@ -520,14 +596,39 @@ function deriveFantasy(r) {
   if (['games', 'receptions', 'receiving_yards', 'receiving_touchdowns'].some(k => r.nv.has(k))) r.nv.add('fppg');
 }
 
-// The slice list always counts both sources; only the TABLE honours D.useNv,
+// Team and games are facts about the season, not a competing definition of a
+// stat, so they come from nflverse even while its STATS are switched off —
+// without them there is no season team and no FPPG (PlayerProfiler's reports
+// carry neither). Only fills a gap on an existing PlayerProfiler row; a player
+// nflverse has and PlayerProfiler doesn't still doesn't appear.
+const NV_FACT_KEYS = ['team', 'games'];
+function overlayNvFacts(rows) {
+  const nv = new Map();
+  for (const r of D.raw) if (r.source === 'nflverse') nv.set(r.season + '|' + r.key, r.data);
+  for (const r of rows) {
+    const d = nv.get(r.season + '|' + r.key);
+    if (!d) continue;
+    for (const k of NV_FACT_KEYS) {
+      if (r.cells[k] === undefined && d[k] !== undefined) { r.cells[k] = d[k]; r.nv.add(k); }
+    }
+  }
+}
+
+// The slice list always counts every source; only the TABLE honours D.useNv,
 // so an nflverse pull is visible as stored even while it's switched off.
+// Sumer is always merged (it only exists for the man/zone route splits), but it
+// never contributes a ROW: a player Sumer has and PlayerProfiler doesn't is
+// dropped — same rule as nflverse's team/games facts.
 function remerge() {
   const all = mergeRows(D.raw.slice());
-  const m = D.useNv ? all : mergeRows(D.raw.filter(r => r.source === 'pp'));
+  const m = D.useNv ? all : mergeRows(D.raw.filter(r => r.source !== 'nflverse'));
+  m.rows = m.rows.filter(r => r.srcs.has('pp') || (D.useNv && r.srcs.has('nflverse')));
   D.rows = m.rows; D.extraCols = m.extra.filter(k => !HIDDEN_KEYS.has(k));
+  if (!D.useNv) overlayNvFacts(D.rows);
   normalizeCells(D.rows);
   drawSlices(all.slices);
+  drawMatchReport();
+  drawSumerReport();
   drawColsPanel();
   $('nv-toggle').classList.toggle('on', D.useNv);
   $('nv-toggle').textContent = D.useNv ? 'nflverse: filling gaps' : 'nflverse: off';
@@ -545,7 +646,7 @@ function toggleNv() {
 async function loadAll() {
   try {
     const { rows } = await apiJson('/api/data/rows');
-    D.raw = rows;
+    D.raw = canonRows(rows);
     remerge();
     if (!rows.length) $('import-panel').open = true;
   } catch (e) {
@@ -592,16 +693,144 @@ async function doImport() {
   }
 }
 
-// Pulls each season's nflverse file through the Worker and imports it. The
-// report lists real receivers nflverse has that matched NO PlayerProfiler row
-// in a season PlayerProfiler covers — almost always a spelling difference
-// (PlayerProfiler's "Chosen Robbie Anderson"), which would otherwise show up
-// as two half-empty rows for one player.
-const NV_REPORT_MIN_TGT = 30;
+// PlayerProfiler player-seasons with no nflverse partner, in seasons nflverse
+// covers. Those rows get no Team, G or FPPG, so this is THE list to work from:
+// almost always a spelling difference — fix with a NAME_ALIASES line + reload.
+// Read off the canonRows-keyed D.raw, so aliases and the name-only fallback
+// are already applied. Rebuilt on every load (remerge), not only after a pull.
+const NV_REPORT_MIN_TGT = 10;
+function drawMatchReport() {
+  const nvKeys = new Set(), nvSeasons = new Set();
+  for (const r of D.raw) if (r.source === 'nflverse') { nvKeys.add(r.season + '|' + r.key); nvSeasons.add(r.season); }
+  if (!nvSeasons.size) { $('nv-report').innerHTML = ''; return; }
+  const miss = D.raw.filter(r => r.source === 'pp' && nvSeasons.has(r.season) &&
+    r.data.targets >= NV_REPORT_MIN_TGT && !nvKeys.has(r.season + '|' + r.key));
+  const byName = new Map();
+  for (const r of miss) byName.set(r.name, (byName.get(r.name) || []).concat(r.season));
+  $('nv-report').innerHTML = byName.size
+    ? `<span class="err">No nflverse match, so no Team / G / FPPG (≥${NV_REPORT_MIN_TGT} targets):</span> ` +
+      [...byName].sort((x, y) => x[0].localeCompare(y[0]))
+        .map(([n, ss]) => esc(`${n} (${ss.sort().join(', ')})`)).join(' · ')
+    : `<span class="ok">Every PlayerProfiler receiver with ≥${NV_REPORT_MIN_TGT} targets has an nflverse match.</span>`;
+}
+
+// Same check against Sumer: PP receivers in seasons Sumer covers with no Sumer
+// row, so no man/zone routes or YPRR.
+function drawSumerReport() {
+  const keys = new Set(), seasons = new Set();
+  for (const r of D.raw) if (r.source === 'sumer') { keys.add(r.season + '|' + r.key); seasons.add(r.season); }
+  if (!seasons.size) { $('sm-report').innerHTML = ''; return; }
+  const byName = new Map();
+  for (const r of D.raw) if (r.source === 'pp' && seasons.has(r.season) &&
+      r.data.targets >= NV_REPORT_MIN_TGT && !keys.has(r.season + '|' + r.key)) {
+    byName.set(r.name, (byName.get(r.name) || []).concat(r.season));
+  }
+  $('sm-report').innerHTML = byName.size
+    ? `<span class="err">No Sumer match, so no man/zone routes (≥${NV_REPORT_MIN_TGT} targets):</span> ` +
+      [...byName].sort((x, y) => x[0].localeCompare(y[0]))
+        .map(([n, ss]) => esc(`${n} (${ss.sort().join(', ')})`)).join(' · ')
+    : `<span class="ok">Every PlayerProfiler receiver with ≥${NV_REPORT_MIN_TGT} targets has a Sumer match.</span>`;
+}
+
+// ── SumerSports man/zone pull ────────────────────────────────────────────────
+// The request id (Sumer's `next-action` header) is the only thing that goes
+// stale — Sumer issues a new one when it redeploys. Default is the one captured
+// 2026-10-17; replace by pasting a fresh "Copy as cURL" of any Sumer player
+// table request into the box (the id is extracted from it).
+const SUMER_DEFAULT_ACTION = '7e0154f61fb110c9f56a71c0ce0b32fd371f06a37c';
+const LS_SUMER_ACTION = 'data_room_sumer_action';
+const SUMER_PAGES = { 'wide-receiver': 'WRs', 'tight-end': 'TEs' };
+const SUMER_COVS  = { VS_MAN: 'man', VS_ZONE: 'zone' };
+const SUMER_FIRST_SEASON = 2022;   // coverage splits don't exist before this
+const SUMER_LIMIT = 500;           // must match the Worker's
+
+function sumerAction() {
+  try { return localStorage.getItem(LS_SUMER_ACTION) || SUMER_DEFAULT_ACTION; } catch { return SUMER_DEFAULT_ACTION; }
+}
+function onSumerIdInput() {
+  const raw = $('sm-id').value.trim();
+  const id = (raw.match(/next-action:\s*([0-9a-f]{20,80})/i) || raw.match(/^([0-9a-f]{20,80})$/i) || [])[1];
+  if (!raw) return;
+  if (!id) { $('sm-status').innerHTML = '<span class="err">No request id found in that paste</span>'; return; }
+  try { localStorage.setItem(LS_SUMER_ACTION, id.toLowerCase()); } catch {}
+  $('sm-id').value = id.toLowerCase();
+  $('sm-status').innerHTML = '<span class="ok">Request id saved.</span>';
+}
+
+// The response is a React Server Components stream: numbered lines, one of
+// which is the JSON array of player rows. Anything else means the id is stale.
+function parseSumer(text, cov, season) {
+  let list = null;
+  for (const line of text.split('\n')) {
+    const m = line.match(/^[0-9a-f]+:(\[.*)$/);
+    if (!m) continue;
+    try { const v = JSON.parse(m[1]); if (Array.isArray(v) && (!v.length || v[0]?.sumerPlayer)) { list = v; break; } } catch {}
+  }
+  if (!list) throw new Error('Sumer sent something unexpected — paste a fresh request id');
+  const c = SUMER_COVS[cov];
+  const num = (v, scale = 1) => typeof v === 'number' && isFinite(v) ? Math.round(v * scale * 1000) / 1000 : undefined;
+  const rows = [];
+  for (const r of list) {
+    const p = r.sumerPlayer || {};
+    const name = [p.footballName, p.lastName].filter(Boolean).join(' ').trim();
+    if (!name) continue;
+    // Own keys (sm_*), never PlayerProfiler's *_vs_man columns: the two chart
+    // coverage differently — TPRR roughly agrees, but yards and catches vs man
+    // don't (George Pickens 2025: 559 yds Sumer, 677 PP). Gap-filling would put
+    // Sumer yards beside PP yards in one column and make YPRR unreconcilable.
+    const data = {
+      ['sm_routes_vs_' + c]: num(r.routesRun),
+      ['sm_yprr_vs_' + c]:   num(r.yardsPerRouteRun),
+      ['sm_tprr_vs_' + c]:   num(r.targetsPerRouteRun, 100),   // percent, like every other TPRR here
+      ['sm_rec_vs_' + c]:    num(r.receptions),
+      ['sm_yds_vs_' + c]:    num(r.receivingYards),
+    };
+    for (const k in data) if (data[k] === undefined) delete data[k];
+    if (Object.keys(data).length) rows.push({ season, key: playerKey(name, p.position || ''), name, pos: (p.position || '').toUpperCase(), data });
+  }
+  return { rows, capped: list.length >= SUMER_LIMIT };
+}
+
+async function pullSumer() {
+  const from = Math.max(SUMER_FIRST_SEASON, parseInt($('sm-from').value, 10) || SUMER_FIRST_SEASON);
+  const to = parseInt($('sm-to').value, 10) || from;
+  if (to < from) { $('sm-status').innerHTML = '<span class="err">Pick a season range (2022 or later)</span>'; return; }
+  $('sm-go').disabled = true;
+  const done = [], failed = [], warn = [];
+  outer:
+  for (let s = from; s <= to; s++) {
+    for (const page of Object.keys(SUMER_PAGES)) {
+      for (const cov of Object.keys(SUMER_COVS)) {
+        const what = `${s} ${SUMER_PAGES[page]} vs ${SUMER_COVS[cov]}`;
+        try {
+          $('sm-status').textContent = `${what}: downloading…`;
+          const r = await fetch('/api/data/sumer', { method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ page, season: s, cov, action: sumerAction() }) });
+          if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `HTTP ${r.status}`);
+          const { rows, capped } = parseSumer(await r.text(), cov, s);
+          if (capped) warn.push(`${what}: hit the ${SUMER_LIMIT}-row cap, some players may be missing`);
+          if (rows.length) await writeRows('sumer', rows, (n, t) => { $('sm-status').textContent = `${what}: writing ${n} / ${t}…`; });
+          done.push(what);
+        } catch (e) {
+          failed.push(`${what}: ${e.message}`);
+          if (/request id/.test(e.message)) break outer;   // every later call would fail the same way
+        }
+        await new Promise(res => setTimeout(res, 400));   // be gentle with Sumer
+      }
+    }
+  }
+  $('sm-go').disabled = false;
+  $('sm-status').innerHTML = `<span class="ok">Pulled ${done.length} table(s).</span>` +
+    warn.concat(failed).map(f => `<br><span class="err">${esc(f)}</span>`).join('');
+  await loadAll();
+}
+
+// Pulls each season's nflverse file through the Worker and imports it.
 async function pullNflverse() {
   const from = parseInt($('nv-from').value, 10), to = parseInt($('nv-to').value, 10) || from;
   if (!(from >= 1999) || to < from) { $('nv-status').innerHTML = '<span class="err">Pick a season range</span>'; return; }
-  $('nv-go').disabled = true; $('nv-report').innerHTML = '';
+  $('nv-go').disabled = true;
   const pulled = [], failed = [];
   for (let s = from; s <= to; s++) {
     try {
@@ -616,21 +845,11 @@ async function pullNflverse() {
   $('nv-go').disabled = false;
   $('nv-status').innerHTML = `<span class="ok">Pulled ${pulled.length} season(s).</span>` +
     failed.map(f => `<br><span class="err">${esc(f)}</span>`).join('');
-  await loadAll();
-
-  const ppKeys = new Set(D.rows.filter(r => r.srcs.has('pp')).map(r => r.season + '|' + r.key));
-  const ppSeasons = new Set(D.rows.filter(r => r.srcs.has('pp')).map(r => r.season));
-  const lines = pulled.filter(p => ppSeasons.has(p.season)).map(p => {
-    const miss = p.rows.filter(r => r.data.targets >= NV_REPORT_MIN_TGT && !ppKeys.has(p.season + '|' + r.key));
-    return miss.length ? `${p.season}: ${miss.map(r => esc(`${r.name} (${r.pos}, ${r.data.targets} tgt)`)).join(', ')}` : '';
-  }).filter(Boolean);
-  $('nv-report').innerHTML = lines.length
-    ? `<span class="err">No PlayerProfiler match (≥${NV_REPORT_MIN_TGT} targets) — likely a name spelled differently:</span><br>` + lines.join('<br>')
-    : (pulled.some(p => ppSeasons.has(p.season)) ? `<span class="ok">Every nflverse receiver with ≥${NV_REPORT_MIN_TGT} targets matched a PlayerProfiler row.</span>` : '');
+  await loadAll();   // redraws the match report too
 }
 
 function drawSlices(slices) {
-  const label = { pp: 'PlayerProfiler', nflverse: 'nflverse' };
+  const label = { pp: 'PlayerProfiler', nflverse: 'nflverse', sumer: 'Sumer' };
   const items = [...slices.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   $('slices').innerHTML = items.length ? items.map(([sk, n]) => {
     const [src, season] = sk.split('|');
@@ -910,7 +1129,8 @@ function draw() {
     const v = r.cells[c.key];
     if (v === undefined || v === null) return `<td class="null ${c.txt ? 'txt' : ''}">–</td>`;
     const cls = (c.txt ? 'txt ' : '') + (r.nv.has(c.key) ? 'nv' : '');
-    return `<td class="${cls}"${r.nv.has(c.key) ? ' title="from nflverse"' : ''}>${esc(fmtCell(c, v))}</td>`;
+    const src = r.nv.has(c.key) ? ' title="from nflverse"' : r.sm.has(c.key) ? ' title="from Sumer"' : '';
+    return `<td class="${cls}"${src}>${esc(fmtCell(c, v))}</td>`;
   }).join('') + '</tr>').join('');
 
   $('tbl-wrap').innerHTML = `<table><thead>${head}</thead><tbody>${body}</tbody></table>`;
@@ -967,7 +1187,13 @@ $('imp-files').addEventListener('change', onFiles);
 $('imp-season').addEventListener('change', onFiles);
 $('imp-go').addEventListener('click', doImport);
 $('nv-go').addEventListener('click', pullNflverse);
-$('nv-to').value = new Date().getFullYear() - 1;   // last completed season; the current one is partial
+$('sm-go').addEventListener('click', pullSumer);
+$('sm-id').addEventListener('change', onSumerIdInput);
+$('sm-id').value = sumerAction();
+$('sm-to').value = $('nv-to').value;
+// The current season's file exists from week 1 and is refreshed daily; re-pulling
+// it later in the year just updates those rows (imports merge).
+$('nv-to').value = new Date().getMonth() >= 8 ? new Date().getFullYear() : new Date().getFullYear() - 1;
 $('slices').addEventListener('click', e => { const b = e.target.closest('.btn.del'); if (b) onDeleteSlice(b); });
 
 $('nv-toggle').addEventListener('click', toggleNv);
