@@ -329,6 +329,7 @@ footer a:hover { color: var(--gold); }
 .rg-halves { display: grid; grid-template-columns: repeat(var(--rg-parts, 2), 1fr); }
 .rg-half { min-width: 0; }
 .rg-half + .rg-half { border-left: 1px solid var(--brown-mid); }
+.rg-stack { min-width: 0; display: flex; flex-direction: column; gap: 10px; }   /* K under QB, D/ST under TE */
 .rg-col { min-width: 0; border: 1px solid var(--brown-mid); border-radius: 2px; background: var(--brown-dark); }
 .rg-head { font-family: 'Rye', serif; font-size: 0.55rem; letter-spacing: 0.12em; text-transform: uppercase;
            color: var(--gold-light); background: #2b1d13; padding: 7px 8px; text-align: center;
@@ -5377,6 +5378,10 @@ const RG = { leagueIdx: 0, mode: 'current', _sig: null };   // mode: current | r
 // reads better side by side than as one column you have to scan past several
 // times, but only while every track stays wide enough to show a full name.
 const RG_COLS = [['QB','QB'], ['RB','RB', 2], ['WR','WR', 2], ['TE','TE'], ['FLEX','FLEX', 3]];
+// K and D/ST ride UNDER an existing column rather than taking tracks of their
+// own — two short lists as full columns would cost as much width as a long one.
+// Shown only when the uploaded sheet carries those blocks.
+const RG_STACK = { QB: ['K', 'K'], TE: ['DEF', 'D/ST'] };
 const RG_SPLIT_MIN = 20;   // rows per part — a shorter sheet drops to fewer parts
                            // rather than rendering stubs
 const RG_TRACK_MIN = 190;  // px a track needs before names start ellipsizing
@@ -5457,7 +5462,7 @@ function rgUnrankedHtml(fix, mode, inGrid) {
     : '';
   return `<div class="rg-unranked">
       ${group('Already played', played, 'His game has kicked off — weekly sheets drop players once they play. The number is what he actually scored in this league.')}
-      ${group('Not ranked', rest, 'Not ranked by the uploaded sheet, or a position this grid does not lay out (K, D/ST, IDP) — usually a format difference, not a missing player.')}
+      ${group('Not ranked', rest, 'Not ranked by the uploaded sheet, or a position this grid does not lay out (IDP) — usually a format difference, not a missing player.')}
     </div>`;
 }
 
@@ -5478,12 +5483,13 @@ function rgWidth() {
 function rgAllocParts(cols, width) {
   const parts = {};
   let tracks = 0;
-  for (const [k] of RG_COLS) if ((cols[k] || []).length) { parts[k] = 1; tracks++; }
+  // A track exists for its own list OR for the K / D/ST list stacked in it.
+  for (const [k] of RG_COLS) if ((cols[k] || []).length || (cols[RG_STACK[k]?.[0]] || []).length) { parts[k] = 1; tracks++; }
   // Stubby parts read worse than one continuous column, so a short sheet stops
   // splitting on its own rather than being forced into the shape below.
   const room = key => {
     const max = RG_COLS.find(([k]) => k === key)?.[2] || 1;
-    const now = parts[key];
+    const now = (cols[key] || []).length ? parts[key] : 0;
     return !!now && now < max && (cols[key] || []).length >= (now + 1) * RG_SPLIT_MIN;
   };
   const take = key => { parts[key]++; tracks++; };
@@ -5589,13 +5595,14 @@ function rgDraw() {
   // aren't here", and deliberately taken from the columns rather than from
   // LU.ranks.byPid, which also holds the K and DEF blocks RG_COLS leaves out.
   const inGrid = new Set();
-  for (const [key] of RG_COLS) for (const r of (cols[key] || [])) if (r.pid) inGrid.add(String(r.pid));
+  const gridKeys = RG_COLS.flatMap(([k]) => RG_STACK[k] ? [k, RG_STACK[k][0]] : [k]);
+  for (const key of gridKeys) for (const r of (cols[key] || [])) if (r.pid) inGrid.add(String(r.pid));
 
   const alloc = rgAllocParts(cols, rgWidth());
   const tracks = alloc.tracks;
   RG._sig = rgPartsSig(alloc.parts);
 
-  const grid = `<div class="rg-wrap" style="--rg-tracks:${tracks};">${RG_COLS.map(([key, label]) => {
+  const colHtml = (key, label, parts) => {
     const list = cols[key] || [];
     if (!list.length) return '';
     // Flip the band every time the tier changes. Computed over the FULL list
@@ -5625,7 +5632,6 @@ function rgDraw() {
         <span class="rg-opp">${esc(r.opp || '')}</span>
       </div>`;
     };
-    const parts = alloc.parts[key] || 1;
     const per   = Math.ceil(list.length / parts);
     // Every part after the first must keep its true index or both the banding and
     // the cut points would restart at zero.
@@ -5635,6 +5641,13 @@ function rgDraw() {
       : list.map((r, i) => cell(r, i)).join('');
     return `<div class="rg-col${parts > 1 ? ' rg-split' : ''}" style="--rg-parts:${parts};">
       <div class="rg-head" style="top:${navH}px;">${esc(label)} <em>${list.length}</em></div>${body}</div>`;
+  };
+
+  const grid = `<div class="rg-wrap" style="--rg-tracks:${tracks};">${RG_COLS.map(([key, label]) => {
+    const main  = colHtml(key, label, alloc.parts[key] || 1);
+    const stack = RG_STACK[key] ? colHtml(RG_STACK[key][0], RG_STACK[key][1], 1) : '';
+    // One grid item, so the stacked list sits in the same track and costs no width.
+    return main && stack ? `<div class="rg-stack">${main}${stack}</div>` : main || stack;
   }).join('')}</div>`;
 
   setC(`<div>${head}${controls}${rgUnrankedHtml(fix, RG.mode, inGrid)}${grid}</div>`);
