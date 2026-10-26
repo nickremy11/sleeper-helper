@@ -3485,6 +3485,42 @@ function lsMatchRankRow(name, team) {
   return pid || byTeam;
 }
 
+// Last-name fallback for sheets that list a position by surname only (kicker
+// blocks often do: "Reichard, MIN"). Scoped to that position and, when the sheet
+// gives one, that team — and it only answers when exactly one player fits, so a
+// shared surname resolves to nothing rather than to the wrong man.
+function lsMatchByLastName(name, team, pos) {
+  const key = normName(name);
+  if (!key || key.includes(' ')) return null;          // a full name already had its chance
+  const t = team ? normTeamAbbr(team) : null;
+  let hit = null;
+  for (const [pid, p] of Object.entries(S.players || {})) {
+    if (lsNormPos(p.position) !== pos || normName(p.last_name || '') !== key) continue;
+    if (t && normTeamAbbr(p.team) !== t) continue;
+    if (hit) return null;                                // ambiguous
+    hit = pid;
+  }
+  return hit;
+}
+
+// Some sheets carry the tier in a block's "Projection" column instead of a Tier
+// column (the K block: 1,1,1,…,2,2,…). Read it as the tier only when it looks
+// like one — whole numbers, small, never going DOWN as rank goes up. A real
+// points projection fails the last test straight away.
+function lsProjIsTier(rows, iRank, iProj) {
+  const pairs = rows.slice(1)
+    .map(r => [lsNum(r[iRank]), lsNum(r[iProj])])
+    .filter(([rk, v]) => rk != null && v != null)
+    .sort((a, b) => a[0] - b[0]);
+  if (pairs.length < 3) return false;
+  for (let i = 0; i < pairs.length; i++) {
+    const v = pairs[i][1];
+    if (!Number.isInteger(v) || v < 1 || v > 20) return false;
+    if (i && v < pairs[i - 1][1]) return false;
+  }
+  return true;
+}
+
 function lsParseRanksCsv(text) {
   const rows = lsCsvRows(text);
   if (rows.length < 2) return null;
@@ -3499,6 +3535,9 @@ function lsParseRanksCsv(text) {
     const iName = at(spec.nameCol), iRank = at('Rank');
     if (iName == null || iRank == null) continue;          // block absent
     const get = (r, f) => { const i = at(f); return i == null ? '' : String(r[i] ?? '').trim(); };
+    const tierCol = at('Tier') != null ? 'Tier'
+                  : at('Projection') != null && lsProjIsTier(rows, iRank, at('Projection')) ? 'Projection'
+                  : 'Tier';
 
     const list = [];
     for (let ri = 1; ri < rows.length; ri++) {
@@ -3508,7 +3547,8 @@ function lsParseRanksCsv(text) {
       if (!name || rank == null) continue;                 // padding cell
       // The DEF block has no team column of its own — its name IS the team.
       const team = block === 'DEF' ? '' : get(r, 'Team');
-      const pid  = lsMatchRankRow(name, team);
+      const pid  = lsMatchRankRow(name, team)
+                || (block !== 'DEF' && block !== 'FLEX' ? lsMatchByLastName(name, team, block) : null);
       total++;
       if (pid) matched++; else unmatched.push(block + ' ' + rank + '. ' + name);
 
@@ -3516,7 +3556,7 @@ function lsParseRanksCsv(text) {
         rank, name, pid,
         team:    team ? normTeamAbbr(team) : '',
         opp:     normTeamAbbr(get(r, 'Opponent')) || '',
-        tier:    lsNum(get(r, 'Tier')),
+        tier:    lsNum(get(r, tierCol)),
         total:   lsNum(get(r, 'Total')),
         matchup: lsNum(get(r, 'Matchup')),
         pos:     block === 'FLEX' ? (get(r, 'Pos') || '').toUpperCase() : block,
