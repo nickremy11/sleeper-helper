@@ -106,12 +106,13 @@ body::before {
 /* Season-to-date PPG in the selected league. Shown only while the track is wide
    enough to keep names readable: a container query on the cell follows the real
    track width (parts, the stacked breakpoints, resizes) with no JS remeasuring.
-   The ▲/▼ column takes its own share of the row, so the cut-off moves with it. */
+   The ▲/▼ column takes its own share of the row, so the cut-off moves with it.
+   Cut-offs leave a name ~80px — enough for "Christian McCaffrey" at this size. */
 .mrg-cell { container-type: inline-size; }
 .mrg-ppg { color: var(--parchment); font-size: 0.6rem; flex-shrink: 0; opacity: 0.85;
            min-width: 24px; text-align: right; font-variant-numeric: tabular-nums; }
-@container (max-width: 225px) { .mrg-ppg { display: none; } }
-@container (max-width: 250px) { .mrg-cons-on .mrg-ppg { display: none; } }
+@container (max-width: 170px) { .mrg-ppg { display: none; } }
+@container (max-width: 195px) { .mrg-cons-on .mrg-ppg { display: none; } }
 .mrg-on { background: rgba(95,174,95,0.18);  box-shadow: inset 3px 0 0 #5fae5f; }
 .mrg-on .mrg-name { color: #8fd08f; font-weight: 700; }
 .mrg-fa { background: rgba(235,195,55,0.28); box-shadow: inset 3px 0 0 #f0c93c; }

@@ -972,6 +972,9 @@ const MRG = {
   stats: null,            // Sleeper season-to-date stat lines, pid → line ({} = load failed)
   scoring: {},            // lgId → scoring map | null (null = couldn't read it → no PPG)
   scoringFor: null,       // optional host hook: lgId → scoring map it already holds
+  names: {},              // pid → {name, pos} for EVERY position (players is QB–TE only
+                          // when the grid fetched it), so the unranked line can name a K
+  _namesTried: false,
   loading: false, error: '',
   _idTried: false, _sig: null, _espnCfg: null,
 };
@@ -1002,8 +1005,8 @@ async function mrgInit(opts = {}) {
     await mrgEnsureLeagues();
     await mrgLoadSources();
     await mrgLoadRanks();
-    await Promise.all([mrgEnsureRosters(MRG.leagueId), mrgEnsureCons(),
-                       mrgEnsureStats(), mrgEnsureScoring(MRG.leagueId)]);
+    await Promise.all([mrgEnsureRosters(MRG.leagueId).then(() => mrgEnsureNames(MRG.leagueId)),
+                       mrgEnsureCons(), mrgEnsureStats(), mrgEnsureScoring(MRG.leagueId)]);
   } catch (e) {
     MRG.error = e.message || String(e);
   }
@@ -1026,6 +1029,7 @@ async function mrgEnsureRefData() {
     const res = await fetch(`${MRG.apiBase}/players`).then(r => r.json());
     const players = {}, byName = {};
     const rankOf = p => (p.search_rank != null && p.search_rank < 9999999) ? p.search_rank : Infinity;
+    mrgIndexNames(res);
     for (const [pid, p] of Object.entries(res || {})) {
       if (!MRG_POS_KEYS.has(p.position)) continue;
       players[pid] = p;
@@ -1223,6 +1227,27 @@ async function mrgEnsureRosters(lgId) {
   });
 }
 
+// Names for every position, off a raw /api/players map.
+function mrgIndexNames(all) {
+  for (const [pid, p] of Object.entries(all || {})) {
+    const name = p.full_name || `${p.first_name || ''} ${p.last_name || ''}`.trim();
+    if (name) MRG.names[pid] = { name, pos: p.position || '' };
+  }
+}
+
+// The unranked line names every rostered player, kickers and IDP included. The
+// host's player map usually covers them (index.html keeps K/DEF/IDP); when it
+// doesn't, pull the full map once — it's KV-cached, so this is cheap.
+async function mrgEnsureNames(lgId) {
+  const mine = MRG.rosters[lgId]?.mine;
+  if (!mine || MRG._namesTried) return;
+  const missing = [...mine].some(pid => String(pid) !== '0'
+    && !MRG.players?.[pid] && !MRG.names[pid] && !/^[A-Z]{2,3}$/.test(String(pid)));
+  if (!missing) return;
+  MRG._namesTried = true;
+  try { mrgIndexNames(await fetch(`${MRG.apiBase}/players`).then(r => r.json())); } catch {}
+}
+
 // ── Season-to-date PPG ───────────────────────────────────────────────────────
 // What a player has ACTUALLY averaged this season, scored with the selected
 // league's own settings — the same definition index.html's playerSeasonPpg
@@ -1277,25 +1302,25 @@ function mrgPpg(pid) {
 const MRG_UN_ORDER = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
 function mrgUnrankedHtml(mine, onBoard) {
   if (!mine || !mine.size) return '';
-  let unnamed = 0;
   const rows = [];
   for (const raw of mine) {
     const pid = String(raw);
     if (pid === '0' || onBoard.has(pid)) continue;
-    const p = MRG.players?.[pid];
+    const p   = MRG.players?.[pid];
+    const n   = MRG.names[pid];
     // A team defence's Sleeper id IS the team abbreviation.
-    const name = p ? (p.full_name || `${p.first_name || ''} ${p.last_name || ''}`.trim())
-               : /^[A-Z]{2,3}$/.test(pid) ? `${pid} D/ST` : '';
-    if (!name) { unnamed++; continue; }
-    const pos = p?.position || (/^[A-Z]{2,3}$/.test(pid) ? 'DEF' : '');
+    const isDef = /^[A-Z]{2,3}$/.test(pid);
+    const pos  = p?.position || n?.pos || (isDef ? 'DEF' : '');
+    const name = isDef ? `${pid} D/ST`
+               : (p && (p.full_name || `${p.first_name || ''} ${p.last_name || ''}`.trim()))
+                 || n?.name || `Player ${pid}`;
     const oi  = MRG_UN_ORDER.indexOf(pos);
     rows.push({ name, pos, oi: oi < 0 ? MRG_UN_ORDER.length : oi, ppg: mrgPpg(pid) });
   }
-  if (!rows.length && !unnamed) return '';
+  if (!rows.length) return '';
   rows.sort((a, b) => a.oi - b.oi || (b.ppg ?? -Infinity) - (a.ppg ?? -Infinity) || a.name.localeCompare(b.name));
   const items = rows.map(e => `<span class="mrg-un-p" title="${esc(e.pos)}">${esc(e.name)}`
     + (e.ppg != null ? `<em>${e.ppg.toFixed(1)}</em>` : '') + `</span>`);
-  if (unnamed) items.push(`<span class="mrg-un-p">+${unnamed} more</span>`);
   return `<div class="mrg-unranked" title="On your roster in this league but not on this board as shown — not in the ranking set, or a position the grid does not lay out (K, D/ST, IDP). The number is his season PPG in this league.">
       <b>Your roster, not ranked:</b>${items.join('<span class="mrg-un-sep">·</span>')}
     </div>`;
@@ -1429,7 +1454,8 @@ async function mrgSetLeague(id) {
   const needCons = mrgConsSource() === 'fp' && !MRG.fpMap;
   if (MRG.rosters[id] === undefined || needCons || MRG.scoring[id] === undefined || !MRG.stats) {
     mrgDraw('Loading rosters…');
-    await Promise.all([mrgEnsureRosters(id), mrgEnsureCons(), mrgEnsureStats(), mrgEnsureScoring(id)]);
+    await Promise.all([mrgEnsureRosters(id).then(() => mrgEnsureNames(id)),
+                       mrgEnsureCons(), mrgEnsureStats(), mrgEnsureScoring(id)]);
   }
   mrgDraw();
 }
