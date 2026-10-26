@@ -383,6 +383,12 @@ footer a:hover { color: var(--gold); }
    yellow and green rows are the only ones that pop. Unmatched rows can't be
    placed on either side of the ownership line, so they're marked, not painted. */
 .wv-taken { opacity: 0.4; }
+/* Per-league season PPG on a waiver-grid cell, shown only while the column is
+   wide enough to keep the name readable. A container query on the cell itself,
+   so it follows the real track width — splits, the responsive 4/2-column
+   overrides and window resizes alike — with no JS remeasuring. */
+.wv-grid .rg-cell { container-type: inline-size; }
+@container (max-width: 190px) { .wv-ppg { display: none; } }
 .wv-unk .rg-name { font-style: italic; color: var(--brown-light); }
 /* Too narrow to sit two halves side by side — stack them, which restores one
    continuous 1..N list, and let the column keep its double width. */
@@ -1155,7 +1161,11 @@ async function loadOneEspnLeague(leagueId, season) {
     const size = d.teams?.length || d.settings?.size || 10;
     const lg = { league_id: lgId, name, total_rosters: size, source: 'espn' };
     S.leagues.push(lg);
-    S.leagueDetails[lgId] = { ...lg, settings: { type: 0, best_ball: 0 }, _espnId: leagueId };
+    // mSettings is already in hand, so keep the league's parsed scoring — the
+    // waiver grid's per-league PPG needs it and would otherwise refetch.
+    let espnScoring = null;
+    try { espnScoring = crParseEspnScoring(d.settings).scoring; } catch {}
+    S.leagueDetails[lgId] = { ...lg, settings: { type: 0, best_ball: 0 }, _espnId: leagueId, _espnScoring: espnScoring };
     RS.prefs[lgId] = RS._storedPrefs?.[lgId] ?? null;  // Root For Me tags ESPN leagues too (espn_{id})
   } catch {}
 }
@@ -2608,7 +2618,10 @@ async function loadWaiverData() {
 
     WV.rosteredByLeague = {}; WV.myByLeague = {}; // clear stale data before new load
     if (statEl) statEl.textContent = `Fetching ${eligible.length} leagues…`;
+    // Season stats for the grid's per-league PPG — overlaps the roster fan-out.
+    const statsP = ppgLoadStats();
     await Promise.all(eligible.map(lg => wvLoadLeagueRosters(lg)));
+    await statsP;
 
     // Redraft renders one league at a time (wvGridHtml); dynasty stays a
     // cross-league table and needs the row build.
@@ -2724,6 +2737,35 @@ function wvGridCols() {
   return cols;
 }
 
+// The league's own scoring, for season-to-date PPG. Null when it isn't known
+// (an ESPN league whose mSettings didn't parse) — the grid then shows no PPG
+// rather than a full-PPR number it can't label in a cell this small.
+function wvLeagueScoring(lgId) {
+  const d = S.leagueDetails[lgId];
+  const ss = d?.source === 'espn' || String(lgId).startsWith('espn_') ? d?._espnScoring : d?.scoring_settings;
+  return ss && Object.keys(ss).length ? ss : null;
+}
+
+// My rostered players the sheet doesn't put anywhere on the grid — the grid is
+// the whole sheet, so they are invisible rather than merely low. `inGrid` is the
+// pids the columns actually lay out (unfiltered), so a ranked IDP counts as
+// missing too: from this view he is.
+function wvUnrankedHtml(mine, inGrid, ppg) {
+  if (!mine) return '';
+  const order = ['QB','RB','WR','TE','K','DEF'];
+  const rows = [...mine].map(String).filter(pid => pid !== '0' && !inGrid.has(pid)).map(pid => {
+    const pos = lsNormPos(S.players[pid]?.position) || rsNormPos(S.players[pid]?.position) || '';
+    const oi  = order.indexOf(pos);
+    return { pid, pos, oi: oi < 0 ? order.length : oi, ppg: ppg(pid) };
+  }).sort((a, b) => a.oi - b.oi || (b.ppg ?? -Infinity) - (a.ppg ?? -Infinity));
+  if (!rows.length) return '';
+  const name = e => `<span class="rg-un-p" title="${esc(e.pos)}">${esc(lsPlayerName(e.pid))}`
+    + (e.ppg != null ? `<em>${e.ppg.toFixed(1)}</em>` : '') + `</span>`;
+  return `<div class="rg-unranked">
+      <span class="rg-un-grp" title="On your roster in this league but not on the uploaded sheet, or at a position this grid does not lay out (IDP). The number is his season PPG in this league."><b>Your roster, not ranked:</b>${rows.map(name).join('<span class="rg-un-sep">·</span>')}</span>
+    </div>`;
+}
+
 function wvSetGridLeague(v) {
   WV.gridLeagueId = v || null;
   const wrap = document.getElementById('wv-table-wrap');
@@ -2744,6 +2786,8 @@ function wvGridHtml() {
   const lgId  = leagues.some(lg => lg.league_id === WV.gridLeagueId) ? WV.gridLeagueId : leagues[0].league_id;
   const owned = WV.rosteredByLeague[lgId] || null;   // null = rosters didn't load; see wvLoadLeagueRosters
   const mine  = WV.myByLeague[lgId] || null;
+  const scoring = wvLeagueScoring(lgId);
+  const ppg   = scoring ? pid => playerSeasonPpg(pid, scoring) : () => null;
 
   const cols    = wvGridCols();
   const present = WV_GRID_COLS.filter(([k]) => (cols[k] || []).length);
@@ -2803,20 +2847,34 @@ function wvGridHtml() {
   });
   const tracks = built.reduce((n, c) => n + (c.split ? 2 : 1), 0);
 
-  const grid = `<div class="rg-wrap" style="--rg-tracks:${tracks};">${built.map(({ label, bands, list, split }) => {
+  // Every pid the grid lays out, off the UNFILTERED columns — the FA filter
+  // hiding my own players doesn't make them unranked.
+  const inGrid = new Set();
+  for (const [key] of present) for (const r of cols[key]) if (r.pid) inGrid.add(String(r.pid));
+
+  const grid = `<div class="rg-wrap wv-grid" style="--rg-tracks:${tracks};">${built.map(({ label, bands, list, split }) => {
     if (!list.length) return `<div class="rg-col"><div class="rg-head" style="top:${navH}px;">${esc(label)} <em>0</em></div>
       <div class="rg-cell" style="color:var(--brown-light);font-style:italic;">none free</div></div>`;
 
     const cell = ([r, i]) => {
       const st  = state(r);
       const cls = st === 'mine' ? ' rg-on' : st === 'fa' ? ' rg-fa' : st === 'taken' ? ' wv-taken' : ' wv-unk';
-      const right = r.ppg != null ? r.ppg.toFixed(1) : esc(r.team || '');
+      // With league scoring known, the cell carries the player's ACTUAL season
+      // PPG in this league (the same helper the lineup rows and ranks grid use)
+      // and the sheet's own PPG moves to the tooltip — two PPGs side by side
+      // would be unreadable. Without it, the cell reads as it always did.
+      const lp    = r.pid ? ppg(String(r.pid)) : null;
+      const right = scoring || r.ppg == null ? esc(r.team || '') : r.ppg.toFixed(1);
+      const gp    = lp != null ? playerSeasonGp(String(r.pid)) : 0;
       const tip = [r.team, r.bye ? 'bye ' + r.bye : '', r.tier ? 'tier ' + r.tier : '',
+                   lp != null ? `${lp.toFixed(1)} PPG in this league over ${gp} game${gp === 1 ? '' : 's'}` : '',
+                   scoring && r.ppg != null ? `sheet PPG ${r.ppg.toFixed(1)}` : '',
                    st === 'unk' ? 'no Sleeper match' : ''].filter(Boolean).join(' · ');
       return `<div class="rg-cell${bands[i] ? ' rg-tier-b' : ''}${cls}" title="${esc(tip)}">
         <span class="rg-rank">${r.posRank != null ? r.posRank : i + 1}</span>
         <span class="rg-name">${esc(r.name)}</span>
         <span class="rg-opp">${right}</span>
+        ${scoring ? `<span class="rg-ppg wv-ppg">${lp != null ? lp.toFixed(1) : ''}</span>` : ''}
       </div>`;
     };
     const half = Math.ceil(list.length / 2);
@@ -2828,7 +2886,7 @@ function wvGridHtml() {
       <div class="rg-head" style="top:${navH}px;">${esc(label)} <em>${list.length}</em></div>${body}</div>`;
   }).join('')}</div>`;
 
-  return controls + grid;
+  return controls + wvUnrankedHtml(owned ? mine : null, inGrid, ppg) + grid;
 }
 
 function wvRenderTable() {
