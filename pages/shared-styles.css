@@ -103,6 +103,15 @@ body::before {
 .mrg-d-down { color: #e0837c; }
 .mrg-d-even { color: var(--brown-light); opacity: 0.55; font-weight: 400; }
 .mrg-d-none { color: var(--brown-light); opacity: 0.3;  font-weight: 400; }
+/* Season-to-date PPG in the selected league. Shown only while the track is wide
+   enough to keep names readable: a container query on the cell follows the real
+   track width (parts, the stacked breakpoints, resizes) with no JS remeasuring.
+   The ▲/▼ column takes its own share of the row, so the cut-off moves with it. */
+.mrg-cell { container-type: inline-size; }
+.mrg-ppg { color: var(--parchment); font-size: 0.6rem; flex-shrink: 0; opacity: 0.85;
+           min-width: 24px; text-align: right; font-variant-numeric: tabular-nums; }
+@container (max-width: 225px) { .mrg-ppg { display: none; } }
+@container (max-width: 250px) { .mrg-cons-on .mrg-ppg { display: none; } }
 .mrg-on { background: rgba(95,174,95,0.18);  box-shadow: inset 3px 0 0 #5fae5f; }
 .mrg-on .mrg-name { color: #8fd08f; font-weight: 700; }
 .mrg-fa { background: rgba(235,195,55,0.28); box-shadow: inset 3px 0 0 #f0c93c; }
@@ -150,3 +159,13 @@ body::before {
               color: var(--cream); font-family: 'Crimson Text', serif; font-size: 0.82rem;
               padding: 4px 8px; border-radius: 2px; outline: none; cursor: pointer; }
 .mrb-select:focus { border-color: var(--gold); }
+
+/* Rostered players the board doesn't show. Plain text on the cream page the grid
+   sits on (not the dark columns), so the colours are the page's. */
+.mrg-unranked { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap;
+                margin-bottom: 12px; font-size: 0.8rem; color: var(--brown-dark); }
+.mrg-unranked b { color: var(--brown-mid); font-weight: 700; }
+.mrg-un-p em { font-style: normal; color: var(--brown-light); margin-left: 3px; }
+.mrg-un-p em::before { content: '('; }
+.mrg-un-p em::after  { content: ')'; }
+.mrg-un-sep { color: var(--brown-light); }

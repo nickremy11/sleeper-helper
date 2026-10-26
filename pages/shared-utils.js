@@ -969,6 +969,9 @@ const MRG = {
   sleeperUserId: null, swid: null, season: null,
 
   rosters: {},            // lgId → {owned:Set, mine:Set} | null (null = load failed)
+  stats: null,            // Sleeper season-to-date stat lines, pid → line ({} = load failed)
+  scoring: {},            // lgId → scoring map | null (null = couldn't read it → no PPG)
+  scoringFor: null,       // optional host hook: lgId → scoring map it already holds
   loading: false, error: '',
   _idTried: false, _sig: null, _espnCfg: null,
 };
@@ -999,7 +1002,8 @@ async function mrgInit(opts = {}) {
     await mrgEnsureLeagues();
     await mrgLoadSources();
     await mrgLoadRanks();
-    await Promise.all([mrgEnsureRosters(MRG.leagueId), mrgEnsureCons()]);
+    await Promise.all([mrgEnsureRosters(MRG.leagueId), mrgEnsureCons(),
+                       mrgEnsureStats(), mrgEnsureScoring(MRG.leagueId)]);
   } catch (e) {
     MRG.error = e.message || String(e);
   }
@@ -1219,6 +1223,84 @@ async function mrgEnsureRosters(lgId) {
   });
 }
 
+// ── Season-to-date PPG ───────────────────────────────────────────────────────
+// What a player has ACTUALLY averaged this season, scored with the selected
+// league's own settings — the same definition index.html's playerSeasonPpg
+// uses (generic multiply-every-scored-key, divided by games played), so a
+// player reads the same here as on the lineup rows. The grid is QB/RB/WR/TE
+// only, so the ESPN K/D-ST coverage guard that helper carries isn't needed.
+async function mrgEnsureStats() {
+  if (MRG.stats) return;
+  try {
+    const season = MRG.season || String(new Date().getFullYear());
+    const r = await fetch(`${MRG.apiBase}/sleeper/stats/nfl/regular/${season}`);
+    MRG.stats = r.ok ? (await r.json() || {}) : {};
+  } catch { MRG.stats = {}; }
+}
+
+// One league's scoring map, cached. The host may already hold it (index.html's
+// S.leagueDetails); otherwise Sleeper's league object, or ESPN's mSettings run
+// through the same crParseEspnScoring every other ESPN consumer uses.
+async function mrgEnsureScoring(lgId) {
+  if (!lgId || MRG.scoring[lgId] !== undefined) return;
+  const hinted = MRG.scoringFor?.(lgId);
+  if (hinted && Object.keys(hinted).length) { MRG.scoring[lgId] = hinted; return; }
+  let ss = null;
+  try {
+    if (String(lgId).startsWith('espn_')) {
+      const r = await fetch(`${MRG.apiBase}/espn/fantasy/${String(lgId).slice(5)}?view=mSettings`, { credentials: 'include' });
+      if (r.ok) ss = crParseEspnScoring((await r.json())?.settings).scoring;
+    } else {
+      const r = await fetch(`${MRG.apiBase}/sleeper/league/${lgId}`);
+      if (r.ok) ss = (await r.json())?.scoring_settings || null;
+    }
+  } catch {}
+  MRG.scoring[lgId] = ss && Object.keys(ss).length ? ss : null;
+}
+
+// Null when there's no line, he hasn't played, or the league's scoring is
+// unknown — the cell then shows nothing rather than a number scored to nobody's
+// league. Once he has played it's reported as-is, 0.0 and negatives included.
+function mrgPpg(pid) {
+  const line = MRG.stats?.[pid];
+  const ss   = MRG.scoring[MRG.leagueId];
+  if (!ss || !line || !(line.gp > 0)) return null;
+  let pts = 0;
+  for (const [k, v] of Object.entries(line)) if (typeof v === 'number' && ss[k]) pts += v * ss[k];
+  return pts / line.gp;
+}
+
+// My rostered players who appear nowhere on the board on screen. The board is
+// the whole ranking set, so they're invisible rather than merely low — usually
+// a format thing (K, D/ST, IDP aren't laid out) or a player the set just doesn't
+// cover. `onBoard` is the pids the columns actually render.
+const MRG_UN_ORDER = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
+function mrgUnrankedHtml(mine, onBoard) {
+  if (!mine || !mine.size) return '';
+  let unnamed = 0;
+  const rows = [];
+  for (const raw of mine) {
+    const pid = String(raw);
+    if (pid === '0' || onBoard.has(pid)) continue;
+    const p = MRG.players?.[pid];
+    // A team defence's Sleeper id IS the team abbreviation.
+    const name = p ? (p.full_name || `${p.first_name || ''} ${p.last_name || ''}`.trim())
+               : /^[A-Z]{2,3}$/.test(pid) ? `${pid} D/ST` : '';
+    if (!name) { unnamed++; continue; }
+    const pos = p?.position || (/^[A-Z]{2,3}$/.test(pid) ? 'DEF' : '');
+    const oi  = MRG_UN_ORDER.indexOf(pos);
+    rows.push({ name, pos, oi: oi < 0 ? MRG_UN_ORDER.length : oi, ppg: mrgPpg(pid) });
+  }
+  if (!rows.length && !unnamed) return '';
+  rows.sort((a, b) => a.oi - b.oi || (b.ppg ?? -Infinity) - (a.ppg ?? -Infinity) || a.name.localeCompare(b.name));
+  const items = rows.map(e => `<span class="mrg-un-p" title="${esc(e.pos)}">${esc(e.name)}`
+    + (e.ppg != null ? `<em>${e.ppg.toFixed(1)}</em>` : '') + `</span>`);
+  if (unnamed) items.push(`<span class="mrg-un-p">+${unnamed} more</span>`);
+  return `<div class="mrg-unranked" title="On your roster in this league but not on this board as shown — not in the ranking set, or a position the grid does not lay out (K, D/ST, IDP). The number is his season PPG in this league.">
+      <b>Your roster, not ranked:</b>${items.join('<span class="mrg-un-sep">·</span>')}
+    </div>`;
+}
+
 // ── Consensus (the ▲/▼ column) ───────────────────────────────────────────────
 // Which market to measure the board against. 'auto' follows the selected
 // league's format, because that's the only thing that makes one source right
@@ -1345,9 +1427,9 @@ async function mrgSetLeague(id) {
   // Under 'auto' the new league may want the other consensus, so both loads are
   // conditional and both are cheap after the first time.
   const needCons = mrgConsSource() === 'fp' && !MRG.fpMap;
-  if (MRG.rosters[id] === undefined || needCons) {
+  if (MRG.rosters[id] === undefined || needCons || MRG.scoring[id] === undefined || !MRG.stats) {
     mrgDraw('Loading rosters…');
-    await Promise.all([mrgEnsureRosters(id), mrgEnsureCons()]);
+    await Promise.all([mrgEnsureRosters(id), mrgEnsureCons(), mrgEnsureStats(), mrgEnsureScoring(id)]);
   }
   mrgDraw();
 }
@@ -1510,7 +1592,11 @@ function mrgDraw(busy = '') {
   const tracks = cols.reduce((n, c) => n + Math.max(1, c.parts), 0);
   const top    = MRG.stickyTop != null ? MRG.stickyTop : (document.querySelector('.tab-bar')?.offsetHeight || 0);
 
-  const grid = `<div class="mrg-wrap" style="--mrg-tracks:${tracks};">${cols.map(col => {
+  const hasPpg  = !!MRG.scoring[MRG.leagueId];
+  const onBoard = new Set();
+  for (const c of cols) for (const r of c.list) if (r.pid) onBoard.add(String(r.pid));
+
+  const grid = `<div class="mrg-wrap${consSrc ? ' mrg-cons-on' : ''}" style="--mrg-tracks:${tracks};">${cols.map(col => {
     // Bands flip on every tier change, computed over the FULL column before the
     // split so the stripes carry across parts instead of restarting — and each
     // part keeps its rows' true indices for the same reason.
@@ -1526,7 +1612,10 @@ function mrgDraw(busy = '') {
     const cell = (r, i) => {
       const st  = state(r);
       const cls = st === 'mine' ? ' mrg-on' : st === 'fa' ? ' mrg-fa' : st === 'unk' ? ' mrg-unk' : '';
+      const ppg = r.pid ? mrgPpg(String(r.pid)) : null;
+      const gp  = ppg != null ? MRG.stats[String(r.pid)].gp : 0;
       const tip = [r.name, r.team, 'tier ' + r._tier,
+                   ppg != null ? `${ppg.toFixed(1)} PPG in this league over ${gp} game${gp === 1 ? '' : 's'}` : '',
                    // In the positional view the tier shown is the recalculated
                    // one, so name the overall tier it came from too.
                    r._tier !== r.tier ? 'overall tier ' + r.tier : '',
@@ -1540,6 +1629,7 @@ function mrgDraw(busy = '') {
         <span class="mrg-rank">${r._rank}</span>
         <span class="mrg-name">${esc(r.name)}</span>
         <span class="mrg-team">${esc(r.team)}</span>
+        ${hasPpg ? `<span class="mrg-ppg">${ppg != null ? ppg.toFixed(1) : ''}</span>` : ''}
         ${consSrc ? mrgDeltaHtml(r) : ''}
         <span class="mrg-tier">${r._tier}</span>
       </div>`;
@@ -1554,5 +1644,5 @@ function mrgDraw(busy = '') {
       <div class="mrg-head" style="top:${top}px;">${esc(col.label)} <em>${col.list.length}</em></div>${body}</div>`;
   }).join('')}</div>`;
 
-  el.innerHTML = controls + grid;
+  el.innerHTML = controls + mrgUnrankedHtml(mine, onBoard) + grid;
 }

@@ -2541,6 +2541,13 @@ function mrgOpenFromWaivers() {
     sleeperUserId: S.userId || null,
     swid:    S.espnSettings?.swid || null,
     season:  S.nflState?.season || null,
+    // Scoring this page already holds — Sleeper league objects, and ESPN's
+    // mSettings parsed at load (_espnScoring). Anything missing the grid fetches.
+    scoringFor: lgId => {
+      const d = S.leagueDetails[lgId];
+      return d?.source === 'espn' ? d._espnScoring : d?.scoring_settings;
+    },
+    ...(_seasonStats && Object.keys(_seasonStats).length ? { stats: _seasonStats } : {}),
   });
 }
 
