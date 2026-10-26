@@ -2750,6 +2750,10 @@ function wvGridCols() {
 // rather than a full-PPR number it can't label in a cell this small.
 function wvLeagueScoring(lgId) {
   const d = S.leagueDetails[lgId];
+  // An ESPN league whose lineup is loaded: its fixture's scoring object carries
+  // ESPN's own K / D/ST season averages (ESPN_SEASON_AVG), so prefer it.
+  const fix = d?.source === 'espn' ? LU.lineups.find(f => f.leagueId === lgId) : null;
+  if (fix?.scoringSettings && Object.keys(fix.scoringSettings).length) return fix.scoringSettings;
   const ss = d?.source === 'espn' || String(lgId).startsWith('espn_') ? d?._espnScoring : d?.scoring_settings;
   return ss && Object.keys(ss).length ? ss : null;
 }
@@ -3279,8 +3283,30 @@ function playerSeasonPpg(pid, scoring) {
   if (!line || !(line.gp > 0)) return null;
   const ss  = (scoring && Object.keys(scoring).length) ? scoring : PPG_PPR_SCORING;
   const pts = lsComputeProjPts(line, ss);
-  if (pts === 0 && ss !== PPG_PPR_SCORING && lsComputeProjPts(line, PPG_PPR_SCORING) !== 0) return null;
+  if (pts === 0 && ss !== PPG_PPR_SCORING && lsComputeProjPts(line, PPG_PPR_SCORING) !== 0) {
+    // The map doesn't cover him — but for an ESPN league ESPN itself may have
+    // said what he averages (see ESPN_SEASON_AVG), already in league scoring.
+    const own = ESPN_SEASON_AVG.get(scoring)?.[String(pid)];
+    return typeof own === 'number' ? own : null;
+  }
   return pts / line.gp;
+}
+
+// ESPN's own season-to-date average per player (`appliedAverage` on the season
+// stat line), keyed by the fixture's scoringSettings OBJECT — every caller
+// already passes that object to playerSeasonPpg, so no signature changes. It's
+// the fallback for exactly the players crParseEspnScoring can't price (K and
+// D/ST: their statIds aren't mapped, and ESPN's points-allowed bands don't line
+// up with Sleeper's, so mapping them would be wrong, not just incomplete).
+const ESPN_SEASON_AVG = new WeakMap();
+
+// The season ACTUAL line off an ESPN player: statSourceId 0 (real, not
+// projected), scoringPeriodId 0 + statSplitTypeId 0 (the whole season, not a
+// week), this season. appliedAverage is per game played, in league scoring.
+function lsEspnSeasonAvg(pl, season) {
+  const st = (pl?.stats || []).find(x => x.statSourceId === 0 && Number(x.scoringPeriodId) === 0
+    && Number(x.statSplitTypeId) === 0 && (x.seasonId == null || Number(x.seasonId) === Number(season)));
+  return st && typeof st.appliedAverage === 'number' ? st.appliedAverage : null;
 }
 
 // The projection context for one fixture. ESPN leagues can carry ESPN's OWN
@@ -4992,7 +5018,7 @@ function lsEspnProjLine(pl, week) {
 // starter, so pricing one side on ESPN's numbers and the other on Sleeper's would
 // invent upgrades out of thin air. Only called when the roster pull already succeeded
 // — when it didn't, both sides fall back to Sleeper together and stay comparable.
-async function lsFetchEspnFreeAgents(espnId, season, week) {
+async function lsFetchEspnFreeAgents(espnId, season, week, seasonAvg = null) {
   const filter = { players: {
     filterStatus: { value: ['FREEAGENT', 'WAIVERS'] },
     limit: 250,
@@ -5010,6 +5036,8 @@ async function lsFetchEspnFreeAgents(espnId, season, week) {
       if (!pid) continue;
       const line = lsEspnProjLine(pl, week);
       if (line && typeof line.appliedTotal === 'number') out[String(pid)] = line.appliedTotal;
+      // Free-agent K / D/ST need a PPG on the ranks grid too.
+      if (seasonAvg) { const avg = lsEspnSeasonAvg(pl, season); if (avg != null) seasonAvg[String(pid)] = avg; }
     }
     return Object.keys(out).length ? out : null;
   } catch(_) { return null; }
@@ -5092,10 +5120,15 @@ async function lsLoadEspnLineup(lg, week) {
   // mRoster returns every team's roster, so the league-wide owned set is free here
   // the same way it is on the Sleeper side.
   const rostered = new Set();
+  const seasonAvg = {};   // pid → ESPN's own season PPG (see ESPN_SEASON_AVG)
   for (const t of (d.teams || [])) {
     for (const e of (t.roster?.entries || [])) {
-      const pid = lsEspnPid(e.playerPoolEntry?.playerPoolEntry?.player || e.playerPoolEntry?.player);
-      if (pid) rostered.add(String(pid));
+      const pl  = e.playerPoolEntry?.playerPoolEntry?.player || e.playerPoolEntry?.player;
+      const pid = lsEspnPid(pl);
+      if (!pid) continue;
+      rostered.add(String(pid));
+      const avg = lsEspnSeasonAvg(pl, season);
+      if (avg != null) seasonAvg[String(pid)] = avg;
     }
   }
 
@@ -5139,14 +5172,17 @@ async function lsLoadEspnLineup(lg, week) {
   // the analyzer and the trade analyzer already use — TE premium included (see
   // crParseEspnScoring). Only used when ESPN's own projections aren't available.
   const parsedScoring = crParseEspnScoring(d.settings).scoring;
-  const scoringSettings = Object.keys(parsedScoring).length ? parsedScoring : LU_ESPN_SCORING;
+  // A copy of the generic table, never the shared constant: the season-average
+  // WeakMap below is keyed by this object, and two leagues must not share one.
+  const scoringSettings = Object.keys(parsedScoring).length ? parsedScoring : { ...LU_ESPN_SCORING };
 
   // Free agents join the SAME projection map as the roster, so lsPlayerPts prices
   // everyone off one scale with no caller branching. Skipped entirely when the
   // roster pull fell back to Sleeper's numbers (_espnProj null) — then the FA watch
   // reads Sleeper projections for both sides, which is equally comparable.
   const espnProj = await lsFetchEspnProjections(espnId, season, week, espnIdToPid);
-  if (espnProj) Object.assign(espnProj, (await lsFetchEspnFreeAgents(espnId, season, week)) || {});
+  if (espnProj) Object.assign(espnProj, (await lsFetchEspnFreeAgents(espnId, season, week, seasonAvg)) || {});
+  ESPN_SEASON_AVG.set(scoringSettings, seasonAvg);
 
   return {
     leagueName: lg.name, leagueId: lg.league_id, rosterId: myTeam.id,
