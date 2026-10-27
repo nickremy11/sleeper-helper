@@ -183,6 +183,10 @@ export default {
       return handleRoi(request, env);
     }
 
+    if (url.pathname === '/api/ranks/image') {
+      return handleRanksImage(request, env);
+    }
+
     if (url.pathname.startsWith('/api/eliteffl/')) {
       return handleEliteFFL(request, env, url);
     }
@@ -623,6 +627,94 @@ function roiNum(v) {
 }
 function roiInt(v) { const n = roiNum(v); return n === null ? null : Math.round(n); }
 function roiId(v) { const s = String(v ?? ''); return /^[A-Za-z0-9_-]{1,64}$/.test(s) ? s : null; }
+
+// ── Ranking sheet from an image (Lineup Checker, beta) ──────────────────────
+// The client slices a screenshot of a weekly ranking sheet into its vertical
+// column bands and posts ONE band per request; this reads it with a Workers AI
+// vision model and hands back the raw tables. All the interpretation (which
+// block a header is, which cell is the team vs the opponent, name matching)
+// happens client-side, next to the CSV parser it shares a builder with.
+//
+// Model choice was measured on a real 9-band sheet: Llama 4 Scout and Mistral
+// Small 3.1 both returned every row of every table (~25s a band) with only a
+// couple of misspelled names, which the client's fuzzy match absorbs. Gemma 4
+// was as accurate but ~5x slower. JSON-schema mode was WORSE — both models
+// started dropping the optional pos/opp fields — so the output is free-form
+// JSON with rows as arrays in printed column order.
+const RANKS_IMAGE_MODEL = '@cf/meta/llama-4-scout-17b-16e-instruct';
+const RANKS_IMAGE_MAX   = 4_000_000;   // data-URL chars — one band is ~400KB
+// AI Gateway this app's model calls log through (account Nick Lab). Created with
+// collect_logs on, cache off, and a gateway-wide 120 req/min sliding rate limit
+// as a cost guard — a full sheet is ~9 requests.
+const RANKS_IMAGE_GATEWAY = 'sleeper-helper';
+const RANKS_IMAGE_PROMPT = `This image is a vertical strip cut from a fantasy football weekly rankings sheet. It holds one or more ranked tables. Each table starts with a header row such as "Rank Quarterback Team Opp Tier", "Rank FLEX Pos Opp", "Rank TEP FLEX Pos Opp", "Rank Defense Opp Tier" or "Rank Kicker Team Opp Tier".
+Transcribe EVERY data row exactly as printed, top to bottom, spelling names exactly as printed. Output ONLY JSON, no prose:
+{"tables":[{"header":"<header row text, or null if this strip starts mid-table>","rows":[[rank, "name", "team or pos", "opp", tier]]}]}
+Each row lists its cells in the order the columns are printed. Use null for a missing cell. Tier is the small number at the right edge (null if the table has no Tier column).`;
+
+async function handleRanksImage(request, env) {
+  const cors = getCors(request);
+  const res  = (data, status = 200) => new Response(JSON.stringify(data), {
+    status, headers: { ...cors, 'Content-Type': 'application/json;charset=UTF-8', 'Cache-Control': 'no-store' },
+  });
+  if (request.method !== 'POST') return res({ error: 'Method not allowed' }, 405);
+  // Every call costs Workers AI usage, so it's for signed-in accounts only.
+  const user = await getAuthUser(request, env);
+  if (!user) return res({ error: 'Sign in to read a sheet from an image' }, 401);
+  if (!env.AI) return res({ error: 'Workers AI is not bound on this worker' }, 500);
+
+  let body;
+  try { body = await request.json(); } catch { return res({ error: 'Invalid JSON' }, 400); }
+  const image = String(body?.image || '');
+  if (!/^data:image\/(png|jpeg|webp);base64,/.test(image)) return res({ error: 'Expected a PNG/JPEG/WebP data URL' }, 400);
+  if (image.length > RANKS_IMAGE_MAX) return res({ error: 'Image part too large' }, 413);
+
+  // Routed through the `sleeper-helper` AI Gateway so every read is logged with
+  // who made it. Gateway metadata takes at most 5 keys, scalar values only.
+  // `sheet` is a per-upload id from the client, so one sheet's ~9 band reads
+  // can be found together in the logs; `part` is "3/9".
+  const str = (v, n = 64) => String(v ?? '').slice(0, n);
+  const metadata = {
+    user_id:  user.user_id,
+    email:    str(user.email, 120),
+    sleeper:  str(user.sleeper_username),
+    sheet:    str(body.sheet, 40),
+    part:     Number.isInteger(body.part) && Number.isInteger(body.of) ? `${body.part}/${body.of}` : '',
+  };
+
+  let out;
+  try {
+    out = await env.AI.run(RANKS_IMAGE_MODEL, {
+      messages: [{ role: 'user', content: [
+        { type: 'text', text: RANKS_IMAGE_PROMPT },
+        { type: 'image_url', image_url: { url: image } },
+      ] }],
+      max_tokens: 8000,
+      temperature: 0,
+    }, {
+      // No caching: a retry after a bad read must reach the model again.
+      gateway: { id: RANKS_IMAGE_GATEWAY, skipCache: true, metadata },
+    });
+  } catch (e) {
+    return res({ error: 'Image model failed: ' + (e?.message || e) }, 502);
+  }
+
+  // The binding has answered in both the OpenAI shape and the classic
+  // {response} shape depending on the model, and `response` may already be
+  // parsed. Fenced or prose-wrapped JSON is unwrapped to the outermost braces.
+  const choice = out?.choices?.[0];
+  if (choice?.finish_reason === 'length') return res({ error: 'The model ran out of room reading this part' }, 502);
+  const content = choice?.message?.content ?? out?.response;
+  let parsed = content && typeof content === 'object' ? content : null;
+  if (!parsed && typeof content === 'string') {
+    const a = content.indexOf('{'), b = content.lastIndexOf('}');
+    try { if (a >= 0 && b > a) parsed = JSON.parse(content.slice(a, b + 1)); } catch { /* fall through */ }
+  }
+  if (!Array.isArray(parsed?.tables)) {
+    return res({ error: 'Could not read a table from this part of the image', raw: String(content || '').slice(0, 300) }, 502);
+  }
+  return res({ tables: parsed.tables });
+}
 
 async function handleRoi(request, env) {
   const cors = getCors(request);

@@ -3346,7 +3346,18 @@ function lsNormPos(raw) {
   return null;
 }
 
-function lsRankInfo(pid)  { return LU.ranks?.byPid?.[String(pid)] || null; }
+// `pc` (a lsPtsCtx) makes the answer league-aware: in a TEP league, when the
+// sheet carries a TEP FLEX block, the entry comes back with flexRank set to the
+// TEP list's rank — so the optimizer, the rank cells, the swap chooser and its
+// labels all follow the TEP ordering without any of them branching on it.
+// A player missing from the TEP list gets no flex rank rather than falling back
+// to the plain list, whose numbers are a different ordering.
+function lsRankInfo(pid, pc) {
+  const r = LU.ranks?.byPid?.[String(pid)] || null;
+  return r && lsUseTep(pc) ? { ...r, flexRank: r.flexRankTep ?? null } : r;
+}
+function lsIsTep(pc)  { return (pc?.scoring?.bonus_rec_te ?? 0) > 0; }
+function lsUseTep(pc) { return lsIsTep(pc) && !!LU.ranks?.cols?.FLEX_TEP?.length; }
 function lsHaveRankings() { return !!(LU.ranks && Object.keys(LU.ranks.byPid || {}).length); }
 function lsCanOptimize(src) { return src === 'ranks' ? lsHaveRankings() : lsHaveProj(); }
 
@@ -3374,7 +3385,7 @@ function lsSlotKind(slot) {
 function lsSortKey(pid, kind, pc, src) {
   const pts = lsPlayerPts(pid, pc);
   if (src !== 'ranks') return [0, 0, -pts];
-  const r = lsRankInfo(pid);
+  const r = lsRankInfo(pid, pc);
   if (r) {
     if (kind === 'superflex') {
       if (r.pos === 'QB' && r.posRank != null) return [0, r.posRank, 0];
@@ -3456,7 +3467,7 @@ function lsOrderByGameTime(out, slots) {
 // across positions, which is why it carries the load for flex slots.
 //   LU.ranks = {
 //     v, week, uploadedAt, srcName,
-//     byPid: {pid: {pos, posRank, flexRank, tier, opp, total, matchup}},
+//     byPid: {pid: {pos, posRank, flexRank, flexRankTep, tier, opp, total, matchup}},
 //     cols:  {QB:[row], …}  — ordered as the sheet lists them, INCLUDING rows
 //                             whose name didn't resolve to a Sleeper id, so the
 //                             grid can still render the full sheet
@@ -3485,15 +3496,21 @@ function lsCsvRows(text) {
 // Blocks are found by their HEADER text ("QB Rank", "FLEX Pos", "DEF Spread"…)
 // rather than fixed offsets, so a reordered or partial export still parses.
 // DEF names its player column "Team" (the full team name is the defense).
+// FLEX_TEP is the same cross-position list re-ranked for tight-end-premium
+// scoring (headers "TEP FLEX Rank"…). It lands on each player as flexRankTep,
+// which lsRankInfo serves in place of flexRank for a TEP league.
 const LS_RANK_BLOCKS = {
-  QB:   { nameCol: 'Player' },
-  RB:   { nameCol: 'Player' },
-  WR:   { nameCol: 'Player' },
-  TE:   { nameCol: 'Player' },
-  DEF:  { nameCol: 'Team'   },
-  FLEX: { nameCol: 'Player' },   // must parse after the position blocks — it
-  K:    { nameCol: 'Player' },   // fills flexRank onto entries they created
+  QB:       { nameCol: 'Player' },
+  RB:       { nameCol: 'Player' },
+  WR:       { nameCol: 'Player' },
+  TE:       { nameCol: 'Player' },
+  DEF:      { nameCol: 'Team'   },
+  K:        { nameCol: 'Player' },
+  FLEX:     { nameCol: 'Player' },   // must build after the position blocks — they
+  FLEX_TEP: { nameCol: 'Player', prefix: 'TEP FLEX' },   // fill flexRank(Tep) onto their entries
 };
+const LS_FLEX_BLOCKS = new Set(['FLEX', 'FLEX_TEP']);
+const lsBlockLabel = b => b === 'FLEX_TEP' ? 'TEP FLEX' : b;
 
 function lsNum(v) { const n = parseFloat(v); return isFinite(n) ? n : null; }
 
@@ -3547,53 +3564,104 @@ function lsProjIsTier(rows, iRank, iProj) {
   return true;
 }
 
-function lsParseRanksCsv(text) {
+// CSV → blocks: {QB: [{rank, name, team, opp, tier, total, matchup, pos}], …}.
+// Only reads the sheet; resolving names and building byPid is lsBuildRanks',
+// which the image reader (lsImageToBlocks) feeds the same shape.
+function lsCsvToBlocks(text) {
   const rows = lsCsvRows(text);
   if (rows.length < 2) return null;
   const idx = {};
   rows[0].forEach((h, i) => { const k = String(h || '').trim().toUpperCase(); if (k) idx[k] = i; });
 
-  const cols = {}, byPid = {}, unmatched = [];
-  let matched = 0, total = 0;
-
+  const blocks = {};
   for (const [block, spec] of Object.entries(LS_RANK_BLOCKS)) {
-    const at    = f => idx[(block + ' ' + f).toUpperCase()];
+    const at    = f => idx[((spec.prefix || block) + ' ' + f).toUpperCase()];
     const iName = at(spec.nameCol), iRank = at('Rank');
     if (iName == null || iRank == null) continue;          // block absent
     const get = (r, f) => { const i = at(f); return i == null ? '' : String(r[i] ?? '').trim(); };
     const tierCol = at('Tier') != null ? 'Tier'
                   : at('Projection') != null && lsProjIsTier(rows, iRank, at('Projection')) ? 'Projection'
                   : 'Tier';
-
     const list = [];
     for (let ri = 1; ri < rows.length; ri++) {
       const r    = rows[ri];
       const name = String(r[iName] ?? '').trim();
       const rank = lsNum(r[iRank]);
       if (!name || rank == null) continue;                 // padding cell
-      // The DEF block has no team column of its own — its name IS the team.
-      const team = block === 'DEF' ? '' : get(r, 'Team');
-      const pid  = lsMatchRankRow(name, team)
-                || (block !== 'DEF' && block !== 'FLEX' ? lsMatchByLastName(name, team, block) : null);
-      total++;
-      if (pid) matched++; else unmatched.push(block + ' ' + rank + '. ' + name);
-
-      const row = {
-        rank, name, pid,
-        team:    team ? normTeamAbbr(team) : '',
-        opp:     normTeamAbbr(get(r, 'Opponent')) || '',
+      list.push({
+        rank, name,
+        // The DEF block has no team column of its own — its name IS the team.
+        team:    block === 'DEF' ? '' : get(r, 'Team'),
+        opp:     get(r, 'Opponent'),
         tier:    lsNum(get(r, tierCol)),
         total:   lsNum(get(r, 'Total')),
         matchup: lsNum(get(r, 'Matchup')),
-        pos:     block === 'FLEX' ? (get(r, 'Pos') || '').toUpperCase() : block,
+        pos:     LS_FLEX_BLOCKS.has(block) ? get(r, 'Pos') : block,
+      });
+    }
+    if (list.length) blocks[block] = list;
+  }
+  return Object.keys(blocks).length ? blocks : null;
+}
+
+function lsParseRanksCsv(text) {
+  const blocks = lsCsvToBlocks(text);
+  return blocks ? lsBuildRanks(blocks) : null;
+}
+
+// Blocks → {cols, byPid, matched, total, unmatched} — the one place a sheet's
+// rows become LU.ranks, whether they came from a CSV or an image.
+// `opts.image` (the image path) adds an edit-distance fallback for names a
+// vision model misread by a letter or two ("Tetaioa McMillan"), and keeps only
+// the first read of a repeated rank (a band can repeat a row at its edge) —
+// a CSV keeps its ties.
+function lsBuildRanks(blocks, opts = {}) {
+  const cols = {}, byPid = {}, unmatched = [];
+  let matched = 0, total = 0;
+  // Names already resolved in a positional block. A FLEX row carries no team
+  // column, so the positional block's (team-checked) answer for the same
+  // spelling is the best one available — and it carries a misread over too.
+  const seen = {};
+
+  for (const block of Object.keys(LS_RANK_BLOCKS)) {
+    const src = blocks[block];
+    if (!src?.length) continue;
+    const isFlex = LS_FLEX_BLOCKS.has(block);
+    const list = [];
+    const done = new Set();
+    for (const raw of src) {
+      if (raw.rank == null || !raw.name) continue;
+      if (opts.image && done.has(raw.rank)) continue;
+      done.add(raw.rank);
+      const name = raw.name, team = raw.team || '';
+      const pos  = isFlex ? lsNormPos(raw.pos) : block;
+      const key  = normName(name);
+      const pid  = (isFlex && seen[key])
+                || lsMatchRankRow(name, team)
+                || (block !== 'DEF' && !isFlex ? lsMatchByLastName(name, team, block) : null)
+                || (opts.image ? lsFuzzyMatch(name, team, pos, isFlex) : null);
+      if (pid && !isFlex) seen[key] = pid;
+      total++;
+      if (pid) matched++; else unmatched.push(lsBlockLabel(block) + ' ' + raw.rank + '. ' + name);
+
+      const row = {
+        rank: raw.rank, name, pid,
+        team:    team ? normTeamAbbr(team) : '',
+        opp:     normTeamAbbr(raw.opp || '') || '',
+        tier:    raw.tier ?? null,
+        total:   raw.total ?? null,
+        matchup: raw.matchup ?? null,
+        pos:     isFlex ? String(raw.pos || '').toUpperCase() : block,
       };
       list.push(row);
       if (!pid) continue;
 
-      const e = byPid[pid] || (byPid[pid] = { pos: null, posRank: null, flexRank: null,
+      const e = byPid[pid] || (byPid[pid] = { pos: null, posRank: null, flexRank: null, flexRankTep: null,
                                              tier: null, opp: '', total: null, matchup: null });
-      if (block === 'FLEX') { e.flexRank = rank; if (!e.pos) e.pos = row.pos; }
-      else                  { e.pos = block; e.posRank = rank; e.tier = row.tier; }
+      if (block === 'FLEX')          e.flexRank    = row.rank;
+      else if (block === 'FLEX_TEP') e.flexRankTep = row.rank;
+      else                           { e.pos = block; e.posRank = row.rank; e.tier = row.tier; }
+      if (isFlex && !e.pos)    e.pos     = row.pos;
       if (!e.opp && row.opp)   e.opp     = row.opp;
       if (e.total   == null)   e.total   = row.total;
       if (e.matchup == null)   e.matchup = row.matchup;
@@ -3602,6 +3670,197 @@ function lsParseRanksCsv(text) {
     if (list.length) cols[block] = list;
   }
   return Object.keys(cols).length ? { cols, byPid, matched, total, unmatched } : null;
+}
+
+// Edit distance where swapping two adjacent letters counts as ONE edit (a
+// common misread: "Szymt" for "Szmyt"), giving up (returning max+1) once every
+// path exceeds max.
+function lsEditDist(a, b, max) {
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  let pp = null, prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    let lo = i;
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (pp && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) cur[j] = Math.min(cur[j], pp[j - 2] + 1);
+      if (cur[j] < lo) lo = cur[j];
+    }
+    if (lo > max) return max + 1;
+    pp = prev; prev = cur;
+  }
+  return prev[b.length];
+}
+
+// Last resort for an image-read name: the closest active player at that
+// position (and team, when the row has one) within 1 edit, or 2 for a long
+// name. A tie answers nothing — a wrong match is worse than a missing one.
+// Surname-only rows (kicker blocks) compare against last names.
+function lsFuzzyMatch(name, team, pos, flexRow) {
+  const key = normName(name);
+  if (!key || key.length < 4) return null;
+  const t   = team ? normTeamAbbr(team) : null;
+  const max = key.length >= 10 ? 2 : 1;
+  const surnameOnly = !key.includes(' ');
+  const posOk = pos ? (p => p === pos) : flexRow ? (p => p === 'RB' || p === 'WR' || p === 'TE') : () => true;
+  let best = null, bestD = max + 1, tie = false;
+  for (const [pid, p] of Object.entries(S.players || {})) {
+    if (!p.team || !posOk(lsNormPos(p.position))) continue;
+    if (t && normTeamAbbr(p.team) !== t) continue;
+    const d = lsEditDist(key, normName(surnameOnly ? (p.last_name || '') : sleeperName(p)), max);
+    if (d < bestD)       { best = pid; bestD = d; tie = false; }
+    else if (d === bestD) tie = true;
+  }
+  return best && !tie ? best : null;
+}
+
+// ── Ranking sheet from an IMAGE (beta) ───────────────────────────────────────
+// A screenshot of the sheet is far too dense to read in one go (~550 rows at
+// 5000px wide), so it's cut at its vertical rule lines into column bands
+// (~600px each) and every band is read separately by /api/ranks/image (Workers
+// AI vision). Each band comes back as {tables:[{header, rows}]}; the header
+// names the block, and a band with no header continues the previous band's.
+
+// Header text → block. TEP FLEX must test before FLEX.
+const LS_IMG_HEADERS = [
+  [/TEP\s*FLEX/i, 'FLEX_TEP'], [/FLEX/i, 'FLEX'],
+  [/quarterback|\bQB\b/i, 'QB'], [/running\s*back|\bRB\b/i, 'RB'],
+  [/wide\s*receiver|\bWR\b/i, 'WR'], [/tight\s*end|\bTE\b/i, 'TE'],
+  [/defen|D\/?ST|\bDEF\b/i, 'DEF'], [/kicker|\bK\b/i, 'K'],
+];
+const LS_IMG_POS = new Set(['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DST']);
+
+// Cut points: x columns that are dark for nearly the whole sheet height — the
+// rules between column groups. Runs of adjacent dark columns collapse to one cut.
+function lsImageCuts(ctx, w, h) {
+  const y0 = Math.floor(h * 0.08), y1 = Math.floor(h * 0.95);
+  const data = ctx.getImageData(0, y0, w, y1 - y0).data;
+  const rowsN = y1 - y0;
+  const dark = new Uint32Array(w);
+  for (let y = 0; y < rowsN; y++) {
+    let o = y * w * 4;
+    for (let x = 0; x < w; x++, o += 4) {
+      if (data[o] * 0.299 + data[o + 1] * 0.587 + data[o + 2] * 0.114 < 110) dark[x]++;
+    }
+  }
+  const cuts = [0];
+  for (let x = 0; x < w; x++) {
+    if (dark[x] < rowsN * 0.85) continue;
+    let e = x;
+    while (e + 1 < w && dark[e + 1] >= rowsN * 0.85) e++;
+    const mid = Math.round((x + e) / 2);
+    if (mid - cuts[cuts.length - 1] > 40) cuts.push(mid);
+    x = e;
+  }
+  if (w - cuts[cuts.length - 1] > 40) cuts.push(w); else cuts[cuts.length - 1] = w;
+  return cuts;
+}
+
+// File → [PNG data URL] per column band. A narrow band from a small screenshot
+// is upscaled (to ~600px) so the model has letters it can actually read.
+async function lsSliceSheetImage(file) {
+  const img = await createImageBitmap(file);
+  const { width: w, height: h } = img;
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(img, 0, 0);
+  const cuts = lsImageCuts(ctx, w, h);
+  const bands = [];
+  for (let i = 0; i + 1 < cuts.length; i++) {
+    const x = cuts[i] + (i ? 3 : 0), bw = cuts[i + 1] - x - 2;
+    if (bw < 40) continue;
+    const scale = Math.min(2, Math.max(1, 600 / bw));
+    const out = document.createElement('canvas');
+    out.width = Math.round(bw * scale); out.height = Math.round(h * scale);
+    const oc = out.getContext('2d');
+    oc.imageSmoothingQuality = 'high';
+    oc.drawImage(cv, x, 0, bw, h, 0, 0, out.width, out.height);
+    bands.push(out.toDataURL('image/png'));
+  }
+  return bands;
+}
+
+// One model row → {rank, name, team, opp, tier, pos}. Rows arrive as arrays in
+// printed column order (or occasionally as objects), and the two models tested
+// disagree on padding — one inserts empty cells, one invents a tier for FLEX —
+// so cells are classified by what they ARE, not by where they sit:
+// a position code is the pos, a small integer the tier, team codes the team
+// then the opponent. FLEX and DEF print no team column, so their only team
+// code is the opponent.
+function lsImageRow(raw, block) {
+  if (raw && !Array.isArray(raw) && typeof raw === 'object') {
+    raw = [raw.rank, raw.name, raw.team, raw.pos, raw.opp, raw.tier];
+  }
+  if (!Array.isArray(raw)) return null;
+  const cells = raw.map(c => c == null ? '' : String(c).trim()).filter(Boolean);
+  const rank  = parseInt(cells.shift(), 10);
+  const ni    = cells.findIndex(c => /[a-z]/i.test(c) && !/^[A-Z]{1,3}$/.test(c));
+  if (!isFinite(rank) || ni < 0) return null;
+  const name = cells.splice(ni, 1)[0].replace(/[‐-―]/g, '-').replace(/\s+/g, ' ');
+  let pos = '', tier = null;
+  const abbrs = [];
+  for (const c of cells) {
+    const u = c.toUpperCase();
+    if (LS_IMG_POS.has(u) && !pos)           pos = u;
+    else if (/^\d{1,2}$/.test(c))            tier = parseInt(c, 10);
+    else if (/^[A-Z]{2,3}$/i.test(c))        abbrs.push(u);
+  }
+  const noTeam = LS_FLEX_BLOCKS.has(block) || block === 'DEF';
+  return {
+    rank, name,
+    team: noTeam ? '' : (abbrs[0] || ''),
+    opp:  noTeam ? (abbrs[abbrs.length - 1] || '') : (abbrs[1] || ''),
+    tier: LS_FLEX_BLOCKS.has(block) ? null : tier,   // FLEX prints no tier
+    total: null, matchup: null,
+    pos: LS_FLEX_BLOCKS.has(block) ? pos : block,
+  };
+}
+
+// Every band's tables, in band order → blocks for lsBuildRanks.
+function lsImageToBlocks(bandTables) {
+  const blocks = {};
+  let cur = null;
+  for (const tables of bandTables) {
+    for (const t of tables || []) {
+      const hdr = String(t?.header || '');
+      const hit = hdr && LS_IMG_HEADERS.find(([re]) => re.test(hdr));
+      if (hit) cur = hit[1];
+      if (!cur) continue;                              // rows before any header we know
+      for (const r of t.rows || []) {
+        const row = lsImageRow(r, cur);
+        if (row) (blocks[cur] || (blocks[cur] = [])).push(row);
+      }
+    }
+  }
+  return Object.keys(blocks).length ? blocks : null;
+}
+
+// File → parsed ranks (lsBuildRanks shape). onProgress(done, total).
+async function lsReadSheetImage(file, onProgress) {
+  const bands = await lsSliceSheetImage(file);
+  if (!bands.length) throw new Error('Could not find any columns in that image');
+  let done = 0;
+  onProgress?.(0, bands.length);
+  // Groups this upload's band reads in the AI Gateway logs (with part "3/9").
+  const sheet = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  const readBand = async (image, part, attempt = 0) => {
+    const r = await fetch('/api/ranks/image', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image, sheet, part, of: bands.length }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok) return j.tables || [];
+    if (r.status === 401) throw new Error(j.error || 'Sign in to read a sheet from an image');
+    if (attempt < 1) return readBand(image, part, attempt + 1);   // one retry — a bad read is often a one-off
+    throw new Error(j.error || 'HTTP ' + r.status);
+  };
+  const results = await Promise.all(bands.map((b, i) => readBand(b, i + 1).then(t => { onProgress?.(++done, bands.length); return t; })));
+  const blocks = lsImageToBlocks(results);
+  if (!blocks) throw new Error('No ranking tables were read from that image');
+  return lsBuildRanks(blocks, { image: true });
 }
 
 // Fallback for the older paste-a-list format: one player per line, best first,
@@ -3993,12 +4252,12 @@ function lsBodyRows(fix, mode) {
   const haveRanks = lsHaveRankings();
   const rankCells = pid => {
     if (!haveRanks) return '';
-    const ri  = lsRankInfo(pid);
+    const ri  = lsRankInfo(pid, pc);
     const pos = lsNormPos(S.players[pid]?.position) || '';
     const pr  = ri?.posRank  ? pos + ri.posRank : '–';
     const fr  = ri?.flexRank ? 'F' + ri.flexRank : '';
     return `<span class="diff-rank${ri?.posRank ? '' : ' diff-none'}" title="Position rank on the sheet">${esc(pr)}</span>`
-         + `<span class="diff-rank diff-flex" title="Flex rank on the sheet">${esc(fr)}</span>`;
+         + `<span class="diff-rank diff-flex" title="${lsUseTep(pc) ? 'TEP flex rank on the sheet (this league scores TE premium)' : 'Flex rank on the sheet'}">${esc(fr)}</span>`;
   };
 
   return fix.rosterPositions.map((slot, i) => {
@@ -4084,7 +4343,7 @@ function lsSlotOptionsHtml(fix, idx, slotIdx) {
     const pg   = ppgOf(pid);
     const pts  = lsPlayerPts(pid, pc);
     const inj  = injuryBadge(p.injury_status);
-    const lbl  = lswRankLabel(pid, opts.landSlot || slot, !!opts.mixed);
+    const lbl  = lswRankLabel(pid, opts.landSlot || slot, !!opts.mixed, pc);
     return `<div class="lc-opt${opts.cls || ''}">
       <span class="lc-opt-name">${opts.tag || ''}${esc(lsPlayerName(pid))}${inj ? ' ' + inj : ''}${opts.via || ''}</span>
       <span class="lc-opt-pos">${esc(lsNormPos(p.position) || '')}${p.team ? ' ' + esc(p.team) : ''}</span>
@@ -4457,7 +4716,7 @@ function lswCandidates(fix, slotIdx) {
 }
 
 function lswCandKey(c, mixed, pc) {
-  const r = lsRankInfo(c.pid);
+  const r = lsRankInfo(c.pid, pc);
   if (mixed) return (r && r.flexRank != null) ? [0, r.flexRank, 0] : [1, 0, -c.pts];
   return lsSortKey(c.pid, c.landKind, pc, 'ranks');
 }
@@ -4480,8 +4739,8 @@ function lswPending(t) {
 // `mixed` says the surrounding list spans positions and is therefore ordered by
 // FLEX rank; the label has to follow that or the Rank column stops running in
 // order and reads as a bug (a direct TE21 sitting below a promoted FLEX28).
-function lswRankLabel(pid, slot, mixed) {
-  const r = lsRankInfo(pid);
+function lswRankLabel(pid, slot, mixed, pc) {
+  const r = lsRankInfo(pid, pc);
   if (!r) return '';
   if (mixed && r.flexRank != null) return 'FLEX' + r.flexRank;
   const kind = lsSlotKind(slot);
@@ -4671,7 +4930,7 @@ function lswCandRow(t, c, chosen) {
   // Label him against the slot he'd actually land in — a promotion puts him in the
   // vacated flex, so his FLEX rank is the honest one to show.
   const land = t.fix.rosterPositions[c.moves[c.moves.length - 1][0]];
-  const lbl  = lswRankLabel(c.pid, land, c.mixed);
+  const lbl  = lswRankLabel(c.pid, land, c.mixed, lsPtsCtx(t.fix));
   const inj  = injuryBadge(p.injury_status);
   const via  = c.via
     ? `<span style="display:block;font-size:0.6rem;color:var(--gold-light);">↳ ${esc(lsPlayerName(c.via.pid))} moves ${esc(c.via.slot)} → ${esc(t.slot)}</span>`
@@ -4746,7 +5005,7 @@ function lswLeagueBlock(t) {
            <span style="color:#c0504d;text-decoration:line-through;">${esc(lsPlayerName(fix.starters[k]))}</span>
            <span style="color:var(--brown-light);"> → </span>
            <span style="color:#5fae5f;">${esc(lsPlayerName(into))}</span>
-           ${lswRankLabel(into, fix.rosterPositions[k]) ? `<span style="color:var(--gold-light);font-size:0.65rem;"> ${esc(lswRankLabel(into, fix.rosterPositions[k]))}</span>` : ''}
+           ${lswRankLabel(into, fix.rosterPositions[k], false, pc) ? `<span style="color:var(--gold-light);font-size:0.65rem;"> ${esc(lswRankLabel(into, fix.rosterPositions[k], false, pc))}</span>` : ''}
          </span>
          <span style="color:var(--brown-light);font-size:0.8rem;white-space:nowrap;flex-shrink:0;">${lsHaveProj() ? lsPlayerPts(fix.starters[k], pc).toFixed(1) : '–'} <span style="color:#5fae5f;">→ ${lsHaveProj() ? lsPlayerPts(into, pc).toFixed(1) : '–'}</span></span>
        </div>`).join('')
@@ -4850,7 +5109,7 @@ function lsRanksSummary() {
   if (!lsHaveRankings()) return 'No ranking sheet';
   const r = LU.ranks;
   const n = Object.keys(r.byPid).length;
-  return `Ranks: ${n} player${n === 1 ? '' : 's'}${r.srcName ? ' · ' + r.srcName : ''}`;
+  return `Ranks: ${n} player${n === 1 ? '' : 's'}${r.cols?.FLEX_TEP?.length ? ' · TEP FLEX' : ''}${r.srcName ? ' · ' + r.srcName : ''}`;
 }
 
 function openRankingsUpload() {
@@ -4865,6 +5124,15 @@ function openRankingsUpload() {
         Pick a ranking-sheet CSV — the wide kind with side-by-side QB / RB / WR / TE / DEF / FLEX / K blocks — or paste a plain list, one player per line, best first. Names are matched to your league players and the team column breaks ties.
       </div>
       <input type="file" id="lu-rk-file" accept=".csv,.txt" style="color:var(--cream);font-family:'Crimson Text',serif;font-size:0.8rem;margin-bottom:10px;display:block;width:100%;" onchange="lsRankFilePicked(this)" />
+      <div style="border:1px dashed var(--brown-light);border-radius:3px;padding:10px;margin-bottom:10px;">
+        <div style="font-size:0.75rem;color:var(--cream);margin-bottom:4px;">🖼 From a screenshot <span style="font-size:0.55rem;color:var(--gold-light);border:1px solid var(--gold);border-radius:2px;padding:0 4px;margin-left:4px;">BETA</span></div>
+        <div style="font-size:0.65rem;color:var(--brown-light);margin-bottom:6px;line-height:1.5;">
+          An image of the side-by-side sheet (QB / RB / WR / TE / FLEX / TEP FLEX / Defense / Kicker). It's read by an AI model, about 30 seconds, so check the unmatched list afterwards. If the sheet has a <b>TEP FLEX</b> list, leagues with a TE premium use it as their flex ranks.
+        </div>
+        ${S.auth
+          ? `<input type="file" id="lu-rk-img" accept="image/png,image/jpeg,image/webp" style="color:var(--cream);font-family:'Crimson Text',serif;font-size:0.8rem;display:block;width:100%;" onchange="lsRankImagePicked(this)" />`
+          : `<div style="font-size:0.65rem;color:#d08a30;">Sign in to use this.</div>`}
+      </div>
       <textarea id="lu-rk-text" style="width:100%;height:160px;background:var(--brown-mid);color:var(--parchment);border:1px solid var(--brown-light);border-radius:2px;padding:8px;font-family:monospace;font-size:0.8rem;box-sizing:border-box;" placeholder="…or paste here:&#10;Josh Allen&#10;Lamar Jackson&#10;Ja'Marr Chase"></textarea>
       <div id="lu-rk-status" style="font-size:0.7rem;margin:8px 0;color:var(--brown-light);min-height:1em;"></div>
       <div style="display:flex;gap:8px;justify-content:flex-end;">
@@ -4901,9 +5169,31 @@ function saveRankingsUpload(srcName) {
     if (st) { st.style.color = '#c0504d'; st.textContent = 'Nothing matched — check that this is a ranking sheet or a plain list of player names.'; }
     return;
   }
+  lsCommitRanks(parsed, typeof srcName === 'string' ? srcName : 'pasted list');
+}
+
+// A picked screenshot: sliced, read band by band, then committed exactly like a CSV.
+async function lsRankImagePicked(input) {
+  const f  = input.files?.[0];
+  const st = document.getElementById('lu-rk-status');
+  if (!f) return;
+  const say = (msg, color) => { if (st) { st.style.color = color || 'var(--brown-light)'; st.textContent = msg; } };
+  input.disabled = true;
+  say('Slicing the image…');
+  try {
+    const parsed = await lsReadSheetImage(f, (done, total) => say(`Reading the sheet… ${done} of ${total} columns`));
+    if (!document.getElementById('lu-rk-modal')) return;   // closed while it read
+    lsCommitRanks(parsed, f.name + ' (image)');
+  } catch (e) {
+    say('Could not read that image: ' + (e.message || 'error'), '#c0504d');
+    input.disabled = false;
+  }
+}
+
+function lsCommitRanks(parsed, srcName) {
   LU.ranks = {
     v: 2, week: LU.week, uploadedAt: Date.now(),
-    srcName: typeof srcName === 'string' ? srcName : 'pasted list',
+    srcName,
     byPid: parsed.byPid, cols: parsed.cols,
   };
   lsSaveRankings();
@@ -4912,7 +5202,7 @@ function saveRankingsUpload(srcName) {
   // Report what landed rather than silently dropping rows — a stale export shows
   // up here as a pile of unmatched names.
   const miss = parsed.unmatched || [];
-  const blocks = Object.entries(parsed.cols).map(([k, v]) => `${k} ${v.length}`).join(' · ');
+  const blocks = Object.entries(parsed.cols).map(([k, v]) => `${lsBlockLabel(k)} ${v.length}`).join(' · ');
   document.getElementById('lu-rk-modal').innerHTML = `
     <div style="background:var(--brown-dark);border:1px solid var(--gold);border-radius:4px;max-width:560px;width:100%;padding:20px;max-height:88vh;overflow:auto;">
       <div style="font-family:'Playfair Display',serif;font-size:1.1rem;color:var(--cream);margin-bottom:10px;">Rankings loaded — Week ${LU.week}</div>
@@ -5598,9 +5888,12 @@ window.addEventListener('resize', () => {
 
 function rgDraw() {
   const week   = LU.week;
-  const cols   = LU.ranks?.cols || {};
-  const hasCol = RG_COLS.some(([k]) => (cols[k] || []).length);
   const fix    = LU.lineups[RG.leagueIdx] || null;
+  // A TEP league reads the sheet's TEP FLEX list in the FLEX column — the same
+  // list the optimizer uses for that league (lsRankInfo).
+  const rgTep  = lsUseTep(lsPtsCtx(fix));
+  const cols   = rgTep ? { ...LU.ranks.cols, FLEX: LU.ranks.cols.FLEX_TEP } : (LU.ranks?.cols || {});
+  const hasCol = RG_COLS.some(([k]) => (cols[k] || []).length);
 
   const head = `<div class="tab-header" style="margin-bottom:16px;align-items:flex-start;">
       <div class="section-head" style="margin-bottom:0;flex:1;"><h2>Weekly Ranks — Week ${week}</h2><div class="section-head-line"></div></div>
@@ -5720,7 +6013,7 @@ function rgDraw() {
   };
 
   const grid = `<div class="rg-wrap" style="--rg-tracks:${tracks};">${RG_COLS.map(([key, label]) => {
-    const main  = colHtml(key, label, alloc.parts[key] || 1);
+    const main  = colHtml(key, key === 'FLEX' && rgTep ? 'TEP FLEX' : label, alloc.parts[key] || 1);
     const stack = RG_STACK[key] ? colHtml(RG_STACK[key][0], RG_STACK[key][1], 1) : '';
     // One grid item, so the stacked list sits in the same track and costs no width.
     return main && stack ? `<div class="rg-stack">${main}${stack}</div>` : main || stack;

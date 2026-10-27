@@ -9,6 +9,7 @@ function esc(s) {
 const NAME_ALIASES = {
   'kenneth gainwell': 'kenny gainwell',
   'nicholas singleton': 'nick singleton',
+  'bam knight': 'zonovan knight',
 };
 function applyNameAlias(key) {
   return NAME_ALIASES[key] || key;

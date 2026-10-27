@@ -25,8 +25,8 @@ const MNM_KDEF_DEFAULT = {
   pts_allow_0: 10, pts_allow_1_6: 7, pts_allow_7_13: 4, pts_allow_14_20: 1,
   pts_allow_21_27: 0, pts_allow_28_34: -1, pts_allow_35p: -4,
 };
-// Plausibility yardstick only (ranking how ordinary a sampled line is) — never
-// used to decide a matchup.
+// Reference yardstick only — orders lines along one axis (window sweep) and
+// ranks simulated nights (leverage, ranges). Never decides a matchup.
 const MNM_REF_SCORING = {
   pass_yd: 0.04, pass_td: 4, pass_int: -1, rush_yd: 0.1, rush_td: 6,
   rec: 1, rec_yd: 0.1, rec_td: 6, fum_lost: -2, ...MNM_KDEF_DEFAULT,
@@ -87,19 +87,6 @@ function rPick(r, weights) {
   return weights.length - 1;
 }
 function rBinom(r, n, p) { let k = 0; for (let i = 0; i < n; i++) if (r() < p) k++; return k; }
-
-// Acklam's inverse normal CDF — turns a sample's percentile into a z-score.
-function invNorm(p) {
-  const a = [-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02, 1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00];
-  const b = [-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02, 6.680131188771972e+01, -1.328068155288572e+01];
-  const c = [-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00, -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00];
-  const d = [7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00, 3.754408661907416e+00];
-  const pl = 0.02425;
-  if (p < pl) { const q = Math.sqrt(-2 * Math.log(p)); return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1); }
-  if (p > 1 - pl) { const q = Math.sqrt(-2 * Math.log(1 - p)); return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1); }
-  const q = p - 0.5, rr = q * q;
-  return (((((a[0]*rr+a[1])*rr+a[2])*rr+a[3])*rr+a[4])*rr+a[5])*q / (((((b[0]*rr+b[1])*rr+b[2])*rr+b[3])*rr+b[4])*rr+1);
-}
 
 // ── Game state ────────────────────────────────────────────────────────────────
 // Fraction of the game still to be played. `state` comes from the worker's
@@ -350,15 +337,27 @@ function mnmSimDef(r, team, p, f, opp) {
 // matchups: [{id, name, value, scoring, isEspn,
 //             my:{total, starters:[pid], pts:{pid:n}}, opp: same | null}]
 // games:    /api/espn/games rows (home, away, kickoff, state?, period?, clock?)
+// Monday night = kickoff on a Monday, Eastern. A Monday doubleheader is two.
+function mnmIsMonday(g) {
+  const k = new Date(g?.kickoff);
+  return !isNaN(k) && k.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'America/New_York' }) === 'Mon';
+}
+
+// Only Monday-night starters are "remaining" — this tool is for the last
+// game(s) of the week. A starter in some other unfinished game (opened early,
+// on Sunday) is pending: counted at current score + projection, no variance,
+// so the Monday picture is right but Sunday isn't simulated.
 function mnmBuild({ matchups, games, players, proj, stats, now }) {
   now = now || Date.now();
   const gameOf = {};
   for (const g of games || []) {
     const f = mnmRemainingFrac(g, now);
-    const gg = { ...g, f, key: [g.home, g.away].sort().join('_') };
+    const gg = { ...g, f, mnf: mnmIsMonday(g), key: [g.home, g.away].sort().join('_') };
     gameOf[g.home] = gg; gameOf[g.away] = gg;
   }
-  const fracOf = pid => gameOf[players[pid]?.team]?.f || 0;
+  const gOf = pid => gameOf[players[pid]?.team];
+  const isRem  = pid => { const g = gOf(pid); return !!g && g.mnf && g.f > 0; };
+  const isPend = pid => { const g = gOf(pid); return !!g && !g.mnf && g.f > 0; };
 
   // Dedupe scoring maps — dozens of leagues usually share a handful.
   const scorings = [], sidOf = {};
@@ -370,31 +369,30 @@ function mnmBuild({ matchups, games, players, proj, stats, now }) {
   };
 
   const rows = [];
-  const relevant = new Set();
+  const relevant = new Set(), pendAll = new Set();
   for (const m of matchups) {
     const side = s => {
-      if (!s) return { total: 0, banked: 0, rem: [], now: 0 };
+      if (!s) return { rem: [], pend: [], pts: {}, now: 0, base: 0 };
       const starters = (s.starters || []).filter(pid => pid && pid !== '0');
-      const rem = starters.filter(pid => fracOf(pid) > 0);
-      const remNow = rem.reduce((t, pid) => t + (s.pts?.[pid] || 0), 0);
-      return { total: s.total || 0, banked: (s.total || 0) - remNow, rem, pts: s.pts || {}, now: s.total || 0 };
+      const now = s.total || 0;
+      // `base` = what the margin math starts from; pending projections are
+      // added to it once scoring is known (below).
+      return { rem: starters.filter(isRem), pend: starters.filter(isPend), pts: s.pts || {}, now, base: now };
     };
     const my = side(m.my), opp = side(m.opp);
-    const decided = !m.opp || (!my.rem.length && !opp.rem.length);
-    const row = { ...m, sid: sidFor(m.scoring, m.isEspn), my, opp, decided, gap: my.now - opp.now };
-    if (!decided) { my.rem.forEach(p => relevant.add(p)); opp.rem.forEach(p => relevant.add(p)); }
+    const row = { ...m, sid: sidFor(m.scoring, m.isEspn), my, opp };
+    row.decided = !m.opp || (!my.rem.length && !opp.rem.length);
+    // Nothing on Monday, but someone still playing earlier: not this tool's
+    // question — neither live nor settled.
+    row.notMonday = !!m.opp && row.decided && (my.pend.length + opp.pend.length) > 0;
+    if (!row.decided) { my.rem.forEach(p => relevant.add(p)); opp.rem.forEach(p => relevant.add(p)); }
+    [...my.pend, ...opp.pend].forEach(p => pendAll.add(p));
     rows.push(row);
   }
 
-  const live = rows.filter(r => !r.decided);
-  const totalValue = live.reduce((s, r) => s + (r.value || 0), 0);
-  // No $ set on any live matchup → count wins instead of dollars.
-  const unit = totalValue > 0 ? '$' : 'W';
-  for (const r of rows) r.weight = unit === '$' ? (r.value || 0) : 1;
-
   const relGames = [];
   for (const pid of relevant) {
-    const g = gameOf[players[pid]?.team];
+    const g = gOf(pid);
     if (g && !relGames.includes(g)) relGames.push(g);
   }
   relGames.sort((a, b) => (a.kickoff || '').localeCompare(b.kickoff || '') || a.key.localeCompare(b.key));
@@ -410,16 +408,36 @@ function mnmBuild({ matchups, games, players, proj, stats, now }) {
   for (const t in teamPids) models[t] = mnmTeamModel(t, teamPids[t], proj, players);
 
   const relList = [...relevant];
+  const relSet = new Set(relList);
   const posOf = pid => players[pid]?.position || '';
   const cur = {};
-  for (const pid of relList) cur[pid] = stats?.[pid] || {};
+  for (const pid of [...relList, ...pendAll]) cur[pid] = stats?.[pid] || {};
 
-  return {
-    rows, live, unit, scorings, gameOf, relGames, models, relList, posOf, cur,
+  const ctx = {
+    rows, unit: '$', scorings, gameOf, relGames, models, relList, relSet, posOf, cur,
     players, proj, stats: stats || {}, sims: MNM_SIMS,
-    decidedWon: rows.filter(r => r.decided && r.opp && r.gap > 0).reduce((s, r) => s + r.weight, 0),
-    decidedLost: rows.filter(r => r.decided && r.opp && r.gap < 0).reduce((s, r) => s + r.weight, 0),
+    mondayGames: Object.values(gameOf).filter((g, i, a) => g.mnf && a.indexOf(g) === i),
   };
+
+  // Pending (non-Monday, unfinished) starters at current + projection.
+  if (pendAll.size) {
+    const { expD } = mnmSweepTools(ctx);
+    for (const r of rows) {
+      r.my.base  += r.my.pend.reduce((t, q) => t + expD(q, r.sid), 0);
+      r.opp.base += r.opp.pend.reduce((t, q) => t + expD(q, r.sid), 0);
+    }
+  }
+  for (const r of rows) r.gap = r.my.base - r.opp.base;
+
+  ctx.live = rows.filter(r => !r.decided);
+  const totalValue = ctx.live.reduce((s, r) => s + (r.value || 0), 0);
+  // No $ set on any live matchup → count wins instead of dollars.
+  ctx.unit = totalValue > 0 ? '$' : 'W';
+  for (const r of rows) r.weight = ctx.unit === '$' ? (r.value || 0) : 1;
+  const settled = rows.filter(r => r.decided && r.opp && !r.notMonday);
+  ctx.decidedWon  = settled.filter(r => r.gap > 0).reduce((s, r) => s + r.weight, 0);
+  ctx.decidedLost = settled.filter(r => r.gap < 0).reduce((s, r) => s + r.weight, 0);
+  return ctx;
 }
 
 // Rest-of-game line for every relevant player in one sample. Deterministic per
@@ -477,7 +495,7 @@ async function mnmRun(ctx, onProgress) {
     }
     let usd = 0;
     live.forEach((row, j) => {
-      let my = row.my.now, op = row.opp.now;
+      let my = row.my.base, op = row.opp.base;
       for (const pid of row.my.rem) my += delta[pidIdx[pid] * S + row.sid];
       for (const pid of row.opp.rem) op += delta[pidIdx[pid] * S + row.sid];
       const o = Math.abs(my - op) < 0.005 ? 1 : my > op ? 2 : 0;
@@ -500,101 +518,75 @@ function mnmSummarise(ctx, { dollars, outcome, refPts, N, P }) {
     row.winP = w / (2 * N);
   });
 
-  // Plausibility: each player's sampled night as a percentile of his own
-  // simulated distribution → z-score. A script's cost is Σz², so "the most
-  // plausible way to win $X" is the sample at $X with the most ordinary box
-  // score — not the single most extreme one.
-  const plaus = new Float64Array(N);
+  // Leverage: E[$ | above his median night] − E[$ | at or below it].
   const leverage = [];
   const idx = Array.from({ length: N }, (_, i) => i);
   for (let i = 0; i < P; i++) {
     idx.sort((a, b) => refPts[a * P + i] - refPts[b * P + i]);
-    let lo = 0, sumHi = 0, nHi = 0, sumLo = 0, nLo = 0;
-    while (lo < N) {
-      let hi = lo; const v = refPts[idx[lo] * P + i];
-      while (hi + 1 < N && refPts[idx[hi + 1] * P + i] === v) hi++;
-      const pct = ((lo + hi) / 2 + 0.5) / N, z = invNorm(pct);
-      for (let t = lo; t <= hi; t++) {
-        const s = idx[t];
-        plaus[s] += z * z;
-        // Leverage: E[$ | above his median night] − E[$ | below it].
-        if (pct > 0.5) { sumHi += dollars[s]; nHi++; } else { sumLo += dollars[s]; nLo++; }
-      }
-      lo = hi + 1;
+    const med = refPts[idx[Math.floor(N / 2)] * P + i];
+    let sumHi = 0, nHi = 0, sumLo = 0, nLo = 0;
+    for (let s = 0; s < N; s++) {
+      if (refPts[s * P + i] > med) { sumHi += dollars[s]; nHi++; } else { sumLo += dollars[s]; nLo++; }
     }
     const pid = ctx.relList[i];
-    const sorted = idx.map(s => refPts[s * P + i]);
     leverage.push({
       pid, lev: nHi && nLo ? sumHi / nHi - sumLo / nLo : 0,
-      p10: sorted[Math.floor(N * 0.1)], p50: sorted[Math.floor(N * 0.5)], p90: sorted[Math.floor(N * 0.9)],
+      p10: refPts[idx[Math.floor(N * 0.1)] * P + i], p50: med, p90: refPts[idx[Math.floor(N * 0.9)] * P + i],
       mine: live.filter(r => r.my.rem.includes(pid)).map(r => r.id),
       theirs: live.filter(r => r.opp.rem.includes(pid)).map(r => r.id),
     });
   }
   leverage.sort((a, b) => Math.abs(b.lev) - Math.abs(a.lev));
 
-  // Tiers: distinct $ totals reached, each with its most plausible sample.
+  // Tiers: distinct $ totals reached and how often.
   const tierMap = new Map();
   for (let s = 0; s < N; s++) {
     const key = Math.round(dollars[s] * 100) / 100;
-    const t = tierMap.get(key);
-    if (!t) tierMap.set(key, { usd: key, count: 1, best: s });
-    else { t.count++; if (plaus[s] < plaus[t.best]) t.best = s; }
+    tierMap.set(key, (tierMap.get(key) || 0) + 1);
   }
-  const tiers = [...tierMap.values()].sort((a, b) => b.usd - a.usd);
-  let cum = 0;
-  for (const t of tiers) { cum += t.count; t.pAtLeast = cum / N; }
+  const tiers = [...tierMap].map(([usd, count]) => ({ usd, count })).sort((a, b) => b.usd - a.usd);
 
   const sortedUsd = Array.from(dollars).sort((a, b) => a - b);
-  const median = sortedUsd[Math.floor(N / 2)];
-  const medTier = tiers.reduce((b, t) => Math.abs(t.usd - median) < Math.abs(b.usd - median) ? t : b, tiers[0]);
-  const expected = sortedUsd.reduce((s, x) => s + x, 0) / N;
   const atStake = live.reduce((s, r) => s + r.weight, 0);
-
-  const script = (label, tier) => tier && {
-    label, usd: tier.usd, freq: tier.count / N, pAtLeast: tier.pAtLeast, sample: tier.best,
-    results: live.map((row, j) => ({ row, o: outcome[tier.best * M + j] })),
-  };
-  const scripts = [script('miracle', tiers[0])];
-  if (medTier !== tiers[0]) scripts.push(script('typical', medTier));
-  if (tiers[tiers.length - 1] !== medTier && tiers.length > 1) scripts.push(script('nightmare', tiers[tiers.length - 1]));
-
   return {
-    atStake, expected, median, tiers, scripts, leverage,
+    atStake, tiers, leverage,
+    expected: sortedUsd.reduce((s, x) => s + x, 0) / N,
     p10: sortedUsd[Math.floor(N * 0.1)], p90: sortedUsd[Math.floor(N * 0.9)],
     sweepP: tiers[0].usd >= atStake - 1e-9 ? tiers[0].count / N : 0,
   };
 }
 
-// The full box score for one player in one stored sample (current + rest).
-function mnmScriptLine(ctx, s, pid) {
-  const rem = mnmSample(ctx, s);
-  return mnmAdd(ctx.cur[pid], rem[pid] || {});
-}
-function mnmScriptLines(ctx, s) {
-  const rem = mnmSample(ctx, s), out = {};
-  for (const pid of ctx.relList) out[pid] = mnmAdd(ctx.cur[pid], rem[pid] || {});
-  return out;
-}
-// Each matchup's final score in a stored sample.
-function mnmScriptScores(ctx, s, lines) {
-  const sc = {};
-  for (const row of ctx.live) {
-    const S = ctx.scorings[row.sid];
-    const d = pid => mnmScore(mnmDerive(lines[pid], ctx.posOf(pid)), S) - mnmScore(mnmDerive(ctx.cur[pid], ctx.posOf(pid)), S);
-    sc[row.id] = {
-      my: row.my.now + row.my.rem.reduce((t, p) => t + d(p), 0),
-      opp: row.opp.now + row.opp.rem.reduce((t, p) => t + d(p), 0),
-    };
+// ── Optimal windows — the actual numbers ─────────────────────────────────────
+// Deterministic, not sampled (the sim is for odds; this is for "what do I need
+// to see"). One player's line is swept over his projected shape × t with 0–3
+// TDs; every step is scored in every league it touches. Everyone else sits at
+// their projected rest-of-game line — EXCEPT the players his line is tied to
+// (mnmLinkAdjust), who move with him: a receiver's yards and TDs are his
+// QB's; a QB's are shared out to his receivers; the offence's TDs and yards
+// are the other D/ST's points/yards allowed and his kicker's PATs. That's
+// what makes two players in one game read as one combined projection: Lamb's
+// window already knows a big Lamb night is a big Dak night.
+const MNM_T_MAX = 4;          // 4× his projected volume is the ceiling of "possible"
+const MNM_T_REASONABLE = 2;   // a window past 2× is a wish, not a target
+const MNM_T_STEP = 0.025;
+
+function mnmExpectedRem(ctx, pid) {
+  const p = ctx.proj[pid] || {}, team = ctx.players[pid]?.team, g = ctx.gameOf[team], f = g?.f || 0;
+  const L = {};
+  for (const k in p) if (typeof p[k] === 'number' && !MNM_SKIP_RE.test(k)) L[k] = p[k] * f;
+  if (ctx.posOf(pid) === 'DEF' && g) {
+    const o = ctx.models[g.home === team ? g.away : g.home];
+    if (o) {
+      L.pts_allow = ((o.passTd + o.rushTd) * 6.9 + 4.8) * f;
+      L.yds_allow = (o.passYd + o.rushYd) * f;
+      L.int = o.passInt * f;
+    }
   }
-  return sc;
+  return L;
 }
 
-// ── "What it takes" — points → a box score, in one league's scoring ─────────
-// Scales the player's projected rest-of-game shape (rec/yds, or carries/yds,
-// or passing yds) up or down and adds TDs, finding the smallest line that
-// clears `need` points under that league's rules — bonuses included, which is
-// why it searches rather than dividing.
+// His rest-of-game line at t× projected volume with k TDs. A QB keeps his
+// expected INTs (fractional) so a swept QB isn't silently interception-free.
 function mnmShape(ctx, pid, t, k) {
   const p = ctx.proj[pid] || {}, pos = ctx.posOf(pid);
   const f = ctx.gameOf[ctx.players[pid]?.team]?.f || 0;
@@ -603,6 +595,7 @@ function mnmShape(ctx, pid, t, k) {
   if (pos === 'QB') {
     L.pass_yd = sc('pass_yd'); L.pass_att = sc('pass_att'); L.pass_cmp = sc('pass_cmp');
     L.rush_yd = sc('rush_yd'); L.rush_att = sc('rush_att'); L.pass_td = k;
+    L.pass_int = (p.pass_int || 0) * f;
   } else if (pos === 'RB') {
     L.rush_yd = sc('rush_yd'); L.rush_att = sc('rush_att'); L.rec = sc('rec'); L.rec_yd = sc('rec_yd'); L.rush_td = k;
   } else {
@@ -612,54 +605,225 @@ function mnmShape(ctx, pid, t, k) {
   // Volume-linked keys (first downs, catches by length…) follow the same t.
   return mnmScaleOthers(L, p, f * t, { rec: 1, rush: 1, pass: 1 });
 }
-function mnmShapeDelta(ctx, pid, sid, t, k) {
-  const S = ctx.scorings[sid], pos = ctx.posOf(pid);
-  return mnmScore(mnmDerive(mnmAdd(ctx.cur[pid], mnmShape(ctx, pid, t, k)), pos), S)
-       - mnmScore(mnmDerive(ctx.cur[pid], pos), S);
-}
-const MNM_T_MAX = 4;   // 4× his projection is the ceiling of "possible"
-function mnmMinT(ctx, pid, sid, k, need) {
-  if (mnmShapeDelta(ctx, pid, sid, 0, k) >= need) return 0;
-  if (mnmShapeDelta(ctx, pid, sid, MNM_T_MAX, k) < need) return null;
-  let lo = 0, hi = MNM_T_MAX;
-  for (let i = 0; i < 30; i++) { const mid = (lo + hi) / 2; if (mnmShapeDelta(ctx, pid, sid, mid, k) >= need) hi = mid; else lo = mid; }
-  return hi;
-}
-// [{k, line, stretch}] — up to two ways to get there, fewest TDs first, but
-// only lines within 2× his projected volume lead: "510 yds, no TD" is a true
-// answer and a useless one when "1 TD + 260 yds" also gets there.
-const MNM_T_REASONABLE = 2;
-function mnmNeedOptions(ctx, pid, sid, need) {
-  const pos = ctx.posOf(pid);
-  if (pos === 'K' || pos === 'DEF' || !ctx.proj[pid]) return [];
-  const all = [];
-  for (let k = 0; k <= 3; k++) {
-    const t = mnmMinT(ctx, pid, sid, k, need);
-    if (t == null) continue;
-    all.push({ k, t, line: mnmAdd(ctx.cur[pid], mnmShape(ctx, pid, t, k)) });
-    if (t === 0) break;   // the TDs alone do it — another TD says nothing new
+
+// Rest-of-game lines for the relevant players tied to `pid`, given his swept
+// rest-of-game line `rem`. Only differences from HIS projection propagate, so
+// at t≈1 everyone is back at projection. K and D/ST don't drive anyone.
+function mnmLinkAdjust(ctx, pid, rem, expRem) {
+  const pos = ctx.posOf(pid), team = ctx.players[pid]?.team, g = ctx.gameOf[team];
+  const m = ctx.models[team];
+  if (!g || !m || pos === 'K' || pos === 'DEF') return {};
+  const oppTeam = g.home === team ? g.away : g.home;
+  const e = expRem(pid), d = k => (rem[k] || 0) - (e[k] || 0);
+  const out = {};
+  const bump = (q, k, v) => {
+    if (q === pid || !ctx.relSet.has(q) || !v) return;
+    const L = out[q] || (out[q] = { ...expRem(q) });
+    L[k] = Math.max(0, (L[k] || 0) + v);
+  };
+  let dYds, dTd;
+  if (pos === 'QB') {
+    const dPY = d('pass_yd'), dPT = d('pass_td');
+    m.rec.forEach((q, i) => {
+      const p = ctx.proj[q], ypr = p.rec > 0 ? p.rec_yd / p.rec : 10;
+      bump(q, 'rec_yd', m.recShare[i] * dPY);
+      bump(q, 'rec', m.recShare[i] * dPY / ypr);
+      bump(q, 'rec_td', (p.rec_td || 0) / Math.max(0.3, m.passTd) * dPT);
+    });
+    bump(oppTeam, 'int', d('pass_int'));
+    dYds = dPY + d('rush_yd'); dTd = dPT + d('rush_td');
+  } else {
+    if (m.qb) {
+      bump(m.qb, 'pass_yd', d('rec_yd')); bump(m.qb, 'pass_td', d('rec_td'));
+      bump(m.qb, 'pass_cmp', d('rec')); bump(m.qb, 'pass_att', d('rec') / 0.65);
+    }
+    dYds = d('rec_yd') + d('rush_yd'); dTd = d('rec_td') + d('rush_td');
   }
-  const ok = all.filter(o => o.t <= MNM_T_REASONABLE);
-  if (ok.length) return ok.slice(0, 2);
-  return all.length ? [{ ...all.reduce((a, b) => b.t < a.t ? b : a), stretch: true }] : [];
+  bump(oppTeam, 'pts_allow', 7 * dTd);
+  bump(oppTeam, 'yds_allow', dYds);
+  if (m.k) { bump(m.k, 'xpm', 0.95 * dTd); bump(m.k, 'xpa', dTd); }
+  return out;
 }
-// For an opponent's lone player: the biggest TD-less line he can have while
-// staying under `cushion`, and whether a single TD alone sinks me.
-function mnmHoldUnder(ctx, pid, sid, cushion) {
+
+function mnmSweepTools(ctx) {
+  if (ctx._sweepTools) return ctx._sweepTools;
+  const S = ctx.scorings, posOf = ctx.posOf;
+  const expMemo = {}, baseMemo = {}, expDMemo = {};
+  const expRem = q => expMemo[q] || (expMemo[q] = mnmExpectedRem(ctx, q));
+  const base = (q, sid) => baseMemo[q + '|' + sid] ?? (baseMemo[q + '|' + sid] = mnmScore(mnmDerive(ctx.cur[q], posOf(q)), S[sid]));
+  const deltaOf = (q, rem, sid) => mnmScore(mnmDerive(mnmAdd(ctx.cur[q], rem), posOf(q)), S[sid]) - base(q, sid);
+  const expD = (q, sid) => expDMemo[q + '|' + sid] ?? (expDMemo[q + '|' + sid] = deltaOf(q, expRem(q), sid));
+  return (ctx._sweepTools = { expRem, deltaOf, expD });
+}
+
+// One matchup's margin (mine − theirs, final) with some players pinned:
+// spec[pid] = {rem} (a rest-of-game line) or {extra} (points vs. projection,
+// for K/D-ST). Pinned lines drive their teammates IN THIS MATCHUP through
+// mnmLinkAdjust — a Lamb TD is a Dak TD when both start here — but never a
+// pinned player (his line is what it was set to). Everyone else: projection.
+function mnmRowMargin(ctx, row, spec) {
+  const { expRem, deltaOf, expD } = mnmSweepTools(ctx);
+  const adj = {};
+  for (const pid in spec) {
+    if (!spec[pid].rem) continue;
+    const a = mnmLinkAdjust(ctx, pid, spec[pid].rem, expRem);
+    for (const q in a) {
+      if (spec[q]) continue;
+      if (!adj[q]) { adj[q] = a[q]; continue; }
+      const e = expRem(q), merged = { ...adj[q] };   // two drivers: add both deltas
+      for (const k in a[q]) merged[k] = Math.max(0, (merged[k] || 0) + a[q][k] - (e[k] || 0));
+      adj[q] = merged;
+    }
+  }
+  const d = q => spec[q] ? (spec[q].rem ? deltaOf(q, spec[q].rem, row.sid) : expD(q, row.sid) + spec[q].extra)
+    : adj[q] ? deltaOf(q, adj[q], row.sid) : expD(q, row.sid);
+  let m = row.my.base - row.opp.base;
+  for (const q of row.my.rem) m += d(q);
+  for (const q of row.opp.rem) m -= d(q);
+  return m;
+}
+
+const mnmOutcome = mg => Math.abs(mg) < 0.005 ? 1 : mg > 0 ? 2 : 0;
+
+// Every step of one player's sweep, with the outcome of each of HIS live
+// matchups. `fixed` pins other players (trade-off table); `rowId` limits it to
+// one matchup. Only the unpinned whole-slate sweep is cached.
+function mnmSweep(ctx, pid, { fixed = null, rowId = null } = {}) {
+  const cacheable = !fixed && !rowId;
+  ctx._sweeps = ctx._sweeps || {};
+  if (cacheable && ctx._sweeps[pid]) return ctx._sweeps[pid];
+  const { expRem } = mnmSweepTools(ctx);
   const pos = ctx.posOf(pid);
-  if (pos === 'K' || pos === 'DEF' || !ctx.proj[pid]) return null;
-  const tdKills = mnmShapeDelta(ctx, pid, sid, 0, 1) >= cushion;
-  const t = mnmMinT(ctx, pid, sid, 0, cushion);
-  return { tdKills, line: t == null ? null : mnmAdd(ctx.cur[pid], mnmShape(ctx, pid, t, 0)), unreachable: t == null };
+  const flatPts = pos === 'K' || pos === 'DEF' || !ctx.proj[pid];
+  const rows = ctx.live.filter(r => (!rowId || r.id === rowId) && (r.my.rem.includes(pid) || r.opp.rem.includes(pid)));
+  // Teammates in his matchups whose lines move with his (for the label).
+  const inRows = new Set(rows.flatMap(r => [...r.my.rem, ...r.opp.rem]));
+  const linked = flatPts ? [] : Object.keys(mnmLinkAdjust(ctx, pid, mnmShape(ctx, pid, 2, 2), expRem))
+    .filter(q => inRows.has(q) && !(fixed && fixed[q]));
+  const evals = [];
+  const evalAt = (one, ref, line, k, t) => {
+    const spec = { ...(fixed || {}), [pid]: one };
+    const o = new Uint8Array(rows.length);
+    rows.forEach((r, j) => { o[j] = mnmOutcome(mnmRowMargin(ctx, r, spec)); });
+    evals.push({ o, ref, line, k, t });
+  };
+  if (flatPts) {
+    // No box-score shape to scale — a K/D/ST's window is in points. Axis =
+    // his projected full-game points (reference scoring) + the offset; the
+    // same offset is added to his score in every league.
+    const proj0 = mnmScore(mnmDerive(mnmAdd(ctx.cur[pid], expRem(pid)), pos), MNM_REF_SCORING);
+    const now0 = mnmScore(mnmDerive(ctx.cur[pid], pos), MNM_REF_SCORING);
+    // Never below what he already has (a D/ST can still lose points; a K can't).
+    const lo = pos === 'DEF' ? -Math.min(12, Math.max(0, proj0 + 4)) : -(proj0 - now0);
+    for (let pts = lo; pts <= 22; pts += 0.5) evalAt({ extra: pts }, proj0 + pts, null, null, null);
+  } else {
+    for (let k = 0; k <= 3; k++) {
+      for (let t = 0; t <= MNM_T_MAX + 1e-9; t += MNM_T_STEP) {
+        const rem = mnmShape(ctx, pid, t, k), line = mnmAdd(ctx.cur[pid], rem);
+        evalAt({ rem }, mnmScore(mnmDerive(line, pos), MNM_REF_SCORING), line, k, t);
+      }
+    }
+  }
+  evals.sort((a, b) => a.ref - b.ref);
+  const sw = { pid, flatPts, linked, rows, evals };
+  if (cacheable) ctx._sweeps[pid] = sw;
+  return sw;
+}
+
+// The window over a subset of the sweep's matchups (all of them for the
+// player card; one for a matchup's "what it needs").
+function mnmWindowOf(sw, idxs) {
+  const { evals, rows } = sw;
+  const usdOf = e => idxs.reduce((s, j) => s + rows[j].weight * e.o[j] / 2, 0);
+  for (const e of evals) e._usd = usdOf(e);
+  const max = Math.max(...evals.map(e => e._usd)), min = Math.min(...evals.map(e => e._usd));
+  const best = evals.filter(e => e._usd >= max - 1e-9);
+  const low = best[0], high = best[best.length - 1];
+  const below = evals.filter(e => e.ref < low.ref).pop();
+  const above = evals.find(e => e.ref > high.ref);
+  // Per TD count: smallest → largest volume still at the max. Lines with
+  // different TD counts can't be compared end to end, so this is the
+  // readable form ("no TD: 132 → 174 yds · 1 TD: 92 → 138 yds").
+  const byK = [];
+  if (!sw.flatPts) {
+    for (let k = 0; k <= 3; k++) {
+      const inK = best.filter(e => e.k === k);
+      if (!inK.length) continue;
+      const lo = inK.reduce((a, b) => b.t < a.t ? b : a), hi = inK.reduce((a, b) => b.t > a.t ? b : a);
+      byK.push({ k, lo, hi, fromZero: lo.t === 0, toCap: hi.t >= MNM_T_MAX - MNM_T_STEP / 2 });
+    }
+  }
+  const pick = (e, f) => idxs.filter(j => f(e, j)).map(j => rows[j]);
+  return {
+    pid: sw.pid, flatPts: sw.flatPts, linked: sw.linked, rows: idxs.map(j => rows[j]),
+    max, min, swing: max - min, flat: max - min < 1e-9, low, high, byK,
+    floor: low === evals[0], unbounded: high === evals[evals.length - 1],
+    wonAtBest: pick(low, (e, j) => e.o[j] === 2),
+    lostBelow: below ? pick(low, (e, j) => e.o[j] === 2 && below.o[j] !== 2) : [],
+    lostAbove: above ? pick(high, (e, j) => e.o[j] === 2 && above.o[j] !== 2) : [],
+  };
+}
+
+function mnmWindows(ctx) {
+  return ctx.relList.map(pid => {
+    const sw = mnmSweep(ctx, pid);
+    return sw.rows.length ? mnmWindowOf(sw, sw.rows.map((_, j) => j)) : null;
+  }).filter(Boolean).sort((a, b) => b.swing - a.swing);
+}
+
+// One matchup's window for one of its remaining players.
+function mnmRowWindow(ctx, rowId, pid, fixed) {
+  const sw = mnmSweep(ctx, pid, { rowId, fixed });
+  return sw.rows.length ? mnmWindowOf(sw, [0]) : null;
+}
+
+// Trade-off table for a matchup with 2+ Monday players: step the pivot (my
+// biggest non-K/DST player by projected points here; theirs if I have none)
+// through a quiet / projected / big night, plus projection + a TD, and for
+// each step solve every other player's window with the pivot pinned there.
+// Steps are rest-of-game scalings, so a live game's steps start from what he
+// already has — 2 TDs in hand never reads as fewer.
+const MNM_PIVOT_STEPS = [[0.5, 0, 'quiet'], [1, 0, 'projection'], [1.6, 0, 'big'], [1, 1, 'projection + TD']];
+function mnmTradeoff(ctx, rowId) {
+  const row = ctx.live.find(r => r.id === rowId);
+  if (!row) return null;
+  const all = [...row.my.rem, ...row.opp.rem];
+  if (all.length < 2) return null;
+  const { expD } = mnmSweepTools(ctx);
+  const shaped = q => !['K', 'DEF'].includes(ctx.posOf(q)) && ctx.proj[q];
+  const byProj = (a, b) => expD(b, row.sid) - expD(a, row.sid);
+  const pivot = [...row.my.rem].filter(shaped).sort(byProj)[0] || [...row.opp.rem].filter(shaped).sort(byProj)[0];
+  if (!pivot) return null;
+  const others = all.filter(q => q !== pivot);
+  const seen = new Set(), steps = [];
+  // Mid-game, "if he does nothing else" is the row you actually watch for.
+  const live = (ctx.gameOf[ctx.players[pivot]?.team]?.f ?? 1) < 1;
+  for (const [t, k, label] of live ? [[0, 0, 'nothing more'], ...MNM_PIVOT_STEPS] : MNM_PIVOT_STEPS) {
+    const rem = mnmShape(ctx, pivot, t, k), line = mnmAdd(ctx.cur[pivot], rem);
+    const key = mnmFmtLine(line, ctx.posOf(pivot));
+    if (seen.has(key)) continue;   // late in a game the steps collapse together
+    seen.add(key);
+    const fixed = { [pivot]: { rem } };
+    steps.push({
+      label, t, k, line,
+      atProj: mnmOutcome(mnmRowMargin(ctx, row, fixed)),   // others at projection
+      cells: others.map(q => ({ pid: q, w: mnmRowWindow(ctx, rowId, q, fixed) })),
+    });
+  }
+  // Others whose line moves with the pivot's (same offence, same matchup).
+  const linked = mnmSweep(ctx, pivot, { rowId }).linked.filter(q => others.includes(q));
+  return { row, pivot, pivotMine: row.my.rem.includes(pivot), others, linked, steps };
 }
 
 // ── Formatting ────────────────────────────────────────────────────────────────
 function mnmFmtLine(line, pos) {
   const n = k => Math.round(line[k] || 0);
+  // Turnovers on a swept line are expected values (0.53 INT) — show whole events only.
+  const w = k => Math.floor((line[k] || 0) + 1e-9);
   const td = k => n(k) ? ` ${n(k)} TD` : '';
   const parts = [];
   if (pos === 'QB') {
-    parts.push(`${n('pass_cmp')}/${n('pass_att')} ${n('pass_yd')} yds${td('pass_td')}${n('pass_int') ? ` ${n('pass_int')} INT` : ''}`);
+    parts.push(`${n('pass_cmp')}/${n('pass_att')} ${n('pass_yd')} yds${td('pass_td')}${w('pass_int') ? ` ${w('pass_int')} INT` : ''}`);
     if (n('rush_yd') || n('rush_td')) parts.push(`${n('rush_yd')} rush yds${td('rush_td')}`);
   } else if (pos === 'K') {
     const fg = FG_BUCKETS.flatMap(([k, d]) => Array(n(k)).fill(d < 20 ? '<20' : d < 50 ? `${Math.floor(d / 10)}0s` : '50+'));
@@ -674,13 +838,13 @@ function mnmFmtLine(line, pos) {
     if (pos === 'RB') { parts.push(rush); if (n('rec') || n('rec_td')) parts.push(rec); }
     else { parts.push(rec); if (n('rush_yd') || n('rush_td')) parts.push(rush); }
   }
-  if (n('fum_lost')) parts.push(`${n('fum_lost')} fum`);
+  if (w('fum_lost')) parts.push(`${w('fum_lost')} fum`);
   return parts.join(' · ');
 }
 
 const api = {
-  MNM_SIMS, MNM_KDEF_DEFAULT, mnmBuild, mnmRun, mnmRemainingFrac, mnmGameLabel,
-  mnmScriptLines, mnmScriptLine, mnmScriptScores, mnmNeedOptions, mnmHoldUnder,
+  MNM_SIMS, MNM_KDEF_DEFAULT, MNM_T_REASONABLE, mnmBuild, mnmRun, mnmRemainingFrac, mnmGameLabel,
+  mnmWindows, mnmRowWindow, mnmTradeoff, mnmIsMonday,
   mnmFmtLine, mnmDerive, mnmScore, mnmSample,
 };
 Object.assign(root, api);

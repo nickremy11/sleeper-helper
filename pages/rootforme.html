@@ -308,22 +308,21 @@ details.pos-group[open] > summary .pos-group-toggle { transform: rotate(90deg); 
 .mnm-rem .mine   { background: rgba(45,74,30,0.4); border: 1px solid rgba(74,122,47,0.5); color: var(--green-light); }
 .mnm-rem .theirs { background: rgba(139,26,26,0.3); border: 1px solid rgba(139,26,26,0.5); color: #e08080; }
 
-.mnm-scripts { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 12px; }
-.mnm-script { background: rgba(255,255,255,0.04); border: 1px solid var(--brown-mid); border-radius: 2px; padding: 10px 12px; }
-.mnm-script.miracle { border-color: var(--gold); }
-.mnm-script-title { font-family: 'Rye', serif; font-size: 0.62rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold); }
-.mnm-script-usd { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 1.15rem; color: var(--cream); margin: 2px 0; }
-.mnm-script-freq { font-family: 'Crimson Text', serif; font-size: 0.8rem; font-style: italic; color: var(--brown-light); }
-.mnm-box { margin: 8px 0; }
-.mnm-box-row { font-family: 'Crimson Text', serif; font-size: 0.86rem; color: var(--parchment); padding: 3px 0 3px 8px; border-left: 2px solid var(--brown-mid); margin-bottom: 3px; }
-.mnm-box-row.for     { border-left-color: var(--green-light); }
-.mnm-box-row.against { border-left-color: #e08080; }
-.mnm-box-row b { font-weight: 600; color: var(--cream); }
-.mnm-box-line { display: block; color: var(--brown-light); font-size: 0.82rem; }
-.mnm-res { font-family: 'Crimson Text', serif; font-size: 0.84rem; display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; color: var(--parchment); }
-.mnm-res .w { color: var(--green-light); font-weight: 600; }
-.mnm-res .l { color: #e08080; font-weight: 600; }
-.mnm-res .t { color: var(--gold-light); font-weight: 600; }
+.mnm-win { display: grid; grid-template-columns: 34px minmax(0,1fr) auto; align-items: start; gap: 10px; padding: 8px 4px; border-bottom: 1px dashed rgba(255,255,255,0.07); }
+.mnm-win:last-child { border-bottom: none; }
+.mnm-win .player-pos { margin-top: 3px; }
+.mnm-tr-wrap { overflow-x: auto; margin-top: 6px; }
+.mnm-tr { border-collapse: collapse; width: 100%; font-family: 'Crimson Text', serif; font-size: 0.86rem; color: var(--parchment); }
+.mnm-tr th { font-family: 'Rye', serif; font-size: 0.44rem; letter-spacing: 0.12em; text-transform: uppercase; text-align: left; color: var(--gold); padding: 4px 8px; border-bottom: 1px solid var(--brown-mid); white-space: nowrap; }
+.mnm-tr th.mnm-good { color: var(--green-light); } .mnm-tr th.mnm-bad { color: #e08080; }
+.mnm-tr td { padding: 5px 8px; border-bottom: 1px dashed rgba(255,255,255,0.07); vertical-align: top; }
+.mnm-tr td b { font-weight: 600; color: var(--cream); }
+.mnm-tr-tag { display: block; font-style: italic; font-size: 0.78rem; color: var(--brown-light); }
+.mnm-tr-td { font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold); margin-right: 4px; }
+.mnm-need-p { margin-top: 5px; padding-left: 8px; border-left: 2px solid var(--brown-mid); font-size: 0.88rem; }
+.mnm-win-k { font-family: 'Crimson Text', serif; font-size: 0.88rem; color: var(--parchment); display: flex; gap: 8px; }
+.mnm-win-k > span:first-child { font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold); width: 44px; flex-shrink: 0; padding-top: 4px; }
+.mnm-win-k b { font-weight: 600; color: var(--cream); }
 @media (max-width: 640px) {
   .mnm-lev-row { grid-template-columns: 34px minmax(0,1fr) 60px; }
   .mnm-lev-range { display: none; }
@@ -433,8 +432,15 @@ details.pos-group[open] > summary .pos-group-toggle { transform: rotate(90deg); 
 
   <!-- Monday Night Miracle -->
   <div id="mnm-section" style="display:none; margin-bottom: 28px;">
-    <div class="section-head"><h2>Monday Night Miracle</h2><div class="section-head-line"></div></div>
-    <div id="mnm-container"></div>
+    <details id="mnm-details" class="players-outer leagues-details" ontoggle="mnmOnToggle()">
+      <summary>
+        <span class="players-toggle">▶</span>
+        <h2 class="players-summary-head">Monday Night Miracle</h2>
+        <div class="section-head-line"></div>
+        <span id="mnm-summary-info" class="players-summary-info"></span>
+      </summary>
+      <div id="mnm-container"></div>
+    </details>
   </div>
 
   <!-- Games -->
@@ -1239,20 +1245,28 @@ function toggleGame(key) {
 // and which box scores for those games win the most $. The engine is
 // /miracle.js; this is only plumbing + rendering. Best ball is left out: its
 // score is an optimal lineup re-picked after the fact, not a sum of starters.
-async function renderMiracle() {
+// Prepared on every Load, but only SIMULATED once the section is open: it opens
+// itself on Monday (Eastern) or once a Monday game is under way, and stays a
+// collapsed one-liner the rest of the week.
+function renderMiracle() {
   const section = document.getElementById('mnm-section');
   const box     = document.getElementById('mnm-container');
+  const details = document.getElementById('mnm-details');
+  const info    = document.getElementById('mnm-summary-info');
   if (!section || !box) return;
-  section.style.display = '';
-  const token = ++S.mnmToken;
+  S.mnmToken++;
   S.mnmCtx = S.mnmRes = null;
+  S.mnmRan = false;
+  section.style.display = '';
 
   if (typeof mnmBuild !== 'function') {
     box.innerHTML = '<div class="err-state">The Miracle engine (/miracle.js) didn\'t load — refresh in a minute.</div>';
     return;
   }
+  const monday = S.nflGames.filter(g => mnmIsMonday(g));
+  if (!monday.length) { section.style.display = 'none'; return; }   // e.g. Week 18
   if (!S.mnmProj) {
-    box.innerHTML = `<div class="err-state">Couldn't load Week ${S.week} projections, which the simulation runs on.</div>`;
+    box.innerHTML = `<div class="err-state">Couldn't load Week ${S.week} projections, which the Monday numbers run on.</div>`;
     return;
   }
 
@@ -1272,29 +1286,52 @@ async function renderMiracle() {
       my: side(r.myMatchup), opp: side(r.oppMatchup),
     });
   }
-
   const ctx = mnmBuild({ matchups, games: S.nflGames, players: S.playerMap, proj: S.mnmProj, stats: S.mnmStats });
   S.mnmCtx = ctx;
-  const notes = mnmNotesHtml(ctx, bestBall);
+  S.mnmBestBall = bestBall;
+
+  const label = monday.map(g => `${g.away} @ ${g.home}`).join(', ');
+  if (info) info.textContent = ctx.live.length
+    ? `${label} · ${ctx.live.length} matchup${ctx.live.length !== 1 ? 's' : ''} ride on it`
+    : `${label} · nothing riding on it`;
+
+  const now = Date.now();
+  const isMondayET = new Date(now).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'America/New_York' }) === 'Mon';
+  const underway = monday.some(g => mnmRemainingFrac(g, now) < 1);
+  if (details && (isMondayET || underway)) details.open = true;   // fires ontoggle → run
+  if (details?.open) mnmRunAndDraw();
+  else box.innerHTML = '';
+}
+
+function mnmOnToggle() {
+  if (document.getElementById('mnm-details')?.open && S.mnmCtx && !S.mnmRan) mnmRunAndDraw();
+}
+
+async function mnmRunAndDraw() {
+  const ctx = S.mnmCtx, box = document.getElementById('mnm-container');
+  if (!ctx || S.mnmRan) return;
+  S.mnmRan = true;
+  const token = S.mnmToken;
+  const notes = mnmNotesHtml(ctx, S.mnmBestBall || 0);
 
   if (!ctx.live.length) {
-    const anyLeft = S.nflGames.some(g => mnmRemainingFrac(g) > 0);
-    box.innerHTML = `<div class="mnm-card"><div class="mnm-need">${anyLeft
-      ? 'Every contending matchup is already settled — nobody left to play can change one.'
-      : `Week ${S.week} is in the books — no games left to root for.`}</div>${mnmDecidedHtml(ctx)}${notes}</div>`;
+    const left = ctx.mondayGames.some(g => g.f > 0);
+    box.innerHTML = `<div class="mnm-card"><div class="mnm-need">${left
+      ? 'None of your contending matchups has a Monday-night starter still to play — nothing to root for tonight.'
+      : 'Monday night is in the books.'}</div>${mnmDecidedHtml(ctx)}${notes}</div>`;
     return;
   }
 
   box.innerHTML = `<div class="mnm-card"><div class="loading-state"><div class="spinner"></div>
-    <span id="mnm-prog">Simulating ${ctx.sims.toLocaleString()} versions of the rest of the week…</span></div></div>`;
+    <span id="mnm-prog">Simulating ${ctx.sims.toLocaleString()} versions of Monday night…</span></div></div>`;
   const res = await mnmRun(ctx, f => {
     const el = document.getElementById('mnm-prog');
     if (el && token === S.mnmToken) el.textContent = `Simulating… ${Math.round(f * 100)}%`;
   });
   if (token !== S.mnmToken) return;   // a newer Load started while this ran
   S.mnmRes = res;
-  box.innerHTML = mnmHeroHtml(ctx, res) + mnmLeverageHtml(ctx, res) + mnmMatchupsHtml(ctx)
-    + mnmScriptsHtml(ctx, res) + `<div class="mnm-card" style="padding:10px 16px">${mnmDecidedHtml(ctx)}${notes}</div>`;
+  box.innerHTML = mnmHeroHtml(ctx, res) + mnmWindowsHtml(ctx) + mnmMatchupsHtml(ctx)
+    + mnmLeverageHtml(ctx, res) + `<div class="mnm-card" style="padding:10px 16px">${mnmDecidedHtml(ctx)}${notes}</div>`;
 }
 
 const mnmMoney = (ctx, v, signed) => {
@@ -1317,7 +1354,7 @@ function mnmHeroHtml(ctx, res) {
   const tile = (v, l, sub) => `<div class="mnm-tile"><div class="mnm-tile-v">${v}</div><div class="mnm-tile-l">${l}</div>${sub ? `<div class="mnm-tile-s">${sub}</div>` : ''}</div>`;
   const best = res.tiers[0];
   return `<div class="mnm-card">
-    <div class="mnm-label">Still to play</div>
+    <div class="mnm-label">Monday night</div>
     <div class="mnm-games">${games}</div>
     <div class="mnm-tiles">
       ${tile(mnmMoney(ctx, res.atStake), 'At stake', `${ctx.live.length} live matchup${ctx.live.length !== 1 ? 's' : ''}`)}
@@ -1373,61 +1410,129 @@ function mnmNeedHtml(ctx, row) {
   const gap = row.gap, my = row.my.rem, op = row.opp.rem;
   const names = a => a.map(p => `<b>${esc(mnmName(p))}</b>`).join(' + ');
   const n = x => Math.abs(x).toFixed(1);
+  let h;
   if (my.length && !op.length) {
-    if (gap > 0) return `Up ${n(gap)} and their side is done — ${names(my)} just can't go backwards.`;
-    let h = `${names(my)} need${my.length === 1 ? 's' : ''} <b>${n(gap)}+</b> more.`;
-    if (my.length === 1) {
-      const opts = mnmNeedOptions(ctx, my[0], row.sid, -gap + 0.05);
-      const fmt = o => esc(mnmFmtLine(o.line, mnmPos(my[0])));
-      if (opts.length && opts[0].stretch) h += `<div class="mnm-opt">Only with a career night: finishes ≈ ${fmt(opts[0])}</div>`;
-      else if (opts.length) h += `<div class="mnm-opt">≈ finishes ${opts.map(fmt).join(' — or — ')}</div>`;
-      else if (!['K', 'DEF'].includes(mnmPos(my[0]))) h += '<div class="mnm-opt">Beyond anything his projection stretches to.</div>';
-    }
-    return h;
+    h = gap > 0 ? `Up ${n(gap)} and their side is done.` : `${names(my)} need${my.length === 1 ? 's' : ''} <b>${n(gap)}+</b> more.`;
+  } else if (!my.length && op.length) {
+    h = gap <= 0 ? `Down ${n(gap)} with nobody left — only a negative night from ${names(op)} saves it.`
+      : `Up ${n(gap)}. Hold ${names(op)} under <b>${n(gap)}</b> more.`;
+  } else {
+    h = gap >= 0
+      ? `Up ${n(gap)}. ${names(op)} can outscore ${names(my)} by up to <b>${n(gap)}</b> the rest of the way.`
+      : `${names(my)} must outscore ${names(op)} by <b>${n(gap)}+</b> the rest of the way.`;
   }
-  if (!my.length && op.length) {
-    if (gap <= 0) return `Down ${n(gap)} with nobody left — only a negative night from ${names(op)} saves it.`;
-    let h = `Up ${n(gap)}. Hold ${names(op)} under <b>${n(gap)}</b> more.`;
-    if (op.length === 1) {
-      const hu = mnmHoldUnder(ctx, op[0], row.sid, gap);
-      if (hu?.tdKills) h += '<div class="mnm-opt">A single touchdown sinks you.</div>';
-      else if (hu?.line) h += `<div class="mnm-opt">Safe if he finishes under ≈ ${esc(mnmFmtLine(hu.line, mnmPos(op[0])))} with no TD.</div>`;
-    }
-    return h;
-  }
-  return gap >= 0
-    ? `Up ${n(gap)}. ${names(op)} can outscore ${names(my)} by up to <b>${n(gap)}</b> the rest of the way.`
-    : `${names(my)} must outscore ${names(op)} by <b>${n(gap)}+</b> the rest of the way.`;
+  const inRow = [...my, ...op];
+  // 2+ Monday players: one combined answer — step the biggest one's night and
+  // solve the rest against it.
+  const tr = inRow.length > 1 ? mnmTradeoff(ctx, row.id) : null;
+  if (tr) return h + mnmTradeoffHtml(ctx, tr);
+  // A lone Monday player: his window for this matchup.
+  return h + inRow.map(pid => {
+    const w = mnmRowWindow(ctx, row.id, pid);
+    if (!w) return '';
+    const range = mnmRangeHtml(w, 2);
+    const body = range || `<span class="mnm-opt">${w.max > 0 ? 'safe whatever he does' : "can't swing it on his own"}</span>`;
+    return `<div class="mnm-need-p"><span class="${my.includes(pid) ? 'mnm-good' : 'mnm-bad'}">${esc(mnmName(pid))}</span> — ${body}</div>`;
+  }).join('');
 }
 
-const MNM_SCRIPT_TITLES = {
-  miracle:   ['The Miracle', 'Most $ any simulated night won — the most ordinary box score that gets there'],
-  typical:   ['A typical night', 'The median result'],
-  nightmare: ['The Nightmare', 'The worst result, as it most plausibly happens'],
-};
-function mnmScriptsHtml(ctx, res) {
-  const lev = {}; res.leverage.forEach(l => { lev[l.pid] = l.lev; });
-  const order = res.leverage.map(l => l.pid);
-  const cards = res.scripts.map(sc => {
-    const lines = mnmScriptLines(ctx, sc.sample), scores = mnmScriptScores(ctx, sc.sample, lines);
-    const [title, sub] = MNM_SCRIPT_TITLES[sc.label];
-    const boxRows = order.map(pid => `<div class="mnm-box-row ${lev[pid] > 0 ? 'for' : lev[pid] < 0 ? 'against' : ''}">
-      <b>${esc(mnmName(pid))}</b><span class="mnm-box-line">${esc(mnmFmtLine(lines[pid], mnmPos(pid))) || '—'}</span></div>`).join('');
-    const results = [...sc.results].sort((a, b) => b.row.weight - a.row.weight).map(({ row, o }) => {
-      const s = scores[row.id], cls = ['l', 't', 'w'][o];
-      return `<div class="mnm-res"><span><span class="${cls}">${'LTW'[o]}</span> ${esc(row.name)}</span><span>${s.my.toFixed(1)}–${s.opp.toFixed(1)}${ctx.unit === '$' ? ` · ${mnmMoney(ctx, row.weight)}` : ''}</span></div>`;
-    }).join('');
-    const freq = sc.label === 'typical' ? `${mnmPct(sc.pAtLeast)} of sims do at least this well` : `${mnmPct(sc.freq)} of sims`;
-    return `<div class="mnm-script ${sc.label}">
-      <div class="mnm-script-title">${title}</div>
-      <div class="mnm-script-usd">${mnmMoney(ctx, sc.usd)} <span class="mnm-script-freq">· ${freq}</span></div>
-      <div class="mnm-script-freq">${sub}</div>
-      <div class="mnm-box">${boxRows}</div>${results}</div>`;
+// "If <pivot> goes … → <each other> needs …". Rows are the pivot's full-game
+// line (what he has + the rest at that pace); each cell is the other player's
+// window with the pivot pinned there and anyone else at projection.
+function mnmTradeoffHtml(ctx, tr) {
+  const pPos = mnmPos(tr.pivot);
+  const head = `<tr><th>If ${esc(mnmName(tr.pivot))} goes…</th>${tr.others.map(q =>
+    `<th class="${tr.row.my.rem.includes(q) ? 'mnm-good' : 'mnm-bad'}">${esc(mnmName(q))}${tr.row.my.rem.includes(q) ? ' needs' : ' must stay'}</th>`).join('')}</tr>`;
+  const body = tr.steps.map(st => `<tr>
+      <td><b>${esc(mnmFmtLine(st.line, pPos))}</b><span class="mnm-tr-tag">${esc(st.label)}</span></td>
+      ${st.cells.map(c => `<td>${mnmCellHtml(c.w, tr.row.my.rem.includes(c.pid))}</td>`).join('')}
+    </tr>`).join('');
+  const linked = tr.linked;
+  const note = linked.length
+    ? `<div class="mnm-opt">${linked.map(q => esc(mnmName(q))).join(', ')} share${linked.length === 1 ? 's' : ''} an offence with ${esc(mnmName(tr.pivot))} — his yards and TDs count for both.</div>` : '';
+  return `<div class="mnm-tr-wrap"><table class="mnm-tr">${head}${body}</table></div>${note}`;
+}
+
+// One window as a single cell: its most realistic TD-count row.
+function mnmCellHtml(w, mine) {
+  if (!w) return '—';
+  if (w.flat) return w.max > 0 ? '<span class="mnm-good">anything</span>'
+    : `<span class="mnm-bad">${mine ? "can't save it" : 'even a zero isn\'t enough'}</span>`;
+  if (w.flatPts) {
+    const p = e => `${e.ref.toFixed(1)} pts`;
+    return w.floor ? `under <b>${p(w.high)}</b>` : w.unbounded ? `<b>${p(w.low)}</b>+` : `<b>${p(w.low)}</b> – <b>${p(w.high)}</b>`;
+  }
+  const r = mnmRangeRows(w, 1)[0];
+  return r ? `<span class="mnm-tr-td">${r.label}</span> ${r.html}` : '—';
+}
+
+// A window as text: per TD count, the range of his full-game line that wins
+// the most. `maxRows` trims it for the compact per-matchup view.
+function mnmRangeHtml(w, maxRows) {
+  const pts = e => `${e.ref.toFixed(1)} pts`;
+  if (w.flat) return null;
+  if (w.flatPts) {
+    return w.floor && w.unbounded ? 'anything works'
+      : w.floor ? `keep him under <b>${pts(w.high)}</b>`
+      : w.unbounded ? `<b>${pts(w.low)}</b> or more`
+      : `between <b>${pts(w.low)}</b> and <b>${pts(w.high)}</b>`;
+  }
+  const head = w.floor && w.unbounded ? 'anything works' : w.floor ? 'keep him under' : w.unbounded ? 'needs' : 'sweet spot';
+  const lines = mnmRangeRows(w, maxRows)
+    .map(r => `<div class="mnm-win-k"><span>${r.label}</span>${r.html}</div>`).join('');
+  const tdNote = w.floor && !w.byK.some(r => r.k > 0) ? '<div class="mnm-opt">Any touchdown sinks it.</div>' : '';
+  return `${head}${lines}${tdNote}`;
+}
+
+// The window's per-TD-count rows as {label, html}. TD counts include what he
+// already has — a player with 1 TD in hand starts at "1 TD", never "no TD".
+// Rows past 2× his projected volume are a wish, not a target — shown only
+// when nothing more realistic gets there.
+function mnmRangeRows(w, maxRows) {
+  const pos = mnmPos(w.pid);
+  const tdKeys = pos === 'QB' ? ['pass_td'] : ['rec_td', 'rush_td'];
+  const bare = e => esc(mnmFmtLine({ ...e.line, ...Object.fromEntries(tdKeys.map(k => [k, 0])) }, pos));
+  const curTd = tdKeys.reduce((t, k) => t + (S.mnmStats?.[w.pid]?.[k] || 0), 0);
+  const real = w.byK.filter(r => r.fromZero || r.lo.t <= MNM_T_REASONABLE);
+  const show = (real.length ? real : w.byK.slice(0, 1)).slice(0, maxRows);
+  const rng = r => r.fromZero && r.toCap ? 'any line'
+    : r.fromZero ? `up to <b>${bare(r.hi)}</b>`
+    : r.toCap ? `<b>${bare(r.lo)}</b> or more`
+    : `<b>${bare(r.lo)}</b> → <b>${bare(r.hi)}</b>`;
+  return show.map(r => { const n = r.k + curTd; return { label: n ? `${n} TD` : 'no TD', html: rng(r) }; });
+}
+
+// Teammates (and the other D/ST, his kicker) whose lines move with him.
+function mnmMovesWithHtml(w, onlyIn) {
+  const ids = w.linked.filter(q => !onlyIn || onlyIn.includes(q));
+  return ids.length ? `<div class="mnm-opt">moves with him: ${ids.map(q => esc(mnmName(q))).join(', ')}</div>` : '';
+}
+
+// The actual numbers: per player, the range of his line that wins the most $
+// across every league it touches (mnmWindows). Below the window a league he
+// helps slips; above it, one he hurts does.
+function mnmWindowsHtml(ctx) {
+  const wins = mnmWindows(ctx);
+  const names = rows => rows.map(r => esc(r.name)).join(', ');
+  const rowsHtml = wins.map(w => {
+    const pos = mnmPos(w.pid);
+    const range = mnmRangeHtml(w, 3);
+    const what = range ? range.replace(/^\w/, c => c.toUpperCase())
+      : '<span class="mnm-opt">Doesn\'t swing anything if everyone else hits projection.</span>';
+    const sub = w.flat ? '' : [
+      w.wonAtBest.length ? `<span class="mnm-good">wins</span> ${names(w.wonAtBest)} (${mnmMoney(ctx, w.max)})` : `best case ${mnmMoney(ctx, w.max)}`,
+      w.lostBelow.length ? `less loses ${names(w.lostBelow)}` : '',
+      w.lostAbove.length ? `<span class="mnm-bad">more loses</span> ${names(w.lostAbove)}` : '',
+    ].filter(Boolean).join(' · ');
+    return `<div class="mnm-win pos-${pos.toLowerCase()}">
+      <span class="player-pos">${pos || '—'}</span>
+      <div style="min-width:0"><div class="mnm-lev-name">${esc(mnmName(w.pid))}</div>
+        <div class="mnm-need">${what}</div>${sub ? `<div class="mnm-lev-sub">${sub}</div>` : ''}${w.flat ? '' : mnmMovesWithHtml(w)}</div>
+      ${w.flat ? '' : `<span class="mnm-chip" style="background:${rootColor(100)}" title="Swing between his best and worst window">${mnmMoney(ctx, w.swing)}</span>`}
+    </div>`;
   }).join('');
-  const sweepNote = res.sweepP ? '' : `<div class="mnm-note">No simulated night won all ${ctx.live.length}: something you need in one league works against you in another.</div>`;
-  return `<div class="mnm-card"><div class="mnm-label">Optimal outcomes — box scores, scored in every league</div>
-    <div class="mnm-scripts">${cards}</div>${sweepNote}
-    <div class="mnm-note">Green edge = root for him, red = against. Each line is the full game (what he has already + the simulated rest), scored with each league's own settings to decide the results below it.</div></div>`;
+  return `<div class="mnm-card"><div class="mnm-label">Optimal stat lines — the numbers you need</div>${rowsHtml}
+    <div class="mnm-note">Full-game lines (what he has + the rest of the game), scored in each of his matchups with everyone else in it at projection — except a teammate in the same matchup, whose line moves with his (a Lamb TD is a Dak TD). The chip is how much $ his night swings.</div></div>`;
 }
 
 function mnmDecidedHtml(ctx) {
@@ -1442,7 +1547,9 @@ function mnmDecidedHtml(ctx) {
 }
 
 function mnmNotesHtml(ctx, bestBall) {
-  const bits = [`${ctx.sims.toLocaleString()} joint simulations of the remaining games from Sleeper's Week ${S.week} projections — a QB's yards and TDs are split among his receivers, a D/ST's INTs and points allowed are the other offence's.`];
+  const bits = [`Win % and the chips come from ${ctx.sims.toLocaleString()} simulations of Monday night off Sleeper's Week ${S.week} projections; the stat lines are exact thresholds in each league's scoring, starting from what each player already has.`];
+  if (ctx.rows.some(r => r.notMonday) || ctx.live.some(r => r.my.pend.length || r.opp.pend.length))
+    bits.push('Starters still playing before Monday count at their current score + projection.');
   if (ctx.unit === 'W') bits.push('No $ values set on these leagues, so results count matchups won — set values in Your Leagues above.');
   if (bestBall) bits.push(`${bestBall} best ball league${bestBall !== 1 ? 's' : ''} left out (their score is an optimal lineup picked after the fact).`);
   if (ctx.live.some(r => r.isEspn)) bits.push('ESPN kickers and D/ST are priced with Sleeper\'s default scoring.');
