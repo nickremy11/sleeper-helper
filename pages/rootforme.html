@@ -466,7 +466,7 @@ details.pos-group[open] > summary .pos-group-toggle { transform: rotate(90deg); 
 
 <script src="/shared-auth.js"></script>
 <script src="/shared-utils.js"></script>
-<script src="/miracle.js"></script>
+<script src="/miracle.js?v=2"></script>
 <script>
 // ── Constants ─────────────────────────────────────────────────────────────────
 const API = '/api';
@@ -768,7 +768,13 @@ async function loadMatchups() {
 
     renderGameCards();
     renderPlayersSection();
-    renderMiracle();
+    // Isolated: a Miracle failure (e.g. a stale cached /miracle.js) must not
+    // take the game cards and player list down with it.
+    try { renderMiracle(); }
+    catch (e) {
+      const box = document.getElementById('mnm-container');
+      if (box) box.innerHTML = `<div class="err-state">Monday Night Miracle failed: ${esc(e.message)}</div>`;
+    }
   } catch (e) {
     container.innerHTML = `<div class="err-state">Failed to load matchup data: ${esc(e.message)}</div>`;
   } finally {
@@ -1259,7 +1265,11 @@ function renderMiracle() {
   S.mnmRan = false;
   section.style.display = '';
 
-  if (typeof mnmBuild !== 'function') {
+  // Check every engine export this page calls, not just one: /miracle.js is
+  // cached for hours, so an older copy can be missing newer functions.
+  const MNM_NEEDS = ['mnmBuild', 'mnmRun', 'mnmIsMonday', 'mnmWindows', 'mnmRowWindow',
+                     'mnmTradeoff', 'mnmFmtLine', 'mnmGameLabel', 'mnmRemainingFrac'];
+  if (MNM_NEEDS.some(f => typeof window[f] !== 'function')) {
     box.innerHTML = '<div class="err-state">The Miracle engine (/miracle.js) didn\'t load — refresh in a minute.</div>';
     return;
   }
