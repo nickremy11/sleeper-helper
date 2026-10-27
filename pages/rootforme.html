@@ -266,6 +266,69 @@ details.pos-group[open] > summary .pos-group-toggle { transform: rotate(90deg); 
 .pos-group-count { font-family: 'Crimson Text', serif; font-size: 0.82rem; color: var(--brown-light); font-style: italic; }
 .pos-group-body { padding: 2px 12px 10px; }
 
+
+/* ── MONDAY NIGHT MIRACLE ── */
+.mnm-card {
+  background: var(--brown-dark); border: 2px solid var(--brown-mid); border-radius: 2px;
+  box-shadow: 4px 4px 0 var(--brown-mid); margin-bottom: 16px; padding: 14px 16px;
+}
+.mnm-label { font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin-bottom: 8px; }
+.mnm-games { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.mnm-game { font-family: 'Crimson Text', serif; font-size: 0.9rem; color: var(--parchment); background: rgba(255,255,255,0.05); border: 1px solid var(--brown-mid); padding: 3px 10px; border-radius: 2px; }
+.mnm-game b { font-family: 'Rye', serif; font-size: 0.6rem; letter-spacing: 0.08em; color: var(--cream); font-weight: normal; }
+.mnm-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+.mnm-tile { background: rgba(255,255,255,0.04); border: 1px solid var(--brown-mid); border-radius: 2px; padding: 8px 10px; }
+.mnm-tile-v { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 1.25rem; color: var(--cream); }
+.mnm-tile-l { font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brown-light); margin-top: 2px; }
+.mnm-tile-s { font-family: 'Crimson Text', serif; font-size: 0.8rem; font-style: italic; color: var(--brown-light); }
+.mnm-note { font-family: 'Crimson Text', serif; font-size: 0.85rem; font-style: italic; color: var(--brown-light); margin-top: 10px; }
+.mnm-good { color: var(--green-light); }
+.mnm-bad  { color: #e08080; }
+
+.mnm-lev-row { display: grid; grid-template-columns: 34px minmax(0,1fr) auto 64px; align-items: center; gap: 10px; padding: 6px 4px; border-bottom: 1px dashed rgba(255,255,255,0.07); }
+.mnm-lev-row:last-child { border-bottom: none; }
+.mnm-lev-name { font-family: 'Crimson Text', serif; font-size: 0.95rem; color: var(--parchment); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mnm-lev-sub { font-family: 'Crimson Text', serif; font-size: 0.8rem; color: var(--brown-light); white-space: normal; }
+.mnm-lev-range { font-family: 'Crimson Text', serif; font-size: 0.8rem; color: var(--brown-light); white-space: nowrap; text-align: right; }
+.mnm-chip { font-family: 'Playfair Display', serif; font-size: 0.8rem; font-weight: 700; text-align: center; padding: 2px 6px; border-radius: 3px; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.4); }
+
+.mnm-mu { padding: 10px 4px 12px; border-bottom: 1px dashed rgba(255,255,255,0.09); }
+.mnm-mu:last-child { border-bottom: none; }
+.mnm-mu-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.mnm-mu-name { font-family: 'Crimson Text', serif; font-weight: 600; font-size: 1rem; color: var(--parchment); flex: 1; min-width: 0; }
+.mnm-mu-val { font-family: 'Crimson Text', serif; color: var(--gold-light); }
+.mnm-mu-score { font-family: 'Playfair Display', serif; font-size: 0.95rem; color: var(--cream); white-space: nowrap; }
+.mnm-bar { position: relative; height: 6px; background: rgba(224,128,128,0.35); border-radius: 3px; margin: 7px 0 6px; overflow: hidden; }
+.mnm-bar > span { position: absolute; left: 0; top: 0; bottom: 0; background: var(--green-light); }
+.mnm-need { font-family: 'Crimson Text', serif; font-size: 0.92rem; color: var(--parchment); }
+.mnm-need b { color: var(--gold-light); }
+.mnm-opt { font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--brown-light); font-style: italic; margin-top: 2px; }
+.mnm-rem { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; font-family: 'Crimson Text', serif; font-size: 0.82rem; }
+.mnm-rem span { padding: 1px 7px; border-radius: 2px; }
+.mnm-rem .mine   { background: rgba(45,74,30,0.4); border: 1px solid rgba(74,122,47,0.5); color: var(--green-light); }
+.mnm-rem .theirs { background: rgba(139,26,26,0.3); border: 1px solid rgba(139,26,26,0.5); color: #e08080; }
+
+.mnm-scripts { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 12px; }
+.mnm-script { background: rgba(255,255,255,0.04); border: 1px solid var(--brown-mid); border-radius: 2px; padding: 10px 12px; }
+.mnm-script.miracle { border-color: var(--gold); }
+.mnm-script-title { font-family: 'Rye', serif; font-size: 0.62rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold); }
+.mnm-script-usd { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 1.15rem; color: var(--cream); margin: 2px 0; }
+.mnm-script-freq { font-family: 'Crimson Text', serif; font-size: 0.8rem; font-style: italic; color: var(--brown-light); }
+.mnm-box { margin: 8px 0; }
+.mnm-box-row { font-family: 'Crimson Text', serif; font-size: 0.86rem; color: var(--parchment); padding: 3px 0 3px 8px; border-left: 2px solid var(--brown-mid); margin-bottom: 3px; }
+.mnm-box-row.for     { border-left-color: var(--green-light); }
+.mnm-box-row.against { border-left-color: #e08080; }
+.mnm-box-row b { font-weight: 600; color: var(--cream); }
+.mnm-box-line { display: block; color: var(--brown-light); font-size: 0.82rem; }
+.mnm-res { font-family: 'Crimson Text', serif; font-size: 0.84rem; display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; color: var(--parchment); }
+.mnm-res .w { color: var(--green-light); font-weight: 600; }
+.mnm-res .l { color: #e08080; font-weight: 600; }
+.mnm-res .t { color: var(--gold-light); font-weight: 600; }
+@media (max-width: 640px) {
+  .mnm-lev-row { grid-template-columns: 34px minmax(0,1fr) 60px; }
+  .mnm-lev-range { display: none; }
+}
+
 /* ── MOBILE ── */
 @media (max-width: 640px) {
   .banner-inner { padding: 16px 16px 14px; gap: 10px; }
@@ -368,6 +431,12 @@ details.pos-group[open] > summary .pos-group-toggle { transform: rotate(90deg); 
     </div>
   </div>
 
+  <!-- Monday Night Miracle -->
+  <div id="mnm-section" style="display:none; margin-bottom: 28px;">
+    <div class="section-head"><h2>Monday Night Miracle</h2><div class="section-head-line"></div></div>
+    <div id="mnm-container"></div>
+  </div>
+
   <!-- Games -->
   <div id="games-section" style="display:none">
     <div class="section-head"><h2>NFL Games</h2><div class="section-head-line"></div></div>
@@ -391,6 +460,7 @@ details.pos-group[open] > summary .pos-group-toggle { transform: rotate(90deg); 
 
 <script src="/shared-auth.js"></script>
 <script src="/shared-utils.js"></script>
+<script src="/miracle.js"></script>
 <script>
 // ── Constants ─────────────────────────────────────────────────────────────────
 const API = '/api';
@@ -418,6 +488,11 @@ const S = {
   playerMap:       {},
   nflGames:        [],
   matchupResults:  [],
+  mnmStats:        null, // Sleeper week stats {pid: line} — Monday Night Miracle
+  mnmProj:         null, // Sleeper week projections {pid: line}
+  mnmCtx:          null, // mnmBuild() output for the last load
+  mnmRes:          null, // mnmRun() output
+  mnmToken:        0,    // drops a stale sim when Load is pressed again mid-run
   espnSkips:       [], // [{name, reason}] — ESPN leagues that dropped out of a load
   processedGames:  null, // cached after loadMatchups
   activeDetail:    null, // { gameKey, pid }
@@ -665,12 +740,18 @@ async function loadMatchups() {
     const contenderLeagues = S.leagues.filter(lg => S.prefs[lg.league_id]?.contender);
 
     // Players must load before matchups so ESPN name lookup can resolve Sleeper IDs
-    const [players, nflGames] = await Promise.all([
+    // Week stats + projections only feed the Monday Night Miracle; a failure
+    // there degrades that section, never the rest of the page.
+    const [players, nflGames, stats, proj] = await Promise.all([
       fetch(`${API}/players`).then(r => r.json()),
       fetch(`${API}/espn/games?week=${S.week}&season=${S.season}`).then(r => r.ok ? r.json() : []),
+      fetch(`${API}/sleeper/stats/nfl/regular/${S.season}/${S.week}`).then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch(`${API}/sleeper/projections/nfl/regular/${S.season}/${S.week}`).then(r => r.ok ? r.json() : null).catch(() => null),
     ]);
     S.playerMap = players || {};
     S.nflGames  = nflGames || [];
+    S.mnmStats  = stats || {};
+    S.mnmProj   = proj;
 
     S.espnSkips = [];
     const matchupResults = await Promise.all(contenderLeagues.map(lg => fetchLeagueMatchup(lg)));
@@ -681,6 +762,7 @@ async function loadMatchups() {
 
     renderGameCards();
     renderPlayersSection();
+    renderMiracle();
   } catch (e) {
     container.innerHTML = `<div class="err-state">Failed to load matchup data: ${esc(e.message)}</div>`;
   } finally {
@@ -706,14 +788,14 @@ async function fetchLeagueMatchup(league) {
     m.matchup_id === myMatchup.matchup_id && m.roster_id !== myRoster.roster_id
   );
 
-  return { league, myMatchup, oppMatchup: oppMatchup || null };
+  return { league, myMatchup, oppMatchup: oppMatchup || null, scoring: league.scoring_settings || {} };
 }
 
 async function fetchEspnLeagueMatchup(league) {
   try {
     const espnId = league.league_id.replace('espn_', '');
     const r = await fetch(
-      `${API}/espn/fantasy/${espnId}?view=mMatchup&view=mRoster&view=mTeam&scoringPeriodId=${S.week}&seasonId=${S.season}`,
+      `${API}/espn/fantasy/${espnId}?view=mMatchup&view=mRoster&view=mTeam&view=mSettings&scoringPeriodId=${S.week}&seasonId=${S.season}`,
       { credentials: 'include' }
     );
     if (!r.ok) return espnSkip(league, `ESPN returned HTTP ${r.status}`);
@@ -750,11 +832,15 @@ async function fetchEspnLeagueMatchup(league) {
     }
 
     const parseRoster = (team) => {
-      if (!team) return { starters: [], players_points: {} };
+      if (!team) return { starters: [], players_points: {}, total: 0 };
       const starters = [], players_points = {};
+      let total = 0;
       for (const entry of (team.roster?.entries || [])) {
         // 20 = Bench, 21 = IR — skip non-starters
         if (entry.lineupSlotId === 20 || entry.lineupSlotId === 21) continue;
+        // Summed before the id match below can drop the player — the team's
+        // score has to include starters we can't resolve to a Sleeper id.
+        total += entry.playerPoolEntry?.appliedStatTotal ?? 0;
         const pData = entry.playerPoolEntry?.playerPoolEntry?.player
                    || entry.playerPoolEntry?.player;
         if (!pData) continue;
@@ -770,15 +856,17 @@ async function fetchEspnLeagueMatchup(league) {
         starters.push(pid);
         players_points[pid] = entry.playerPoolEntry?.appliedStatTotal ?? 0;
       }
-      return { starters, players_points };
+      return { starters, players_points, total };
     };
 
     const my  = parseRoster(myTeam);
     const opp = parseRoster(oppTeam);
     return {
       league,
-      myMatchup:  { starters: my.starters,  players: my.starters,  players_points: my.players_points  },
-      oppMatchup: oppTeam ? { starters: opp.starters, players: opp.starters, players_points: opp.players_points } : null,
+      myMatchup:  { starters: my.starters,  players: my.starters,  players_points: my.players_points, points: my.total },
+      oppMatchup: oppTeam ? { starters: opp.starters, players: opp.starters, players_points: opp.players_points, points: opp.total } : null,
+      // Offence only — miracle.js layers Sleeper's default K/DEF rules on top.
+      scoring: (typeof crParseEspnScoring === 'function' ? crParseEspnScoring(d.settings)?.scoring : null) || {},
     };
   } catch (e) { return espnSkip(league, e.message || 'request failed'); }
 }
@@ -1144,6 +1232,221 @@ function scoreLabel(score) {
 function toggleGame(key) {
   const card = document.getElementById(`gc-${key}`);
   card.classList.toggle('open');
+}
+
+// ── Monday Night Miracle ──────────────────────────────────────────────────────
+// What each still-live contending matchup needs from the players left to play,
+// and which box scores for those games win the most $. The engine is
+// /miracle.js; this is only plumbing + rendering. Best ball is left out: its
+// score is an optimal lineup re-picked after the fact, not a sum of starters.
+async function renderMiracle() {
+  const section = document.getElementById('mnm-section');
+  const box     = document.getElementById('mnm-container');
+  if (!section || !box) return;
+  section.style.display = '';
+  const token = ++S.mnmToken;
+  S.mnmCtx = S.mnmRes = null;
+
+  if (typeof mnmBuild !== 'function') {
+    box.innerHTML = '<div class="err-state">The Miracle engine (/miracle.js) didn\'t load — refresh in a minute.</div>';
+    return;
+  }
+  if (!S.mnmProj) {
+    box.innerHTML = `<div class="err-state">Couldn't load Week ${S.week} projections, which the simulation runs on.</div>`;
+    return;
+  }
+
+  let bestBall = 0;
+  const matchups = [];
+  for (const r of S.matchupResults) {
+    if (r.league.settings?.best_ball === 1) { bestBall++; continue; }
+    const side = m => m && {
+      total: typeof m.points === 'number' ? m.points
+        : (m.starters || []).reduce((t, pid) => t + (m.players_points?.[pid] || 0), 0),
+      starters: m.starters || [], pts: m.players_points || {},
+    };
+    matchups.push({
+      id: r.league.league_id, name: r.league.name || 'League',
+      value: +(S.prefs[r.league.league_id]?.value) || 0,
+      scoring: r.scoring || r.league.scoring_settings || {}, isEspn: r.league.source === 'espn',
+      my: side(r.myMatchup), opp: side(r.oppMatchup),
+    });
+  }
+
+  const ctx = mnmBuild({ matchups, games: S.nflGames, players: S.playerMap, proj: S.mnmProj, stats: S.mnmStats });
+  S.mnmCtx = ctx;
+  const notes = mnmNotesHtml(ctx, bestBall);
+
+  if (!ctx.live.length) {
+    const anyLeft = S.nflGames.some(g => mnmRemainingFrac(g) > 0);
+    box.innerHTML = `<div class="mnm-card"><div class="mnm-need">${anyLeft
+      ? 'Every contending matchup is already settled — nobody left to play can change one.'
+      : `Week ${S.week} is in the books — no games left to root for.`}</div>${mnmDecidedHtml(ctx)}${notes}</div>`;
+    return;
+  }
+
+  box.innerHTML = `<div class="mnm-card"><div class="loading-state"><div class="spinner"></div>
+    <span id="mnm-prog">Simulating ${ctx.sims.toLocaleString()} versions of the rest of the week…</span></div></div>`;
+  const res = await mnmRun(ctx, f => {
+    const el = document.getElementById('mnm-prog');
+    if (el && token === S.mnmToken) el.textContent = `Simulating… ${Math.round(f * 100)}%`;
+  });
+  if (token !== S.mnmToken) return;   // a newer Load started while this ran
+  S.mnmRes = res;
+  box.innerHTML = mnmHeroHtml(ctx, res) + mnmLeverageHtml(ctx, res) + mnmMatchupsHtml(ctx)
+    + mnmScriptsHtml(ctx, res) + `<div class="mnm-card" style="padding:10px 16px">${mnmDecidedHtml(ctx)}${notes}</div>`;
+}
+
+const mnmMoney = (ctx, v, signed) => {
+  const sign = signed && v > 0 ? '+' : signed && v < 0 ? '−' : '';
+  const a = Math.abs(v);
+  const n = a >= 100 || Number.isInteger(a) ? Math.round(a).toLocaleString() : a.toFixed(1);
+  return ctx.unit === '$' ? `${sign}$${n}` : `${sign}${n} W`;
+};
+const mnmPct = p => p >= 0.995 ? '>99%' : p > 0 && p < 0.005 ? '<1%' : `${Math.round(p * 100)}%`;
+function mnmName(pid) {
+  const p = S.playerMap[pid];
+  if (p?.position === 'DEF') return `${pid} D/ST`;
+  return p?.full_name || `${p?.first_name || ''} ${p?.last_name || ''}`.trim() || pid;
+}
+const mnmPos = pid => (S.playerMap[pid]?.position || '').toUpperCase();
+
+function mnmHeroHtml(ctx, res) {
+  const games = ctx.relGames.map(g =>
+    `<span class="mnm-game"><b>${esc(g.away)} @ ${esc(g.home)}</b> · ${esc(mnmGameLabel(g))}</span>`).join('');
+  const tile = (v, l, sub) => `<div class="mnm-tile"><div class="mnm-tile-v">${v}</div><div class="mnm-tile-l">${l}</div>${sub ? `<div class="mnm-tile-s">${sub}</div>` : ''}</div>`;
+  const best = res.tiers[0];
+  return `<div class="mnm-card">
+    <div class="mnm-label">Still to play</div>
+    <div class="mnm-games">${games}</div>
+    <div class="mnm-tiles">
+      ${tile(mnmMoney(ctx, res.atStake), 'At stake', `${ctx.live.length} live matchup${ctx.live.length !== 1 ? 's' : ''}`)}
+      ${tile(mnmMoney(ctx, res.expected), 'Expected', `middle 80%: ${mnmMoney(ctx, res.p10)}–${mnmMoney(ctx, res.p90)}`)}
+      ${tile(mnmMoney(ctx, best.usd), 'Best case', `${mnmPct(best.count / ctx.sims)} of sims`)}
+      ${tile(mnmPct(res.sweepP), 'Clean sweep', res.sweepP ? 'win every live matchup' : 'never happened — see below')}
+    </div>
+  </div>`;
+}
+
+// Leverage = E[$ | he beats his median] − E[$ | he doesn't]. The Root For Me
+// score says whose side he's on; this says how much his night is worth.
+function mnmLeverageHtml(ctx, res) {
+  const nameOf = id => esc(ctx.live.find(r => r.id === id)?.name || id);
+  const max = Math.max(1e-9, ...res.leverage.map(l => Math.abs(l.lev)));
+  const rows = res.leverage.map(l => {
+    const pos = mnmPos(l.pid);
+    const score = Math.round(50 + 50 * l.lev / max);
+    const sub = [
+      l.mine.length ? `<span class="mnm-good">yours in</span> ${l.mine.map(nameOf).join(', ')}` : '',
+      l.theirs.length ? `<span class="mnm-bad">theirs in</span> ${l.theirs.map(nameOf).join(', ')}` : '',
+    ].filter(Boolean).join(' · ');
+    return `<div class="mnm-lev-row pos-${pos.toLowerCase()}">
+      <span class="player-pos">${pos || '—'}</span>
+      <div style="min-width:0"><div class="mnm-lev-name">${esc(mnmName(l.pid))}</div><div class="mnm-lev-sub">${sub}</div></div>
+      <span class="mnm-lev-range" title="Middle 80% of his simulated nights, full-PPR points">${l.p10.toFixed(0)}–${l.p90.toFixed(0)} pts</span>
+      <span class="mnm-chip" style="background:${rootColor(score)}" title="Expected ${ctx.unit === '$' ? '$' : 'wins'} when he beats his median night vs. when he doesn't">${mnmMoney(ctx, l.lev, true)}</span>
+    </div>`;
+  }).join('');
+  return `<div class="mnm-card"><div class="mnm-label">Who to root for — what a big night is worth</div>${rows}
+    <div class="mnm-note">The chip is how much more you win, on average, when he beats his median night than when he doesn't. Negative = root against.</div></div>`;
+}
+
+function mnmMatchupsHtml(ctx) {
+  const rows = [...ctx.live].sort((a, b) => b.weight - a.weight || Math.abs(a.gap) - Math.abs(b.gap)).map(row => {
+    const chip = (pid, cls) => `<span class="${cls}">${esc(mnmName(pid))} · ${((cls === 'mine' ? row.my : row.opp).pts[pid] || 0).toFixed(1)}</span>`;
+    return `<div class="mnm-mu">
+      <div class="mnm-mu-head">
+        <span class="mnm-mu-name">${esc(row.name)}${row.isEspn ? ' <span class="player-count">ESPN</span>' : ''}</span>
+        ${ctx.unit === '$' ? `<span class="mnm-mu-val">${mnmMoney(ctx, row.weight)}</span>` : ''}
+        <span class="mnm-mu-score">${row.my.now.toFixed(1)} – ${row.opp.now.toFixed(1)}</span>
+        <span class="mnm-chip" style="background:${rootColor(Math.round(row.winP * 100))}">${mnmPct(row.winP)}</span>
+      </div>
+      <div class="mnm-bar"><span style="width:${(row.winP * 100).toFixed(1)}%"></span></div>
+      <div class="mnm-need">${mnmNeedHtml(ctx, row)}</div>
+      <div class="mnm-rem">${row.my.rem.map(p => chip(p, 'mine')).join('')}${row.opp.rem.map(p => chip(p, 'theirs')).join('')}</div>
+    </div>`;
+  }).join('');
+  return `<div class="mnm-card"><div class="mnm-label">What each matchup needs</div>${rows}</div>`;
+}
+
+function mnmNeedHtml(ctx, row) {
+  const gap = row.gap, my = row.my.rem, op = row.opp.rem;
+  const names = a => a.map(p => `<b>${esc(mnmName(p))}</b>`).join(' + ');
+  const n = x => Math.abs(x).toFixed(1);
+  if (my.length && !op.length) {
+    if (gap > 0) return `Up ${n(gap)} and their side is done — ${names(my)} just can't go backwards.`;
+    let h = `${names(my)} need${my.length === 1 ? 's' : ''} <b>${n(gap)}+</b> more.`;
+    if (my.length === 1) {
+      const opts = mnmNeedOptions(ctx, my[0], row.sid, -gap + 0.05);
+      const fmt = o => esc(mnmFmtLine(o.line, mnmPos(my[0])));
+      if (opts.length && opts[0].stretch) h += `<div class="mnm-opt">Only with a career night: finishes ≈ ${fmt(opts[0])}</div>`;
+      else if (opts.length) h += `<div class="mnm-opt">≈ finishes ${opts.map(fmt).join(' — or — ')}</div>`;
+      else if (!['K', 'DEF'].includes(mnmPos(my[0]))) h += '<div class="mnm-opt">Beyond anything his projection stretches to.</div>';
+    }
+    return h;
+  }
+  if (!my.length && op.length) {
+    if (gap <= 0) return `Down ${n(gap)} with nobody left — only a negative night from ${names(op)} saves it.`;
+    let h = `Up ${n(gap)}. Hold ${names(op)} under <b>${n(gap)}</b> more.`;
+    if (op.length === 1) {
+      const hu = mnmHoldUnder(ctx, op[0], row.sid, gap);
+      if (hu?.tdKills) h += '<div class="mnm-opt">A single touchdown sinks you.</div>';
+      else if (hu?.line) h += `<div class="mnm-opt">Safe if he finishes under ≈ ${esc(mnmFmtLine(hu.line, mnmPos(op[0])))} with no TD.</div>`;
+    }
+    return h;
+  }
+  return gap >= 0
+    ? `Up ${n(gap)}. ${names(op)} can outscore ${names(my)} by up to <b>${n(gap)}</b> the rest of the way.`
+    : `${names(my)} must outscore ${names(op)} by <b>${n(gap)}+</b> the rest of the way.`;
+}
+
+const MNM_SCRIPT_TITLES = {
+  miracle:   ['The Miracle', 'Most $ any simulated night won — the most ordinary box score that gets there'],
+  typical:   ['A typical night', 'The median result'],
+  nightmare: ['The Nightmare', 'The worst result, as it most plausibly happens'],
+};
+function mnmScriptsHtml(ctx, res) {
+  const lev = {}; res.leverage.forEach(l => { lev[l.pid] = l.lev; });
+  const order = res.leverage.map(l => l.pid);
+  const cards = res.scripts.map(sc => {
+    const lines = mnmScriptLines(ctx, sc.sample), scores = mnmScriptScores(ctx, sc.sample, lines);
+    const [title, sub] = MNM_SCRIPT_TITLES[sc.label];
+    const boxRows = order.map(pid => `<div class="mnm-box-row ${lev[pid] > 0 ? 'for' : lev[pid] < 0 ? 'against' : ''}">
+      <b>${esc(mnmName(pid))}</b><span class="mnm-box-line">${esc(mnmFmtLine(lines[pid], mnmPos(pid))) || '—'}</span></div>`).join('');
+    const results = [...sc.results].sort((a, b) => b.row.weight - a.row.weight).map(({ row, o }) => {
+      const s = scores[row.id], cls = ['l', 't', 'w'][o];
+      return `<div class="mnm-res"><span><span class="${cls}">${'LTW'[o]}</span> ${esc(row.name)}</span><span>${s.my.toFixed(1)}–${s.opp.toFixed(1)}${ctx.unit === '$' ? ` · ${mnmMoney(ctx, row.weight)}` : ''}</span></div>`;
+    }).join('');
+    const freq = sc.label === 'typical' ? `${mnmPct(sc.pAtLeast)} of sims do at least this well` : `${mnmPct(sc.freq)} of sims`;
+    return `<div class="mnm-script ${sc.label}">
+      <div class="mnm-script-title">${title}</div>
+      <div class="mnm-script-usd">${mnmMoney(ctx, sc.usd)} <span class="mnm-script-freq">· ${freq}</span></div>
+      <div class="mnm-script-freq">${sub}</div>
+      <div class="mnm-box">${boxRows}</div>${results}</div>`;
+  }).join('');
+  const sweepNote = res.sweepP ? '' : `<div class="mnm-note">No simulated night won all ${ctx.live.length}: something you need in one league works against you in another.</div>`;
+  return `<div class="mnm-card"><div class="mnm-label">Optimal outcomes — box scores, scored in every league</div>
+    <div class="mnm-scripts">${cards}</div>${sweepNote}
+    <div class="mnm-note">Green edge = root for him, red = against. Each line is the full game (what he has already + the simulated rest), scored with each league's own settings to decide the results below it.</div></div>`;
+}
+
+function mnmDecidedHtml(ctx) {
+  const done = ctx.rows.filter(r => r.decided && r.opp);
+  if (!done.length) return '';
+  const won = done.filter(r => r.gap > 0), lost = done.filter(r => r.gap < 0);
+  const list = a => a.map(r => esc(r.name)).join(', ');
+  return `<div class="mnm-note" style="font-style:normal">Already settled:
+    ${won.length ? `<span class="mnm-good">${won.length} won${ctx.unit === '$' ? ` (${mnmMoney(ctx, ctx.decidedWon)})` : ''}</span> — ${list(won)}` : ''}
+    ${won.length && lost.length ? ' · ' : ''}
+    ${lost.length ? `<span class="mnm-bad">${lost.length} lost${ctx.unit === '$' ? ` (${mnmMoney(ctx, ctx.decidedLost)})` : ''}</span> — ${list(lost)}` : ''}</div>`;
+}
+
+function mnmNotesHtml(ctx, bestBall) {
+  const bits = [`${ctx.sims.toLocaleString()} joint simulations of the remaining games from Sleeper's Week ${S.week} projections — a QB's yards and TDs are split among his receivers, a D/ST's INTs and points allowed are the other offence's.`];
+  if (ctx.unit === 'W') bits.push('No $ values set on these leagues, so results count matchups won — set values in Your Leagues above.');
+  if (bestBall) bits.push(`${bestBall} best ball league${bestBall !== 1 ? 's' : ''} left out (their score is an optimal lineup picked after the fact).`);
+  if (ctx.live.some(r => r.isEspn)) bits.push('ESPN kickers and D/ST are priced with Sleeper\'s default scoring.');
+  return `<div class="mnm-note">${bits.join(' ')}</div>`;
 }
 
 // ── Color ─────────────────────────────────────────────────────────────────────

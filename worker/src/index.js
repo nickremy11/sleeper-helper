@@ -515,7 +515,9 @@ async function handleESPNScoreboard(request, env, url) {
 async function handleESPNGames(request, env, url) {
   const week   = url.searchParams.get('week')   || '1';
   const season = url.searchParams.get('season') || '2025';
-  const key    = `espn_games_${season}_${week}`;
+  // v2: rows carry state/period/clock/scores (Monday Night Miracle needs to
+  // know how much of each game is left). Bumped so a cached v1 row can't hide them.
+  const key    = `espn_games_v2_${season}_${week}`;
 
   const cached = await env.SLEEPER_KV.getWithMetadata(key, 'text');
   if (cached.value) {
@@ -541,7 +543,15 @@ async function handleESPNGames(request, env, url) {
         const awayComp = competition.competitors.find(c => c.homeAway === 'away');
         let home = homeComp ? (ESPN_TO_SLEEPER[homeComp.team?.abbreviation] || homeComp.team?.abbreviation) : teams[0];
         let away = awayComp ? (ESPN_TO_SLEEPER[awayComp.team?.abbreviation] || awayComp.team?.abbreviation) : teams[1];
-        games.push({ home, away, kickoff });
+        const st = competition.status || event.status || {};
+        games.push({
+          home, away, kickoff,
+          state:  st.type?.state || null,          // 'pre' | 'in' | 'post'
+          period: st.period ?? null,
+          clock:  st.displayClock || null,
+          homeScore: homeComp?.score != null ? Number(homeComp.score) : null,
+          awayScore: awayComp?.score != null ? Number(awayComp.score) : null,
+        });
       }
     }
   }
