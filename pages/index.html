@@ -925,23 +925,24 @@ const WV = {
   sortCol:            'adjVal',
   sortDir:            -1,
   skippedCount:       0,
-  projPpg:            {},  // {nameLower: ppg} — from projections.ffhistorian.com (logged-in users)
+  weekProj:           {},  // {pid: projected stat line} — Sleeper, upcoming week (wvLoadWeekProj)
+  projWeek:           null,
 };
 
-// Fetch the user's saved projections (name → PPG). No-op if not logged in.
-async function wvLoadProjections() {
-  if (!S.auth) { WV.projPpg = {}; return; }
+// Sleeper projections for the upcoming week (the week the Lineup Checker sets —
+// lsWeekFor, i.e. `leg`, not display_week). Reuses LU.proj when that tab already
+// loaded the same week. Never throws; an empty map just leaves the column blank.
+async function wvLoadWeekProj() {
+  const st = await getNflState();
+  const w  = lsWeekFor(st) || 1;
+  if (LU._cache?.week === w && LU.proj && Object.keys(LU.proj).length) {
+    WV.weekProj = LU.proj; WV.projWeek = w; return;
+  }
   try {
-    const r = await fetch('/api/projections/ppg?season=2026', { credentials: 'include' });
-    if (!r.ok) { WV.projPpg = {}; return; }
-    const map = await r.json();
-    const lc = {};
-    for (const [name, ppg] of Object.entries(map || {})) lc[name.toLowerCase()] = ppg;
-    WV.projPpg = lc;
-    // Refresh the table if it's already rendered (fetch may resolve after build)
-    const wrap = document.getElementById('wv-table-wrap');
-    if (wrap && WV.loaded) wrap.innerHTML = wvRenderTable();
-  } catch { WV.projPpg = {}; }
+    const pr = await api('/projections/nfl/regular/' + (st?.season || new Date().getFullYear()) + '/' + w);
+    WV.weekProj = (pr && typeof pr === 'object') ? pr : {};
+  } catch { WV.weekProj = {}; }
+  WV.projWeek = w;
 }
 
 // Alternate NFL team abbreviations (other sites/CSVs) → Sleeper's canonical form.
@@ -2571,8 +2572,8 @@ async function loadWaiverData() {
     if (statEl) statEl.textContent = 'Loading players…';
     await loadPlayers();
 
-    // Projected PPG (logged-in users) — runs in parallel, never blocks waivers
-    wvLoadProjections();
+    // Upcoming-week projections for the dynasty table — overlaps the fetches below.
+    const projP = WV.mode === 'dynasty' ? wvLoadWeekProj() : null;
 
     // FC values — reuse RS.fcMap if Rostership already fetched it
     if (Object.keys(RS.fcMap).length > 0) {
@@ -2630,6 +2631,7 @@ async function loadWaiverData() {
     const statsP = ppgLoadStats();
     await Promise.all(eligible.map(lg => wvLoadLeagueRosters(lg)));
     await statsP;
+    await projP;
 
     // Redraft renders one league at a time (wvGridHtml); dynasty stays a
     // cross-league table and needs the row build.
@@ -2906,23 +2908,35 @@ function wvRenderTable() {
   if (!WV.rows.length) return `<div class="empty-state"><p>No available players found above value threshold (100)</p></div>`;
 
   const isDyn = true;
-  // Attach projected PPG (name-keyed) so it's sortable and renderable
-  const hasProj = Object.keys(WV.projPpg).length > 0;
-  for (const row of WV.rows) row.projPpg = WV.projPpg[(row.name || '').toLowerCase()] ?? null;
+  // Season PPG + next week's projection, both scored with Sleeper's stock PPR
+  // table — a cross-league row has no single league to score to. Attached to
+  // the rows so they sort like any column.
+  const ss = PPG_PPR_SCORING;
+  for (const row of WV.rows) {
+    row.seasonPpg = playerSeasonPpg(row.pid, ss);
+    const line = WV.weekProj[row.pid];
+    row.weekProj = line ? lsComputeProjPts(line, ss) : null;
+  }
+  const ssLabel = 'Sleeper default PPR';
 
   const cols = isDyn
     ? [{ key:'name', label:'Player' }, { key:'pos', label:'Pos' }, { key:'adjVal', label:'FC Value' }, { key:'availCount', label:'# Available' }]
     : [{ key:'rank', label:'Rank' }, { key:'name', label:'Player' }, { key:'pos', label:'Pos' }, { key:'availCount', label:'# Available' }];
-  if (hasProj) cols.push({ key:'projPpg', label:'Proj PPG' });
+  cols.push({ key:'seasonPpg', label:'PPG', title:`Season-to-date points per game played — ${ssLabel}` });
+  cols.push({ key:'weekProj', label: WV.projWeek ? `Wk ${WV.projWeek} Proj` : 'Proj', title:`Sleeper projection for week ${WV.projWeek ?? '?'} — ${ssLabel}` });
 
-  const projCell = row => hasProj
-    ? `<td style="font-family:'Playfair Display',serif;color:var(--cream);">${row.projPpg != null ? row.projPpg.toFixed(1) : '<span style="color:var(--brown-light);">—</span>'}</td>`
-    : '';
+  const dash = '<span style="color:var(--brown-light);">—</span>';
+  const numCell = (v, tip) => `<td style="font-family:'Playfair Display',serif;color:var(--cream);"${tip ? ` title="${esc(tip)}"` : ''}>${v != null ? v.toFixed(1) : dash}</td>`;
+  const projCell = row => {
+    const gp = playerSeasonGp(row.pid);
+    return numCell(row.seasonPpg, row.seasonPpg != null ? `${gp} game${gp === 1 ? '' : 's'} played · ${ssLabel}` : '')
+         + numCell(row.weekProj, '');
+  };
 
   const mkTh = c => {
     const sorted = WV.sortCol === c.key;
     const arr    = sorted ? (WV.sortDir > 0 ? '▲' : '▼') : '⇅';
-    return `<th onclick="wvSort('${c.key}')" class="${sorted?'rs-sorted':''}">${c.label}<span class="rs-arr">${arr}</span></th>`;
+    return `<th onclick="wvSort('${c.key}')" class="${sorted?'rs-sorted':''}"${c.title ? ` title="${esc(c.title)}"` : ''}>${c.label}<span class="rs-arr">${arr}</span></th>`;
   };
 
   const sorted = [...WV.rows].sort((a, b) => {
