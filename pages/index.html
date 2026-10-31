@@ -373,6 +373,9 @@ footer a:hover { color: var(--gold); }
    things: one is settled, one is a gap in what the sheet covers. */
 .rg-unranked { display: flex; gap: 18px; align-items: baseline; flex-wrap: wrap;
                margin-bottom: 12px; font-size: 0.8rem; color: var(--brown-dark); }
+.rg-apply { display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+             margin-bottom: 12px; font-size: 0.8rem; color: var(--brown-dark); }
+.rg-ap-grp b { color: var(--brown-mid); font-weight: 700; margin-right: 4px; }
 .rg-un-grp { display: inline-flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
 .rg-un-grp b { color: var(--brown-mid); font-weight: 700; }
 .rg-un-p em { font-style: normal; color: var(--brown-light); margin-left: 3px; }
@@ -5749,7 +5752,7 @@ function lsSwapBarHtml() {
 // lineup, red where he's rostered but doesn't. Which lineup "starting" means is
 // the mode toggle — the point is to flip between ranks and projections and see
 // where the two disagree.
-const RG = { leagueIdx: 0, mode: 'current', _sig: null };   // mode: current | ranks | projections
+const RG = { leagueIdx: 0, mode: 'current', _sig: null, msg: null };   // mode: current | ranks | projections; msg: {leagueId, color, text}
 // K and DEF are still parsed and still drive the optimizer — they're dropped from
 // the GRID only, where two short columns cost as much width as a long one and
 // neither is a call you make by scanning a list.
@@ -5781,8 +5784,94 @@ async function renderRanksGrid(force = false) {
   catch (e) { setC(errHtml(e)); }
 }
 
-function rgSetLeague(v) { RG.leagueIdx = parseInt(v, 10) || 0; rgDraw(); }
-function rgSetMode(m)   { RG.mode = m; rgDraw(); }
+function rgSetLeague(v) { RG.leagueIdx = parseInt(v, 10) || 0; RG.msg = null; rgDraw(); }
+function rgSetMode(m)   { RG.mode = m; RG.msg = null; rgDraw(); }
+
+// Optimize + Apply from the grid. The proposal is the exact one the lineup card
+// would show (lsProposal, cached on the fixture) and the write is the card's own
+// lsPutStarters, so the two views can never disagree about what "optimal" means
+// or how it gets set. In Current mode the bar is just a status line per source
+// whose button switches the highlight to that proposal; in an optimal mode it
+// lists what changes and offers the Apply.
+function rgApplyBarHtml(fix) {
+  if (!fix) return '';
+  const msg = RG.msg && RG.msg.leagueId === fix.leagueId
+    ? `<span style="color:${RG.msg.color};">${esc(RG.msg.text)}</span>` : '';
+  const pc  = lsPtsCtx(fix);
+  const tot = list => list.reduce((t, p) => t + lsPlayerPts(p, pc), 0);
+  const diff = src => {
+    const prop = lsProposal(fix, src);
+    if (!prop) return null;
+    const cur = fix.starters.map(String), nxt = prop.map(String);
+    const curSet = new Set(cur), nxtSet = new Set(nxt);
+    return {
+      prop,
+      changed: nxt.some((p, i) => p !== cur[i]),
+      ins:  nxt.filter(p => p && p !== '0' && !curSet.has(p)),
+      outs: cur.filter(p => p && p !== '0' && !nxtSet.has(p)),
+      d:    tot(prop) - tot(fix.starters),
+    };
+  };
+  const label = src => src === 'ranks' ? 'ranking sheet' : 'projections';
+
+  if (RG.mode === 'current') {
+    const part = src => {
+      if (!lsCanOptimize(src)) return '';
+      const x = diff(src);
+      if (!x) return '';
+      const m = src === 'ranks' ? 'ranks' : 'projections';
+      return x.changed
+        ? `<button class="ghost-btn" style="font-size:0.5rem;" onclick="rgSetMode('${m}')">⚡ Optimize with ${src === 'ranks' ? 'Ranks' : 'Projections'}</button>`
+        : `<span style="color:#5fae5f;">✓ optimal by ${label(src)}</span>`;
+    };
+    const parts = [part('ranks'), part('projections')].filter(Boolean);
+    if (!parts.length && !msg) return '';
+    return `<div class="rg-apply">${parts.join('')}${msg}</div>`;
+  }
+
+  const src = RG.mode === 'ranks' ? 'ranks' : 'projections';
+  if (!lsCanOptimize(src)) {
+    return `<div class="rg-apply"><span style="color:#c0504d;">${src === 'ranks'
+      ? 'No ranking sheet uploaded for week ' + LU.week + '.' : 'No projections for week ' + LU.week + ' yet.'}</span></div>`;
+  }
+  const x = diff(src);
+  if (!x) return '';
+  if (!x.changed) return `<div class="rg-apply"><span style="color:#5fae5f;">✓ Already optimal by ${label(src)}</span>${msg}</div>`;
+  const names = list => list.map(p => esc(lsPlayerName(p))).join(', ');
+  // Same rule as the card: the delta is always in projections, so in ranks mode
+  // a negative number is the sheet and the projections disagreeing, not a bug.
+  const dc = x.d >= 0.05 ? '#5fae5f' : x.d <= -0.05 ? '#d08a30' : 'var(--brown-light)';
+  const swaps = x.ins.length || x.outs.length
+    ? `<span class="rg-ap-grp"><b>In</b> ${names(x.ins) || '—'}</span><span class="rg-ap-grp"><b>Out</b> ${names(x.outs) || '—'}</span>`
+    : `<span class="rg-ap-grp">same players, slots reshuffled</span>`;
+  const act = fix._espn ? '<span style="color:var(--brown-light);">set it in ESPN</span>'
+    : lsCanWrite() ? `<button class="setup-btn" style="padding:5px 12px;font-size:0.6rem;" onclick="rgApply()">Apply this lineup</button>`
+    : '<span style="color:var(--brown-light);">preview only — <a href="/myprofile">add a Sleeper token</a> to apply</span>';
+  return `<div class="rg-apply">
+      <span class="rg-ap-grp"><b>By ${label(src)}</b></span>${swaps}
+      <span class="rg-ap-grp" style="color:${dc};">${x.d >= 0 ? '+' : ''}${x.d.toFixed(1)} proj</span>
+      ${act}${msg}
+    </div>`;
+}
+
+async function rgApply() {
+  const fix = LU.lineups[RG.leagueIdx];
+  if (!fix || fix._espn || !lsCanWrite() || RG.mode === 'current') return;
+  const prop = lsProposal(fix, RG.mode === 'ranks' ? 'ranks' : 'projections');
+  if (!prop) return;
+  RG.msg = { leagueId: fix.leagueId, color: 'var(--brown-light)', text: 'applying…' };
+  rgDraw();
+  try {
+    const ok = await lsPutStarters(fix, prop);
+    RG.msg = { leagueId: fix.leagueId, color: ok ? '#5fae5f' : '#d08a30',
+               text: ok ? '✓ lineup set' : '⚠ saved but Sleeper returned a different lineup' };
+    // Back to the live lineup, so the green you now see is what Sleeper has.
+    RG.mode = 'current';
+  } catch (e) {
+    RG.msg = { leagueId: fix.leagueId, color: '#c0504d', text: '✗ ' + (e.message || 'failed') };
+  }
+  if (S.tab === 'ranksgrid') rgDraw();
+}
 
 // The players counted as starting under the selected mode, in slot order. The
 // grid only needs the set, but the unranked-starters line needs them in lineup
@@ -6033,7 +6122,7 @@ function rgDraw() {
     return main && stack ? `<div class="rg-stack">${main}${stack}</div>` : main || stack;
   }).join('')}</div>`;
 
-  setC(`<div>${head}${controls}${rgUnrankedHtml(fix, RG.mode, inGrid)}${grid}</div>`);
+  setC(`<div>${head}${controls}${rgApplyBarHtml(fix)}${rgUnrankedHtml(fix, RG.mode, inGrid)}${grid}</div>`);
 }
 
 // ── 4d. ROI Tracker ──────────────────────────────────────────────────────────
