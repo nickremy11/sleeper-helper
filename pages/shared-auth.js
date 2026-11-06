@@ -10,8 +10,11 @@
 
   // ── State ─────────────────────────────────────────────────────────────────────
 
-  // When hosted on the apex domain, API calls must be cross-origin to helper.
-  var _apiBase  = (location.hostname === 'ffhistorian.com') ? 'https://helper.ffhistorian.com/api' : '/api';
+  // Accounts live on helper. Any other host (the apex site, My Ranks) calls it
+  // cross-origin, and its profile links have to name it too.
+  var _onHelper = location.hostname === 'helper.ffhistorian.com' || location.hostname.endsWith('.pages.dev');
+  var _siteBase = _onHelper ? '' : 'https://helper.ffhistorian.com';
+  var _apiBase  = _siteBase ? _siteBase + '/api' : '/api';
   var _user     = null;
   var _chipId   = 'auth-chip';
   var _loginCbs  = [];
@@ -157,8 +160,8 @@
       container.innerHTML =
         '<span class="sh-chip sh-signed-in">' +
           'Signed in as <strong style="margin-left:4px;">' + displayName + '</strong>' +
-          '<a href="/myprofile" class="sh-profile-link">View my profile</a>' +
-          (_user.is_admin ? '<a href="/admin" class="sh-profile-link">Site Lead</a>' : '') +
+          '<a href="' + _siteBase + '/myprofile" class="sh-profile-link">View my profile</a>' +
+          (_user.is_admin ? '<a href="' + _siteBase + '/admin" class="sh-profile-link">Site Lead</a>' : '') +
           '<a href="#" class="sh-signout-link" onclick="SharedAuth._logout();return false;">Sign out</a>' +
         '</span>';
     } else {

@@ -450,14 +450,13 @@
     </div>
   </div>
 
+  <script src="/shared-core.js"></script>
   <script src="/shared-utils.js"></script>
   <script src="/shared-auth.js"></script>
   <script>
   'use strict';
 
-  const API = window.location.hostname === 'ffhistorian.com'
-    ? 'https://helper.ffhistorian.com/api'
-    : '/api';
+  const API = SH_API;
 
   // Named scoring preset (projections.ffhistorian.com) whose calc_ppg backs the
   // "My PPG" column below — tied to this league's scoring, not auto-detected.
@@ -613,8 +612,8 @@
   // Fallback for when headers don't match any known alias: guess the Player
   // and $ Value columns from the shape of the data itself, using a sample of
   // rows. Only fills in columns not already claimed by a header match.
-  function detectColumnsFromContent(lines, col) {
-    const sample = lines.slice(1, 21).map(l => splitCSVLine(l));
+  function detectColumnsFromContent(rows, col) {
+    const sample = rows.slice(1, 21);
     const numCols = sample.reduce((m, r) => Math.max(m, r.length), 0);
     const claimed = new Set(Object.values(col));
 
@@ -689,13 +688,10 @@
   }
 
   function parseCSV(text) {
-    // Strip UTF-8 BOM that Excel sometimes adds
-    const clean = text.replace(/^﻿/, '');
-    const lines = clean.split(/\r?\n/).filter(l => l.trim());
-    if (lines.length < 2) throw new Error('CSV must have a header row and at least one data row.');
+    const rows = csvTable(text);
+    if (rows.length < 2) throw new Error('CSV must have a header row and at least one data row.');
 
-    // Use the same quoted-aware splitter for headers
-    const rawHeaders = splitCSVLine(lines[0]);
+    const rawHeaders = rows[0];
     const col = {};
     rawHeaders.forEach((h, i) => {
       const key = matchHeader(h);
@@ -703,7 +699,7 @@
     });
 
     const headerCol = { ...col };
-    detectColumnsFromContent(lines, col);
+    detectColumnsFromContent(rows, col);
 
     if (col.player === undefined) {
       const found = rawHeaders.map(h => `"${h}"`).join(', ');
@@ -715,8 +711,8 @@
     }
 
     const players = [];
-    for (let i = 1; i < lines.length; i++) {
-      const parts = splitCSVLine(lines[i]);
+    for (let i = 1; i < rows.length; i++) {
+      const parts = rows[i];
       const name = (parts[col.player] || '').trim();
       if (!name) continue;
       const draftedFor = col.draftedFor !== undefined ? parseNumOpt(parts[col.draftedFor]) : NaN;
@@ -742,21 +738,7 @@
   }
 
   // ESPN proTeamId → NFL abbreviation (Sleeper-compatible). Same table as
-  // index.html's ESPN_TEAM_MAP — duplicated here since auction.html shares no
-  // state with index.html (see "Change auction tracker" notes in CLAUDE.md).
-  const ESPN_TEAM_MAP = {1:'ATL',2:'BUF',3:'CHI',4:'CIN',5:'CLE',6:'DAL',7:'DEN',8:'DET',9:'GB',10:'TEN',11:'IND',12:'KC',13:'LV',14:'LAR',15:'MIA',16:'MIN',17:'NE',18:'NO',19:'NYG',20:'NYJ',21:'PHI',22:'ARI',23:'PIT',24:'LAC',25:'SF',26:'SEA',27:'TB',28:'WAS',29:'CAR',30:'JAX',33:'BAL',34:'HOU'};
 
-  function splitCSVLine(line) {
-    const out = []; let cur = ''; let inQ = false;
-    for (let i = 0; i < line.length; i++) {
-      const c = line[i];
-      if (c === '"') { inQ = !inQ; }
-      else if (c === ',' && !inQ) { out.push(cur); cur = ''; }
-      else { cur += c; }
-    }
-    out.push(cur);
-    return out.map(s => s.trim());
-  }
 
   function normPos(raw) {
     if (!raw) return null;
@@ -770,17 +752,6 @@
     return null;
   }
 
-  function normalizePlayerName(name) {
-    let key = name.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
-    // stripNameSuffix/NAME_ALIASES/applyNameAlias come from shared-utils.js:
-    // - stripNameSuffix drops a trailing "Jr"/"Sr"/"II"-"V" so "Michael Pittman Jr"
-    //   matches "Michael Pittman" (punctuation-only mismatches like Tre'/Tre,
-    //   A.J./AJ are already handled by the strip above).
-    // - applyNameAlias resolves nicknames Sleeper's full_name doesn't share
-    //   (e.g. Kenneth/Kenny Gainwell).
-    if (typeof stripNameSuffix === 'function') key = stripNameSuffix(key);
-    return (typeof applyNameAlias === 'function') ? applyNameAlias(key) : key;
-  }
 
   // ─── Starting lineup requirements ──────────────────────────────────────────────
   // {QB,RB,WR,TE,FLEX,K,DST} starter counts. Drives each team's "Needs" hint.
@@ -808,11 +779,11 @@
   // ESPN's mSettings → settings.rosterSettings.lineupSlotCounts is keyed by
   // lineup slot ID (per ESPN's stable, widely-used numbering: see the espn-api
   // project's POSITION_MAP). Bench (20), IR (21), and IDP slots are dropped.
-  const ESPN_LINEUP_SLOT_MAP = { 0: 'QB', 2: 'RB', 3: 'FLEX', 4: 'WR', 5: 'FLEX', 6: 'TE', 16: 'DST', 17: 'K', 23: 'FLEX' };
+  const ESPN_LINEUP_SLOT_MAP = { QB: 'QB', RB: 'RB', WR: 'WR', TE: 'TE', FLEX: 'FLEX', WRRB_FLEX: 'FLEX', REC_FLEX: 'FLEX', DEF: 'DST', K: 'K' };
   function lineupReqsFromEspnSlotCounts(slotCounts) {
     const req = { QB: 0, RB: 0, WR: 0, TE: 0, FLEX: 0, K: 0, DST: 0 };
     Object.entries(slotCounts || {}).forEach(([slotId, count]) => {
-      const pos = ESPN_LINEUP_SLOT_MAP[Number(slotId)];
+      const pos = ESPN_LINEUP_SLOT_MAP[ESPN_SLOT[Number(slotId)]];
       if (pos) req[pos] += (parseInt(count) || 0);
     });
     return req;
@@ -829,7 +800,7 @@
 
   function buildNameMap() {
     const m = new Map();
-    A.players.forEach((p, i) => m.set(normalizePlayerName(p.name), i));
+    A.players.forEach((p, i) => m.set(normName(p.name), i));
     A._nameMap = m;
   }
 
@@ -1649,7 +1620,7 @@
       return `
       <div class="auc-team-card">
         <div class="auc-team-name-row">
-          <div class="auc-team-name" title="Click to rename" style="cursor:pointer;" onclick="renameTeam('${esc(t.id)}')">${esc(t.name)} <span style="font-size:0.7rem;color:var(--brown-light);font-family:'Crimson Text',serif;">✎</span></div>
+          <div class="auc-team-name" title="Click to rename" style="cursor:pointer;" onclick="renameTeam(${jsArg(t.id)})">${esc(t.name)} <span style="font-size:0.7rem;color:var(--brown-light);font-family:'Crimson Text',serif;">✎</span></div>
           <div class="auc-team-budget">$${spent} / <span>$${remaining}</span> left</div>
         </div>
         <div class="auc-budget-bar">
@@ -1845,7 +1816,7 @@
         let pIdx = A.players.findIndex(p => p._espnId === espnId);
         if (pIdx < 0 && pick.playerPoolEntry) {
           const fullName = pick.playerPoolEntry?.onTeamId !== undefined
-            ? normalizePlayerName(pick.playerPoolEntry?.player?.fullName || '')
+            ? normName(pick.playerPoolEntry?.player?.fullName || '')
             : null;
           if (fullName) pIdx = A._nameMap?.get(fullName) ?? -1;
         }
@@ -1981,7 +1952,7 @@
         const pl = entry.player || entry;
         const name = pl.fullName;
         if (!name) return;
-        const idx = A._nameMap?.get(normalizePlayerName(name));
+        const idx = A._nameMap?.get(normName(name));
         if (idx == null || idx < 0) return;
         const p = A.players[idx];
 
@@ -2020,10 +1991,10 @@
       const entries = Object.entries(map || {});
       if (!entries.length) { A._myPpgNote = 'My PPG: no saved projections found'; renderMain(); return; }
 
-      const byNorm = new Map(entries.map(([name, ppg]) => [normalizePlayerName(name), ppg]));
+      const byNorm = new Map(entries.map(([name, ppg]) => [normName(name), ppg]));
       let filled = 0;
       A.players.forEach(p => {
-        const ppg = byNorm.get(normalizePlayerName(p.name));
+        const ppg = byNorm.get(normName(p.name));
         if (ppg != null) { p.myPpg = ppg; filled++; }
       });
 
@@ -2171,7 +2142,7 @@
         let pIdx = sleeperId ? A.players.findIndex(p => p._sleeperId && p._sleeperId === sleeperId) : -1;
         if (pIdx < 0) {
           const sp = A._sleeperPlayers?.get(sleeperId);
-          if (sp) pIdx = A._nameMap?.get(normalizePlayerName(sp.name)) ?? -1;
+          if (sp) pIdx = A._nameMap?.get(normName(sp.name)) ?? -1;
         }
         if (pIdx < 0) return;
 

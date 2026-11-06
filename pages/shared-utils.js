@@ -1,45 +1,3 @@
-function esc(s) {
-  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-// Manual aliases for players whose commonly-used name differs from Sleeper's
-// own full_name (nicknames, not punctuation — normName()/normalizePlayerName()
-// already strip punctuation before this runs). Keys/values are pre-normalized:
-// lowercase, no punctuation. Add entries here as new mismatches surface.
-const NAME_ALIASES = {
-  'kenneth gainwell': 'kenny gainwell',
-  'nicholas singleton': 'nick singleton',
-  'bam knight': 'zonovan knight',
-};
-function applyNameAlias(key) {
-  return NAME_ALIASES[key] || key;
-}
-
-// Drop a trailing generational suffix ("Jr", "Sr", "II"..."V") so sources that
-// include it ("Michael Pittman Jr") match sources that don't ("Michael Pittman").
-// Must run after punctuation is already stripped (so "Jr." has become "jr").
-// Shared by normName() below and auction.html's normalizePlayerName().
-function stripNameSuffix(key) {
-  return key.replace(/\s+(jr|sr|ii|iii|iv|v)$/i, '');
-}
-
-// Normalize a player name for matching across sources. Collapses punctuation/spacing
-// differences so "Amon-Ra St Brown"/"Amon-Ra St. Brown", "CJ"/"C.J.", "AJ"/"A.J.",
-// "Tre Harris"/"Tre' Harris" match, drops a trailing "Jr"/"Sr"/"II"-"V" suffix
-// (see stripNameSuffix above), then resolves known nickname aliases (see
-// NAME_ALIASES above). Both the name→id index and every lookup against it MUST
-// go through this.
-function normName(s) {
-  const key = (s || '')
-    .toLowerCase()
-    .replace(/[.,'’‘]/g, '')  // drop periods/commas/apostrophes: "st." → "st", "c.j." → "cj", "tre'" → "tre"
-    .replace(/\s+/g, ' ')     // collapse whitespace
-    .trim();
-  return applyNameAlias(stripNameSuffix(key));
-}
-function errHtml(e) { return `<div class="err-state">Error: ${esc(e.message)}</div>`; }
-function loading(msg = 'Loading…') { return `<div class="loading-state"><div class="spinner"></div>${esc(msg)}</div>`; }
-
 // ════════════════════════════════════════════════════════════════════════════
 // Per-player and per-roster scoring helpers.
 //
@@ -65,6 +23,17 @@ function loading(msg = 'Loading…') { return `<div class="loading-state"><div c
 // 2 QB if SF (else 1), (RB/WR/TE slots + 1) each, then the best remaining
 // flex-eligible players up to (starter_count + 3).
 // ════════════════════════════════════════════════════════════════════════════
+
+// Which positions can fill a flex-type roster slot, and the order to fill them:
+// narrowest first, so a wide slot never takes a player only a narrow one could use.
+const SLOT_ELIG = {
+  FLEX:       ['RB', 'WR', 'TE'],
+  WRRB_FLEX:  ['RB', 'WR'],
+  REC_FLEX:   ['WR', 'TE'],
+  SUPER_FLEX: ['QB', 'RB', 'WR', 'TE'],
+  IDP_FLEX:   ['DL', 'LB', 'DB'],
+};
+const FLEX_ORDER = ['WRRB_FLEX', 'REC_FLEX', 'FLEX', 'SUPER_FLEX', 'IDP_FLEX'];
 
 function crNormPos(raw) {
   if (!raw) return null;
@@ -219,7 +188,7 @@ async function crLoadProjectionData(opts) {
 // numeric statId, not field names. This maps the ones that matter for
 // QB/RB/WR/TE valuation onto the SAME field names Sleeper's own scoring_settings
 // (and its player stat-projection lines) use, so crScoreSleeper()/
-// lsComputeProjPts() work on ESPN leagues completely unchanged — no separate
+// computeProjPts() work on ESPN leagues completely unchanged — no separate
 // ESPN scoring formula needed. Kicker/D-ST/return-TD categories are
 // intentionally not mapped: crScoreRoster only ever scores QB/RB/WR/TE, and an
 // unmapped statId is a silent no-op (crScoreSleeper only applies a
@@ -286,7 +255,7 @@ function crParseEspnScoring(settings) {
   // number. Sleeper's own scoring_settings AND its projection stat lines both use
   // a `bonus_rec_te` key, so putting it back into `scoring` under that name is
   // all any consumer needs — crScoreSleeper already reads it, and
-  // lsComputeProjPts is a plain dot product over the stat line. Still returned
+  // computeProjPts is a plain dot product over the stat line. Still returned
   // separately as well, since the FantasyCalc value multipliers in analyzer.html
   // / trade-analyzer.html want the raw bonus, not a scoring key.
   if (bonusRecTe) scoring.bonus_rec_te = bonusRecTe;
@@ -299,21 +268,78 @@ function crParseEspnScoring(settings) {
 // rosterPositions array Sleeper's own roster_positions field already is
 // (['QB','RB','RB',...,'FLEX','BN',...]) — used by both pages' playoff-odds
 // lineup optimizers. D/ST(16) and K(17) slots are dropped — this app never
-// scores kickers/defense in either sim (rsNormPos() drops them for Sleeper
+// scores kickers/defense in either sim (crNormPos() drops them for Sleeper
 // too), so it's a pre-existing, consistent gap, not new for ESPN.
-const ESPN_SLOT_TO_ROSTER_POS = {
-  0: 'QB', 2: 'RB', 4: 'WR', 6: 'TE',
-  3: 'FLEX', 5: 'FLEX', 23: 'FLEX', 7: 'SUPER_FLEX',
-  20: 'BN', 21: 'IR',
+// ESPN defaultPositionId → position (5 = kicker, 16 = D/ST).
+const ESPN_POS_MAP = { 1:'QB', 2:'RB', 3:'WR', 4:'TE', 5:'K', 6:'DL', 7:'LB', 8:'DB', 9:'DL', 10:'DL', 12:'LB', 13:'LB', 14:'DB', 15:'DB', 16:'DEF' };
+// ESPN proTeamId → NFL abbreviation (Sleeper-compatible).
+const ESPN_TEAM_MAP = {1:'ATL',2:'BUF',3:'CHI',4:'CIN',5:'CLE',6:'DAL',7:'DEN',8:'DET',9:'GB',10:'TEN',11:'IND',12:'KC',13:'LV',14:'LAR',15:'MIA',16:'MIN',17:'NE',18:'NO',19:'NYG',20:'NYJ',21:'PHI',22:'ARI',23:'PIT',24:'LAC',25:'SF',26:'SEA',27:'TB',28:'WAS',29:'CAR',30:'JAX',33:'BAL',34:'HOU'};
+
+const ESPN_SLOT = {
+  0:'QB', 2:'RB', 4:'WR', 6:'TE',
+  3:'WRRB_FLEX', 5:'REC_FLEX', 23:'FLEX', 7:'SUPER_FLEX',
+  16:'DEF', 17:'K',
+  8:'DL', 9:'DL', 11:'DL', 10:'LB', 12:'DB', 13:'DB', 14:'DB', 15:'IDP_FLEX',
+  20:'BN', 21:'IR', 24:'IR',
 };
-function espnRosterPositionsFromSlotCounts(lineupSlotCounts) {
+// One roster position per slot in ESPN's lineupSlotCounts. `fold` maps a slot name
+// to what the tool wants, or to null to leave it out.
+function espnSlotList(lineupSlotCounts, fold = n => n) {
   const out = [];
   for (const [slotId, count] of Object.entries(lineupSlotCounts || {})) {
-    const label = ESPN_SLOT_TO_ROSTER_POS[Number(slotId)];
+    const label = ESPN_SLOT[Number(slotId)] && fold(ESPN_SLOT[Number(slotId)]);
     if (!label) continue;
     for (let i = 0; i < count; i++) out.push(label);
   }
   return out;
+}
+const ESPN_ODDS_SLOT = { QB:'QB', RB:'RB', WR:'WR', TE:'TE', FLEX:'FLEX', WRRB_FLEX:'FLEX', REC_FLEX:'FLEX', SUPER_FLEX:'SUPER_FLEX', BN:'BN', IR:'IR' };
+function espnRosterPositionsFromSlotCounts(lineupSlotCounts) {
+  return espnSlotList(lineupSlotCounts, n => ESPN_ODDS_SLOT[n]);
+}
+
+// The team in an ESPN league that belongs to this SWID. Co-owners count, and ESPN
+// doesn't always agree with itself on the case of the {GUID}.
+function espnIsMyTeam(team, swid) {
+  const me = String(swid || '').toUpperCase();
+  if (!me || !team) return false;
+  return String(team.primaryOwner || '').toUpperCase() === me
+      || (team.owners || []).some(o => String(o).toUpperCase() === me);
+}
+function espnMyTeam(teams, swid) {
+  return (teams || []).find(t => espnIsMyTeam(t, swid)) || null;
+}
+
+// ── League format ───────────────────────────────────────────────────────────
+function leagueIsDynasty(lg) {
+  if (!lg || lg.source === 'espn' || String(lg.league_id || '').startsWith('espn_')) return false;
+  return lg.settings?.type === 2;
+}
+// "Dynasty", "Keeper", "Redraft" — best ball and ESPN are each caller's own wording.
+function leagueFormatLabel(lg) {
+  if (leagueIsDynasty(lg)) return 'Dynasty';
+  return lg?.source !== 'espn' && lg?.settings?.type === 1 ? 'Keeper' : 'Redraft';
+}
+
+// The Format / Mode / Type pill groups on the Weekly Recap and Live Matchups.
+const LEAGUE_SCOPE_FILTERS = [
+  { key: 'fmt',    lbl: 'Format', opts: [['all', 'All'], ['dynasty', 'Dynasty'], ['redraft', 'Redraft']] },
+  { key: 'role',   lbl: 'Mode',   opts: [['all', 'All'], ['contender', 'Contenders'], ['rebuilder', 'Rebuilders']] },
+  { key: 'lineup', lbl: 'Type',   opts: [['all', 'All'], ['lineup', 'Lineup'], ['bestball', 'Best Ball']] },
+];
+
+// Contender/rebuilder prefs as stored: the server's copy when signed in, this
+// browser's otherwise. {lgId: {value, contender}}. What an untagged league means
+// differs per page, so each caller applies its own default.
+async function loadStoredLeaguePrefs(signedIn) {
+  if (signedIn) {
+    try {
+      const r = await fetch(`${SH_API}/rootforme/prefs`, { credentials: 'include' });
+      if (r.ok) return (await r.json()).prefs || {};
+    } catch {}
+    return {};
+  }
+  try { return JSON.parse(localStorage.getItem('rfm_prefs') || '{}'); } catch { return {}; }
 }
 
 // ESPN has no per-week matchup endpoint like Sleeper's — mMatchupScore returns
@@ -669,7 +695,7 @@ async function crLoadLeagueOwnership({ apiBase, leagueId, espn, espnId, season, 
       if (!r.ok) return null;
       const d = await r.json();
       for (const team of (d.teams || [])) {
-        const isMine = !!swid && team.primaryOwner === swid;
+        const isMine = espnIsMyTeam(team, swid);
         for (const entry of (team.roster?.entries || [])) {
           const pl = entry.playerPoolEntry?.playerPoolEntry?.player || entry.playerPoolEntry?.player;
           if (!pl) continue;
@@ -740,8 +766,8 @@ const MRB = {
 // definition of the id scheme instead of drifting apart.
 async function mrbFetchSources() {
   const [dataRes, setsRes] = await Promise.all([
-    fetch(MRG_MYRANKS_API + '/api/myranks/data',  { credentials: 'include' }),
-    fetch(MRG_MYRANKS_API + '/api/myranks/sets',  { credentials: 'include' }),
+    fetch(MYRANKS_API + '/api/myranks/data',  { credentials: 'include' }),
+    fetch(MYRANKS_API + '/api/myranks/sets',  { credentials: 'include' }),
   ]);
   if (!dataRes.ok || !setsRes.ok) throw new Error('Could not load your My Ranks sets — sign in at myranks.ffhistorian.com');
   const [data, sets] = await Promise.all([dataRes.json(), setsRes.json()]);
@@ -768,7 +794,7 @@ async function mrbFetchRanksFor(id, sources) {
   const url = id.startsWith('primary:') ? `/api/myranks/data?owner_id=${encodeURIComponent(id.slice(8))}`
             : id.startsWith('set:')     ? `/api/myranks/sets/${id.slice(4)}/data`
             :                             `/api/myranks/sets/${id}/data`;
-  const r = await fetch(MRG_MYRANKS_API + url, { credentials: 'include' });
+  const r = await fetch(MYRANKS_API + url, { credentials: 'include' });
   if (!r.ok) throw new Error('Could not load that ranking set');
   return (await r.json()).rankings || [];
 }
@@ -883,6 +909,20 @@ function mrbBadge(pid, opts = {}) {
 // The <select> of ranking sets. `onchange` is the name of a page-level handler
 // taking the new id; the page owns the reload + redraw because only it knows
 // what to redraw.
+// The "My Ranks: [set]" bar above a roster. The host passes its change handler's name.
+function mrbSourceBarHtml(onchange) {
+  if (!MRB.sources?.length) return '';
+  const n = Object.keys(MRB.index || {}).length;
+  const note = MRB.error ? esc(MRB.error)
+    : !n ? 'no players in this set matched'
+    : `${n} ranked${MRB.unmatched ? ` · ${MRB.unmatched} unmatched` : ''} · ${MRB.format} board`;
+  return `<div class="mrb-bar" style="margin:8px 0 2px;">
+    <label>My Ranks</label>
+    ${mrbSourceSelectHtml(onchange)}
+    <span class="mrb-note">${note}</span>
+  </div>`;
+}
+
 function mrbSourceSelectHtml(onchange, cls = 'mrb-select') {
   if (!MRB.sources?.length) return '';
   const opts = MRB.sources.map(s =>
@@ -929,7 +969,6 @@ function mrbSourceSelectHtml(onchange, cls = 'mrb-select') {
 // (see above) — the delta is driven by which tier you put a player in, and
 // against FP ROS a slice of it is FantasyCalc's tiebreak rather than your view.
 
-const MRG_MYRANKS_API   = 'https://myranks.ffhistorian.com';
 const MRG_POS_COLS      = [['QB', 1], ['RB', 2], ['WR', 2], ['TE', 1]];   // [position, columns]
 const MRG_POS_KEYS      = new Set(['QB', 'RB', 'WR', 'TE']);
 const MRG_TRACK_MIN     = 170;   // px a track needs before names start ellipsizing
@@ -1091,7 +1130,7 @@ async function mrgEnsureLeagues() {
     MRG.leagues = MRG.leagues.map(lg => lg.id
       ? lg
       : { id: lg.league_id, name: lg.name || lg.league_id, espn: lg.source === 'espn',
-          dynasty: lg.source !== 'espn' && lg.settings?.type === 2 });
+          dynasty: leagueIsDynasty(lg) });
     return;
   }
   const out  = [];

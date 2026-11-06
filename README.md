@@ -36,7 +36,8 @@ and stored tokens.
 ```
 sleeper-helper/
 ├── pages/                  ← static, served by Cloudflare Pages (no build step)
-│   ├── index.html              ← main app (all tabs)
+│   ├── index.html              ← main app shell
+│   ├── app/                    ← main app code, one script per tab
 │   ├── analyzer.html           ← League Analyzer
 │   ├── trade-analyzer.html     ← Trade Analyzer
 │   ├── auction.html            ← Auction Draft Tracker
@@ -44,11 +45,18 @@ sleeper-helper/
 │   ├── rootforme.html          ← Root For Me
 │   ├── myprofile.html          ← account + ESPN settings
 │   ├── admin.html              ← Site Lead dashboard
+│   ├── shared-core.js          ← helpers every site loads
 │   ├── shared-auth.js          ← auth chip + sign-in modal
-│   └── shared-utils.js         ← shared helpers + contender scoring
+│   ├── shared-utils.js         ← scoring, ESPN helpers, My Ranks grid
+│   ├── league-engine.js        ← lineups, playoff odds, picks
+│   └── shared-styles.css       ← tokens + shared components
+├── tests/                  ← node --test tests/*.test.js
 ├── worker/
 │   ├── src/index.js        ← Cloudflare Worker (API routes, KV cache, proxies)
+│   ├── src/http.js         ← CORS + response helpers
 │   ├── src/auth.js         ← accounts, sessions, OTP email
+│   ├── src/eliteffl.js     ← Elite FFL routes
+│   ├── src/projections.js  ← Projections routes
 │   ├── src/dispersal.js    ← Durable Object for dispersal rooms
 │   └── schema.sql          ← D1 schema
 └── .github/workflows/

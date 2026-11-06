@@ -20,33 +20,26 @@
 .main { max-width: 960px; margin: 0 auto; padding: 28px 24px 80px; }
 
 /* ── SECTION HEAD ── */
-.section-head { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
-.section-head h2 { font-family: 'Rye', serif; font-size: 1rem; color: var(--brown-dark); white-space: nowrap; }
-.section-head-line { flex: 1; height: 1px; background: linear-gradient(to right, var(--gold), transparent); }
+.section-head { margin-bottom: 16px; }
+.section-head h2 { font-size: 1rem; }
 
 /* ── SETUP CARD ── */
 .setup-card {
   background: var(--brown-dark); border: 2px solid var(--brown-mid); border-radius: 2px;
   padding: 18px 22px; margin-bottom: 22px; box-shadow: 4px 4px 0 var(--brown-mid);
 }
-.setup-label { font-family: 'Rye', serif; font-size: 0.55rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--gold); display: block; margin-bottom: 7px; }
+.setup-label { font-family: 'Rye', serif; font-size: 0.55rem; margin-bottom: 7px; }
 .setup-row { display: flex; gap: 8px; }
-.setup-input {
-  flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--brown-mid);
-  color: var(--cream); font-family: 'Crimson Text', serif; font-size: 1rem;
-  padding: 7px 12px; border-radius: 2px; outline: none; transition: border-color 0.2s;
-}
-.setup-input:focus { border-color: var(--gold); }
-.setup-input::placeholder { color: rgba(255,255,255,0.25); font-style: italic; }
+.setup-input { font-family: 'Crimson Text', serif; padding: 7px 12px; }
+
 .setup-btn {
   background: var(--green); border: 2px solid var(--gold); color: var(--gold-light);
   font-family: 'Rye', serif; font-size: 0.55rem; letter-spacing: 0.18em; text-transform: uppercase;
   padding: 0 16px; cursor: pointer; border-radius: 2px; transition: background 0.2s, color 0.2s; white-space: nowrap;
 }
-.setup-btn:hover { background: var(--gold); color: var(--brown-dark); }
-.setup-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.setup-status { font-family: 'Crimson Text', serif; font-size: 0.85rem; font-style: italic; color: var(--brown-light); margin-top: 5px; min-height: 16px; }
-.setup-status.ok  { color: var(--green-light); }
+
+.setup-status { font-family: 'Crimson Text', serif; margin-top: 5px; min-height: 16px; }
+
 .setup-status.err { color: #e05050; }
 
 /* ── WEEK CONTROLS ── */
@@ -265,7 +258,6 @@ details.pos-group[open] > summary .pos-group-toggle { transform: rotate(90deg); 
 .pos-group-label { font-family: 'Rye', serif; font-size: 0.58rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); }
 .pos-group-count { font-family: 'Crimson Text', serif; font-size: 0.82rem; color: var(--brown-light); font-style: italic; }
 .pos-group-body { padding: 2px 12px 10px; }
-
 
 /* ── MONDAY NIGHT MIRACLE ── */
 .mnm-card {
@@ -513,12 +505,13 @@ details.pos-group[open] > summary .pos-group-toggle { transform: rotate(90deg); 
 </main>
 
 <script src="/shared-auth.js"></script>
+<script src="/shared-core.js"></script>
 <script src="/shared-utils.js"></script>
 <script src="/miracle.js?v=2"></script>
 <script src="/matchup-tracker.js?v=1"></script>
 <script>
 // ── Constants ─────────────────────────────────────────────────────────────────
-const API = '/api';
+const API = SH_API;
 
 const POS_RANK = {
   QB:0, RB:1, WR:2, TE:3,
@@ -535,7 +528,7 @@ const S = {
   auth:            null,
   username:        '',
   userId:          '',
-  season:          '2025',
+  season:          String(new Date().getFullYear()),
   week:            1,
   leagues:         [],
   espnSettings:    null,
@@ -622,7 +615,7 @@ async function loadLeagues() {
 
     const stateRes = await fetch(`${API}/sleeper/state/nfl`);
     const nflState = await stateRes.json();
-    S.season = nflState.season || '2025';
+    S.season = nflState.season || S.season;
     S.week   = nflState.display_week || nflState.week || 1;
 
     const lgRes = await fetch(`${API}/sleeper/user/${S.userId}/leagues/nfl/${S.season}`);
@@ -658,10 +651,6 @@ async function loadEspnLeagues() {
   } catch {}
 }
 
-// ESPN proTeamId → NFL abbreviation (Sleeper-compatible). Duplicated from
-// index.html — this page shares no state with it.
-const ESPN_TEAM_MAP = {1:'ATL',2:'BUF',3:'CHI',4:'CIN',5:'CLE',6:'DAL',7:'DEN',8:'DET',9:'GB',10:'TEN',11:'IND',12:'KC',13:'LV',14:'LAR',15:'MIA',16:'MIN',17:'NE',18:'NO',19:'NYG',20:'NYJ',21:'PHI',22:'ARI',23:'PIT',24:'LAC',25:'SF',26:'SEA',27:'TB',28:'WAS',29:'CAR',30:'JAX',33:'BAL',34:'HOU'};
-
 async function loadOneEspnLeague(leagueId) {
   try {
     const r = await fetch(`${API}/espn/fantasy/${leagueId}?view=mSettings&view=mTeam&seasonId=${S.season}`, { credentials: 'include' });
@@ -677,16 +666,7 @@ async function loadOneEspnLeague(leagueId) {
 
 // ── Prefs ─────────────────────────────────────────────────────────────────────
 async function loadPrefs() {
-  let stored = {};
-  if (S.auth) {
-    try {
-      const r = await fetch(`${API}/rootforme/prefs`, { credentials: 'include' });
-      if (r.ok) stored = (await r.json()).prefs || {};
-    } catch {}
-  } else {
-    try { stored = JSON.parse(localStorage.getItem('rfm_prefs') || '{}'); } catch {}
-  }
-
+  const stored = await loadStoredLeaguePrefs(S.auth);
   S.prefs = {};
   for (const lg of S.leagues) {
     S.prefs[lg.league_id] = stored[lg.league_id] ?? { value: 0, contender: true };
@@ -735,7 +715,7 @@ function renderLeagueTable() {
     const pref    = S.prefs[lg.league_id] || { value: 0, contender: true };
     const isEspn  = lg.source === 'espn';
     const isBB    = lg.settings?.best_ball === 1;
-    const type    = isEspn ? 'ESPN · Redraft' : isBB ? 'Bestball' : lg.settings?.type === 2 ? 'Dynasty' : lg.settings?.type === 1 ? 'Keeper' : 'Redraft';
+    const type    = isEspn ? 'ESPN · Redraft' : isBB ? 'Bestball' : leagueFormatLabel(lg);
     const val     = pref.value || '';
     const chk     = pref.contender ? 'checked' : '';
     return `
@@ -870,9 +850,7 @@ async function fetchEspnLeagueMatchup(league, week = S.week) {
     const d = await r.json();
 
     const mySWID = S.espnSettings?.swid || '';
-    const myTeam = (d.teams || []).find(t =>
-      t.primaryOwner === mySWID || (t.owners || []).includes(mySWID)
-    );
+    const myTeam = espnMyTeam(d.teams, mySWID);
     if (!myTeam) return espnSkip(league, 'could not find your team (SWID mismatch)');
 
     const matchup = (d.schedule || []).find(m =>
@@ -925,7 +903,7 @@ async function fetchEspnLeagueMatchup(league, week = S.week) {
         // which is all the tracker needs.
         const known = !!(pid && S.playerMap[pid]);
         line.push({ pid: known ? pid : null, name: fullName, pts, proj,
-                    team: ESPN_TEAM_MAP[pData.proTeamId] || null, pos: ESPN_POS_ID[pData.defaultPositionId] || '',
+                    team: ESPN_TEAM_MAP[pData.proTeamId] || null, pos: ESPN_POS_MAP[pData.defaultPositionId] || '',
                     inj: entry.injuryStatus || pData.injuryStatus || null });
         if (!known) continue;
         starters.push(pid);
@@ -947,7 +925,6 @@ async function fetchEspnLeagueMatchup(league, week = S.week) {
   } catch (e) { return espnSkip(league, e.message || 'request failed'); }
 }
 
-const ESPN_POS_ID = { 1: 'QB', 2: 'RB', 3: 'WR', 4: 'TE', 5: 'K', 16: 'DEF' };
 
 // One player's week off his stat lines, both already in this league's scoring:
 // statSourceId 0 is actual, 1 is projected, statSplitTypeId 1 is the single week.
@@ -955,7 +932,7 @@ const ESPN_POS_ID = { 1: 'QB', 2: 'RB', 3: 'WR', 4: 'TE', 5: 'K', 16: 'DEF' };
 // response, and asking for week N returns weeks N-1 and N. So a player "started"
 // at last week's score before kickoff and every team total ran far too high.
 function espnWeekLine(pl, week) {
-  // Split 1 is preferred, not required: index.html's lsEspnProjLine learned that
+  // Split 1 is preferred, not required: index.html's luEspnProjLine learned that
   // ESPN doesn't reliably label it.
   const line = src => {
     const all = (pl.stats || []).filter(st => st.statSourceId === src
@@ -1342,12 +1319,7 @@ const LM = {
   skips: [],    // [{name, reason}] Sleeper leagues whose read failed
   filter: { fmt: 'all', role: 'all', lineup: 'all' },
 };
-const LM_FILTERS = [
-  { key: 'fmt',    lbl: 'Format', opts: [['all', 'All'], ['dynasty', 'Dynasty'], ['redraft', 'Redraft']] },
-  { key: 'role',   lbl: 'Mode',   opts: [['all', 'All'], ['contender', 'Contenders'], ['rebuilder', 'Rebuilders']] },
-  { key: 'lineup', lbl: 'Type',   opts: [['all', 'All'], ['lineup', 'Lineup'], ['bestball', 'Best Ball']] },
-];
-// index.html's LS_BAD_INJ, plus how ESPN spells two of them.
+// index.html's LU_BAD_INJ, plus how ESPN spells two of them.
 const LM_OUT = new Set(['OUT', 'IR', 'SUS', 'NA', 'PUP', 'DNR', 'COV', 'DNP', 'O', 'SUSPENSION', 'INJURY_RESERVE']);
 
 // One failed league read mustn't take the whole page down, now that this also
@@ -1482,7 +1454,7 @@ function lmSetFilter(key, val) {
 function lmFiltered() {
   const { fmt, role, lineup } = LM.filter;
   return LM.rows.filter(({ lg }) => {
-    const dynasty = lg.source !== 'espn' && lg.settings?.type === 2;
+    const dynasty = leagueIsDynasty(lg);
     const contender = !!S.prefs[lg.league_id]?.contender;
     const bb = lg.settings?.best_ball === 1;
     if (fmt !== 'all' && (fmt === 'dynasty') !== dynasty) return false;
@@ -1524,7 +1496,7 @@ function lmDraw() {
   const info = document.getElementById('lm-summary-info');
   if (!box) return;
 
-  const pills = LM_FILTERS.map(f => `<div class="lm-filter">
+  const pills = LEAGUE_SCOPE_FILTERS.map(f => `<div class="lm-filter">
       <span class="lm-filter-lbl">${f.lbl}</span>
       ${f.opts.map(([v, l]) => `<button class="lm-pill${LM.filter[f.key] === v ? ' active' : ''}" onclick="lmSetFilter('${f.key}','${v}')">${l}</button>`).join('')}
     </div>`).join('');

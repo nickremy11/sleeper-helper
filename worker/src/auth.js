@@ -1,7 +1,7 @@
 /**
  * Auth module — register, login, session management, Sleeper token encryption.
  *
- * Passwords:  PBKDF2-SHA-256, 200k iterations, random salt.
+ * Passwords:  PBKDF2-SHA-256, 100k iterations, random salt.
  * Token enc:  AES-256-GCM with TOKEN_ENCRYPTION_KEY Worker secret (base64 32 bytes).
  * Sessions:   random 64-char hex token stored in D1, set as HttpOnly cookie sh_session.
  * Email:      6-digit OTP for signup verification + password reset, sent via the
@@ -183,6 +183,8 @@ async function deleteUserAccount(userId, env) {
     env.DB.prepare('DELETE FROM user_rankings_shares WHERE owner_user_id = ? OR shared_with_user_id = ?').bind(userId, userId),
     env.DB.prepare('DELETE FROM player_projections WHERE user_id = ?').bind(userId),
     env.DB.prepare('DELETE FROM team_projections WHERE user_id = ?').bind(userId),
+    env.DB.prepare('DELETE FROM scoring_presets WHERE user_id = ?').bind(userId),
+    env.DB.prepare('DELETE FROM player_projection_scores WHERE user_id = ?').bind(userId),
     env.DB.prepare('DELETE FROM email_verifications WHERE user_id = ?').bind(userId),
     env.DB.prepare('DELETE FROM password_resets WHERE user_id = ?').bind(userId),
     env.DB.prepare('DELETE FROM users WHERE id = ?').bind(userId),

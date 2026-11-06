@@ -20,10 +20,9 @@
 .main { max-width: 700px; margin: 0 auto; padding: 32px 32px 80px; }
 
 /* ── SECTION HEAD ── */
-.section-head { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; margin-top: 32px; }
-.section-head:first-child { margin-top: 0; }
-.section-head h2 { font-family: 'Rye', serif; font-size: 1rem; color: var(--brown-dark); white-space: nowrap; }
-.section-head-line { flex: 1; height: 1px; background: linear-gradient(to right, var(--gold), transparent); }
+.section-head { margin-bottom: 20px; margin-top: 32px; }
+
+.section-head h2 { font-size: 1rem; }
 
 /* ── PROFILE CARD ── */
 .profile-card {
@@ -69,12 +68,8 @@
   font-family: 'Crimson Text', serif; font-size: 0.88rem; font-style: italic;
   color: var(--green-light); margin-bottom: 8px;
 }
-.ghost-btn {
-  background: none; border: 1px solid var(--brown-mid); color: var(--brown-light);
-  font-family: 'Crimson Text', serif; font-size: 0.82rem; padding: 4px 12px;
-  cursor: pointer; border-radius: 2px; transition: border-color 0.2s, color 0.2s;
-}
-.ghost-btn:hover { border-color: var(--gold); color: var(--gold-light); }
+.ghost-btn { font-family: 'Crimson Text', serif; font-size: 0.82rem; padding: 4px 12px; }
+.ghost-btn:hover { color: var(--gold-light); }
 
 /* ── ESPN DISCOVERY ── */
 .head-help {
@@ -120,20 +115,9 @@
   font-family: 'Playfair Display', serif; font-style: italic;
   font-size: 1.1rem; color: var(--parchment); margin-bottom: 20px;
 }
-.guest-signin-btn {
-  background: var(--green); border: 2px solid var(--gold); color: var(--gold-light);
-  font-family: 'Rye', serif; font-size: 0.58rem; letter-spacing: 0.18em;
-  text-transform: uppercase; padding: 12px 28px; cursor: pointer; border-radius: 2px;
-  transition: background 0.2s, color 0.2s;
-}
-.guest-signin-btn:hover { background: var(--gold); color: var(--brown-dark); }
 
-footer {
-  text-align: center; padding: 32px 0 20px;
-  font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--brown-light); opacity: 0.7;
-}
-footer a { color: var(--brown-light); text-decoration: none; }
-footer a:hover { color: var(--gold-light); }
+footer { padding: 32px 0 20px; }
+
 </style>
 </head>
 <body>
@@ -284,6 +268,7 @@ footer a:hover { color: var(--gold-light); }
 </div>
 
 <script src="/shared-auth.js"></script>
+<script src="/shared-core.js"></script>
 <script src="/shared-utils.js"></script>
 <script>
 async function populateFields(user) {
@@ -296,7 +281,7 @@ async function populateFields(user) {
 
 async function loadEspnSettings() {
   try {
-    const r = await fetch(API_BASE + '/espn/settings', { credentials: 'include' });
+    const r = await fetch(SH_API + '/espn/settings', { credentials: 'include' });
     if (!r.ok) return;
     const d = await r.json();
     const idsEl = document.getElementById('field-espn-ids');
@@ -313,7 +298,7 @@ async function saveEspnSettings() {
   const swid = document.getElementById('field-espn-swid')?.value.trim() || '';
   setStatus('espn-status', 'Saving…', true);
   try {
-    const r = await fetch(API_BASE + '/espn/settings', {
+    const r = await fetch(SH_API + '/espn/settings', {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ league_ids: ids, espn_s2: s2, swid }),
@@ -340,7 +325,7 @@ async function discoverEspnLeagues() {
   btn.disabled = true;
   setStatus('espn-status', 'Asking ESPN which leagues you are in…', true);
   try {
-    const r = await fetch(API_BASE + '/espn/discover', {
+    const r = await fetch(SH_API + '/espn/discover', {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(s2 && swid ? { espn_s2: s2, swid } : {}),
@@ -414,10 +399,9 @@ function showGuest() {
   document.getElementById('profile-view').style.display = 'none';
 }
 
-const API_BASE = location.hostname === 'ffhistorian.com' ? 'https://helper.ffhistorian.com/api' : '/api';
 
 async function apiPatch(body) {
-  const r = await fetch(API_BASE + '/auth/me', {
+  const r = await fetch(SH_API + '/auth/me', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -469,7 +453,7 @@ async function changePassword() {
   if (!cur || !nw) { setStatus('password-status', 'All fields are required', false); return; }
   if (nw !== nw2)  { setStatus('password-status', 'New passwords do not match', false); return; }
   try {
-    const r = await fetch(API_BASE + '/auth/change-password', {
+    const r = await fetch(SH_API + '/auth/change-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -489,7 +473,7 @@ async function deleteAccount() {
   if (!pass) { setStatus('delete-status', 'Enter your password to confirm', false); return; }
   if (!confirm('Permanently delete your account and all saved data? This cannot be undone.')) return;
   try {
-    const r = await fetch(API_BASE + '/auth/delete-account', {
+    const r = await fetch(SH_API + '/auth/delete-account', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',

@@ -11,21 +11,16 @@
     .ta-wrap { max-width: 1060px; margin: 0 auto; padding: 24px 16px 60px; }
 
     /* ── Format flags (reused from analyzer.html) ── */
-    .az-flags { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 20px; align-items: center; }
-    .az-flag {
-      font-family: 'Rye', serif; font-size: 0.57rem; letter-spacing: 0.12em;
-      text-transform: uppercase; padding: 6px 14px; border: 1.5px solid var(--brown-mid);
-      border-radius: 2px; color: var(--brown-light); background: rgba(0,0,0,0.22);
-    }
-    .az-flag-hi { border-color: var(--gold); color: var(--gold); background: rgba(201,150,42,0.08); }
-    .az-badge { font-family: 'Rye', serif; font-size: 0.55rem; letter-spacing: 0.12em; text-transform: uppercase; padding: 5px 12px; border-radius: 2px; }
+    .az-flags { margin-bottom: 20px; }
+
+    .az-badge { font-size: 0.55rem; padding: 5px 12px; }
     .az-badge-dynasty  { background: rgba(201,150,42,0.2); color: var(--gold-light); border: 1px solid rgba(201,150,42,0.4); }
     .az-badge-bestball { background: rgba(91,155,213,0.2); color: #8eb8e5; border: 1px solid rgba(91,155,213,0.4); }
     .az-badge-redraft  { background: rgba(92,184,92,0.15); color: #7ed07e; border: 1px solid rgba(92,184,92,0.3); }
-    .az-league-title { font-family: 'Playfair Display', serif; font-weight: 700; font-size: clamp(1rem,2.5vw,1.4rem); color: var(--cream); margin-top: 6px; line-height: 1.2; }
+    .az-league-title { font-size: clamp(1rem,2.5vw,1.4rem); }
 
     /* ── Position pill ── */
-    .rs-pos { display: inline-block; font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.1em; padding: 3px 7px; border-radius: 2px; text-transform: uppercase; }
+    .rs-pos { font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.1em; padding: 3px 7px; }
     .rs-pos-QB   { background: rgba(139,26,26,0.5);  color: #ff9999; border: 1px solid rgba(139,26,26,0.7); }
     .rs-pos-RB   { background: rgba(45,74,30,0.5);   color: #a8e08a; border: 1px solid rgba(45,74,30,0.7); }
     .rs-pos-WR   { background: rgba(30,50,100,0.5);  color: #80aaee; border: 1px solid rgba(30,50,100,0.7); }
@@ -325,7 +320,9 @@
     </div>
   </div>
 
+  <script src="/shared-core.js"></script>
   <script src="/shared-utils.js"></script>
+  <script src="/league-engine.js"></script>
   <script src="/shared-auth.js"></script>
   <script>
   'use strict';
@@ -335,9 +332,7 @@
   // ReferenceError take the whole page down — same defence the ranks grid uses.
   if (typeof mrbBadge !== 'function') window.mrbBadge = () => '';
 
-  const API = window.location.hostname === 'ffhistorian.com'
-    ? 'https://helper.ffhistorian.com/api'
-    : '/api';
+  const API = SH_API;
 
   const _params = new URLSearchParams(window.location.search);
   const lgId    = _params.get('league') || '';
@@ -348,12 +343,6 @@
   // shared-utils' tradeAssetsToParam.
   const presetTrade = tradeAssetsFromParam(_params.get('t') || '');
 
-  // A few leagues have no playoff bracket at all — the champion is simply whoever
-  // scores the most total points across the full 17-week season. For those, the
-  // record-based "Playoff Odds" / "Bye (Top 2) Odds" become "finishes #1 in total
-  // points" / "finishes top 3 in total points" (labels are swapped in the results,
-  // but the card layout is otherwise identical — no separate page needed).
-  const POINTS_ONLY_LEAGUES = new Set(['1318053615725715456']);
   const isPointsOnly = POINTS_ONLY_LEAGUES.has(lgId);
 
   // ── State ─────────────────────────────────────────────────────────────────────
@@ -380,21 +369,6 @@
   const SIDE_CLS    = ['a', 'b', 'c'];
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
-
-  function normPos(raw) {
-    if (!raw) return null;
-    const p = raw.toUpperCase();
-    if (['QB','RB','WR','TE'].includes(p))            return p;
-    if (['DE','DT','NT','IDL','DL'].includes(p))      return 'DL';
-    if (['LB','ILB','OLB','MLB'].includes(p))         return 'LB';
-    if (['CB','S','SS','FS','SAF','DB'].includes(p))  return 'DB';
-    return null;
-  }
-
-  function rankColor(rank, total) {
-    const hue = Math.round(120 * (1 - (rank - 1) / Math.max(total - 1, 1)));
-    return `hsl(${hue}, 62%, 38%)`;
-  }
 
   function fmtOdds(p) {
     if (p == null)   return { label: '—',    color: 'var(--brown-light)', weight: '400' };
@@ -438,7 +412,7 @@
   const POS_CLS = { QB:'rs-pos-QB', RB:'rs-pos-RB', WR:'rs-pos-WR', TE:'rs-pos-TE', DL:'rs-pos-DL', LB:'rs-pos-LB', DB:'rs-pos-DB' };
 
   function slotCls(slot, playerPos) {
-    if (slot === 'FLEX')       return 'rs-pos-FLEX';
+    if (slot === 'FLEX' || slot === 'WRRB_FLEX' || slot === 'REC_FLEX') return 'rs-pos-FLEX';
     if (slot === 'SUPER_FLEX') return 'rs-pos-SF';
     if (slot === 'IDP_FLEX')   return 'rs-pos-IDP';
     return POS_CLS[playerPos] || POS_CLS[slot] || '';
@@ -446,321 +420,15 @@
   function slotLabel(slot) {
     if (slot === 'SUPER_FLEX') return 'SF';
     if (slot === 'IDP_FLEX')   return 'IDP';
+    if (slot === 'WRRB_FLEX')  return 'W/R';
+    if (slot === 'REC_FLEX')   return 'W/T';
     return slot;
-  }
-
-  // ── Pick computation (verbatim from analyzer.html) ─────────────────────────
-
-  function computePicksForRoster(myRosterId, allRosters, tradedPicks, nflSeason, numRounds) {
-    const curYear = parseInt(nflSeason);
-    const rounds  = Array.from({ length: numRounds }, (_, i) => i + 1);
-    const seasons = new Set();
-    for (let y = curYear; y <= curYear + 3; y++) seasons.add(String(y));
-    for (const tp of (tradedPicks || [])) {
-      if (parseInt(tp.season) >= curYear) seasons.add(String(tp.season));
-    }
-    const ownership = {};
-    for (const r of allRosters) {
-      for (const season of seasons) {
-        for (const round of rounds) {
-          ownership[`${season}_${round}_${r.roster_id}`] = r.roster_id;
-        }
-      }
-    }
-    for (const tp of (tradedPicks || [])) {
-      if (tp.round > numRounds || parseInt(tp.season) < curYear) continue;
-      ownership[`${tp.season}_${tp.round}_${tp.roster_id}`] = tp.owner_id;
-    }
-    const picks = [];
-    for (const [key, ownerId] of Object.entries(ownership)) {
-      if (String(ownerId) !== String(myRosterId)) continue;
-      const [season, round, origRid] = key.split('_');
-      if (parseInt(season) === curYear) continue;
-      picks.push({ season, round: parseInt(round), originalRosterId: parseInt(origRid) });
-    }
-    return picks;
-  }
-
-  function buildPickValueMap(fcRes) {
-    const map = {};
-    const isPickItem = item => {
-      const pos = (item.player?.position || '').toUpperCase();
-      if (pos === 'PI' || pos === 'PICK') return true;
-      const sid = item.player?.sleeperId || item.player?.maybeSleeperID;
-      return !sid || String(sid) === '0';
-    };
-    for (const item of (fcRes || [])) {
-      if (!isPickItem(item)) continue;
-      const name = (item.player?.name || '').toLowerCase();
-      if (!name) continue;
-      const yearM = name.match(/20(\d\d)/); if (!yearM) continue;
-      const year = '20' + yearM[1];
-      let round = 0;
-      if      (/\b1(st)?\b/.test(name) || /first/.test(name))  round = 1;
-      else if (/\b2(nd)?\b/.test(name) || /second/.test(name)) round = 2;
-      else if (/\b3(rd)?\b/.test(name) || /third/.test(name))  round = 3;
-      else if (/\b4(th)?\b/.test(name) || /fourth/.test(name)) round = 4;
-      else if (/\b5(th)?\b/.test(name) || /fifth/.test(name))  round = 5;
-      else if (/\b6(th)?\b/.test(name) || /sixth/.test(name))  round = 6;
-      if (!round) continue;
-      // Qualified ("2027 1st (Mid)") and unqualified ("2027 1st") entries are
-      // keyed separately — defaulting the unqualified one to `mid` overwrote
-      // the real Mid value with the lower generic one. Mirrors analyzer.html.
-      const q = /early/.test(name)   ? 'early'
-              : /late/.test(name)    ? 'late'
-              : /\bmid\b/.test(name) ? 'mid'
-              : null;
-      if (q) map[`${year}_${round}_${q}`] = item.value;
-      else   map[`${year}_${round}`]      = item.value;
-    }
-    return map;
-  }
-
-  // Playoff odds -> likely slot band. Same thresholds the old value multiplier
-  // used, so the "who is bad" judgement is unchanged. Mirrors analyzer.html.
-  const pickQualForOdds = o => (o >= 0.70 ? 'late' : o >= 0.30 ? 'mid' : 'early');
-  const fcHasQuals = (fcPickMap, season) =>
-    ['early', 'mid', 'late'].some(q => fcPickMap[`${season}_1_${q}`] != null);
-
-  // qualOverride forces the band instead of deriving it from the CURRENT
-  // season's draft order, which says nothing about a future season.
-  function getPickValue(season, round, origRosterId, ridToSlot, numTeams, fcPickMap, qualOverride) {
-    if (round > 4) return 0;
-    let q = qualOverride || null;
-    if (!q) {
-      q = 'mid';
-      const slot = ridToSlot?.[String(origRosterId)];
-      if (slot && numTeams > 0) {
-        const third = Math.ceil(numTeams / 3);
-        if (slot <= third) q = 'early'; else if (slot > numTeams - third) q = 'late';
-      }
-    }
-    return fcPickMap[`${season}_${round}_${q}`] || fcPickMap[`${season}_${round}`]
-        || fcPickMap[`${season}_${round}_mid`] || fcPickMap[`${season}_${round}_early`] || 0;
-  }
-
-  // opts.redraft: read FantasyCalc's redraftValue instead of its dynasty value
-  // (same response either way — FC returns both fields regardless of the
-  // isDynasty query param — but the numQbs/ppr params sent with the request
-  // still need to match the league's actual format; see loadLeagueData()/
-  // loadEspnLeagueData()). Mirrors analyzer.html's buildFcMap().
-  function buildFcMap(fcRes, opts = {}) {
-    const map = {};
-    const key = opts.redraft ? 'redraftValue' : 'value';
-    for (const item of (fcRes || [])) {
-      const sid = item.player?.sleeperId || item.player?.maybeSleeperID;
-      if (sid) map[String(sid)] = item[key];
-    }
-    return map;
-  }
-
-  function buildPlayerMap(playersRes) {
-    const KEEP = new Set(['QB','RB','WR','TE','DEF','DL','LB','DB','S','CB','DE','DT','FS','SS','IDL','OLB','ILB','MLB','SAF','NT']);
-    const players = {}, byName = {};
-    const rankOf = p => (p.search_rank != null && p.search_rank < 9999999) ? p.search_rank : Infinity;
-    for (const [pid, p] of Object.entries(playersRes || {})) {
-      if (!KEEP.has(p.position)) continue;
-      players[pid] = p;
-      if (!p.full_name) continue;
-      // Normalize names + on collisions keep the more fantasy-relevant player.
-      const key = normName(p.full_name);
-      if (byName[key] == null || rankOf(p) < rankOf(players[byName[key]])) byName[key] = pid;
-    }
-    return { players, byName };
-  }
-
-  function buildFormatFlags(lg) {
-    const sc = lg.scoring_settings || {}, rp = lg.roster_positions || [];
-    const flags = [];
-    const starters = rp.filter(p => !['BN','IR','TAXI'].includes(p)).length;
-    if (starters) flags.push({ label: starters + ' Starters', hi: false });
-    flags.push(rp.includes('SUPER_FLEX') ? { label: 'SF', hi: false } : { label: '1QB', hi: false });
-    const rec = sc.rec ?? 1;
-    if (rec === 0)    flags.push({ label: 'Std',       hi: false });
-    else if (rec < 1) flags.push({ label: rec + 'PPR', hi: true  });
-    else              flags.push({ label: 'PPR',        hi: true  });
-    if ((sc.bonus_rec_te ?? 0) > 0) flags.push({ label: '+' + sc.bonus_rec_te + 'TEP', hi: true });
-    if ((sc.bonus_rec_wr ?? 0) > 0) flags.push({ label: '+' + sc.bonus_rec_wr + 'WRP', hi: true });
-    if ((sc.pass_td ?? 4) !== 4)    flags.push({ label: (sc.pass_td ?? 4) + 'ptTD',    hi: true });
-    return flags;
-  }
-
-  // ── Simulation helpers ─────────────────────────────────────────────────────
-
-  const POS_CV = { QB: 0.43, RB: 0.50, WR: 0.52, TE: 0.58, DL: 0.55, LB: 0.55, DB: 0.55 };
-
-  function computeProjPts(stats, sc) {
-    let pts = 0;
-    for (const [k, v] of Object.entries(stats || {})) { if (typeof v === 'number' && sc[k]) pts += v * sc[k]; }
-    return pts;
-  }
-
-  function optimalLineupAndSigma(pids, projMap, sc, rp, players) {
-    const starterSlots  = rp.filter(p => !['BN','IR','TAXI'].includes(p));
-    const specificSlots = starterSlots.filter(s => !['FLEX','SUPER_FLEX','IDP_FLEX'].includes(s));
-    const flexSlots     = starterSlots.filter(s =>  ['FLEX','SUPER_FLEX','IDP_FLEX'].includes(s));
-    const pool = pids.map(pid => {
-      const p = players[pid]; if (!p) return null;
-      const pos = normPos(p.position); if (!pos) return null;
-      return { pid, pos, pts: computeProjPts(projMap?.[pid], sc) };
-    }).filter(Boolean);
-    const used = new Set(); let mu = 0, sigSq = 0;
-    const sc2 = {};
-    for (const s of specificSlots) sc2[s] = (sc2[s] || 0) + 1;
-    for (const [pos, count] of Object.entries(sc2)) {
-      const elig = pool.filter(p => p.pos === pos && !used.has(p.pid)).sort((a,b) => b.pts - a.pts);
-      for (let i = 0; i < Math.min(count, elig.length); i++) {
-        const pl = elig[i]; used.add(pl.pid); mu += pl.pts; sigSq += ((POS_CV[pl.pos] ?? 0.5) * pl.pts) ** 2;
-      }
-    }
-    for (const slot of flexSlots) {
-      const ep = slot === 'FLEX' ? ['RB','WR','TE'] : slot === 'SUPER_FLEX' ? ['QB','RB','WR','TE'] : ['DL','LB','DB'];
-      const elig = pool.filter(p => ep.includes(p.pos) && !used.has(p.pid)).sort((a,b) => b.pts - a.pts);
-      if (elig.length) { const pl = elig[0]; used.add(pl.pid); mu += pl.pts; sigSq += ((POS_CV[pl.pos] ?? 0.5) * pl.pts) ** 2; }
-    }
-    return { mu, sigma: Math.max(10, Math.sqrt(sigSq)) };
   }
 
   // Returns starters list (with slot property) and bench
   function buildOptimalLineup(pids, fcMap, projMap, useFc, sc, rp, players) {
-    const starterSlots  = rp.filter(p => !['BN','IR','TAXI'].includes(p));
-    const specificSlots = starterSlots.filter(s => !['FLEX','SUPER_FLEX','IDP_FLEX'].includes(s));
-    const flexSlots     = starterSlots.filter(s =>  ['FLEX','SUPER_FLEX','IDP_FLEX'].includes(s));
-    const pool = pids.map(pid => {
-      const p = players[pid]; if (!p) return null;
-      const pos = normPos(p.position); if (!pos) return null;
-      const pts = useFc ? ((fcMap[pid] ?? 0) / 100) : computeProjPts(projMap?.[pid], sc);
-      return { pid, pos, name: p.full_name || pid, pts };
-    }).filter(Boolean);
-    const starters = [], used = new Set();
-    const sc2 = {};
-    for (const s of specificSlots) sc2[s] = (sc2[s] || 0) + 1;
-    for (const [pos, count] of Object.entries(sc2)) {
-      const elig = pool.filter(p => p.pos === pos && !used.has(p.pid)).sort((a,b) => b.pts - a.pts);
-      for (let i = 0; i < Math.min(count, elig.length); i++) {
-        const pl = elig[i]; used.add(pl.pid); starters.push({ ...pl, slot: pos });
-      }
-    }
-    for (const slot of flexSlots) {
-      const ep = slot === 'FLEX' ? ['RB','WR','TE'] : slot === 'SUPER_FLEX' ? ['QB','RB','WR','TE'] : ['DL','LB','DB'];
-      const elig = pool.filter(p => ep.includes(p.pos) && !used.has(p.pid)).sort((a,b) => b.pts - a.pts);
-      if (elig.length) { const pl = elig[0]; used.add(pl.pid); starters.push({ ...pl, slot }); }
-    }
-    return { starters, bench: pool.filter(p => !used.has(p.pid)) };
-  }
-
-  function gaussianRandom(mu, sigma) {
-    let u, v;
-    do { u = Math.random(); } while (!u);
-    do { v = Math.random(); } while (!v);
-    return Math.max(0, mu + sigma * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v));
-  }
-
-  // Best-ball-equivalent total for a single already-played week, built from the
-  // matchup's actual players_points (all rostered players that week, not just starters).
-  function computeWeeklyOptimalPoints(pids, ptsMap, rp, players) {
-    const starterSlots  = rp.filter(p => !['BN','IR','TAXI'].includes(p));
-    const specificSlots = starterSlots.filter(s => !['FLEX','SUPER_FLEX','IDP_FLEX'].includes(s));
-    const flexSlots     = starterSlots.filter(s =>  ['FLEX','SUPER_FLEX','IDP_FLEX'].includes(s));
-    const pool = (pids || []).map(pid => {
-      const p = players[pid]; if (!p) return null;
-      const pos = normPos(p.position); if (!pos) return null;
-      return { pid, pos, pts: ptsMap[pid] ?? 0 };
-    }).filter(Boolean);
-    const used = new Set(); let total = 0;
-    const sc2 = {};
-    for (const s of specificSlots) sc2[s] = (sc2[s] || 0) + 1;
-    for (const [pos, count] of Object.entries(sc2)) {
-      const elig = pool.filter(p => p.pos === pos && !used.has(p.pid)).sort((a,b) => b.pts - a.pts);
-      for (let i = 0; i < Math.min(count, elig.length); i++) {
-        const pl = elig[i]; used.add(pl.pid); total += pl.pts;
-      }
-    }
-    for (const slot of flexSlots) {
-      const ep = slot === 'FLEX' ? ['RB','WR','TE'] : slot === 'SUPER_FLEX' ? ['QB','RB','WR','TE'] : ['DL','LB','DB'];
-      const elig = pool.filter(p => ep.includes(p.pos) && !used.has(p.pid)).sort((a,b) => b.pts - a.pts);
-      if (elig.length) { const pl = elig[0]; used.add(pl.pid); total += pl.pts; }
-    }
-    return total;
-  }
-
-  // opts.pointsOnly: rank by total points scored (not W/L). count → #1 in points,
-  // count2 → top opts.topCount (default 3) in points, countLast → fewest points.
-  // opts.median: the league plays a second game each week against the league
-  // median (Sleeper `league_average_match`), so every week awards TWO wins, not
-  // one. Leaving this out was why this page disagreed with League Summaries and
-  // analyzer.html on median leagues — banked records already count two games a
-  // week, so simulating one made the start of the season count double.
-  function runSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams, potentialPtsSoFar = {}, opts = {}, N = 5000) {
-    const pointsOnly = !!opts.pointsOnly;
-    const median     = !!opts.median;
-    const topCount   = opts.topCount || 3;
-    const count = {}, count2 = {}, countLast = {};
-    for (const t of teams) { count[t.rosterId] = 0; count2[t.rosterId] = 0; countLast[t.rosterId] = 0; }
-    for (let sim = 0; sim < N; sim++) {
-      const wins = {}, pts = {}, potPts = {};
-      for (const t of teams) { wins[t.rosterId] = t.wins; pts[t.rosterId] = t.fpts; potPts[t.rosterId] = potentialPtsSoFar[t.rosterId] || 0; }
-      for (const week of futureWeeks) {
-        const groups = {};
-        for (const m of (matchupsByWeek[week] || [])) {
-          if (!m.matchup_id) continue;
-          (groups[m.matchup_id] = groups[m.matchup_id] || []).push(m);
-        }
-        const weekScores = [];
-        for (const pair of Object.values(groups)) {
-          if (pair.length !== 2) continue;
-          const [a, b] = pair;
-          const sA = gaussianRandom(muMap[a.roster_id]?.[week] ?? 100, sigmaMap[a.roster_id]?.[week] ?? 20);
-          const sB = gaussianRandom(muMap[b.roster_id]?.[week] ?? 100, sigmaMap[b.roster_id]?.[week] ?? 20);
-          pts[a.roster_id] = (pts[a.roster_id] || 0) + sA;
-          pts[b.roster_id] = (pts[b.roster_id] || 0) + sB;
-          // sA/sB are draws from the optimal-lineup projection, i.e. this week's "potential" score
-          potPts[a.roster_id] = (potPts[a.roster_id] || 0) + sA;
-          potPts[b.roster_id] = (potPts[b.roster_id] || 0) + sB;
-          if      (sA > sB) wins[a.roster_id] = (wins[a.roster_id] || 0) + 1;
-          else if (sB > sA) wins[b.roster_id] = (wins[b.roster_id] || 0) + 1;
-          weekScores.push([a.roster_id, sA], [b.roster_id, sB]);
-        }
-        if (median && weekScores.length > 1) {
-          const cut = weekScores.map(x => x[1]).sort((x, y) => y - x)[Math.floor(weekScores.length / 2)];
-          for (const [rid, s] of weekScores) if (s > cut) wins[rid] = (wins[rid] || 0) + 1;
-        }
-      }
-      const ranked = pointsOnly
-        ? teams.slice().sort((a, b) => (pts[b.rosterId]||0) - (pts[a.rosterId]||0))
-        : teams.slice().sort((a, b) => {
-            const wd = (wins[b.rosterId]||0) - (wins[a.rosterId]||0);
-            return wd !== 0 ? wd : (pts[b.rosterId]||0) - (pts[a.rosterId]||0);
-          });
-      const seedCount = pointsOnly ? 1 : playoffTeams;
-      const topSlots  = pointsOnly ? topCount : 2;
-      for (let i = 0; i < Math.min(seedCount, ranked.length); i++) count[ranked[i].rosterId]++;
-      for (let i = 0; i < Math.min(topSlots, ranked.length); i++) count2[ranked[i].rosterId]++;
-
-      // Last place: fewest total points in a points-only league, otherwise
-      // fewest optimal ("potential") points as before.
-      const rankedByPot = pointsOnly
-        ? teams.slice().sort((a, b) => (pts[a.rosterId]||0) - (pts[b.rosterId]||0))
-        : teams.slice().sort((a, b) => potPts[a.rosterId] - potPts[b.rosterId]);
-      if (rankedByPot.length) countLast[rankedByPot[0].rosterId]++;
-    }
-    const odds = {}, top2 = {}, last = {};
-    for (const t of teams) { odds[t.rosterId] = count[t.rosterId] / N; top2[t.rosterId] = count2[t.rosterId] / N; last[t.rosterId] = countLast[t.rosterId] / N; }
-    return { odds, top2, last };
-  }
-
-  function computeRanks(teams) {
-    const rankBy = getter => {
-      const sorted = [...teams].sort((a, b) => getter(b) - getter(a));
-      const map = {}; sorted.forEach((t, i) => { map[t.rosterId] = i + 1; });
-      return map;
-    };
-    return {
-      overall: rankBy(t => t.overall), contender: rankBy(t => t.contender),
-      QB: rankBy(t => t.posValues.QB), RB: rankBy(t => t.posValues.RB),
-      WR: rankBy(t => t.posValues.WR), TE: rankBy(t => t.posValues.TE),
-      DL: rankBy(t => t.posValues.DL), draft: rankBy(t => t.draft),
-    };
+    const pool = lineupPool(pids, players, pid => useFc ? ((fcMap[pid] ?? 0) / 100) : computeProjPts(projMap?.[pid], sc));
+    return pickOptimalLineup(pool, rp);
   }
 
   // ── Data loading ───────────────────────────────────────────────────────────
@@ -843,11 +511,7 @@
     // to award both, or this page's odds drift from League Summaries / analyzer.html.
     const isMedian           = leagueRes?.settings?.league_average_match === 1;
 
-    const rosterNames = {};
-    for (const r of allRosters) {
-      const info = userMap[r.owner_id];
-      rosterNames[r.roster_id] = info?.teamName || info?.displayName || ('Team ' + r.roster_id);
-    }
+    const ownerNames = rosterOwnerNames(allRosters, usersRes);
 
     const SKILL = new Set(['QB','RB','WR','TE']);
     const DEF_P = new Set(['DL','LB','DB']);
@@ -865,7 +529,7 @@
 
       for (const pid of (roster.players || [])) {
         const p = players[pid]; if (!p) continue;
-        const pos = normPos(p.position); if (!pos) continue;
+        const pos = crNormPos(p.position); if (!pos) continue;
         const val = (fcMap[pid] ?? 0) * (pos === 'TE' ? te2Mult : 1.0);
         overall += val;
         const bucket = DEF_P.has(pos) ? 'DL' : pos;
@@ -878,24 +542,23 @@
         return ORDER.indexOf(a.pos) !== ORDER.indexOf(b.pos) ? ORDER.indexOf(a.pos) - ORDER.indexOf(b.pos) : b.val - a.val;
       });
 
-      const rawPicks = computePicksForRoster(roster.roster_id, allRosters, tradedPicks, nflSeason, numRounds);
+      const rawPicks = ownedPicks({ rosterId: roster.roster_id, rosters: allRosters, tradedPicks, firstSeason: parseInt(nflSeason) + 1, rounds: numRounds, ownerNames });
       let draftValue = 0;
       const pickList = rawPicks.map(pick => {
-        const pv = getPickValue(pick.season, pick.round, pick.originalRosterId, ridToSlot, numTeams, fcPickMap);
+        const pv = getPickValue(pick.season, pick.round, pick.orig, ridToSlot, numTeams, fcPickMap);
         draftValue += pv;
         const roundStr = ['1st','2nd','3rd'][pick.round - 1] || pick.round + 'th';
-        const slot = ridToSlot?.[String(pick.originalRosterId)];
+        const slot = ridToSlot?.[String(pick.orig)];
         const label = slot ? `${pick.season} ${pick.round}.${String(slot).padStart(2,'0')}` : `${pick.season} ${roundStr}`;
-        const isTraded = pick.originalRosterId !== roster.roster_id;
-        return { label, val: pv, viaName: isTraded ? (rosterNames[pick.originalRosterId] || null) : null, season: pick.season, round: pick.round, originalRosterId: pick.originalRosterId };
+        return { label, val: pv, viaName: pick.viaName, season: pick.season, round: pick.round, originalRosterId: pick.orig };
       }).sort((a, b) => a.season !== b.season ? a.season.localeCompare(b.season) : a.round - b.round);
 
       return {
         rosterId: roster.roster_id, teamName: info.teamName, ownerName: info.displayName,
-        wins, losses, fpts,
+        wins, losses, fpts, maxPf: sleeperMaxPf(roster),
         overall: Math.round(overall), contender: Math.round(contenderBase + wins * 50),
         posValues: { QB: Math.round(posValues.QB), RB: Math.round(posValues.RB), WR: Math.round(posValues.WR), TE: Math.round(posValues.TE), DL: Math.round(posValues.DL) },
-        draft: Math.round(draftValue), playerList, pickList, standing: 0, playoffOdds: null, top2Odds: null,
+        draft: Math.round(draftValue), playerList, pickList, standing: 0, playoffOdds: null, byeOdds: null,
       };
     });
 
@@ -938,20 +601,7 @@
       playoffTeams, numTeams,
     });
 
-    // Best-ball-equivalent points banked so far, from real players_points on already-played weeks
-    const futureWeekSet = new Set(futureWeeks);
-    const potentialPtsSoFar = {};
-    for (const roster of allRosters) potentialPtsSoFar[roster.roster_id] = 0;
-    for (const [weekStr, matchups] of Object.entries(matchupsByWeek)) {
-      if (futureWeekSet.has(Number(weekStr))) continue;
-      for (const m of matchups) {
-        if (m.roster_id == null) continue;
-        potentialPtsSoFar[m.roster_id] = (potentialPtsSoFar[m.roster_id] || 0) +
-          computeWeeklyOptimalPoints(m.players || [], m.players_points || {}, rp, players);
-      }
-    }
-
-    let playoffOdds = {}, top2Odds = {}, lastOdds = {};
+    let simRes = { odds: {}, bye: null, lastPf: {} };
     let projectionsByWeek = {};
     let muMap = {}, sigmaMap = {};
     let useFc = true;
@@ -959,18 +609,7 @@
     const simTeams = teams.filter(t => t.overall > 0 || t.wins > 0 || t.losses > 0);
 
     if (futureWeeks.length === 0) {
-      if (isPointsOnly) {
-        const byPts = [...teams].sort((a, b) => b.fpts - a.fpts);
-        byPts.forEach((t, i) => { playoffOdds[t.rosterId] = i < 1 ? 1.0 : 0.0; top2Odds[t.rosterId] = i < 3 ? 1.0 : 0.0; });
-        const minPts = Math.min(...teams.map(t => t.fpts ?? Infinity));
-        const lastTeams = teams.filter(t => (t.fpts ?? Infinity) === minPts);
-        for (const t of teams) lastOdds[t.rosterId] = lastTeams.includes(t) ? 1 / lastTeams.length : 0;
-      } else {
-        byStand.forEach((t, i) => { playoffOdds[t.rosterId] = i < playoffTeams ? 1.0 : 0.0; top2Odds[t.rosterId] = i < 2 ? 1.0 : 0.0; });
-        const minPot = Math.min(...teams.map(t => potentialPtsSoFar[t.rosterId] ?? Infinity));
-        const lastTeams = teams.filter(t => (potentialPtsSoFar[t.rosterId] ?? Infinity) === minPot);
-        for (const t of teams) lastOdds[t.rosterId] = lastTeams.includes(t) ? 1 / lastTeams.length : 0;
-      }
+      simRes = finalStandingOdds(teams, playoffTeams, { pointsOnly: isPointsOnly });
     } else {
       const projResults = await Promise.all(
         futureWeeks.map(w =>
@@ -1004,50 +643,25 @@
           }
         }
       }
-      ({ odds: playoffOdds, top2: top2Odds, last: lastOdds } = runSimulation(simTeams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams, potentialPtsSoFar, { pointsOnly: isPointsOnly, median: isMedian }));
+      simRes = runSimulation(simTeams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams, { pointsOnly: isPointsOnly, median: isMedian });
     }
 
-    // Next-year picks are re-valued off the original team's playoff odds. FC
-    // now publishes real Early/Mid/Late entries for the upcoming rookie draft,
-    // so this re-reads the priced value for the implied band; the old
-    // ×2.0/×1.4/×1.0 multiplier was a stand-in for that data and could push a
-    // 1st above FC's own "(Early)" price. Kept only for an unbanded season.
+    applyOddsToTeams(teams, simRes);
+
+    // Next-year picks are re-valued off the original team's odds. "Good team"
+    // proxy: playoff odds normally, or top-3-points odds in a points-only league.
     const nextSeason = String(parseInt(nflSeason) + 1);
-    const nextBanded = fcHasQuals(fcPickMap, nextSeason);
-    for (const t of teams) {
-      t.playoffOdds   = playoffOdds[t.rosterId] ?? null;
-      t.top2Odds      = top2Odds[t.rosterId] ?? null;
-      t.lastPlaceOdds = lastOdds[t.rosterId] ?? null;
-      let adj = 0;
-      for (const pick of t.pickList) {
-        if (pick.season === nextSeason && pick.originalRosterId != null) {
-          // "Good team" proxy for pick value: playoff odds normally, or top-3
-          // points odds in a points-only league.
-          const o = isPointsOnly ? top2Odds[pick.originalRosterId] : playoffOdds[pick.originalRosterId];
-          if (o != null) {
-            if (nextBanded) {
-              const banded = getPickValue(pick.season, pick.round, pick.originalRosterId,
-                                          ridToSlot, numTeams, fcPickMap, pickQualForOdds(o));
-              if (banded > 0) pick.val = banded;
-            } else {
-              pick.val = Math.round(pick.val * (o >= 0.70 ? 1.0 : o >= 0.30 ? 1.4 : 2.0));
-            }
-          }
-        }
-        adj += pick.val;
-      }
-      t.draft = Math.round(adj);
-    }
+    revaluePicksByOdds(teams, isPointsOnly ? (simRes.bye || {}) : simRes.odds, { nextSeason, ridToSlot, numTeams, fcPickMap });
 
     _rawData = {
       teams: simTeams, lgName, category, season: nflSeason,
       formatFlags: buildFormatFlags(leagueRes || {}),
       numTeams, playoffTeams, hasIDP,
       allRosters, tradedPicks, players, byName, fcMap, fcPickMap, ridToSlot, numRounds,
-      rp, scoringSettings, rosterNames,
+      rp, scoringSettings,
       leagueUsers: usersRes || [],   // raw /users rows — the trade DM embeds them
     };
-    _simData = { matchupsByWeek, futureWeeks, projectionsByWeek, muMap, sigmaMap, useFc, potentialPtsSoFar, median: isMedian };
+    _simData = { matchupsByWeek, futureWeeks, projectionsByWeek, muMap, sigmaMap, useFc, median: isMedian };
   }
 
   // ── ESPN load ────────────────────────────────────────────────────────────────
@@ -1062,7 +676,6 @@
   async function loadEspnLeagueData() {
     if (_rawData) return;
 
-    const ESPN_POS_MAP = {1:'QB',2:'RB',3:'WR',4:'TE',6:'DL',7:'LB',8:'DB',9:'DL',10:'DL',12:'LB',13:'LB',14:'DB',15:'DB',16:'DB'};
 
     const espnRes = await fetch(`${API}/espn/fantasy/${espnNumId}?view=mRoster&view=mTeam&view=mSettings`, { credentials: 'include' }).then(r => {
       if (!r.ok) throw new Error('ESPN data unavailable — log in and save ESPN credentials in your profile');
@@ -1090,10 +703,10 @@
     const numTeams      = (espnRes?.teams || []).length;
     const playoffTeams  = Math.floor(numTeams / 2);
 
-    const espnPrimaryOwnerByTeamId = {};
+    const espnTeamById = {};
 
     const teams = (espnRes?.teams || []).map(team => {
-      espnPrimaryOwnerByTeamId[team.id] = team.primaryOwner;
+      espnTeamById[team.id] = team;
       const wins   = team.record?.overall?.wins   ?? 0;
       const losses = team.record?.overall?.losses ?? 0;
       const fpts   = team.record?.overall?.pointsFor ?? 0;
@@ -1106,7 +719,7 @@
         const pid       = byName[normName(pl.fullName)];
         const sleeperP  = pid ? players[pid] : null;
         const espnPos   = ESPN_POS_MAP[pl.defaultPositionId];
-        const pos       = sleeperP ? normPos(sleeperP.position) : (espnPos ? normPos(espnPos) : null);
+        const pos       = sleeperP ? crNormPos(sleeperP.position) : (espnPos ? crNormPos(espnPos) : null);
         if (!pos) continue;
         if (pid) sleeperPids.push(pid);
         const rawVal    = pid ? (fcMap[pid] ?? 0) : 0;
@@ -1123,7 +736,7 @@
         rosterId: team.id, teamName: team.name || null, ownerName: null,
         wins, losses, fpts,
         overall: 0, contender: 0, posValues: { QB: 0, RB: 0, WR: 0, TE: 0, DL: 0 }, draft: 0,
-        playerList, pickList: [], standing: 0, playoffOdds: null, top2Odds: null, lastPlaceOdds: null,
+        playerList, pickList: [], standing: 0, playoffOdds: null, byeOdds: null, lastPlaceOdds: null,
         _sleeperPids: sleeperPids,
       };
       recomputeTeamValues(t); // fills overall/contender/posValues/draft from playerList/pickList — same formula as Sleeper teams
@@ -1135,17 +748,12 @@
 
     const simTeams = teams.filter(t => t.overall > 0 || t.wins > 0 || t.losses > 0);
 
-    let playoffOdds = {}, top2Odds = {}, lastOdds = {};
+    let simRes = { odds: {}, bye: null, lastPf: {} };
     let projectionsByWeek = {};
     let muMap = {}, sigmaMap = {};
     let useFc = true;
     let matchupsByWeek = {};
     let futureWeeks = [];
-    // No per-week realized-points endpoint wired up for ESPN in this app (see
-    // analyzer.html's ESPN sim for the same simplification) — last-place odds
-    // below won't credit weeks already banked, only projected future weeks.
-    const potentialPtsSoFar = {};
-    for (const t of teams) potentialPtsSoFar[t.rosterId] = 0;
 
     // This is the piece that matters most: real ESPN schedule + real per-week
     // Sleeper projections run through this league's real scoring/lineup shape,
@@ -1162,8 +770,7 @@
       matchupsByWeek = crEspnScheduleToMatchupsByWeek(schedule, futureWeeks);
 
       if (futureWeeks.length === 0) {
-        byStand.forEach((t, i) => { playoffOdds[t.rosterId] = i < playoffTeams ? 1.0 : 0.0; top2Odds[t.rosterId] = i < 2 ? 1.0 : 0.0; });
-        for (const t of teams) lastOdds[t.rosterId] = 1 / teams.length; // no banked-points signal for ESPN — split evenly
+        simRes = finalStandingOdds(teams, playoffTeams);
       } else {
         const projResults = await Promise.all(
           futureWeeks.map(w =>
@@ -1198,26 +805,22 @@
             }
           }
         }
-        ({ odds: playoffOdds, top2: top2Odds, last: lastOdds } = runSimulation(simTeams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams, potentialPtsSoFar));
+        simRes = runSimulation(simTeams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams);
       }
     } catch (e) {
       console.warn('[Trade Analyzer] ESPN playoff-odds simulation failed:', e);
     }
 
-    for (const t of teams) {
-      t.playoffOdds   = playoffOdds[t.rosterId] ?? null;
-      t.top2Odds      = top2Odds[t.rosterId] ?? null;
-      t.lastPlaceOdds = lastOdds[t.rosterId] ?? null;
-    }
+    applyOddsToTeams(teams, simRes);
 
     _rawData = {
       teams: simTeams, lgName, category: 'redraft', season: nflSeason,
       formatFlags: buildFormatFlags({ scoring_settings: scoringSettings, roster_positions: rp }),
       numTeams, playoffTeams, hasIDP: false,
       players, byName, fcMap, rp, scoringSettings,
-      espnPrimaryOwnerByTeamId,
+      espnTeamById,
     };
-    _simData = { matchupsByWeek, futureWeeks, projectionsByWeek, muMap, sigmaMap, useFc, potentialPtsSoFar };
+    _simData = { matchupsByWeek, futureWeeks, projectionsByWeek, muMap, sigmaMap, useFc };
   }
 
   // ── Trade analysis ──────────────────────────────────────────────────────────
@@ -1243,7 +846,7 @@
 
   function executeTradeAnalysis() {
     const { teams, players, rp, scoringSettings, fcMap } = _rawData;
-    const { matchupsByWeek, futureWeeks, projectionsByWeek, muMap, sigmaMap, useFc, potentialPtsSoFar, median: isMedian } = _simData;
+    const { matchupsByWeek, futureWeeks, projectionsByWeek, muMap, sigmaMap, useFc, median: isMedian } = _simData;
 
     const cloned = teams.map(t => ({ ...t, playerList: t.playerList.map(p => ({...p})), pickList: t.pickList.map(p => ({...p})) }));
     const cSides = _teamIds.map(rid => cloned.find(t => t.rosterId === rid));
@@ -1271,7 +874,7 @@
     const afterRanks  = computeRanks(cloned);
     const beforeBySide = _teamIds.map(rid => teams.find(t => t.rosterId === rid));
 
-    let afterOddsMap = {}, afterTop2Map = {}, afterLastMap = {};
+    let afterOddsMap = {}, afterByeMap = {}, afterLastMap = {};
 
     if (futureWeeks.length > 0) {
       const newMu    = Object.fromEntries(Object.entries(muMap).map(([k,v]) => [k, {...v}]));
@@ -1295,8 +898,8 @@
       }
 
       const simTeams = cloned.filter(t => t.overall > 0 || t.wins > 0 || t.losses > 0);
-      const after = runSimulation(simTeams, matchupsByWeek, newMu, newSigma, futureWeeks, _rawData.playoffTeams, potentialPtsSoFar, { pointsOnly: isPointsOnly, median: isMedian });
-      afterOddsMap = after.odds; afterTop2Map = after.top2; afterLastMap = after.last;
+      const after = runSimulation(simTeams, matchupsByWeek, newMu, newSigma, futureWeeks, _rawData.playoffTeams, { pointsOnly: isPointsOnly, median: isMedian });
+      afterOddsMap = after.odds; afterByeMap = after.bye || {}; afterLastMap = after.lastPf;
     }
 
     const projMap   = futureWeeks.length > 0 ? (projectionsByWeek[futureWeeks[0]] || {}) : {};
@@ -1309,8 +912,8 @@
         rosterId:     rid,
         beforeOdds:   orig?.playoffOdds ?? null,
         afterOdds:    futureWeeks.length > 0 ? (afterOddsMap[rid] ?? null) : null,
-        beforeTop2:   orig?.top2Odds ?? null,
-        afterTop2:    futureWeeks.length > 0 ? (afterTop2Map[rid] ?? null) : null,
+        beforeBye:   orig?.byeOdds ?? null,
+        afterBye:    futureWeeks.length > 0 ? (afterByeMap[rid] ?? null) : null,
         beforeLast:   orig?.lastPlaceOdds ?? null,
         afterLast:    futureWeeks.length > 0 ? (afterLastMap[rid] ?? null) : null,
         lineupBefore: buildOptimalLineup(orig.playerList.map(p => p.pid),  fcMap, projMap, lineupFc, scoringSettings, rp, players),
@@ -1369,18 +972,7 @@
 
   // Renders nothing when signed out or when no sets exist — an extra read on
   // the page, never a call to action.
-  function taRankSourceBar() {
-    if (typeof MRB === 'undefined' || !MRB.sources?.length) return '';
-    const n = Object.keys(MRB.index || {}).length;
-    const note = MRB.error ? esc(MRB.error)
-      : !n ? 'no players in this set matched'
-      : `${n} ranked${MRB.unmatched ? ` · ${MRB.unmatched} unmatched` : ''} · ${MRB.format} board`;
-    return `<div class="mrb-bar" style="margin:8px 0 2px;">
-      <label>My Ranks</label>
-      ${mrbSourceSelectHtml('taSetRankSource')}
-      <span class="mrb-note">${note}</span>
-    </div>`;
-  }
+  function taRankSourceBar() { return typeof MRB === 'undefined' ? '' : mrbSourceBarHtml('taSetRankSource'); }
 
   // ── Trade summary visual ────────────────────────────────────────────────────
 
@@ -1893,8 +1485,8 @@
           const r = (rosters || []).find(x => x.roster_id === a.from);
           return !(r?.players || []).map(String).includes(String(a.pid));
         }
-        const owned = computePicksForRoster(a.from, rosters || [], traded || [], _rawData.season, Math.max(_rawData.numRounds, a.round));
-        return !owned.some(p => p.season === String(a.season) && p.round === a.round && p.originalRosterId === a.orig);
+        const owned = ownedPicks({ rosterId: a.from, rosters: rosters || [], tradedPicks: traded || [], firstSeason: parseInt(_rawData.season) + 1, rounds: Math.max(_rawData.numRounds, a.round) });
+        return !owned.some(p => p.season === String(a.season) && p.round === a.round && p.orig === a.orig);
       });
       if (stale.length) {
         throw new Error(`No longer with the team sending them: ${stale.map(a => a.label).join(', ')}. Reload the page to pick up the latest rosters.`);
@@ -2090,7 +1682,7 @@
         <div class="ta-odds-lbl">${label}</div>
         <div class="ta-odds-team" style="color:${teamColor};">${name}</div>
         ${metricRow(isPointsOnly ? 'Most Points Odds' : 'Playoff Odds',     pt.beforeOdds, pt.afterOdds, fmtOdds,     false)}
-        ${metricRow(isPointsOnly ? 'Top 3 Points Odds' : 'Bye (Top 2) Odds', pt.beforeTop2, pt.afterTop2, fmtOdds,     false)}
+        ${metricRow(isPointsOnly ? 'Top 3 Points Odds' : 'Bye Odds', pt.beforeBye, pt.afterBye, fmtOdds,     false)}
         ${metricRow('Last Place Odds',  pt.beforeLast, pt.afterLast, fmtLastOdds, true)}
       </div>`;
     }
@@ -2166,7 +1758,7 @@
           const espnSettings = await fetch(`${API}/espn/settings`, { credentials: 'include' }).then(r => r.ok ? r.json() : null);
           const swid = espnSettings?.swid;
           if (swid) {
-            const myTeam = _rawData.teams.find(t => _rawData.espnPrimaryOwnerByTeamId?.[t.rosterId] === swid);
+            const myTeam = _rawData.teams.find(t => espnIsMyTeam(_rawData.espnTeamById?.[t.rosterId], swid));
             if (myTeam) _teamIds.push(myTeam.rosterId);
           }
         } catch {}

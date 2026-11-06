@@ -17,9 +17,8 @@
 
 .main { max-width: 900px; margin: 0 auto; padding: 32px 32px 80px; }
 
-.section-head { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
-.section-head h2 { font-family: 'Rye', serif; font-size: 1rem; color: var(--brown-dark); white-space: nowrap; }
-.section-head-line { flex: 1; height: 1px; background: linear-gradient(to right, var(--gold), transparent); }
+.section-head { margin-bottom: 20px; }
+.section-head h2 { font-size: 1rem; }
 
 .admin-card {
   background: var(--brown-dark); border: 2px solid var(--brown-mid); border-radius: 2px;
@@ -33,7 +32,7 @@ table.accounts th {
 }
 table.accounts td { padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.06); color: var(--cream); font-size: 0.92rem; vertical-align: middle; }
 table.accounts tr:last-child td { border-bottom: none; }
-.badge { font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 8px; border-radius: 2px; white-space: nowrap; }
+.badge { font-family: 'Rye', serif; letter-spacing: 0.1em; padding: 3px 8px; white-space: nowrap; }
 .badge.ok    { background: var(--green); color: var(--gold-light); }
 .badge.pend  { background: var(--brown-mid); color: var(--brown-light); }
 .badge.admin { background: var(--gold); color: var(--brown-dark); }
@@ -59,20 +58,9 @@ table.accounts tr:last-child td { border-bottom: none; }
   font-family: 'Playfair Display', serif; font-style: italic;
   font-size: 1.1rem; color: var(--parchment); margin-bottom: 20px;
 }
-.guest-signin-btn {
-  background: var(--green); border: 2px solid var(--gold); color: var(--gold-light);
-  font-family: 'Rye', serif; font-size: 0.58rem; letter-spacing: 0.18em;
-  text-transform: uppercase; padding: 12px 28px; cursor: pointer; border-radius: 2px;
-  transition: background 0.2s, color 0.2s;
-}
-.guest-signin-btn:hover { background: var(--gold); color: var(--brown-dark); }
 
-footer {
-  text-align: center; padding: 32px 0 20px;
-  font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--brown-light); opacity: 0.7;
-}
-footer a { color: var(--brown-light); text-decoration: none; }
-footer a:hover { color: var(--gold-light); }
+footer { padding: 32px 0 20px; }
+
 </style>
 </head>
 <body>
@@ -122,13 +110,10 @@ footer a:hover { color: var(--gold-light); }
   </div>
 </div>
 
+<script src="/shared-core.js"></script>
 <script src="/shared-auth.js"></script>
 <script>
-const API_BASE = location.hostname === 'ffhistorian.com' ? 'https://helper.ffhistorian.com/api' : '/api';
 
-function esc(s) {
-  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
 
 function showGuest() {
   document.getElementById('guest-view').style.display = '';
@@ -152,7 +137,7 @@ async function loadAccounts() {
   const body = document.getElementById('admin-body');
   body.innerHTML = '<div class="admin-loading">Loading accounts…</div>';
   try {
-    const r = await fetch(API_BASE + '/auth/admin/users', { credentials: 'include' });
+    const r = await fetch(SH_API + '/auth/admin/users', { credentials: 'include' });
     const d = await r.json();
     if (d.error) throw new Error(d.error);
     renderAccounts(d.users || []);
@@ -198,7 +183,7 @@ async function deleteUser(email, btn) {
   if (!confirm('Permanently delete ' + email + ' and all their data? This cannot be undone.')) return;
   btn.disabled = true;
   try {
-    const r = await fetch(API_BASE + '/auth/admin/delete-user', {
+    const r = await fetch(SH_API + '/auth/admin/delete-user', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',

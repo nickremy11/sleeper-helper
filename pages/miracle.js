@@ -164,7 +164,7 @@ function mnmDerive(line, pos) {
   return L;
 }
 
-// Same rule as index.html's lsComputeProjPts: multiply only the keys the league
+// Same rule as index.html's computeProjPts: multiply only the keys the league
 // scores, so the many non-scoring fields on a line are inert.
 function mnmScore(line, sc) {
   let pts = 0;
@@ -843,7 +843,7 @@ function mnmFmtLine(line, pos) {
 }
 
 const api = {
-  MNM_SIMS, MNM_KDEF_DEFAULT, MNM_T_REASONABLE, mnmBuild, mnmRun, mnmRemainingFrac, mnmGameLabel,
+  MNM_SIMS, MNM_KDEF_DEFAULT, MNM_T_REASONABLE, mnmRng, mnmBuild, mnmRun, mnmRemainingFrac, mnmGameLabel,
   mnmWindows, mnmRowWindow, mnmTradeoff, mnmIsMonday,
   mnmFmtLine, mnmDerive, mnmScore, mnmSample,
 };

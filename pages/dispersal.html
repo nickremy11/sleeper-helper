@@ -25,24 +25,21 @@
 .step-line { flex:1; height:2px; background:var(--brown-mid); }
 .step-line.done { background:var(--gold); }
 .setup-card { background:var(--brown-dark); border:2px solid var(--brown-mid); border-radius:2px; padding:22px 26px; margin-bottom:20px; box-shadow:4px 4px 0 var(--brown-mid); }
-.setup-label { font-family:'Rye',serif; font-size:0.58rem; letter-spacing:0.22em; text-transform:uppercase; color:var(--gold); display:block; margin-bottom:8px; }
+.setup-label { font-family: 'Rye',serif; font-size: 0.58rem; margin-bottom: 8px; }
 .setup-label-sm { font-family:'Crimson Text',serif; font-size:0.82rem; color:var(--brown-light); font-style:italic; }
 .setup-row { display:flex; gap:8px; }
-.setup-input { flex:1; background:rgba(255,255,255,0.06); border:1px solid var(--brown-mid); color:var(--cream); font-family:'Crimson Text',serif; font-size:1rem; padding:8px 12px; border-radius:2px; outline:none; transition:border-color 0.2s; }
-.setup-input:focus { border-color:var(--gold); }
-.setup-input::placeholder { color:rgba(255,255,255,0.25); font-style:italic; }
+.setup-input { font-family: 'Crimson Text',serif; padding: 8px 12px; }
+
 .setup-btn { background:var(--green); border:2px solid var(--gold); color:var(--gold-light); font-family:'Rye',serif; font-size:0.58rem; letter-spacing:0.18em; text-transform:uppercase; padding:0 18px; cursor:pointer; border-radius:2px; transition:background 0.2s,color 0.2s; white-space:nowrap; min-height:40px; }
-.setup-btn:hover { background:var(--gold); color:var(--brown-dark); }
-.setup-btn:disabled { opacity:0.4; cursor:not-allowed; }
+
 .setup-btn-sm { padding:6px 14px; min-height:auto; font-size:0.52rem; }
 .setup-btn-ghost { background:transparent; border-color:var(--brown-mid); color:var(--brown-light); }
 .setup-btn-ghost:hover { border-color:var(--gold); color:var(--gold); background:transparent; }
 .setup-btn-danger { background:var(--red); border-color:#a02020; color:var(--cream); }
 .setup-btn-danger:hover { background:#a02020; color:var(--cream); }
-.setup-status { font-family:'Crimson Text',serif; font-size:0.85rem; font-style:italic; color:var(--brown-light); margin-top:6px; min-height:18px; }
-.setup-status.ok  { color:var(--green-light); }
+.setup-status { font-family: 'Crimson Text',serif; margin-top: 6px; min-height: 18px; }
+
 .setup-status.err { color:var(--red); }
-.setup-divider { border:none; border-top:1px solid var(--brown-mid); margin:16px 0; }
 
 /* ── LEAGUE SELECT ── */
 .league-list { display:grid; gap:8px; }
@@ -179,10 +176,7 @@
 .copy-btn:hover { border-color:var(--gold); color:var(--gold); }
 
 /* ── BADGE ── */
-.badge { display:inline-block; padding:2px 8px; border-radius:2px; font-family:'Rye',serif; font-size:0.5rem; letter-spacing:0.12em; text-transform:uppercase; }
-.badge-gold  { background:var(--gold);  color:var(--brown-dark); }
-.badge-green { background:var(--green); color:var(--gold-light); border:1px solid var(--gold); }
-.badge-red   { background:var(--red);   color:var(--cream); }
+.badge { display: inline-block; padding: 2px 8px; font-family: 'Rye',serif; letter-spacing: 0.12em; }
 
 /* ── CODES OVERLAY ── */
 .codes-overlay { position:fixed; inset:0; z-index:100; background:rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center; }
@@ -223,6 +217,7 @@
 </main>
 
 </div>
+<script src="/shared-core.js"></script>
 <script src="/shared-utils.js"></script>
 <script>
 'use strict';
@@ -230,7 +225,7 @@
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const IS_LOCAL    = location.protocol === 'file:' || location.hostname === 'localhost';
-const SLEEPER_BASE = IS_LOCAL ? 'https://api.sleeper.app/v1' : '/api/sleeper';
+const SLEEPER_API = IS_LOCAL ? 'https://api.sleeper.app/v1' : '/api/sleeper';
 const ROOM_ID     = new URLSearchParams(location.search).get('room') || null;
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -259,7 +254,7 @@ const fmtVal = v => v ? v.toLocaleString() : '—';
 function setApp(html) { app().innerHTML = html; }
 
 async function sApi(path) {
-  const r = await fetch(SLEEPER_BASE + path);
+  const r = await fetch(SLEEPER_API + path);
   if (!r.ok) throw new Error('Sleeper error ' + r.status);
   return r.json();
 }
@@ -274,11 +269,10 @@ async function dApi(path, opts = {}) {
   try { return JSON.parse(text); } catch { return text; }
 }
 
-const FC_DIRECT = 'https://api.fantasycalc.com/values/current?isDynasty=true&numQbs=2&ppr=1&includePickValues=true';
 
 async function fcApi() {
   if (D.fcValues) return D.fcValues;
-  const r = await fetch(FC_DIRECT);
+  const r = await fetch(`${SH_API}/fantasycalc?isDynasty=true&numQbs=2&ppr=1&includePickValues=true`);
   if (!r.ok) throw new Error('FantasyCalc error');
   D.fcValues = await r.json();
   return D.fcValues;

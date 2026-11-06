@@ -170,3 +170,35 @@ body::before {
 .mrg-un-p em::before { content: '('; }
 .mrg-un-p em::after  { content: ')'; }
 .mrg-un-sep { color: var(--brown-light); }
+
+/* ── SHARED COMPONENTS ── (pages only keep what differs) */
+.section-head { display: flex; align-items: center; gap: 16px; }
+.section-head h2 { font-family: 'Rye', serif; color: var(--brown-dark); white-space: nowrap; }
+.section-head-line { flex: 1; height: 1px; background: linear-gradient(to right, var(--gold), transparent); }
+.setup-input { flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--brown-mid); color: var(--cream); font-size: 1rem; border-radius: 2px; outline: none; transition: border-color 0.2s; }
+.setup-input:focus { border-color: var(--gold); }
+.setup-input::placeholder { color: rgba(255,255,255,0.25); font-style: italic; }
+.setup-btn:hover { background: var(--gold); color: var(--brown-dark); }
+.setup-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.setup-status { font-size: 0.85rem; font-style: italic; color: var(--brown-light); }
+.setup-status.ok { color: var(--green-light); }
+.setup-divider { border: none; border-top: 1px solid var(--brown-mid); margin: 16px 0; }
+.badge { border-radius: 2px; font-size: 0.5rem; text-transform: uppercase; }
+.badge-gold { background: var(--gold); color: var(--brown-dark); }
+.badge-green { background: var(--green); color: var(--gold-light); border: 1px solid var(--gold); }
+.badge-red { background: var(--red); color: var(--cream); }
+.ghost-btn { background: none; border: 1px solid var(--brown-mid); color: var(--brown-light); cursor: pointer; border-radius: 2px; transition: border-color 0.2s, color 0.2s; }
+.ghost-btn:hover { border-color: var(--gold); }
+.az-league-title { font-family: 'Playfair Display', serif; font-weight: 700; color: var(--cream); margin-top: 6px; line-height: 1.2; }
+.az-flags { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
+.az-flag { font-family: 'Rye', serif; font-size: 0.57rem; letter-spacing: 0.12em; text-transform: uppercase; padding: 6px 14px; border: 1.5px solid var(--brown-mid); border-radius: 2px; color: var(--brown-light); background: rgba(0,0,0,0.22); }
+.az-flag-hi { border-color: var(--gold); color: var(--gold); background: rgba(201,150,42,0.08); }
+.rs-pos { display: inline-block; text-transform: uppercase; border-radius: 2px; }
+.az-badge { font-family: 'Rye', serif; letter-spacing: 0.12em; text-transform: uppercase; border-radius: 2px; }
+.setup-label { letter-spacing: 0.22em; text-transform: uppercase; color: var(--gold); display: block; }
+.section-head:first-child { margin-top: 0; }
+.guest-signin-btn { background: var(--green); border: 2px solid var(--gold); color: var(--gold-light); font-family: 'Rye', serif; font-size: 0.58rem; letter-spacing: 0.18em; text-transform: uppercase; padding: 12px 28px; cursor: pointer; border-radius: 2px; transition: background 0.2s, color 0.2s; }
+.guest-signin-btn:hover { background: var(--gold); color: var(--brown-dark); }
+footer { text-align: center; font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--brown-light); opacity: 0.7; }
+footer a { color: var(--brown-light); text-decoration: none; }
+footer a:hover { color: var(--gold-light); }

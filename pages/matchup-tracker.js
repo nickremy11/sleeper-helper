@@ -55,23 +55,17 @@ function lmLine({ pid, name, pts, proj, pos, f, out }) {
   return { pid, name, pos: P, pts: now, rest, sd, f, expFinal: now + rest, left: f > 0 && expected > 0 };
 }
 
-const LM_SLOT_ELIG = {
-  FLEX: ['RB', 'WR', 'TE'], WRRB_FLEX: ['RB', 'WR'], REC_FLEX: ['WR', 'TE'],
-  SUPER_FLEX: ['QB', 'RB', 'WR', 'TE'], IDP_FLEX: ['DL', 'LB', 'DB'],
-};
-const LM_FLEX_ORDER = ['WRRB_FLEX', 'REC_FLEX', 'FLEX', 'SUPER_FLEX', 'IDP_FLEX'];
-
 // Best ball scores an optimal lineup re-picked after the fact, so the projection
 // has to pick one too rather than sum `starters`. Greedy is exact here: dedicated
 // slots first, then flexes narrowest-first, and those eligibilities nest.
 function lmBestLineup(lines, rosterPositions) {
   const slots = (rosterPositions || []).map(lmPos).filter(s => !['BN', 'IR', 'TAXI'].includes(s));
-  const dedicated = slots.filter(s => !LM_SLOT_ELIG[s]);
-  const flexes = slots.filter(s => LM_SLOT_ELIG[s]).sort((a, b) => LM_FLEX_ORDER.indexOf(a) - LM_FLEX_ORDER.indexOf(b));
+  const dedicated = slots.filter(s => !SLOT_ELIG[s]);
+  const flexes = slots.filter(s => SLOT_ELIG[s]).sort((a, b) => FLEX_ORDER.indexOf(a) - FLEX_ORDER.indexOf(b));
   const pool = [...lines].sort((a, b) => b.expFinal - a.expFinal);
   const out = [];
   for (const slot of [...dedicated, ...flexes]) {
-    const elig = LM_SLOT_ELIG[slot] || [slot];
+    const elig = SLOT_ELIG[slot] || [slot];
     const i = pool.findIndex(l => elig.includes(l.pos));
     if (i >= 0) out.push(pool.splice(i, 1)[0]);
   }
@@ -108,15 +102,6 @@ function lmEvaluate(my, opp) {
   return { mu, sd, p, tier: lmTier(mu, sd, Math.max(my.maxSd, opp.maxSd), p), final: my.done && opp.done };
 }
 
-function lmRng(seed) {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6D2B79F5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
 
 // P(I finish in the league's top half this week), which is what a median game pays.
 // Sampled, unlike H2H: the rank of one team in a field has no tidy closed form. The
@@ -124,7 +109,7 @@ function lmRng(seed) {
 function lmMedianOdds(teams, myIdx, sims = 2000) {
   const n = teams.length, top = Math.floor(n / 2);
   if (!top || !teams[myIdx]) return null;
-  const r = lmRng(0x4c4d);
+  const r = mnmRng(0x4c4d);
   const z = () => { let u = 0; while (!u) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); };
   let wins = 0;
   const draw = new Array(n);
