@@ -12,7 +12,7 @@
 
   // Accounts live on helper. Any other host (the apex site, My Ranks) calls it
   // cross-origin, and its profile links have to name it too.
-  var _onHelper = location.hostname === 'helper.ffhistorian.com' || location.hostname.endsWith('.pages.dev');
+  var _onHelper = location.hostname === 'helper.ffhistorian.com' || /(^|\.)sleeper-helper\.pages\.dev$/.test(location.hostname);
   var _siteBase = _onHelper ? '' : 'https://helper.ffhistorian.com';
   var _apiBase  = _siteBase ? _siteBase + '/api' : '/api';
   var _user     = null;

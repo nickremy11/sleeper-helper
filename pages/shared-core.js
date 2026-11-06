@@ -3,7 +3,7 @@
 
 // API roots. A page on the helper host calls the Worker same-origin; every other
 // host (the apex site, My Ranks, local files) has to name it.
-const SH_API = (location.hostname === 'helper.ffhistorian.com' || location.hostname.endsWith('.pages.dev'))
+const SH_API = (location.hostname === 'helper.ffhistorian.com' || /(^|\.)sleeper-helper\.pages\.dev$/.test(location.hostname))
   ? '/api'
   : 'https://helper.ffhistorian.com/api';
 const MYRANKS_API = 'https://myranks.ffhistorian.com';
