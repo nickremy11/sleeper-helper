@@ -107,6 +107,16 @@ async function lsLoadData() {
     d.weekly = await lsLoadWeekly(lg.league_id, d);
     lsApplyApTotals(d);
   }));
+  // ESPN leagues append to S.leagues whenever they finish loading, and the list above
+  // was read long ago. Pick up any that landed during this load: loadEspnLeagues()
+  // only backfills once LS.loaded is set, so nothing else would ever fill them in.
+  const tried = new Set();
+  for (;;) {
+    const late = S.leagues.filter(lg => lg.source === 'espn' && !LS.leagueData[lg.league_id] && !tried.has(lg.league_id));
+    if (!late.length) break;
+    late.forEach(lg => tried.add(lg.league_id));
+    await Promise.all(late.map(lsLoadEspnLeague));
+  }
   lsRecapSnapshot();
 }
 
@@ -122,12 +132,12 @@ async function lsLoadEspnLeague(lg) {
     // mMatchupScore adds the whole season schedule (with scores) — all-play, the
     // weekly recap and the odds sim's future matchups all read it from one call.
     const r = await fetch(`/api/espn/fantasy/${espnId}?view=mRoster&view=mTeam&view=mSettings&view=mMatchupScore&seasonId=${season}`, { credentials: 'include' });
-    if (!r.ok) return;
+    if (!r.ok) { console.warn(`[League Summaries] ${lg.name}: ESPN returned ${r.status}`); return; }
     const d = await r.json();
     const mySWID = S.espnSettings?.swid || '';
     const teams  = d.teams || [];
     const myTeam = espnMyTeam(teams, mySWID);
-    if (!myTeam) return;
+    if (!myTeam) { console.warn(`[League Summaries] ${lg.name}: no team matches your SWID`); return; }
 
     const numTeams     = teams.length;
     const playoffTeams = d.settings?.scheduleSettings?.playoffTeamCount ?? Math.floor(numTeams / 2);
@@ -186,7 +196,9 @@ async function lsLoadEspnLeague(lg) {
       _espn: { id: espnId, settings: d.settings, schedule },
     };
     lsApplyApTotals(LS.leagueData[lg.league_id]);
-  } catch (_) {}
+  } catch (e) {
+    console.warn(`[League Summaries] ${lg.name}: ESPN load failed`, e);
+  }
 }
 
 // One week, one league, from my seat. `rows` = [{rid, mid, pts}] for every team

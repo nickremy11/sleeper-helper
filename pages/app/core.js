@@ -288,7 +288,7 @@ async function loadEspnLeagues(season) {
     // standing/record/odds) until now. Backfill just the new ESPN leagues and
     // redraw; Sleeper leagues are unaffected (already loaded synchronously
     // before render() was ever called).
-    if (S.tab === 'leagues' && LS.loaded) {
+    if (LS.loaded) {
       const newEspnLeagues = S.leagues.filter(l => l.source === 'espn' && !LS.leagueData[l.league_id]);
       if (newEspnLeagues.length) {
         await Promise.all(newEspnLeagues.map(lg => lsLoadEspnLeague(lg)));
