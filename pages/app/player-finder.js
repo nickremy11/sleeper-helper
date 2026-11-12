@@ -1,18 +1,48 @@
 // Player Finder tab
 
 // ── 2. Player Finder ──────────────────────────────────────────────────────────
-function renderPlayerSearch() {
-  setC(`<div>
-    <div class="search-wrap">
-      <div class="player-ac-wrap" id="pf-ac">
-        <input type="text" id="ps" class="search-input" placeholder="Search player to target…"
-          oninput="showPlayerDropdown('ps', 'pf-dropdown', 'pfSelectPlayer')" autocomplete="off" autofocus />
+// Player lookup — the top of the Players tab (renderRostership). It used to be
+// its own Player Finder tab; ?tab=player still lands here (swResolve).
+//
+// Any player, not just yours: who owns him in every league, that owner's playoff
+// odds, and a side-by-side roster comparison. The search and its results survive
+// a tab switch and the table's redraws — pfRestore() repaints them from PF.
+
+function pfLookupHtml() {
+  const p = PF.targetPid ? S.players[PF.targetPid] : null;
+  return `<div class="pf-lookup">
+    <div class="search-wrap" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <div class="player-ac-wrap" id="pf-ac" style="flex:1;min-width:220px;">
+        <input type="text" id="ps" class="search-input" placeholder="Look up any player — who owns him, their playoff odds…"
+          oninput="showPlayerDropdown('ps', 'pf-dropdown', 'pfSelectPlayer')" autocomplete="off" value="${p ? esc(sleeperName(p)) : ''}" />
         <div class="player-dropdown" id="pf-dropdown" style="display:none;"></div>
       </div>
+      ${p ? `<button class="ghost-btn" onclick="pfClearLookup()">✕ Clear</button>` : ''}
     </div>
-    <div id="ps-r"><div class="empty-state"><p>Search and select a player to see where they stand across all your leagues</p></div></div>
-  </div>`);
+    <div id="ps-r"></div>
+  </div>`;
+}
+
+// Repaint the lookup's results after the tab (or the table under it) redraws.
+function pfRestore() {
   document.addEventListener('click', _pfOutsideClick);
+  const r = document.getElementById('ps-r');
+  if (!r || !PF.targetPid) return;
+  if (PF.allRosterData) pfRenderResults();
+  else r.innerHTML = loading('Checking all leagues');
+}
+
+// From a Rostership row: look him up and bring the results into view.
+function pfLookup(pid) {
+  pfSelectPlayer(pid);
+  document.getElementById('pf-ac')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function pfClearLookup() {
+  PF.targetPid = null; PF.myPid = null; PF.allRosterData = null; PF.expanded = null; PF.expandedOther = null;
+  const inp = document.getElementById('ps'); if (inp) inp.value = '';
+  const r = document.getElementById('ps-r'); if (r) r.innerHTML = '';
+  rsDrawFull();
 }
 
 function _pfOutsideClick(e) {
@@ -68,28 +98,31 @@ function pfClearMyPlayer() {
 }
 
 async function pfSelectPlayer(pid) {
-  document.getElementById('pf-dropdown').style.display = 'none';
+  const dd = document.getElementById('pf-dropdown'); if (dd) dd.style.display = 'none';
   const player = S.players[pid];
   if (!player) return;
-  document.getElementById('ps').value = player.full_name;
+  const inp = document.getElementById('ps'); if (inp) inp.value = sleeperName(player);
   PF.targetPid = pid;
   PF.myPid = null;
   PF.expanded = null;
+  PF.allRosterData = null;
   const r = document.getElementById('ps-r');
-  r.innerHTML = loading('Checking all leagues');
+  if (r) r.innerHTML = loading('Checking all leagues');
   try {
     const statsP = ppgLoadStats();
-    PF.allRosterData = await Promise.all(S.leagues.map(lg =>
-      Promise.all([ api('/league/' + lg.league_id + '/rosters'), api('/league/' + lg.league_id + '/users') ])
+    const data = await Promise.all(S.leagues.filter(lg => lg.source !== 'espn').map(lg =>
+      Promise.all([ api('/league/' + lg.league_id + '/rosters'), leagueUsers(lg.league_id) ])
         .then(([rs, us]) => {
           const uMap = Object.fromEntries((us || []).map(u => [u.user_id, u.display_name || u.username]));
           return { lg, rs: rs || [], uMap };
         }).catch(() => null)
     ));
+    if (PF.targetPid !== pid) return;   // another lookup started meanwhile
+    PF.allRosterData = data;
     await statsP;
     pfRenderResults();
     pfLoadOdds();
-  } catch(e) { r.innerHTML = errHtml(e); }
+  } catch(e) { const r2 = document.getElementById('ps-r'); if (r2) r2.innerHTML = errHtml(e); }
 }
 
 // ── Playoff odds beside every team ──
@@ -112,7 +145,7 @@ function pfOddsSlot(lgId, rid) {
 }
 
 function pfPaintOdds() {
-  if (S.tab !== 'player') return;
+  if (S.tab !== 'rostership') return;
   for (const el of document.querySelectorAll('.pf-odds')) {
     const odds = moTeamOdds(el.dataset.lg, Number(el.dataset.rid));
     el.innerHTML = odds != null
@@ -173,6 +206,7 @@ function pfRenderResults() {
   const pfGp  = pfPpg === null ? 0 : playerSeasonGp(pid);
 
   const r = document.getElementById('ps-r');
+  if (!r) return;
   r.innerHTML = `<div style="margin-bottom:16px;">
     <div style="background:var(--brown-dark);border:1px solid var(--brown-mid);border-radius:2px;padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
       <span class="card-title">${esc(player.full_name)}</span>
@@ -198,7 +232,7 @@ function pfRenderResults() {
 
     ${mine.length ? `<div class="sect">On your roster</div><div class="pf-mine">${mine.map(f=>`
       <div class="data-row">
-        <a href="https://sleeper.com/leagues/${esc(f.lgId)}/team" target="_blank" class="row-link">${esc(f.lgName)}</a>
+        <a href="/analyzer?league=${encodeURIComponent(f.lgId)}" target="_blank" rel="noopener" class="row-link">${esc(f.lgName)}</a>
         <span style="display:flex;align-items:center;gap:6px;">${pfOddsSlot(f.lgId, f.rid)}${injuryBadge(player.injury_status)}<span class="badge ${f.starter?'badge-green':'badge-outline'}">${f.starter?'Starting':'Bench'}</span></span>
       </div>`).join('')}</div>` : ''}
 
@@ -215,7 +249,7 @@ function pfRenderResults() {
 
     ${free.length ? `<div class="sect">Free agent in</div><div class="pf-free">${free.map(f=>`
       <div class="data-row">
-        <a href="https://sleeper.com/leagues/${esc(f.lgId)}" target="_blank" class="row-link">${esc(f.name)}</a>
+        <a href="/analyzer?league=${encodeURIComponent(f.lgId)}" target="_blank" rel="noopener" class="row-link">${esc(f.name)}</a>
         <span class="badge badge-green">Available</span>
       </div>`).join('')}</div>` : ''}
 
@@ -394,8 +428,8 @@ function pfCompareHtml(myData, theirData, theirName, lgId, theirRosterId) {
     </div>
     ${sections}
     <div class="pf-compare-footer">
-      <a href="https://sleeper.com/leagues/${esc(lgId)}" target="_blank" class="pf-compare-link">View League on Sleeper</a>
-      <a href="/trade-analyzer?league=${encodeURIComponent(lgId)}&b=${theirRosterId}" target="_blank" class="pf-compare-link">Open in Trade Analyzer ⇄</a>
+      <a href="/analyzer?league=${encodeURIComponent(lgId)}" target="_blank" rel="noopener" class="pf-compare-link">League Analyzer</a>
+      <a href="/trade-analyzer?league=${encodeURIComponent(lgId)}&b=${theirRosterId}" target="_blank" rel="noopener" class="pf-compare-link">Open in Trade Analyzer ⇄</a>
     </div>
   </div>`;
 }

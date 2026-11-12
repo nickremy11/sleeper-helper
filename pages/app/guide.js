@@ -7,51 +7,55 @@
 //   tab:  switches to that dashboard tab      href: a standalone page
 //   espn: has a real ESPN code path (not just Sleeper)
 //   write: writes back to Sleeper — the tag text says what it writes
+// Grouped exactly like the menu (shared-nav.js SH_NAV). A tool with several views
+// lists each view, so the guide also says where a merged tool went.
 const GUIDE = [
-  { title: 'In the dashboard', note: 'Tabs across the top of this app.', items: [
+  { title: 'My Leagues', note: 'Your leagues, week to week.', items: [
     { name:'League Summaries', tab:'leagues',    espn:true,
-      desc:'Standings, record, all-play record and simulated playoff odds for every league on one screen.' },
-    { name:'Rostership',       tab:'rostership', espn:true,
-      desc:'How many of your leagues each player is on, so you can see your real exposure at a glance.' },
-    { name:'Lineup Checker',   tab:'lineups',    espn:true, write:'Sets lineups',
+      desc:'Standings, record, all-play record and simulated playoff odds for every league on one screen. Click a league name to open it in the League Analyzer.' },
+    { name:'League Analyzer',  href:'/analyzer', espn:true, newTab:true,
+      desc:'Every team in one league ranked by roster value, positional strength, draft capital and starter strength. "View vs Ranks" lays one of your My Ranks boards over the league instead.' },
+    { name:'Lineups',          tab:'lineups',    espn:true, write:'Sets lineups',
       desc:'Flags empty slots and hurt starters everywhere, builds the best lineup, and sets it in Sleeper in one click. Click any row to see every replacement for that slot with its PPG, projection and rank. Search an injured starter to bench him in every league he is in at once.' },
-    { name:'Weekly Ranks Grid',tab:'ranksgrid',  espn:true,
-      desc:"Your own ranking sheet as seven position columns, with one league's roster painted on it — green starting, red benched." },
-    { name:'Player Finder',    tab:'player',
-      desc:'Look up any player for his dynasty value and every roster in your leagues he sits on.' },
+    { name:'Lineups · Ranks grid', tab:'ranksgrid', espn:true,
+      desc:"The second view in Lineups: your weekly ranking sheet as position columns, with one league's roster painted on it — green starting, red benched, yellow free agent." },
+    { name:'Players',          tab:'rostership', espn:true,
+      desc:'Look up any player to see who owns him in every league, with that team’s playoff odds and a side-by-side roster comparison. Below it, how many of your leagues each of your players is on.' },
     { name:'Waivers',          tab:'waivers',    espn:true,
       desc:'Dynasty: the best free agents left across all your leagues by FantasyCalc value. Redraft: your uploaded ranking sheet as a grid for one league, with your players in green and free agents in yellow. vs My Ranks: any of your My Ranks tier boards as a grid over one league, overall or broken out by position.' },
+  ]},
+  { title: 'Trades', note: 'Finding, weighing and sending trades.', items: [
     { name:'Open Trades',      tab:'trades',
       desc:'Every pending trade offer across every league in one list, with real player names instead of ID numbers.' },
-    { name:'Trade Partners',   tab:'partners',
-      desc:"Type another manager's name and see every league you share with them." },
-    { name:'Scout',            tab:'scout',      espn:true,
-      desc:"Hunts for trade openings — where you're contending and someone's rebuilding, or who's stacked at a position." },
-    { name:'Mass Offers',      tab:'offers',     write:'Sends trades',
+    { name:'Find a Trade · By position', tab:'scout', espn:true,
+      desc:"Scout every league for trade openings — where you're contending and someone's rebuilding, or who's stacked at a position." },
+    { name:'Find a Trade · By player',   tab:'offers', write:'Sends trades',
       desc:'Shop one of your players to a whole league, or bid a draft pick for a player in every league he is on — review each offer, then send them all.' },
-    { name:'Draft Queue',      tab:'drafts',
+    { name:'Find a Trade · By manager',  tab:'partners',
+      desc:'Pick any manager you share a league with and see every league you have in common, and who owns a given player on each side.' },
+    { name:'Trade Analyzer',   href:'/trade-analyzer', espn:true, write:'Sends trades', newTab:true,
+      desc:"Build a two- or three-team trade, see what it does to each roster's rank and playoff odds, and send it as an offer in Sleeper." },
+  ]},
+  { title: 'Drafts', note: 'Before and during a draft.', items: [
+    { name:'Live Drafts',      tab:'drafts',
       desc:'Every draft you have running right now, and how many picks until your turn in each.' },
-    { name:'In-Draft Tracker', tab:'tracker',    espn:true,
+    { name:'Live Drafts · Draft tracker', tab:'tracker', espn:true,
       desc:"A live board with ADP, tiers and your starred targets while you're on the clock." },
+    { name:'Auction Tracker',  href:'/auction',   espn:true,
+      desc:'Live budgets, inflation and position scarcity while an auction runs, synced to the draft or tracked by hand.' },
+    { name:'Dispersal',        href:'/dispersal',
+      desc:'A shared realtime draft room for splitting up an abandoned dynasty roster.' },
+  ]},
+  { title: 'Other Tools', note: 'The rest of the site.', items: [
     { name:'ROI Tracker',      tab:'roi',        espn:true,
       desc:'Dues, winnings and finish for every league you have played in, year by year, with profit and ROI per season and all time. Finishes come from Sleeper and ESPN; money is entered by hand or imported once from your spreadsheet.' },
-  ]},
-  { title: 'Standalone tools', note: 'Their own pages — shareable links you can send to a leaguemate.', items: [
-    { name:'League Analyzer',      href:'/analyzer',        espn:true,
-      desc:'Every team in one league ranked by roster value, positional strength, draft capital and starter strength. "View vs Ranks" lays one of your My Ranks boards over the league instead.' },
-    { name:'Trade Analyzer',       href:'/trade-analyzer',  espn:true, write:'Sends trades',
-      desc:"Build a two- or three-team trade, see what it does to each roster's rank and playoff odds, and send it as an offer in Sleeper." },
-    { name:'Auction Draft Tracker',href:'/auction',         espn:true,
-      desc:'Live budgets, inflation and position scarcity while an auction runs, synced to the draft or tracked by hand.' },
-    { name:'Dispersal',            href:'/dispersal',
-      desc:'A shared realtime draft room for splitting up an abandoned dynasty roster.' },
-    { name:'Root For Me',          href:'/rootforme',       espn:true,
+    { name:'Root For Me',      href:'/rootforme', espn:true,
       desc:"Which way to root in each NFL game, weighted by whether you're contending or rebuilding in each league — plus Live Matchups, your projected record with every matchup sorted from Mortal Lock to Lost Cause, and the Monday Night Miracle: what every live matchup needs from the players left, and the box scores that win the most $." },
-    { name:'My Ranks',             href:'https://myranks.ffhistorian.com',
+    { name:'My Ranks',         href:'https://myranks.ffhistorian.com',
       desc:'Your own player and pick tiers, kept in one place and shareable with other managers.' },
-    { name:'My Profile',           href:'/myprofile',
+    { name:'My Profile',       href:'/myprofile',
       desc:'Your account, your Sleeper auth token and your ESPN league credentials.' },
-    { name:'Connecting ESPN',      href:'/espn-setup',      espn:true,
+    { name:'Connecting ESPN',  href:'/espn-setup', espn:true,
       desc:'What ESPN needs to let this site read your leagues, where to find the two cookies, and what works once they are in.' },
   ]},
 ];
@@ -63,8 +67,8 @@ function renderGuide() {
 
   const rows = sec => sec.items.map(it => {
     const target = it.tab
-      ? `<button class="gd-name" onclick="sw('${esc(it.tab)}')">${esc(it.name)}</button>`
-      : `<a class="gd-name" href="${esc(it.href)}">${esc(it.name)}</a>`;
+      ? `<a class="gd-name" href="/?tab=${esc(it.tab)}" data-tab="${esc(it.tab)}">${esc(it.name)}</a>`
+      : `<a class="gd-name" href="${esc(it.href)}"${it.newTab ? ' target="_blank" rel="noopener"' : ''}>${esc(it.name)}${it.newTab ? ' ↗' : ''}</a>`;
     const slug = it.tab ? esc(it.name) : esc(it.href.replace(/^https?:\/\//, ''));
     return `<div class="gd-row">
       <div class="gd-slug">${slug}</div>

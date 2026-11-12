@@ -54,5 +54,9 @@ class_name = "DispersalRoom"
 tag              = "v1"
 new_sqlite_classes = ["DispersalRoom"]
 
+# Daily 10:00 UTC — Elite FFL draft history + keeper options sync (src/eliteffl.js)
+[triggers]
+crons = ["0 10 * * *"]
+
 [observability]
 enabled = true

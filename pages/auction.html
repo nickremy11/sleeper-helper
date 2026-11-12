@@ -6,7 +6,7 @@
   <title>Auction Draft Tracker</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Rye&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared-styles.css?v=20261106">
+  <link rel="stylesheet" href="/shared-styles.css?v=20261111">
   <style>
     .auc-wrap { max-width: 1300px; margin: 0 auto; padding: 20px 16px 60px; }
 
@@ -22,7 +22,7 @@
     }
     .auc-field { margin-bottom: 18px; }
     .auc-label {
-      display: block; font-family: 'Rye', serif; font-size: 0.46rem;
+      display: block; font-family: 'Rye', serif; font-size: 0.62rem;
       letter-spacing: 0.16em; text-transform: uppercase;
       color: var(--brown-light); margin-bottom: 7px;
     }
@@ -57,7 +57,7 @@
     }
     .auc-import-err { color: #e05252; }
     .auc-btn {
-      font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.16em;
+      font-family: 'Rye', serif; font-size: 0.64rem; letter-spacing: 0.16em;
       text-transform: uppercase; padding: 11px 28px;
       background: var(--gold); color: var(--brown-dark);
       border: none; border-radius: 3px; cursor: pointer;
@@ -99,7 +99,7 @@
     .auc-stat-val.inflation-low  { color: var(--green-light); }
     .auc-stat-val.inflation-high { color: #e05252; }
     .auc-stat-label {
-      font-family: 'Rye', serif; font-size: 0.38rem; letter-spacing: 0.14em;
+      font-family: 'Rye', serif; font-size: 0.60rem; letter-spacing: 0.14em;
       text-transform: uppercase; color: var(--brown-light); margin-top: 2px;
     }
     .auc-stats-row2 { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -138,7 +138,7 @@
     }
     .auc-pills { display: flex; gap: 6px; flex-wrap: wrap; }
     .auc-pill {
-      font-family: 'Rye', serif; font-size: 0.4rem; letter-spacing: 0.14em;
+      font-family: 'Rye', serif; font-size: 0.61rem; letter-spacing: 0.14em;
       text-transform: uppercase; padding: 5px 11px;
       border: 1.5px solid var(--brown-mid); border-radius: 2px;
       background: transparent; color: var(--brown-light);
@@ -179,7 +179,7 @@
       background: #1e0e05;
     }
     .auc-pool-table th {
-      font-family: 'Rye', serif; font-size: 0.38rem; letter-spacing: 0.16em;
+      font-family: 'Rye', serif; font-size: 0.60rem; letter-spacing: 0.16em;
       text-transform: uppercase; color: var(--gold); padding: 8px 10px;
       text-align: left; white-space: nowrap; border-bottom: 1px solid var(--brown-mid);
     }
@@ -252,7 +252,7 @@
     .auc-teams-header {
       padding: 10px 14px; background: #1e0e05;
       border-bottom: 1px solid var(--brown-mid);
-      font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.18em;
+      font-family: 'Rye', serif; font-size: 0.64rem; letter-spacing: 0.18em;
       text-transform: uppercase; color: var(--gold);
       display: flex; align-items: center; justify-content: space-between;
     }
@@ -317,7 +317,7 @@
     .auc-pool-table tbody tr.tier-odd:hover  { background: rgba(201,150,42,0.13); }
     .auc-pool-table tbody tr.tier-even:hover { background: rgba(91,192,222,0.10); }
     .auc-tier-badge {
-      display: inline-block; font-family: 'Rye', serif; font-size: 0.34rem;
+      display: inline-block; font-family: 'Rye', serif; font-size: 0.59rem;
       letter-spacing: 0.08em; padding: 1px 4px; border-radius: 2px;
       vertical-align: middle; margin-left: 5px; opacity: 0.65;
     }
@@ -327,7 +327,7 @@
     /* ── Player notes (target / avoid / dart throw) ── */
     .auc-note-btns { display: flex; gap: 6px; margin-left: auto; }
     .auc-note-btn {
-      font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.1em;
+      font-family: 'Rye', serif; font-size: 0.61rem; letter-spacing: 0.1em;
       text-transform: uppercase; padding: 6px 10px; border-radius: 3px;
       border: 1.5px solid transparent; cursor: pointer; opacity: 0.75;
       transition: opacity 0.12s;
@@ -341,7 +341,7 @@
       position: relative;
     }
     .auc-notes-label {
-      font-family: 'Rye', serif; font-size: 0.46rem; letter-spacing: 0.14em;
+      font-family: 'Rye', serif; font-size: 0.62rem; letter-spacing: 0.14em;
       text-transform: uppercase; padding: 3px 8px; border-radius: 2px;
       display: inline-block; margin-bottom: 8px;
     }
@@ -416,13 +416,14 @@
     <div class="banner">
       <div style="position:relative;z-index:1;padding:18px 20px;display:flex;justify-content:space-between;align-items:flex-start;">
         <div class="banner-text">
-          <a href="/" class="banner-back">← Home</a>
+          <a href="/" class="banner-back">← Sleeper Helper</a>
           <h1>Auction <span>Draft Tracker</span></h1>
           <div class="banner-divider"></div>
         </div>
         <div id="auth-chip"></div>
       </div>
     </div>
+  <nav id="sh-nav" class="tab-bar"></nav>
 
     <div class="auc-wrap">
       <div id="app"></div>
@@ -450,9 +451,10 @@
     </div>
   </div>
 
-  <script src="/shared-core.js?v=20261106"></script>
-  <script src="/shared-utils.js?v=20261106"></script>
-  <script src="/shared-auth.js?v=20261106"></script>
+  <script src="/shared-nav.js?v=20261111"></script>
+  <script src="/shared-core.js?v=20261111"></script>
+  <script src="/shared-utils.js?v=20261111"></script>
+  <script src="/shared-auth.js?v=20261111"></script>
   <script>
   'use strict';
 
@@ -1035,7 +1037,7 @@
           <div style="display:flex;gap:10px;flex-wrap:wrap;">
             ${LINEUP_REQ_POS.map(pos => `
               <div style="display:flex;flex-direction:column;align-items:center;gap:5px;">
-                <label style="font-family:'Rye',serif;font-size:0.4rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--brown-light);">${pos}</label>
+                <label style="font-family:'Rye',serif;font-size:0.61rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--brown-light);">${pos}</label>
                 <input type="number" min="0" class="auc-input lineup-req-input" data-pos="${pos}"
                   value="${(A.lineupReqs || DEFAULT_LINEUP_REQS)[pos]}"
                   style="width:56px;padding:7px 4px;text-align:center;">
@@ -1435,7 +1437,7 @@
           <span class="auc-poll-status">${A.pollTimer ? 'Live · ' + (A.source === 'sleeper' ? 'Sleeper' : 'ESPN') : 'Manual mode'}</span>
           ${A._espnValNote ? `<span class="auc-poll-status">${esc(A._espnValNote)}</span>` : ''}
           ${A._myPpgNote ? `<span class="auc-poll-status">${esc(A._myPpgNote)}</span>` : ''}
-          <button class="auc-btn auc-btn-ghost" style="margin-top:0;padding:5px 14px;font-size:0.38rem;" onclick="goReset()">New Draft</button>
+          <button class="auc-btn auc-btn-ghost" style="margin-top:0;padding:5px 14px;font-size:0.60rem;" onclick="goReset()">New Draft</button>
         </div>
       </div>
       <div class="auc-stats-row2">

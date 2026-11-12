@@ -2,13 +2,21 @@
 
 // ── 7. Rostership ─────────────────────────────────────────────────────────────
 
+// The Players tab: the any-player lookup that used to be Player Finder on top
+// (pf* in player-finder.js), and the cross-league rostership table under it.
 async function renderRostership() {
   // First visit: init league selection and load prefs
   if (RS.selectedLeagues === null) {
     RS.selectedLeagues = new Set(S.leagues.map(lg => lg.league_id));
     await rsLoadPrefs();
+    if (S.tab !== 'rostership') return;
   }
+  // Loads by itself on the first visit, like every other read-only tab. The
+  // button stays for re-reading after a league selection change.
+  const autoLoad = !RS.loaded && !RS.loading;
+  if (autoLoad) RS.loading = true;
   rsDrawFull();
+  if (autoLoad) loadRostershipData();
 }
 
 async function rsLoadPrefs() {
@@ -119,6 +127,9 @@ function rsDrawFull() {
     </div>` : '';
 
   setC(`<div>
+    <div class="section-head"><h2>Players</h2><div class="section-head-line"></div></div>
+    ${pfLookupHtml()}
+    <div class="section-head" style="margin-top:26px;"><h2>Your Rostership</h2><div class="section-head-line"></div></div>
     <div class="rs-lg-panel">
       <div class="rs-lg-header">
         <span class="rs-lg-title">Leagues</span>
@@ -130,7 +141,7 @@ function rsDrawFull() {
         <button class="ghost-btn" id="rs-btn-cont" ${hasPrefs?'':'disabled title="Fill out Root For Me first"'} onclick="rsSelectContenders()">Contenders</button>
         <button class="ghost-btn" id="rs-btn-reb" ${hasPrefs?'':'disabled title="Fill out Root For Me first"'} onclick="rsSelectRebuilders()">Rebuilders</button>
         <div style="flex:1;"></div>
-        <button class="setup-btn" id="rs-load-btn" onclick="loadRostershipData()" style="height:32px;">${RS.loaded?'Reload':'Load Rostership'}</button>
+        <button class="setup-btn" id="rs-load-btn" onclick="loadRostershipData()" style="height:32px;" ${RS.loading ? 'disabled' : ''}>${RS.loading ? 'Loading…' : RS.loaded ? '↻ Refresh' : 'Load'}</button>
         <span class="setup-status" id="rs-load-status" style="margin:0;"></span>
       </div>
       <div class="rs-lg-list">${lgRows}</div>
@@ -139,7 +150,7 @@ function rsDrawFull() {
     ${RS.loaded ? `
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
       <input type="text" class="search-input" id="rs-search"
-        placeholder="Search player, pick, team…" oninput="rsOnSearch()" value="${esc(RS.search)}" />
+        placeholder="Filter your players, picks, teams…" oninput="rsOnSearch()" value="${esc(RS.search)}" />
     </div>` : ''}
 
     ${filterHtml}
@@ -151,16 +162,18 @@ function rsDrawFull() {
         <thead id="rs-thead"></thead>
         <tbody id="rs-tbody"><tr><td colspan="7" style="padding:20px;text-align:center;font-style:italic;color:var(--brown-light);">Computing…</td></tr></tbody>
       </table>
-    </div>` : `<div class="empty-state"><p>Select leagues above and click Load Rostership</p></div>`}
+    </div>` : RS.loading ? loading('Loading rosters') : `<div class="empty-state"><p>Select leagues above and click Load</p></div>`}
   </div>`);
 
   if (RS.loaded) rsUpdateTable();
+  pfRestore();
 }
 
 // ── Load all roster + draft data ──────────────────────────────────────────────
 async function loadRostershipData() {
   const btn    = document.getElementById('rs-load-btn');
   const statEl = document.getElementById('rs-load-status');
+  RS.loading = true;
   if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
   if (statEl) statEl.textContent = '';
 
@@ -188,12 +201,15 @@ async function loadRostershipData() {
     RS.loaded = true;
     rsBuildRows();
     rsPopulateFilterMeta();
-    rsDrawFull();           // full redraw now that RS.loaded = true
+    RS.loading = false;
+    if (S.tab === 'rostership') rsDrawFull();   // full redraw now that RS.loaded = true — unless the user moved on
   } catch (e) {
-    if (statEl) statEl.textContent = 'Error: ' + e.message;
+    const st = document.getElementById('rs-load-status');
+    if (st) st.textContent = 'Error: ' + e.message;
   } finally {
+    RS.loading = false;
     const b = document.getElementById('rs-load-btn');
-    if (b) { b.disabled = false; b.textContent = RS.loaded ? 'Reload' : 'Load Rostership'; }
+    if (b) { b.disabled = false; b.textContent = RS.loaded ? '↻ Refresh' : 'Load'; }
   }
 }
 
@@ -503,7 +519,7 @@ function rsUpdateTable() {
         const cnt = row.isPick && row.leagueCounts[lgId] > 1
           ? ` ×${row.leagueCounts[lgId]}` : '';
         const espnTag = isEspn ? ' ESPN' : '';
-        return `<span class="rs-expand-tag">${esc(lg.name || 'Unnamed')}<span class="rs-tag-meta">${esc(type)}${espnTag} · ${sz}${cnt}</span></span>`;
+        return `<a class="rs-expand-tag" href="/analyzer?league=${encodeURIComponent(lgId)}" target="_blank" rel="noopener" title="Open in the League Analyzer">${esc(lg.name || 'Unnamed')}<span class="rs-tag-meta">${esc(type)}${espnTag} · ${sz}${cnt}</span></a>`;
       }).filter(Boolean).join('');
 
       const label = row.isPick ? 'Leagues holding this pick' : 'Leagues with this player';
@@ -511,6 +527,7 @@ function rsUpdateTable() {
         <td colspan="7"><div class="rs-expand-inner">
           <div class="rs-expand-title">${label}</div>
           <div class="rs-expand-leagues">${tags || '<span style="font-style:italic;color:var(--brown-light);font-size:0.85rem;">None</span>'}</div>
+          ${!row.isPick && S.players[row.key] ? `<button class="ghost-btn" style="margin-top:10px;" onclick="pfLookup(${jsArg(row.key)})">⌕ Who owns him everywhere, with playoff odds ↑</button>` : ''}
         </div></td>
       </tr>`;
     }

@@ -33,9 +33,9 @@ const RG_SPLIT_WIDE = ['WR', 'RB'];
 const RG_MODES = [['current','Current lineup'], ['ranks','Ranked optimal'], ['projections','Projection optimal']];
 
 async function renderRanksGrid(force = false) {
-  if (force || !luCacheFresh()) setC(loading('Loading ranks grid'));
-  try { await luEnsureLineupData(force); rgDraw(); }
-  catch (e) { setC(errHtml(e)); }
+  if (force || !luCacheFresh()) setC(viewBarHtml('lineups', 'ranksgrid') + loading('Loading ranks grid'));
+  try { await luEnsureLineupData(force); if (S.tab === 'ranksgrid') rgDraw(); }
+  catch (e) { if (S.tab === 'ranksgrid') setC(viewBarHtml('lineups', 'ranksgrid') + errHtml(e)); }
 }
 
 function rgSetLeague(v) { RG.leagueIdx = parseInt(v, 10) || 0; RG.msg = null; rgDraw(); }
@@ -75,7 +75,7 @@ function rgApplyBarHtml(fix) {
       if (!x) return '';
       const m = src === 'ranks' ? 'ranks' : 'projections';
       return x.changed
-        ? `<button class="ghost-btn" style="font-size:0.5rem;" onclick="rgSetMode('${m}')">⚡ Optimize with ${src === 'ranks' ? 'Ranks' : 'Projections'}</button>`
+        ? `<button class="ghost-btn" style="font-size:0.64rem;" onclick="rgSetMode('${m}')">⚡ Optimize with ${src === 'ranks' ? 'Ranks' : 'Projections'}</button>`
         : `<span style="color:#5fae5f;">✓ optimal by ${label(src)}</span>`;
     };
     const parts = [part('ranks'), part('projections')].filter(Boolean);
@@ -252,12 +252,11 @@ function rgDraw() {
   const cols   = rgTep ? { ...LU.ranks.cols, FLEX: LU.ranks.cols.FLEX_TEP } : (LU.ranks?.cols || {});
   const hasCol = RG_COLS.some(([k]) => (cols[k] || []).length);
 
-  const head = `<div class="tab-header" style="margin-bottom:16px;align-items:flex-start;">
+  const head = `${viewBarHtml('lineups', 'ranksgrid')}<div class="tab-header" style="margin-bottom:16px;align-items:flex-start;">
       <div class="section-head" style="margin-bottom:0;flex:1;"><h2>Weekly Ranks — Week ${week}</h2><div class="section-head-line"></div></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
-        <span style="font-size:0.55rem;color:${luHaveRankings() ? 'var(--gold-light)' : 'var(--brown-light)'};">${esc(luRanksSummary())}</span>
-        <button class="ghost-btn" style="font-size:0.5rem;" onclick="openRankingsUpload()">⬆ Upload rankings</button>
-        <button class="ghost-btn" style="font-size:0.5rem;" onclick="sw('lineups')">← Lineup Checker</button>
+        <span style="font-size:0.65rem;color:${luHaveRankings() ? 'var(--gold-light)' : 'var(--brown-light)'};">${esc(luRanksSummary())}</span>
+        <button class="ghost-btn" style="font-size:0.64rem;" onclick="openRankingsUpload()">⬆ Upload rankings</button>
       </div>
     </div>`;
 
@@ -298,12 +297,12 @@ function rgDraw() {
     : `<span style="font-size:0.7rem;color:var(--brown-light);">No leagues loaded</span>`;
 
   const modePills = RG_MODES.map(([m, label]) =>
-    `<button class="ghost-btn rg-pill ${RG.mode === m ? 'on' : ''}" style="font-size:0.5rem;" onclick="rgSetMode('${m}')">${label}</button>`).join('');
+    `<button class="ghost-btn rg-pill ${RG.mode === m ? 'on' : ''}" style="font-size:0.64rem;" onclick="rgSetMode('${m}')">${label}</button>`).join('');
 
   const controls = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
-      <span style="font-size:0.55rem;color:var(--brown-light);">League:</span>${leagueSel}
+      <span style="font-size:0.65rem;color:var(--brown-light);">League:</span>${leagueSel}
       <span style="width:1px;height:18px;background:var(--brown-mid);"></span>
-      <span style="font-size:0.55rem;color:var(--brown-light);">Highlight:</span>${modePills}
+      <span style="font-size:0.65rem;color:var(--brown-light);">Highlight:</span>${modePills}
       <span style="flex:1;"></span>
       <span style="font-size:0.6rem;color:var(--brown-light);display:flex;gap:12px;align-items:center;">
         <span><span style="display:inline-block;width:9px;height:9px;background:rgba(95,174,95,0.6);border-left:3px solid #5fae5f;margin-right:4px;"></span>starting</span>

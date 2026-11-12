@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Root For Me — FF Historian</title>
 <link href="https://fonts.googleapis.com/css2?family=Rye&family=Playfair+Display:ital,wght@0,700;1,400&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/shared-styles.css?v=20261106" />
+<link rel="stylesheet" href="/shared-styles.css?v=20261111" />
 <style>
 
 /* ── BANNER ── */
@@ -28,13 +28,13 @@
   background: var(--brown-dark); border: 2px solid var(--brown-mid); border-radius: 2px;
   padding: 18px 22px; margin-bottom: 22px; box-shadow: 4px 4px 0 var(--brown-mid);
 }
-.setup-label { font-family: 'Rye', serif; font-size: 0.55rem; margin-bottom: 7px; }
+.setup-label { font-family: 'Rye', serif; font-size: 0.65rem; margin-bottom: 7px; }
 .setup-row { display: flex; gap: 8px; }
 .setup-input { font-family: 'Crimson Text', serif; padding: 7px 12px; }
 
 .setup-btn {
   background: var(--green); border: 2px solid var(--gold); color: var(--gold-light);
-  font-family: 'Rye', serif; font-size: 0.55rem; letter-spacing: 0.18em; text-transform: uppercase;
+  font-family: 'Rye', serif; font-size: 0.65rem; letter-spacing: 0.18em; text-transform: uppercase;
   padding: 0 16px; cursor: pointer; border-radius: 2px; transition: background 0.2s, color 0.2s; white-space: nowrap;
 }
 
@@ -47,7 +47,7 @@
   display: flex; align-items: center; gap: 10px; margin-bottom: 20px;
   background: var(--brown-dark); border: 1px solid var(--brown-mid); border-radius: 2px; padding: 10px 16px;
 }
-.week-label { font-family: 'Rye', serif; font-size: 0.55rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); }
+.week-label { font-family: 'Rye', serif; font-size: 0.65rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); }
 .week-num { font-family: 'Playfair Display', serif; font-size: 1.1rem; font-weight: 700; color: var(--cream); min-width: 28px; text-align: center; }
 .week-arrow { background: none; border: 1px solid var(--brown-mid); color: var(--brown-light); width: 28px; height: 28px; cursor: pointer; border-radius: 2px; font-size: 0.8rem; line-height: 1; transition: border-color 0.2s, color 0.2s; display: flex; align-items: center; justify-content: center; }
 .week-arrow:hover:not(:disabled) { border-color: var(--gold); color: var(--gold); }
@@ -55,7 +55,7 @@
 .load-btn {
   margin-left: auto;
   background: var(--green); border: 2px solid var(--gold); color: var(--gold-light);
-  font-family: 'Rye', serif; font-size: 0.52rem; letter-spacing: 0.18em; text-transform: uppercase;
+  font-family: 'Rye', serif; font-size: 0.64rem; letter-spacing: 0.18em; text-transform: uppercase;
   padding: 7px 18px; cursor: pointer; border-radius: 2px; transition: background 0.2s, color 0.2s;
 }
 .load-btn:hover { background: var(--gold); color: var(--brown-dark); }
@@ -64,7 +64,7 @@
 /* ── LEAGUE TABLE ── */
 .league-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
 .league-table th {
-  font-family: 'Rye', serif; font-size: 0.48rem; letter-spacing: 0.2em; text-transform: uppercase;
+  font-family: 'Rye', serif; font-size: 0.63rem; letter-spacing: 0.2em; text-transform: uppercase;
   color: var(--gold); text-align: left; padding: 6px 10px; border-bottom: 2px solid var(--brown-mid);
 }
 .league-table th.center { text-align: center; }
@@ -72,7 +72,7 @@
 .league-table tr:last-child td { border-bottom: none; }
 .league-table tr:hover td { background: rgba(255,255,255,0.02); }
 .league-name { font-family: 'Crimson Text', serif; font-size: 0.95rem; color: var(--parchment); }
-.league-type { font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brown-light); margin-top: 1px; }
+.league-type { font-family: 'Rye', serif; font-size: 0.61rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brown-light); margin-top: 1px; }
 .value-input {
   width: 80px; background: rgba(255,255,255,0.05); border: 1px solid var(--brown-mid);
   color: var(--cream); font-family: 'Crimson Text', serif; font-size: 0.95rem;
@@ -95,7 +95,7 @@ details.leagues-details > summary {
 details.leagues-details > summary::-webkit-details-marker { display: none; }
 details.leagues-details > summary::marker { display: none; }
 .leagues-toggle {
-  font-size: 0.55rem; color: var(--gold);
+  font-size: 0.65rem; color: var(--gold);
   transition: transform 0.2s; flex-shrink: 0;
 }
 details.leagues-details[open] > summary .leagues-toggle { transform: rotate(90deg); }
@@ -128,7 +128,7 @@ details.leagues-details[open] > summary .leagues-toggle { transform: rotate(90de
 .game-at { font-family: 'Crimson Text', serif; font-size: 0.8rem; color: var(--brown-light); }
 .game-time { font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--brown-light); font-style: italic; }
 .game-pill {
-  font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.1em; text-transform: uppercase;
+  font-family: 'Rye', serif; font-size: 0.61rem; letter-spacing: 0.1em; text-transform: uppercase;
   padding: 3px 8px; border-radius: 2px; white-space: nowrap;
 }
 .game-pill-mine { background: rgba(45,74,30,0.4); border: 1px solid rgba(74,122,47,0.5); color: var(--green-light); }
@@ -150,7 +150,7 @@ details.leagues-details[open] > summary .leagues-toggle { transform: rotate(90de
 .game-col { padding: 12px 16px; }
 .game-col-divider { background: var(--brown-mid); }
 .game-col-header {
-  font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.2em; text-transform: uppercase;
+  font-family: 'Rye', serif; font-size: 0.64rem; letter-spacing: 0.2em; text-transform: uppercase;
   color: var(--gold); margin-bottom: 10px; padding-bottom: 6px;
   border-bottom: 1px solid rgba(255,255,255,0.08);
 }
@@ -165,7 +165,7 @@ details.leagues-details[open] > summary .leagues-toggle { transform: rotate(90de
 .player-row:hover { background: rgba(255,255,255,0.05); }
 .player-row.active { background: rgba(201,150,42,0.12); }
 .player-pos {
-  font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.08em; text-transform: uppercase;
+  font-family: 'Rye', serif; font-size: 0.61rem; letter-spacing: 0.08em; text-transform: uppercase;
   width: 28px; flex-shrink: 0; padding: 2px 4px; border-radius: 2px; text-align: center;
   background: rgba(255,255,255,0.06); color: var(--brown-light);
 }
@@ -215,7 +215,7 @@ details.leagues-details[open] > summary .leagues-toggle { transform: rotate(90de
 .detail-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 420px) { .detail-cols { grid-template-columns: 1fr; } }
 .detail-section-label {
-  font-family: 'Rye', serif; font-size: 0.44rem; letter-spacing: 0.18em; text-transform: uppercase;
+  font-family: 'Rye', serif; font-size: 0.62rem; letter-spacing: 0.18em; text-transform: uppercase;
   color: var(--gold); margin-bottom: 5px;
 }
 .detail-league {
@@ -238,7 +238,7 @@ details.players-outer > summary {
 details.players-outer > summary::-webkit-details-marker { display: none; }
 details.players-outer > summary::marker { display: none; }
 details.players-outer[open] > summary { margin-bottom: 14px; }
-.players-toggle { font-size: 0.55rem; color: var(--gold); transition: transform 0.2s; flex-shrink: 0; }
+.players-toggle { font-size: 0.65rem; color: var(--gold); transition: transform 0.2s; flex-shrink: 0; }
 details.players-outer[open] > summary .players-toggle { transform: rotate(90deg); }
 .players-summary-head { font-family: 'Rye', serif; font-size: 1rem; color: var(--brown-dark); white-space: nowrap; }
 .players-summary-info { font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--brown-light); font-style: italic; white-space: nowrap; flex-shrink: 0; }
@@ -253,9 +253,9 @@ details.pos-group > summary {
 details.pos-group > summary:hover { background: rgba(255,255,255,0.02); }
 details.pos-group > summary::-webkit-details-marker { display: none; }
 details.pos-group > summary::marker { display: none; }
-.pos-group-toggle { font-size: 0.5rem; color: var(--brown-light); transition: transform 0.2s; flex-shrink: 0; }
+.pos-group-toggle { font-size: 0.64rem; color: var(--brown-light); transition: transform 0.2s; flex-shrink: 0; }
 details.pos-group[open] > summary .pos-group-toggle { transform: rotate(90deg); }
-.pos-group-label { font-family: 'Rye', serif; font-size: 0.58rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); }
+.pos-group-label { font-family: 'Rye', serif; font-size: 0.66rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); }
 .pos-group-count { font-family: 'Crimson Text', serif; font-size: 0.82rem; color: var(--brown-light); font-style: italic; }
 .pos-group-body { padding: 2px 12px 10px; }
 
@@ -264,14 +264,14 @@ details.pos-group[open] > summary .pos-group-toggle { transform: rotate(90deg); 
   background: var(--brown-dark); border: 2px solid var(--brown-mid); border-radius: 2px;
   box-shadow: 4px 4px 0 var(--brown-mid); margin-bottom: 16px; padding: 14px 16px;
 }
-.mnm-label { font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin-bottom: 8px; }
+.mnm-label { font-family: 'Rye', serif; font-size: 0.64rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin-bottom: 8px; }
 .mnm-games { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .mnm-game { font-family: 'Crimson Text', serif; font-size: 0.9rem; color: var(--parchment); background: rgba(255,255,255,0.05); border: 1px solid var(--brown-mid); padding: 3px 10px; border-radius: 2px; }
 .mnm-game b { font-family: 'Rye', serif; font-size: 0.6rem; letter-spacing: 0.08em; color: var(--cream); font-weight: normal; }
 .mnm-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
 .mnm-tile { background: rgba(255,255,255,0.04); border: 1px solid var(--brown-mid); border-radius: 2px; padding: 8px 10px; }
 .mnm-tile-v { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 1.25rem; color: var(--cream); }
-.mnm-tile-l { font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brown-light); margin-top: 2px; }
+.mnm-tile-l { font-family: 'Rye', serif; font-size: 0.61rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brown-light); margin-top: 2px; }
 .mnm-tile-s { font-family: 'Crimson Text', serif; font-size: 0.8rem; font-style: italic; color: var(--brown-light); }
 .mnm-note { font-family: 'Crimson Text', serif; font-size: 0.85rem; font-style: italic; color: var(--brown-light); margin-top: 10px; }
 .mnm-good { color: var(--green-light); }
@@ -305,15 +305,15 @@ details.pos-group[open] > summary .pos-group-toggle { transform: rotate(90deg); 
 .mnm-win .player-pos { margin-top: 3px; }
 .mnm-tr-wrap { overflow-x: auto; margin-top: 6px; }
 .mnm-tr { border-collapse: collapse; width: 100%; font-family: 'Crimson Text', serif; font-size: 0.86rem; color: var(--parchment); }
-.mnm-tr th { font-family: 'Rye', serif; font-size: 0.44rem; letter-spacing: 0.12em; text-transform: uppercase; text-align: left; color: var(--gold); padding: 4px 8px; border-bottom: 1px solid var(--brown-mid); white-space: nowrap; }
+.mnm-tr th { font-family: 'Rye', serif; font-size: 0.62rem; letter-spacing: 0.12em; text-transform: uppercase; text-align: left; color: var(--gold); padding: 4px 8px; border-bottom: 1px solid var(--brown-mid); white-space: nowrap; }
 .mnm-tr th.mnm-good { color: var(--green-light); } .mnm-tr th.mnm-bad { color: #e08080; }
 .mnm-tr td { padding: 5px 8px; border-bottom: 1px dashed rgba(255,255,255,0.07); vertical-align: top; }
 .mnm-tr td b { font-weight: 600; color: var(--cream); }
 .mnm-tr-tag { display: block; font-style: italic; font-size: 0.78rem; color: var(--brown-light); }
-.mnm-tr-td { font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold); margin-right: 4px; }
+.mnm-tr-td { font-family: 'Rye', serif; font-size: 0.61rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold); margin-right: 4px; }
 .mnm-need-p { margin-top: 5px; padding-left: 8px; border-left: 2px solid var(--brown-mid); font-size: 0.88rem; }
 .mnm-win-k { font-family: 'Crimson Text', serif; font-size: 0.88rem; color: var(--parchment); display: flex; gap: 8px; }
-.mnm-win-k > span:first-child { font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold); width: 44px; flex-shrink: 0; padding-top: 4px; }
+.mnm-win-k > span:first-child { font-family: 'Rye', serif; font-size: 0.61rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold); width: 44px; flex-shrink: 0; padding-top: 4px; }
 .mnm-win-k b { font-weight: 600; color: var(--cream); }
 @media (max-width: 640px) {
   .mnm-lev-row { grid-template-columns: 34px minmax(0,1fr) 60px; }
@@ -324,7 +324,7 @@ details.pos-group[open] > summary .pos-group-toggle { transform: rotate(90deg); 
 .lm-bar { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px 18px; margin-bottom: 14px; }
 .lm-filters { display: flex; flex-wrap: wrap; gap: 8px 16px; min-width: 0; }
 .lm-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
-.lm-filter-lbl { font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); margin-right: 2px; }
+.lm-filter-lbl { font-family: 'Rye', serif; font-size: 0.61rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); margin-right: 2px; }
 .lm-pill { background: transparent; border: 1px solid var(--brown-mid); color: var(--brown-light); font-family: 'Crimson Text', serif; font-size: 0.8rem; padding: 3px 11px; border-radius: 12px; cursor: pointer; transition: all 0.15s; }
 .lm-pill:hover { color: var(--parchment); }
 .lm-pill.active { border-color: var(--gold); color: var(--gold); background: rgba(194,154,83,0.10); }
@@ -334,14 +334,14 @@ details.pos-group[open] > summary .pos-group-toggle { transform: rotate(90deg); 
 .lm-strip { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin: 12px 0 16px; }
 .lm-strip-cell { border: 1px solid var(--brown-mid); border-top: 3px solid var(--lm-c); border-radius: 2px; padding: 6px 4px; text-align: center; background: rgba(255,255,255,0.03); }
 .lm-strip-cell b { display: block; font-family: 'Playfair Display', serif; font-size: 1.15rem; color: var(--cream); line-height: 1.1; }
-.lm-strip-cell span { font-family: 'Rye', serif; font-size: 0.4rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brown-light); }
+.lm-strip-cell span { font-family: 'Rye', serif; font-size: 0.61rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brown-light); }
 .lm-tier { border-left: 3px solid var(--lm-c); padding-left: 12px; margin-bottom: 16px; }
 .lm-t-lock { --lm-c: #5cb85c; } .lm-t-good { --lm-c: #a8c66c; } .lm-t-toss { --lm-c: var(--gold); } .lm-t-bad { --lm-c: #e0946a; } .lm-t-dead { --lm-c: #e05252; }
-.lm-tier-head { font-family: 'Rye', serif; font-size: 0.56rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lm-c); margin-bottom: 2px; }
+.lm-tier-head { font-family: 'Rye', serif; font-size: 0.65rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lm-c); margin-bottom: 2px; }
 .lm-tier-head span { font-family: 'Crimson Text', serif; font-size: 0.85rem; letter-spacing: 0; color: var(--brown-light); margin-left: 4px; }
 .lm-row { padding: 8px 4px 9px; }
 .lm-tier .mnm-bar > span { background: var(--lm-c); }
-.lm-tag { font-family: 'Rye', serif; font-size: 0.4rem; letter-spacing: 0.1em; color: var(--brown-light); border: 1px solid var(--brown-mid); padding: 1px 4px; border-radius: 2px; vertical-align: middle; }
+.lm-tag { font-family: 'Rye', serif; font-size: 0.61rem; letter-spacing: 0.1em; color: var(--brown-light); border: 1px solid var(--brown-mid); padding: 1px 4px; border-radius: 2px; vertical-align: middle; }
 .lm-pct { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 0.95rem; color: var(--lm-c); min-width: 42px; text-align: right; white-space: nowrap; }
 .lm-sub { display: flex; flex-wrap: wrap; gap: 2px 12px; font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--brown-light); }
 .lm-sub-opp { flex: 1; min-width: 0; overflow-wrap: anywhere; }
@@ -351,7 +351,7 @@ details.pos-group[open] > summary .pos-group-toggle { transform: rotate(90deg); 
   .lm-refresh { margin-left: 0; width: 100%; justify-content: space-between; }
   .lm-refresh-btn { flex-basis: auto; padding: 7px 14px; }
   .lm-strip { gap: 4px; }
-  .lm-strip-cell span { font-size: 0.34rem; letter-spacing: 0.02em; }
+  .lm-strip-cell span { font-size: 0.59rem; letter-spacing: 0.02em; }
   .lm-tier { padding-left: 8px; }
 }
 
@@ -379,7 +379,7 @@ details.pos-group[open] > summary .pos-group-toggle { transform: rotate(90deg); 
 
   .league-table th,
   .league-table td { padding: 6px 5px; }
-  .league-table th { font-size: 0.44rem; letter-spacing: 0.12em; }
+  .league-table th { font-size: 0.62rem; letter-spacing: 0.12em; }
   .value-input { width: 60px; }
 
   .game-header { padding: 11px 12px; gap: 8px; flex-wrap: wrap; }
@@ -397,7 +397,7 @@ details.pos-group[open] > summary .pos-group-toggle { transform: rotate(90deg); 
 <header class="banner">
   <div class="banner-inner">
     <div class="banner-text">
-      <a href="https://helper.ffhistorian.com" class="banner-back">← FF Historian</a>
+      <a href="/" class="banner-back">← Sleeper Helper</a>
       <h1>Root <span>For Me</span></h1>
       <p class="banner-sub">Know who to cheer for, week by week</p>
       <div class="banner-divider"></div>
@@ -405,6 +405,7 @@ details.pos-group[open] > summary .pos-group-toggle { transform: rotate(90deg); 
     <div id="auth-chip" style="flex-shrink:0;"></div>
   </div>
 </header>
+  <nav id="sh-nav" class="tab-bar"></nav>
 
 <!-- ── MAIN ── -->
 <main class="main">
@@ -504,11 +505,12 @@ details.pos-group[open] > summary .pos-group-toggle { transform: rotate(90deg); 
 
 </main>
 
-<script src="/shared-auth.js?v=20261106"></script>
-<script src="/shared-core.js?v=20261106"></script>
-<script src="/shared-utils.js?v=20261106"></script>
-<script src="/miracle.js?v=20261106"></script>
-<script src="/matchup-tracker.js?v=20261106"></script>
+<script src="/shared-nav.js?v=20261111"></script>
+  <script src="/shared-auth.js?v=20261111"></script>
+<script src="/shared-core.js?v=20261111"></script>
+<script src="/shared-utils.js?v=20261111"></script>
+<script src="/miracle.js?v=20261111"></script>
+<script src="/matchup-tracker.js?v=20261111"></script>
 <script>
 // ── Constants ─────────────────────────────────────────────────────────────────
 const API = SH_API;

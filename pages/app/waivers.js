@@ -14,6 +14,11 @@ function renderWaivers() {
         : `<span style="font-family:'Crimson Text',serif;font-size:0.82rem;font-style:italic;color:var(--brown-light);">CSV with a Player column (Position / Overall / Team read if present), or one name per line</span>`}
     </div>` : '';
 
+  // Loads by itself on arrival (and after a mode switch) — the button is for
+  // re-reading later. Flagged before the paint so it shows the loading state.
+  const autoLoad = !isMR && !WV.loaded && !WV.loading;
+  if (autoLoad) WV.loading = true;
+
   setC(`<div>
     <div class="tab-header" style="margin-bottom:16px;">
       <div class="section-head" style="margin-bottom:0;flex:1;"><h2>Waivers</h2><div class="section-head-line"></div></div>
@@ -32,18 +37,20 @@ function renderWaivers() {
     ${uploadSection}
     ${isMR ? '<div id="mrg-root"></div>' : `
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
-      <button class="setup-btn" id="wv-load-btn" onclick="loadWaiverData()" style="height:32px;">${WV.loaded ? 'Reload' : 'Load Waivers'}</button>
+      <button class="setup-btn" id="wv-load-btn" onclick="loadWaiverData()" style="height:32px;" ${WV.loading ? 'disabled' : ''}>${WV.loading ? 'Loading…' : WV.loaded ? '↻ Refresh' : 'Load'}</button>
       <span class="setup-status" id="wv-load-status" style="margin:0;"></span>
       ${WV.loaded && WV.skippedCount > 0 ? `<span class="setup-status" style="margin:0;font-style:italic;">— ${WV.skippedCount} league${WV.skippedCount > 1 ? 's' : ''} skipped (draft not yet complete)</span>` : ''}
     </div>
     <div id="wv-table-wrap">
-      ${WV.loaded ? wvRenderTable() : `<div class="empty-state"><p>${isDyn ? 'Click Load Waivers to scan all leagues for available players' : 'Click Load Waivers to pull rosters, then pick a league'}</p></div>`}
+      ${WV.loaded ? wvRenderTable() : WV.loading ? loading(isDyn ? 'Scanning leagues for available players' : 'Loading rosters') : `<div class="empty-state"><p>${isDyn ? 'Click Load to scan all leagues for available players' : 'Click Load to pull rosters, then pick a league'}</p></div>`}
     </div>`}
   </div>`);
 
   // The My Ranks grid loads itself (rankings, rosters, the lot) — there's no
   // "Load Waivers" step to press. Re-entering the tab redraws what's already in
   // MRG rather than re-fetching a ranking set that hasn't changed.
+  if (autoLoad) loadWaiverData();
+
   if (isMR) {
     // Same guard as the analyzer's: without shared-utils.js every reference
     // here throws and the mode renders as an empty panel with no explanation.
@@ -109,6 +116,9 @@ function wvLeagues() {
 async function loadWaiverData() {
   const btn    = document.getElementById('wv-load-btn');
   const statEl = document.getElementById('wv-load-status');
+  // A mode switch mid-load bumps loadSeq; this run then drops its results.
+  const seq = WV.loadSeq = (WV.loadSeq || 0) + 1;
+  WV.loading = true;
   if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
   if (statEl) statEl.textContent = '';
 
@@ -179,16 +189,22 @@ async function loadWaiverData() {
 
     // Redraft renders one league at a time (wvGridHtml); dynasty stays a
     // cross-league table and needs the row build.
+    if (seq !== WV.loadSeq) return;
     if (WV.mode === 'dynasty') wvBuildRows();
     else if (!eligible.some(lg => lg.league_id === WV.gridLeagueId)) WV.gridLeagueId = eligible[0]?.league_id || null;
     WV.loaded = true;
+    WV.loading = false;
     WV.skippedCount = skipped;
-    renderWaivers();
+    if (S.tab === 'waivers') renderWaivers();
   } catch(e) {
-    if (statEl) statEl.textContent = 'Error: ' + e.message;
+    const st = document.getElementById('wv-load-status');
+    if (st && seq === WV.loadSeq) st.textContent = 'Error: ' + e.message;
   } finally {
-    const b = document.getElementById('wv-load-btn');
-    if (b) { b.disabled = false; b.textContent = WV.loaded ? 'Reload' : 'Load Waivers'; }
+    if (seq === WV.loadSeq) {
+      WV.loading = false;
+      const b = document.getElementById('wv-load-btn');
+      if (b) { b.disabled = false; b.textContent = WV.loaded ? '↻ Refresh' : 'Load'; }
+    }
   }
 }
 
@@ -371,8 +387,8 @@ function wvGridHtml() {
     ? `<span style="font-size:0.6rem;color:#e08b88;">rosters didn't load for this league — nothing highlighted</span>` : '';
 
   const controls = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
-      <span style="font-size:0.55rem;color:var(--brown-light);">League:</span>${leagueSel}
-      <button class="ghost-btn rg-pill ${WV.gridFaOnly ? 'on' : ''}" style="font-size:0.5rem;" onclick="wvToggleFaOnly()">◎ Free agents only</button>
+      <span style="font-size:0.65rem;color:var(--brown-light);">League:</span>${leagueSel}
+      <button class="ghost-btn rg-pill ${WV.gridFaOnly ? 'on' : ''}" style="font-size:0.64rem;" onclick="wvToggleFaOnly()">◎ Free agents only</button>
       <span style="font-size:0.6rem;color:var(--gold-light);">${faCount} ranked free agent${faCount === 1 ? '' : 's'}</span>
       ${note}
       <span style="flex:1;"></span>
@@ -492,7 +508,7 @@ function wvRenderTable() {
   const tbody = sorted.map(row => {
     const isExp = WV.expandedKey === row.pid;
     const posHtml = `<span class="rs-pos rs-pos-${row.pos}">${row.pos}</span>`;
-    const teamHtml = `<span style="font-family:'Rye',serif;font-size:0.42rem;letter-spacing:0.1em;color:var(--brown-light);margin-left:5px;">${esc(row.team)}</span>`;
+    const teamHtml = `<span style="font-family:'Rye',serif;font-size:0.61rem;letter-spacing:0.1em;color:var(--brown-light);margin-left:5px;">${esc(row.team)}</span>`;
     const nameCell = `<button class="rs-name-btn${isExp?' rs-expanded':''}" onclick="wvToggle('${esc(row.pid)}')">${esc(row.name)}${teamHtml} <span class="rs-chevron">▾</span></button>`;
 
     const valCell = isDyn
@@ -541,6 +557,8 @@ function wvSetMode(mode) {
   if (WV.mode === mode) return;
   WV.mode    = mode;
   WV.loaded  = false;
+  WV.loading = false;
+  WV.loadSeq = (WV.loadSeq || 0) + 1;   // orphan any load still running for the old mode
   WV.rows    = [];
   WV.expandedKey = null;
   wvApplyWide('waivers');

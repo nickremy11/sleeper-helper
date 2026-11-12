@@ -105,10 +105,10 @@ function luWeekCtlHtml(w) {
   const auto = luAutoWeek(S.nflState);
   const on   = luOverrideLive(S.nflState);
   return `<span style="display:inline-flex;gap:4px;align-items:center;">
-      <button class="ghost-btn" style="font-size:0.5rem;" title="Previous week" onclick="luStepWeek(-1)"${w <= 1 ? ' disabled' : ''}>◀</button>
-      <span style="font-size:0.55rem;white-space:nowrap;color:${on ? '#d08a30' : 'var(--brown-light)'};">Week ${w}${on ? ' · manual' : ''}</span>
-      <button class="ghost-btn" style="font-size:0.5rem;" title="Next week" onclick="luStepWeek(1)"${w >= LU_MAX_WEEK ? ' disabled' : ''}>▶</button>
-      ${on ? `<button class="ghost-btn" style="font-size:0.5rem;" title="Back to Sleeper's week (${auto})" onclick="luClearWeek()">✕</button>` : ''}
+      <button class="ghost-btn" style="font-size:0.64rem;" title="Previous week" onclick="luStepWeek(-1)"${w <= 1 ? ' disabled' : ''}>◀</button>
+      <span style="font-size:0.65rem;white-space:nowrap;color:${on ? '#d08a30' : 'var(--brown-light)'};">Week ${w}${on ? ' · manual' : ''}</span>
+      <button class="ghost-btn" style="font-size:0.64rem;" title="Next week" onclick="luStepWeek(1)"${w >= LU_MAX_WEEK ? ' disabled' : ''}>▶</button>
+      ${on ? `<button class="ghost-btn" style="font-size:0.64rem;" title="Back to Sleeper's week (${auto})" onclick="luClearWeek()">✕</button>` : ''}
     </span>`;
 }
 
@@ -1087,7 +1087,7 @@ function luFaHtml(fix) {
   const ups = luFaUpgrades(fix);
   if (!ups.length) return '';
   return `<div style="padding:6px 16px 8px;border-top:1px dashed var(--brown-mid);">
-    <div style="font-family:'Rye',serif;font-size:0.52rem;letter-spacing:0.1em;text-transform:uppercase;color:#d08a30;margin-bottom:4px;">◎ On the wire — projected to beat your best lineup</div>
+    <div style="font-family:'Rye',serif;font-size:0.64rem;letter-spacing:0.1em;text-transform:uppercase;color:#d08a30;margin-bottom:4px;">◎ On the wire — projected to beat your best lineup</div>
     ${ups.map(u => {
       const p = S.players[u.pid] || {};
       return `<div class="diff-row">
@@ -1123,17 +1123,17 @@ function luSummaryMeta(fix, idx) {
   const reason = st.detail
     ? `<span style="font-size:0.85rem;color:${color};">${esc(st.detail)}</span>` : '';
   const icon  = st.level === 'bad' ? '⚠ ' : st.level === 'ok' ? '✓ ' : '';
-  const badge = `<span style="font-family:'Rye',serif;font-size:0.52rem;letter-spacing:0.1em;text-transform:uppercase;color:${color};border:1px solid ${color};border-radius:2px;padding:2px 6px;white-space:nowrap;">${icon}${esc(st.label)}</span>`;
+  const badge = `<span style="font-family:'Rye',serif;font-size:0.64rem;letter-spacing:0.1em;text-transform:uppercase;color:${color};border:1px solid ${color};border-radius:2px;padding:2px 6px;white-space:nowrap;">${icon}${esc(st.label)}</span>`;
   // Its own chip rather than folded into the status badge: a free-agent upgrade is
   // a different kind of problem from a bad lineup, and a team can easily have one
   // while already being Optimal.
   const qd  = luQuestionableStarters(fix);
   const doubt = qd.length
-    ? `<span title="Game-time decisions: ${esc(qd.map(q => q.name + ' (' + q.tag + ')').join(', '))}" style="font-family:'Rye',serif;font-size:0.52rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--gold);border:1px dotted var(--gold);border-radius:2px;padding:2px 6px;white-space:nowrap;">? ${qd.length} Q/D</span>`
+    ? `<span title="Game-time decisions: ${esc(qd.map(q => q.name + ' (' + q.tag + ')').join(', '))}" style="font-family:'Rye',serif;font-size:0.64rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--gold);border:1px dotted var(--gold);border-radius:2px;padding:2px 6px;white-space:nowrap;">? ${qd.length} Q/D</span>`
     : '';
   const ups = luFaUpgrades(fix);
   const fa  = ups.length
-    ? `<span title="Free agents projected to beat your best lineup" style="font-family:'Rye',serif;font-size:0.52rem;letter-spacing:0.1em;text-transform:uppercase;color:#d08a30;border:1px dashed #d08a30;border-radius:2px;padding:2px 6px;white-space:nowrap;">◎ ${ups.length} FA +${ups[0].gain.toFixed(1)}</span>`
+    ? `<span title="Free agents projected to beat your best lineup" style="font-family:'Rye',serif;font-size:0.64rem;letter-spacing:0.1em;text-transform:uppercase;color:#d08a30;border:1px dashed #d08a30;border-radius:2px;padding:2px 6px;white-space:nowrap;">◎ ${ups.length} FA +${ups[0].gain.toFixed(1)}</span>`
     : '';
   return `<span id="lc-meta-${idx}" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">${reason}${pts}${doubt}${fa}${badge}</span>`;
 }
@@ -1289,7 +1289,7 @@ function luSlotOptionsHtml(fix, idx, slotIdx) {
       ? `<span style="display:block;font-size:0.6rem;color:var(--gold-light);">↳ ${esc(luPlayerName(c.via.pid))} moves ${esc(c.via.slot)} → ${esc(slot)}</span>`
       : '';
     const action = canSwap
-      ? `<button class="ghost-btn" style="font-size:0.5rem;padding:2px 6px;" title="Start him in this slot" onclick="luSlotSwap(${idx},${slotIdx},'${c.pid}')">⇄ Start</button>`
+      ? `<button class="ghost-btn" style="font-size:0.64rem;padding:2px 6px;" title="Start him in this slot" onclick="luSlotSwap(${idx},${slotIdx},'${c.pid}')">⇄ Start</button>`
       : '';
     return row(c.pid, { via, action, landSlot, mixed: c.mixed });
   }).join('');
@@ -1386,7 +1386,7 @@ function optimizeLineup(idx, src) {
     ${fix._espn ? '<span style="font-size:0.65rem;color:var(--brown-light);">set it in ESPN</span>'
                 : luCanWrite() ? `<button class="setup-btn" onclick="applyLineup(${idx})">Apply this lineup</button>`
                 : '<span style="font-size:0.65rem;color:var(--brown-light);">preview only — add a Sleeper token to apply</span>'}
-    <button class="ghost-btn" style="font-size:0.5rem;" onclick="revertLineupView(${idx})">Cancel</button>
+    <button class="ghost-btn" style="font-size:0.64rem;" onclick="revertLineupView(${idx})">Cancel</button>
   </div>`;
 }
 
@@ -1874,7 +1874,7 @@ function lswLeagueBlock(t) {
 
   const head = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 12px;background:var(--brown-mid);">
       <span style="font-family:'Playfair Display',serif;font-weight:700;font-size:0.9rem;color:var(--cream);">${esc(fix.leagueName)}</span>
-      ${fix._espn ? `<span style="font-family:'Rye',serif;font-size:0.45rem;letter-spacing:0.1em;color:var(--gold-light);">ESPN</span>` : ''}
+      ${fix._espn ? `<span style="font-family:'Rye',serif;font-size:0.62rem;letter-spacing:0.1em;color:var(--gold-light);">ESPN</span>` : ''}
       <span class="diff-slot" style="flex:0 0 auto;">${esc(t.slot)}</span>
       ${state === 'ok'   ? `<span style="font-size:0.65rem;color:#5fae5f;">✓ applied</span>` : ''}
       ${state === 'fail' ? `<span style="font-size:0.65rem;color:#c0504d;">✗ failed</span>` : ''}
@@ -1942,7 +1942,7 @@ function lswLeagueBlock(t) {
          </div>
          ${cands.map(c => lswCandRow(t, c, String(pick) === c.pid)).join('')}
        </div>`
-    : `<div style="padding:0 12px 8px;"><button class="ghost-btn" style="font-size:0.5rem;" onclick="lswSetMode('manual')">Choose a different player…</button></div>`;
+    : `<div style="padding:0 12px 8px;"><button class="ghost-btn" style="font-size:0.64rem;" onclick="lswSetMode('manual')">Choose a different player…</button></div>`;
 
   return `<div class="lsw-league">${head}${chosenRow}${list}</div>`;
 }
@@ -1978,7 +1978,7 @@ function lswDraw() {
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 12px;">
         <span style="font-family:'Playfair Display',serif;font-size:1rem;color:var(--cream);">${esc(luPlayerName(LSW.pid))}</span>
         <span style="font-size:0.7rem;color:#5fae5f;">${doneCount ? `✓ swapped out of ${doneCount} lineup${doneCount === 1 ? '' : 's'} — he is no longer starting anywhere` : 'Not in any starting lineup'}</span>
-        <button class="ghost-btn" style="font-size:0.5rem;margin-left:auto;" onclick="lswClear()">✕ Done</button>
+        <button class="ghost-btn" style="font-size:0.64rem;margin-left:auto;" onclick="lswClear()">✕ Done</button>
       </div>
     </div>`;
     return;
@@ -1990,7 +1990,7 @@ function lswDraw() {
       <span style="font-size:0.68rem;color:var(--brown-light);">${esc(luNormPos(p.position) || '')}${p.team ? ' · ' + esc(p.team) : ''}</span>
       ${injuryBadge(p.injury_status)}
       <span style="font-size:0.7rem;color:var(--gold-light);">starting in ${rows.length} league${rows.length === 1 ? '' : 's'}${writable !== rows.length ? ` (${rows.length - writable} ESPN, read-only)` : ''}</span>
-      <button class="ghost-btn" style="font-size:0.5rem;margin-left:auto;" onclick="lswClear()">✕ Clear</button>
+      <button class="ghost-btn" style="font-size:0.64rem;margin-left:auto;" onclick="lswClear()">✕ Clear</button>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 12px;">
       ${modeBtn('ranks',  '⚡ Best ranked in all',     canRank, 'Upload a ranking sheet first')}
@@ -2040,7 +2040,7 @@ function openRankingsUpload() {
       </div>
       <input type="file" id="lu-rk-file" accept=".csv,.txt" style="color:var(--cream);font-family:'Crimson Text',serif;font-size:0.8rem;margin-bottom:10px;display:block;width:100%;" onchange="luRankFilePicked(this)" />
       <div style="border:1px dashed var(--brown-light);border-radius:3px;padding:10px;margin-bottom:10px;">
-        <div style="font-size:0.75rem;color:var(--cream);margin-bottom:4px;">🖼 From a screenshot <span style="font-size:0.55rem;color:var(--gold-light);border:1px solid var(--gold);border-radius:2px;padding:0 4px;margin-left:4px;">BETA</span></div>
+        <div style="font-size:0.75rem;color:var(--cream);margin-bottom:4px;">🖼 From a screenshot <span style="font-size:0.65rem;color:var(--gold-light);border:1px solid var(--gold);border-radius:2px;padding:0 4px;margin-left:4px;">BETA</span></div>
         <div style="font-size:0.65rem;color:var(--brown-light);margin-bottom:6px;line-height:1.5;">
           An image of the side-by-side sheet (QB / RB / WR / TE / FLEX / TEP FLEX / Defense / Kicker). It's read by an AI model, about 30 seconds, so check the unmatched list afterwards. If the sheet has a <b>TEP FLEX</b> list, leagues with a TE premium use it as their flex ranks.
         </div>
@@ -2051,8 +2051,8 @@ function openRankingsUpload() {
       <textarea id="lu-rk-text" style="width:100%;height:160px;background:var(--brown-mid);color:var(--parchment);border:1px solid var(--brown-light);border-radius:2px;padding:8px;font-family:monospace;font-size:0.8rem;box-sizing:border-box;" placeholder="…or paste here:&#10;Josh Allen&#10;Lamar Jackson&#10;Ja'Marr Chase"></textarea>
       <div id="lu-rk-status" style="font-size:0.7rem;margin:8px 0;color:var(--brown-light);min-height:1em;"></div>
       <div style="display:flex;gap:8px;justify-content:flex-end;">
-        ${luHaveRankings() ? `<button class="ghost-btn" style="font-size:0.5rem;margin-right:auto;" onclick="clearRankings()">Clear saved</button>` : ''}
-        <button class="ghost-btn" style="font-size:0.5rem;" onclick="document.getElementById('lu-rk-modal').remove()">Cancel</button>
+        ${luHaveRankings() ? `<button class="ghost-btn" style="font-size:0.64rem;margin-right:auto;" onclick="clearRankings()">Clear saved</button>` : ''}
+        <button class="ghost-btn" style="font-size:0.64rem;" onclick="document.getElementById('lu-rk-modal').remove()">Cancel</button>
         <button class="setup-btn" onclick="saveRankingsUpload()">Save &amp; use</button>
       </div>
     </div>`;
@@ -2502,12 +2502,13 @@ async function luEnsureLineupData(force = false) {
 }
 
 async function renderLineupCheck(force = false) {
-  if (force || !luCacheFresh()) setC(loading('Loading lineups'));
+  if (force || !luCacheFresh()) setC(viewBarHtml('lineups', 'lineups') + loading('Loading lineups'));
   try {
     const lineups = await luEnsureLineupData(force);
-    if (!lineups.length) { setC('<div class="empty-state"><p>No active lineups found</p></div>'); return; }
+    if (S.tab !== 'lineups') return;   // the user moved on while it loaded
+    if (!lineups.length) { setC(viewBarHtml('lineups', 'lineups') + '<div class="empty-state"><p>No active lineups found</p></div>'); return; }
     luRenderLineupCards();
-  } catch(e) { setC(errHtml(e)); }
+  } catch(e) { if (S.tab === 'lineups') setC(viewBarHtml('lineups', 'lineups') + errHtml(e)); }
 }
 
 // Just the <details> cards, so the injury-swap panel can re-render them in place
@@ -2531,11 +2532,11 @@ function luCardsHtml() {
       // is the trailing note: ESPN can't be written at all, and a Sleeper league
       // without a token can be previewed but not applied.
       const note = fix._espn
-        ? `<span style="font-size:0.55rem;color:var(--brown-light);">preview only — set this lineup in ESPN</span>`
+        ? `<span style="font-size:0.65rem;color:var(--brown-light);">preview only — set this lineup in ESPN</span>`
         : canWrite
-        ? `<button class="ghost-btn" style="font-size:0.5rem;" onclick="event.preventDefault();testSetLineup(${idx})">↻ Re-set current (test)</button>
-           <span id="lc-result-test-${idx}" style="font-size:0.55rem;color:var(--brown-light);"></span>`
-        : `<span style="font-size:0.55rem;color:var(--brown-light);">preview only — <a href="/myprofile" style="color:var(--gold-light);">add a Sleeper token</a> to apply</span>`;
+        ? `<button class="ghost-btn" style="font-size:0.64rem;" onclick="event.preventDefault();testSetLineup(${idx})">↻ Re-set current (test)</button>
+           <span id="lc-result-test-${idx}" style="font-size:0.65rem;color:var(--brown-light);"></span>`
+        : `<span style="font-size:0.65rem;color:var(--brown-light);">preview only — <a href="/myprofile" style="color:var(--gold-light);">add a Sleeper token</a> to apply</span>`;
       const actions = `<div style="margin:4px 0;padding:0 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
              ${optBtns}
              ${note}
@@ -2544,7 +2545,7 @@ function luCardsHtml() {
 
     return `<details class="lineup-card" id="lc-${idx}">
       <summary>
-        <span style="font-family:'Playfair Display',serif;font-weight:700;font-size:0.95rem;color:var(--cream);flex-shrink:0;margin-right:12px;">${esc(fix.leagueName)}${fix._espn ? ' <span style="font-family:\'Rye\',serif;font-size:0.45rem;letter-spacing:0.1em;color:var(--brown-light);">ESPN</span>' : ''}</span>
+        <span style="font-family:'Playfair Display',serif;font-weight:700;font-size:0.95rem;color:var(--cream);flex-shrink:0;margin-right:12px;">${esc(fix.leagueName)}${fix._espn ? ' <span style="font-family:\'Rye\',serif;font-size:0.62rem;letter-spacing:0.1em;color:var(--brown-light);">ESPN</span>' : ''}</span>
         ${luSummaryMeta(fix, idx)}
       </summary>
       <div id="lc-body-${idx}">${luBodyRows(fix, 'current')}</div>
@@ -2572,14 +2573,13 @@ function luRenderLineupCards() {
     const toolbar = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
            <button class="setup-btn" ${canProj ? '' : 'disabled'} onclick="optimizeAll()">⚡ Optimize all</button>
            ${canWrite ? `<button class="setup-btn" ${canProj ? '' : 'disabled'} onclick="applyAll()">✓ Apply all</button>` : ''}
-           <button class="ghost-btn" id="lu-collapse-btn" style="font-size:0.5rem;" onclick="toggleCollapseAll()">Expand all</button>
+           <button class="ghost-btn" id="lu-collapse-btn" style="font-size:0.64rem;" onclick="toggleCollapseAll()">Expand all</button>
            <span style="width:1px;height:18px;background:var(--brown-mid);"></span>
            ${luWeekCtlHtml(w)}
            <span style="width:1px;height:18px;background:var(--brown-mid);"></span>
-           <span style="font-size:0.55rem;color:${canRank ? 'var(--gold-light)' : 'var(--brown-light)'};">${esc(luRanksSummary())}</span>
-           <button class="ghost-btn" style="font-size:0.5rem;" onclick="openRankingsUpload()">⬆ Upload rankings</button>
-           <button class="ghost-btn" style="font-size:0.5rem;" onclick="sw('ranksgrid')">▦ View as ranks grid</button>
-           <button class="ghost-btn" style="font-size:0.5rem;${LU.faOn ? 'color:#d08a30;border-color:#d08a30;' : ''}" title="Flag free agents projected to beat your best lineup (redraft leagues only)" onclick="luToggleFa()">◎ FA watch: ${LU.faOn ? 'on' : 'off'}</button>
+           <span style="font-size:0.65rem;color:${canRank ? 'var(--gold-light)' : 'var(--brown-light)'};">${esc(luRanksSummary())}</span>
+           <button class="ghost-btn" style="font-size:0.64rem;" onclick="openRankingsUpload()">⬆ Upload rankings</button>
+           <button class="ghost-btn" style="font-size:0.64rem;${LU.faOn ? 'color:#d08a30;border-color:#d08a30;' : ''}" title="Flag free agents projected to beat your best lineup (redraft leagues only)" onclick="luToggleFa()">◎ FA watch: ${LU.faOn ? 'on' : 'off'}</button>
            <span id="lu-allstatus" style="font-size:0.6rem;color:var(--brown-light);width:100%;text-align:right;"></span>
          </div>`;
 
@@ -2590,11 +2590,12 @@ function luRenderLineupCards() {
         })()
       : '';
     const refreshBar = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
-        <span style="font-size:0.55rem;color:var(--brown-light);">Updated ${cachedAgo}</span>
-        <button class="ghost-btn" style="font-size:0.5rem;" onclick="renderLineupCheck(true)">↻ Refresh</button>
+        <span style="font-size:0.65rem;color:var(--brown-light);">Updated ${cachedAgo}</span>
+        <button class="ghost-btn" style="font-size:0.64rem;" onclick="renderLineupCheck(true)">↻ Refresh</button>
       </div>`;
 
     setC(`<div>
+      ${viewBarHtml('lineups', 'lineups')}
       <div class="tab-header" style="margin-bottom:16px;align-items:flex-start;">
         <div class="section-head" style="margin-bottom:0;flex:1;"><h2>Lineup Check — Week ${w}</h2><div class="section-head-line"></div></div>
         <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;">
@@ -2623,7 +2624,7 @@ function luSwapBarHtml() {
                style="width:100%;box-sizing:border-box;background:var(--brown-mid);color:var(--parchment);border:1px solid var(--brown-light);border-radius:2px;padding:5px 8px;font-family:'Crimson Text',serif;font-size:0.8rem;" />
         <div id="lu-swap-sug" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:50;background:var(--brown-dark);border:1px solid var(--gold);border-radius:2px;max-height:260px;overflow:auto;"></div>
       </div>
-      <span style="font-size:0.55rem;color:var(--brown-light);">finds every league where he's in your starting lineup</span>
+      <span style="font-size:0.65rem;color:var(--brown-light);">finds every league where he's in your starting lineup</span>
     </div>
     <div id="lu-swap-panel" style="margin-top:10px;"></div>
   </div>`;

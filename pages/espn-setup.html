@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Connecting ESPN — FF Historian</title>
 <link href="https://fonts.googleapis.com/css2?family=Rye&family=Playfair+Display:ital,wght@0,700;1,400&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/shared-styles.css?v=20261106" />
+<link rel="stylesheet" href="/shared-styles.css?v=20261111" />
 <style>
 .banner-inner {
   position: relative; z-index: 1;
@@ -80,7 +80,7 @@ code {
 .tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
 .tab-pill {
   background: none; border: 1px solid var(--brown-mid); color: var(--brown-mid);
-  font-family: 'Rye', serif; font-size: 0.55rem; letter-spacing: 0.16em;
+  font-family: 'Rye', serif; font-size: 0.65rem; letter-spacing: 0.16em;
   text-transform: uppercase; padding: 7px 14px; cursor: pointer; border-radius: 2px;
   transition: background 0.2s, color 0.2s;
 }
@@ -92,7 +92,7 @@ code {
 /* ── TABLE ── */
 .tbl { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
 .tbl th {
-  font-family: 'Rye', serif; font-size: 0.52rem; letter-spacing: 0.16em;
+  font-family: 'Rye', serif; font-size: 0.64rem; letter-spacing: 0.16em;
   text-transform: uppercase; color: var(--gold); background: var(--brown-dark);
   text-align: left; padding: 9px 12px; border: 1px solid var(--brown-mid);
 }
@@ -121,7 +121,7 @@ footer { padding: 40px 0 20px; }
   <header class="banner">
     <div class="banner-inner">
       <div class="banner-text">
-        <a href="https://helper.ffhistorian.com" class="banner-back">&larr; Sleeper Helper</a>
+        <a href="/" class="banner-back">← Sleeper Helper</a>
         <h1>Connecting <span>ESPN</span></h1>
         <div class="banner-sub">What you need, where to find it, and what works once it's connected</div>
         <div class="banner-divider"></div>
@@ -129,6 +129,7 @@ footer { padding: 40px 0 20px; }
       <div id="auth-chip" style="flex-shrink:0;"></div>
     </div>
   </header>
+  <nav id="sh-nav" class="tab-bar"></nav>
 
   <div class="main">
 
@@ -307,7 +308,8 @@ footer { padding: 40px 0 20px; }
   </div>
 </div>
 
-<script src="/shared-auth.js?v=20261106"></script>
+<script src="/shared-nav.js?v=20261111"></script>
+  <script src="/shared-auth.js?v=20261111"></script>
 <script>
 function pickTab(id) {
   document.querySelectorAll('.tab-pill').forEach(b => b.classList.toggle('on', b.dataset.tab === id));

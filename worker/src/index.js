@@ -53,7 +53,7 @@
 export { DispersalRoom } from './dispersal.js';
 import { handleAuth, getAuthUser, decryptStoredToken } from './auth.js';
 import { handleDataSite } from './data.js';
-import { handleEliteFFL } from './eliteffl.js';
+import { handleEliteFFL, syncEliteFFL } from './eliteffl.js';
 import { handleProjections } from './projections.js';
 import { getCors, CORS, cacheFor, jsonBody, kvCachedJson } from './http.js';
 
@@ -88,6 +88,12 @@ const FC_BROWSER_TTL      = 3600;   // 1h, against a 24h KV TTL
 
 
 export default {
+  // Daily Elite FFL sync — draft history + keeper options from ESPN (see eliteffl.js).
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(syncEliteFFL(env).then(r => console.log('[eliteffl sync]', JSON.stringify(r)))
+      .catch(e => console.error('[eliteffl sync] failed:', e.message)));
+  },
+
   async fetch(request, env) {
     const url = new URL(request.url);
 
@@ -872,6 +878,10 @@ const PROXY_CACHE_RULES = [
   // as games finish, so 15 minutes is well inside "current" while keeping a cold
   // run from re-fetching a megabyte per tab.
   { re: /^\/stats\/nfl\/[a-z]+\/\d{4}$/,              browser: 900, kv: 900 },
+  // A league's managers — names and avatars, which barely move. Read once per
+  // league by the Find a Trade autocomplete, the Players lookup and Open Trades;
+  // an hour in the browser makes moving between those free. No KV copy needed.
+  { re: /^\/league\/\d+\/users$/,                    browser: 3600 },
 ];
 
 function proxyCacheRule(path) {

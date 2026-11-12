@@ -11,6 +11,15 @@
   --gold:         #c9962a;
   --gold-light:   #e8b84b;
   --ink:          #1a1008;
+  /* Gold that passes 4.5:1 on the cream page. --gold itself is ~2.3:1 there —
+     fine on the dark panels, unreadable as text on cream. */
+  --gold-ink:     #7a5410;
+  /* Content width: grows with the screen, never below the old 900px column and
+     never so wide that a table's rows stop reading as rows. */
+  --page-max:     max(900px, min(1240px, 94vw));
+  /* Small gold section labels: dark gold on cream, the usual gold on dark
+     surfaces (see DARK SURFACES). */
+  --label:        var(--gold-ink);
 }
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 body {
@@ -34,15 +43,99 @@ body::before {
 }
 .banner-text { flex: 1; }
 .banner-back {
-  font-family: 'Rye', serif; font-size: 0.58rem; letter-spacing: 0.3em;
+  font-family: 'Rye', serif; font-size: 0.68rem; letter-spacing: 0.2em;
   text-transform: uppercase; color: var(--gold-light); text-decoration: none;
-  opacity: 0.7; display: inline-block; margin-bottom: 8px;
+  opacity: 0.9; display: inline-block; margin-bottom: 8px;
 }
 .banner-back:hover { opacity: 1; }
 .banner h1 { font-family: 'Rye', serif; font-size: clamp(1.2rem, 3vw, 1.9rem); color: var(--cream); text-shadow: 2px 2px 0 rgba(0,0,0,0.4); line-height: 1.1; }
 .banner h1 span { color: var(--gold-light); }
 .banner-sub { margin-top: 5px; font-family: 'Playfair Display', serif; font-style: italic; font-size: 0.85rem; color: var(--parchment); opacity: 0.75; }
 .banner-divider { margin-top: 8px; height: 2px; width: 100px; background: linear-gradient(to right, var(--gold), transparent); }
+
+/* ── SITE NAV (shared-nav.js renders it on every page) ── */
+.tab-bar { background: var(--brown-dark); border-bottom: 3px solid var(--gold); position: sticky; top: 0; z-index: 100; }
+.tab-bar-inner { max-width: var(--page-max); margin: 0 auto; display: flex; padding: 0 16px; position: relative; }
+.tab-group { position: relative; border-right: 1px solid rgba(255,255,255,0.18); }
+.tab-group:last-child { border-right: none; }
+.tab-group-btn, .tab-btn {
+  background: none; border: none; cursor: pointer; text-decoration: none;
+  font-family: 'Rye', serif; font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--parchment); opacity: 0.82;
+  transition: opacity 0.2s, background 0.2s; position: relative;
+  display: flex; align-items: center; gap: 7px; white-space: nowrap; width: 100%;
+}
+.tab-group-btn { padding: 14px 18px; height: 100%; min-height: 44px; }
+.tab-btn { padding: 12px 18px 12px 22px; border-bottom: 1px solid rgba(255,255,255,0.07); text-align: left; }
+.tab-btn:last-child { border-bottom: none; }
+.tab-group-btn:hover, .tab-btn:hover { opacity: 1; background: rgba(255,255,255,0.06); }
+.tab-group-btn.active, .tab-btn.active { opacity: 1; color: var(--gold-light); background: rgba(255,255,255,0.05); }
+.tab-group-btn.active::after { content: ''; position: absolute; bottom: -3px; left: 0; right: 0; height: 3px; background: var(--gold-light); }
+.tab-btn.active::before { content: '▸'; position: absolute; left: 8px; font-size: 0.6rem; }
+.tab-ext { font-size: 0.7em; opacity: 0.7; }
+.tab-group-arrow { font-size: 0.65rem; transition: transform 0.15s; display: inline-block; }
+.tab-group.open .tab-group-arrow { transform: rotate(180deg); }
+.tab-group-dropdown {
+  display: none; position: absolute; top: calc(100% + 3px); left: 0;
+  background: var(--brown-dark); border: 1px solid var(--gold);
+  z-index: 200; min-width: 100%; flex-direction: column;
+  box-shadow: 4px 4px 0 rgba(0,0,0,0.4);
+}
+.tab-group.open .tab-group-dropdown { display: flex; }
+@media (max-width: 700px) {
+  /* Wrap the group row instead of scrolling it — overflow would clip the
+     absolutely-positioned dropdowns. */
+  .tab-bar-inner { flex-wrap: wrap; padding: 0; }
+  .tab-group { flex: 1 0 auto; border-bottom: 1px solid rgba(255,255,255,0.08); }
+  .tab-group-btn { padding: 12px 12px; letter-spacing: 0.08em; justify-content: center; font-size: 0.66rem; }
+  /* A menu opens as a full-width panel under the whole bar, so it can never run
+     off the side of the screen whichever group it belongs to. */
+  .tab-group { position: static; }
+  .tab-group-dropdown { left: 0; right: 0; top: 100%; min-width: 0; border-left: none; border-right: none; box-shadow: 0 6px 0 rgba(0,0,0,0.35); }
+  .tab-btn { padding: 14px 20px 14px 26px; font-size: 0.72rem; }
+}
+
+/* ── IN-TAB VIEW SWITCH (Lineups · Ranks grid, Find a Trade modes…) ── */
+.view-bar { display: flex; gap: 0; flex-wrap: wrap; margin-bottom: 18px; border-bottom: 2px solid var(--brown-mid); }
+.view-bar a {
+  font-family: 'Rye', serif; font-size: 0.68rem; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--brown-mid); text-decoration: none; padding: 10px 16px; margin-bottom: -2px;
+  border-bottom: 3px solid transparent; min-height: 40px; display: inline-flex; align-items: center;
+}
+.view-bar a:hover { color: var(--ink); }
+.view-bar a.active { color: var(--ink); border-bottom-color: var(--gold); }
+.view-bar .view-sub { font-family: 'Crimson Text', serif; font-style: italic; text-transform: none; letter-spacing: 0; font-size: 0.85rem; color: var(--brown-light); margin-left: 6px; }
+@media (max-width: 600px) { .view-bar .view-sub { display: none; } .view-bar a { padding: 10px 12px; } }
+
+/* ── FOCUS ── a visible ring for keyboard users only (mouse clicks don't show it) */
+:focus-visible { outline: 2px solid var(--gold-light); outline-offset: 2px; }
+.banner :focus-visible, .tab-bar :focus-visible { outline-color: var(--cream); }
+/* Touch screens: controls tall enough to hit with a thumb. */
+@media (pointer: coarse) {
+  .ghost-btn, .pos-pill, .setup-btn, .ls-mode-pill, .view-bar a { min-height: 40px; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation-duration: 0.01ms !important; } }
+
+/* ── DARK SURFACES ──
+   --brown-light is the muted text colour everywhere, and it only reads on the
+   cream page (~4.7:1). On the dark panels it was ~2.6:1. Inside any dark surface
+   it is redefined one step lighter (~5.4:1), so the same rules pass on both. */
+.banner, .tab-bar, .card, .setup-card, .mrg-col, .empty-state.dark,
+/* index.html */
+.dash-card, .home-tile, .lineup-card, .lsw-panel, .gd-legend, .rg-col, .rs-lg-panel, .rs-filter-panel,
+.rs-table, .ls-table, .tl-table, .tracker-player, .mo-chosen, .mo-lg, .mo-offer, .mo-bar, .pf-trade-card,
+.roi-wrap, .player-dropdown,
+/* analyzer / trade analyzer */
+.az-table-header, details.az-card, .az-trade-panel, .az-switcher-panel, .az-targets-panel,
+.ta-team-card, .ta-propose, .ta-addteam-panel, .ta-summary-box, .ta-panel, .ta-odds-card, .ta-lineup-card,
+/* root for me / auction / dispersal */
+.week-bar, .leagues-card, .game-card, .mnm-card,
+.auc-setup, .auc-stats-bar, .auc-pool, .auc-teams, .auc-modal,
+.room-header, .asset-table-wrap, .draft-grid-scroll, .roster-card {
+  --brown-light: #b48a5c;
+  --label: var(--gold);
+}
+.search-input::placeholder { color: rgba(245,234,214,0.5); }
 
 /* ── STATES ── */
 .empty-state { text-align: center; padding: 50px 20px; border: 2px dashed var(--brown-mid); border-radius: 2px; }
@@ -59,7 +152,7 @@ body::before {
    the states differ (no red "benched", a plain cell for a player another team
    owns) and the two existing grids shouldn't move when this one does. */
 .mrg-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
-.mrg-lbl { font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.14em;
+.mrg-lbl { font-family: 'Rye', serif; font-size: 0.64rem; letter-spacing: 0.14em;
            text-transform: uppercase; color: var(--brown-light); }
 .mrg-pill.on { border-color: var(--gold); color: var(--gold-light); }
 .mrg-noterow { margin-bottom: 10px; }
@@ -78,10 +171,10 @@ body::before {
 .mrg-part { min-width: 0; }
 .mrg-part + .mrg-part { border-left: 1px solid var(--brown-mid); }
 .mrg-col { min-width: 0; border: 1px solid var(--brown-mid); border-radius: 2px; background: var(--brown-dark); }
-.mrg-head { font-family: 'Rye', serif; font-size: 0.55rem; letter-spacing: 0.12em; text-transform: uppercase;
+.mrg-head { font-family: 'Rye', serif; font-size: 0.65rem; letter-spacing: 0.12em; text-transform: uppercase;
             color: var(--gold); background: var(--brown-dark); padding: 6px 8px;
             border-bottom: 1px solid var(--brown-mid); position: sticky; z-index: 5; }
-.mrg-head em { color: var(--brown-light); font-size: 0.5rem; font-style: normal; }
+.mrg-head em { color: var(--brown-light); font-size: 0.64rem; font-style: normal; }
 .mrg-cell { display: flex; align-items: baseline; gap: 5px; padding: 2px 7px; font-size: 0.76rem;
             font-family: 'Crimson Text', serif; color: var(--parchment);
             border-bottom: 1px solid rgba(92,61,30,0.35); }
@@ -92,12 +185,12 @@ body::before {
             min-width: 20px; text-align: right; flex-shrink: 0; }
 .mrg-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mrg-team { color: var(--brown-light); font-size: 0.6rem; flex-shrink: 0; }
-.mrg-tier { color: var(--gold); font-size: 0.58rem; flex-shrink: 0; min-width: 12px; text-align: right; opacity: 0.75; }
+.mrg-tier { color: var(--gold); font-size: 0.66rem; flex-shrink: 0; min-width: 12px; text-align: right; opacity: 0.75; }
 /* vs-consensus delta. Fixed width so the tier column stays aligned down the
    whole board whether a row has a delta or not. Its green/red sit alongside the
    ownership highlight, which is a BACKGROUND — the arrow is what separates the
    two readings, so keep the glyph. */
-.mrg-delta { flex-shrink: 0; min-width: 26px; text-align: right; font-size: 0.58rem;
+.mrg-delta { flex-shrink: 0; min-width: 26px; text-align: right; font-size: 0.66rem;
              font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
 .mrg-d-up   { color: #7fc97f; }
 .mrg-d-down { color: #e0837c; }
@@ -129,7 +222,7 @@ body::before {
 /* Standalone, not index.html's .ghost-btn / select rules — the analyzer has
    neither, and this grid renders identically on both pages. */
 .mrg-pill { background: none; border: 1px solid var(--brown-mid); color: var(--brown-light);
-            font-family: 'Rye', serif; font-size: 0.5rem; letter-spacing: 0.15em; text-transform: uppercase;
+            font-family: 'Rye', serif; font-size: 0.64rem; letter-spacing: 0.15em; text-transform: uppercase;
             padding: 6px 12px; cursor: pointer; border-radius: 2px; transition: border-color 0.2s, color 0.2s; }
 .mrg-pill:hover { border-color: var(--gold); color: var(--gold); }
 .mrg-select { max-width: 260px; background: var(--brown-dark); border: 1px solid var(--brown-mid);
@@ -153,7 +246,7 @@ body::before {
 .mrb-badge i { font-style: normal; opacity: 0.45; margin: 0 3px; }
 .mrb-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
            font-family: 'Crimson Text', serif; font-size: 0.78rem; color: var(--brown-light); }
-.mrb-bar label { font-family: 'Rye', serif; font-size: 0.46rem; letter-spacing: 0.15em;
+.mrb-bar label { font-family: 'Rye', serif; font-size: 0.62rem; letter-spacing: 0.15em;
                  text-transform: uppercase; color: var(--brown-light); }
 .mrb-note { font-style: italic; opacity: 0.7; }
 .mrb-select { max-width: 240px; background: var(--brown-dark); border: 1px solid var(--brown-mid);
@@ -183,7 +276,7 @@ body::before {
 .setup-status { font-size: 0.85rem; font-style: italic; color: var(--brown-light); }
 .setup-status.ok { color: var(--green-light); }
 .setup-divider { border: none; border-top: 1px solid var(--brown-mid); margin: 16px 0; }
-.badge { border-radius: 2px; font-size: 0.5rem; text-transform: uppercase; }
+.badge { border-radius: 2px; font-size: 0.64rem; text-transform: uppercase; }
 .badge-gold { background: var(--gold); color: var(--brown-dark); }
 .badge-green { background: var(--green); color: var(--gold-light); border: 1px solid var(--gold); }
 .badge-red { background: var(--red); color: var(--cream); }
@@ -191,13 +284,13 @@ body::before {
 .ghost-btn:hover { border-color: var(--gold); }
 .az-league-title { font-family: 'Playfair Display', serif; font-weight: 700; color: var(--cream); margin-top: 6px; line-height: 1.2; }
 .az-flags { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
-.az-flag { font-family: 'Rye', serif; font-size: 0.57rem; letter-spacing: 0.12em; text-transform: uppercase; padding: 6px 14px; border: 1.5px solid var(--brown-mid); border-radius: 2px; color: var(--brown-light); background: rgba(0,0,0,0.22); }
+.az-flag { font-family: 'Rye', serif; font-size: 0.65rem; letter-spacing: 0.12em; text-transform: uppercase; padding: 6px 14px; border: 1.5px solid var(--brown-mid); border-radius: 2px; color: var(--brown-light); background: rgba(0,0,0,0.22); }
 .az-flag-hi { border-color: var(--gold); color: var(--gold); background: rgba(201,150,42,0.08); }
 .rs-pos { display: inline-block; text-transform: uppercase; border-radius: 2px; }
 .az-badge { font-family: 'Rye', serif; letter-spacing: 0.12em; text-transform: uppercase; border-radius: 2px; }
 .setup-label { letter-spacing: 0.22em; text-transform: uppercase; color: var(--gold); display: block; }
 .section-head:first-child { margin-top: 0; }
-.guest-signin-btn { background: var(--green); border: 2px solid var(--gold); color: var(--gold-light); font-family: 'Rye', serif; font-size: 0.58rem; letter-spacing: 0.18em; text-transform: uppercase; padding: 12px 28px; cursor: pointer; border-radius: 2px; transition: background 0.2s, color 0.2s; }
+.guest-signin-btn { background: var(--green); border: 2px solid var(--gold); color: var(--gold-light); font-family: 'Rye', serif; font-size: 0.66rem; letter-spacing: 0.18em; text-transform: uppercase; padding: 12px 28px; cursor: pointer; border-radius: 2px; transition: background 0.2s, color 0.2s; }
 .guest-signin-btn:hover { background: var(--gold); color: var(--brown-dark); }
 footer { text-align: center; font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--brown-light); opacity: 0.7; }
 footer a { color: var(--brown-light); text-decoration: none; }

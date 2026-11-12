@@ -422,7 +422,7 @@ async function moSearch() {
 
 // ── Render ──
 function renderMassOffers() {
-  if (!moLeagues().length) { setC('<div class="empty-state"><p>No Sleeper leagues found — mass offers are Sleeper-only</p></div>'); return; }
+  if (!moLeagues().length) { setC(viewBarHtml('findtrade', 'offers') + '<div class="empty-state"><p>No Sleeper leagues found — mass offers are Sleeper-only</p></div>'); return; }
   if (!Object.keys(S.players).length) loadPlayers().then(moDraw).catch(() => {});
   if (Date.now() - MO.rostersAt > MO_TTL && !MO.sending) moLoadRosters().catch(e => { MO.err = e.message; }).finally(moDraw);
   moDraw();
@@ -530,7 +530,7 @@ function moDraw() {
     `<button class="ghost-btn" style="${MO.mode === val ? 'border-color:var(--gold);color:var(--gold);' : ''}" onclick="moSetMode('${val}')" ${busy ? 'disabled' : ''}>${txt}</button>`;
   const step = (n, label, body) => `<div class="mo-step"><span class="setup-label-rye">${n} · ${label}</span>${body}</div>`;
 
-  let html = `<div class="section-head"><h2>Mass Offers</h2><div class="section-head-line"></div></div>
+  let html = `${viewBarHtml('findtrade', 'offers')}<div class="section-head"><h2>Mass Offers</h2><div class="section-head-line"></div></div>
     <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">${modeBtn('sell', 'Sell to a league')}${modeBtn('buy', 'Buy in every league')}</div>
     <div class="mo-intro">${sell
       ? 'Offer one of your players to every other manager in a league, each for a draft pick of the round you choose.'

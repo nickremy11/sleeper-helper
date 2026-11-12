@@ -8,7 +8,9 @@ async function renderLeagueSummaries() {
     return;
   }
   if (LS.loaded) { lsDrawTable(); return; }
-  if (LS.loading) return;
+  // Already loading (the user left and came back): show that, and let the
+  // running load paint the table when it lands.
+  if (LS.loading) { setC(loading('Loading league standings…')); return; }
   LS.loading = true;
   // Ensure prefs are loaded (reuse RS.prefs; rsLoadPrefs populates it)
   // Only skip if Rostership has already been visited (which sets RS.selectedLeagues).
@@ -18,13 +20,13 @@ async function renderLeagueSummaries() {
     RS.selectedLeagues = new Set(S.leagues.map(lg => lg.league_id));
     await rsLoadPrefs();
   }
-  setC(loading('Loading league standings…'));
+  if (S.tab === 'leagues') setC(loading('Loading league standings…'));
   try {
     await Promise.all([lsLoadData(), loadPlayers()]);
     LS.loaded = true;
     lsRestoreOddsCache();
   } catch(e) {
-    setC(errHtml(e));
+    if (S.tab === 'leagues') setC(errHtml(e));
     LS.loading = false;
     return;
   }
@@ -1121,7 +1123,7 @@ function lsDrawTable() {
   const tbody = `<tbody id="ls-tbody">${rows.map(row => {
     // League name cell
     const nameCls = row.prefContender ? ' ls-contender-name' : '';
-    const nameCell = `<td><a href="/analyzer?league=${row.lgId}" class="row-link${nameCls}">${esc(row.name)}</a></td>`;
+    const nameCell = `<td><a href="/analyzer?league=${encodeURIComponent(row.lgId)}" target="_blank" rel="noopener" class="row-link${nameCls}">${esc(row.name)}</a></td>`;
 
     // Standing cell
     let standingCell;

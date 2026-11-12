@@ -136,6 +136,16 @@ async function api(path) {
   if (!r.ok) throw new Error('HTTP ' + r.status);
   return r.json();
 }
+// A league's managers, fetched once per session and shared by every tool that
+// needs names (Players lookup, Trade Partners' autocomplete, Open Trades…).
+// A failed read isn't cached, so the next caller retries.
+const _leagueUsers = {};
+function leagueUsers(lgId) {
+  if (!_leagueUsers[lgId]) {
+    _leagueUsers[lgId] = api('/league/' + lgId + '/users').then(u => u || []).catch(() => { delete _leagueUsers[lgId]; return []; });
+  }
+  return _leagueUsers[lgId];
+}
 // normName() (cross-source name normalization) is defined in shared-utils.js.
 // Display name for a Sleeper player. DEF entries carry no full_name — their
 // first/last name is the city + nickname ("Los Angeles" / "Chargers"), which is
@@ -242,9 +252,9 @@ async function loadUser() {
     st.className = 'setup-status ok';
     // Load ESPN leagues (non-blocking — they append to S.leagues after Sleeper leagues)
     loadEspnLeagues(season);
-    const _urlTab = new URLSearchParams(location.search).get('tab');
-    if (_urlTab && document.getElementById('tab-' + _urlTab)) S.tab = _urlTab;
-    render(S.tab);
+    // Whatever tab the URL names (it tracks every switch, so this is also the
+    // tab the user was on before a refresh).
+    sw(new URLSearchParams(location.search).get('tab') || S.tab, { history: 'replace' });
     // Auto-save username to account when logged in
     if (S.auth && u !== S.auth.sleeper_username) {
       fetch('/api/auth/me', { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sleeper_username: u }) })
@@ -324,38 +334,75 @@ async function loadOneEspnLeague(leagueId, season) {
   } catch {}
 }
 
-const TAB_GROUP_MAP = {
-  home: 'grp-home', guide: 'grp-guide',
-  leagues: 'grp-my-leagues', rostership: 'grp-my-leagues',
-  lineups: 'grp-my-leagues', player: 'grp-my-leagues', waivers: 'grp-my-leagues',
-  ranksgrid: 'grp-my-leagues',
-  trades: 'grp-trades', partners: 'grp-trades', scout: 'grp-trades', offers: 'grp-trades',
-  drafts: 'grp-drafts', tracker: 'grp-drafts',
-  roi: 'grp-tools',
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+// The tab lives in the URL (?tab=x), so Refresh keeps you where you were, Back
+// and Forward step through tabs, and any tab can be bookmarked or opened in a new
+// browser tab. The menu itself is shared-nav.js (SH_NAV).
+
+const RENDERERS = {
+  home: () => renderHome(), guide: () => renderGuide(), leagues: () => renderLeagueSummaries(),
+  trades: () => renderTrades(), lineups: () => renderLineupCheck(), ranksgrid: () => renderRanksGrid(),
+  drafts: () => renderDraftQueue(), tracker: () => renderDraftTracker(), rostership: () => renderRostership(),
+  partners: () => renderTradePartners(), waivers: () => renderWaivers(), scout: () => renderScout(),
+  offers: () => renderMassOffers(), roi: () => renderRoi(),
 };
-function toggleGrp(id) {
-  const grp = document.getElementById(id);
-  const isOpen = grp.classList.contains('open');
-  document.querySelectorAll('.tab-group').forEach(g => g.classList.remove('open'));
-  if (!isOpen) grp.classList.add('open');
-}
-document.addEventListener('click', e => {
-  if (!e.target.closest('.tab-group')) {
-    document.querySelectorAll('.tab-group').forEach(g => g.classList.remove('open'));
+// Tabs that render with no Sleeper username loaded.
+const TABS_WITHOUT_USER = new Set(['home', 'guide', 'partners', 'roi']);
+
+// Tabs that are now views inside another tool. Old links and bookmarks still work.
+//  · player    — Player Finder is the lookup at the top of Players (Rostership)
+//  · findtrade — the menu's "Find a Trade": whichever of its three modes you used last
+const FT_MODES = ['scout', 'offers', 'partners'];
+function swResolve(tab) {
+  if (tab === 'player') return 'rostership';
+  if (tab === 'findtrade') {
+    let last = null;
+    try { last = localStorage.getItem('ft_last'); } catch {}
+    return FT_MODES.includes(last) ? last : 'scout';
   }
-});
-function sw(tab) {
+  return RENDERERS[tab] ? tab : 'home';
+}
+
+function swUrlFor(tab) {
+  const u = new URL(location.href);
+  if (tab === 'home') u.searchParams.delete('tab'); else u.searchParams.set('tab', tab);
+  return u;
+}
+
+// opts.history: 'push' (default — a user click), 'replace' (start-up / redirects),
+// 'none' (Back/Forward, where the browser already moved the URL).
+function sw(tab, opts = {}) {
+  tab = swResolve(tab);
   S.tab = tab;
-  document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
-  document.getElementById('tab-' + tab).classList.add('active');
-  document.querySelectorAll('.tab-group-btn').forEach(b => b.classList.remove('active'));
-  const grpId = TAB_GROUP_MAP[tab];
-  if (grpId) document.querySelector('#' + grpId + ' .tab-group-btn').classList.add('active');
-  document.querySelectorAll('.tab-group').forEach(g => g.classList.remove('open'));
+  if (FT_MODES.includes(tab)) { try { localStorage.setItem('ft_last', tab); } catch {} }
+  const mode = opts.history || 'push';
+  if (mode !== 'none') {
+    const u = swUrlFor(tab);
+    if (u.href !== location.href) history[mode === 'replace' ? 'replaceState' : 'pushState']({ tab }, '', u);
+  }
+  shNavRender(tab);
   if (tab !== 'tracker' && T.pollTimer) { clearInterval(T.pollTimer); T.pollTimer = null; }
   wvApplyWide(tab);
   render(tab);
+  if (mode === 'push') window.scrollTo(0, 0);
 }
+window.addEventListener('popstate', () => {
+  sw(new URLSearchParams(location.search).get('tab') || 'home', { history: 'none' });
+});
+
+// The view switch at the top of a tool that's really several tabs in one —
+// rendered as real links, so shared-nav.js's click handler switches in place.
+const VIEW_GROUPS = {
+  lineups:   [['lineups', 'Lineup cards'], ['ranksgrid', 'Ranks grid']],
+  findtrade: [['scout', 'By position', 'Scout'], ['offers', 'By player', 'Mass offers'], ['partners', 'By manager', 'Shared leagues']],
+  drafts:    [['drafts', 'Live drafts'], ['tracker', 'Draft tracker']],
+};
+function viewBarHtml(group, active) {
+  return `<nav class="view-bar" aria-label="Views">${VIEW_GROUPS[group].map(([tab, label, sub]) =>
+    `<a href="/?tab=${tab}" data-tab="${tab}"${tab === active ? ' class="active" aria-current="page"' : ''}>${label}${sub ? `<span class="view-sub">${sub}</span>` : ''}</a>`
+  ).join('')}</nav>`;
+}
+
 // The ranks grid and the redraft waiver grid are the views that earn more than
 // the site's 900px column. Waivers is mode-dependent, so wvSetMode re-applies it.
 function wvApplyWide(tab) {
@@ -364,58 +411,14 @@ function wvApplyWide(tab) {
 }
 
 function render(tab) {
-  // roi gates on the account, not on a Sleeper username — renderRoi says so itself
-  if (!S.userId && tab !== 'partners' && tab !== 'home' && tab !== 'guide' && tab !== 'roi') { setC('<div class="empty-state"><p>Enter your username above to get started</p></div>'); return; }
-  ({ home: renderHome, leagues: renderLeagueSummaries, trades: renderTrades, player: renderPlayerSearch, lineups: renderLineupCheck, drafts: renderDraftQueue, tracker: renderDraftTracker, rostership: renderRostership, partners: renderTradePartners, waivers: renderWaivers, scout: renderScout,
-    offers: renderMassOffers, ranksgrid: renderRanksGrid, guide: renderGuide, roi: renderRoi })[tab]?.();
+  if (!S.userId && !TABS_WITHOUT_USER.has(tab)) {
+    // A signed-in user's leagues load on their own — say so rather than asking
+    // for a username they already gave us.
+    setC(S.auth?.sleeper_username
+      ? loading('Loading your leagues')
+      : '<div class="empty-state"><p>Enter your Sleeper username above to get started</p></div>');
+    return;
+  }
+  RENDERERS[tab]?.();
 }
 function setC(html) { document.getElementById('content').innerHTML = html; }
-
-// ── 0. Home ───────────────────────────────────────────────────────────────────
-function renderHome() {
-  setC(`
-    <div style="text-align:center; padding: 48px 24px 64px; max-width: 700px; margin: 0 auto;">
-      <img src="/assets/ffhistorianlogo.png" alt="FF Historian" style="width: clamp(120px, 28vw, 200px); height: auto; display: block; margin: 0 auto 28px; filter: drop-shadow(0 4px 12px rgba(0,0,0,0.35));" />
-      <h2 style="font-family: 'Rye', serif; font-size: clamp(1.4rem, 4vw, 2.2rem); color: var(--brown-dark); line-height: 1.15; margin-bottom: 14px; letter-spacing: 0.04em;">
-        Welcome to the <span style="color: var(--green);">FF Historian</span>
-      </h2>
-      <div style="height: 2px; width: 80px; background: linear-gradient(to right, transparent, var(--gold), transparent); margin: 0 auto 20px;"></div>
-      <p style="font-family: 'Playfair Display', serif; font-style: italic; font-size: clamp(1rem, 2.5vw, 1.2rem); color: var(--brown-light); line-height: 1.6; margin-bottom: 40px;">
-        Explore all the tools to help you manage your leagues
-      </p>
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; text-align: left; margin-bottom: 40px;">
-        <button onclick="sw('leagues')" style="background: var(--brown-dark); border: 1px solid var(--brown-mid); border-radius: 2px; padding: 16px 18px; cursor: pointer; transition: border-color 0.2s; text-align: left;" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--brown-mid)'">
-          <div style="font-family: 'Rye', serif; font-size: 0.52rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin-bottom: 6px;">League Summaries</div>
-          <div style="font-family: 'Crimson Text', serif; font-size: 0.88rem; color: var(--brown-light); font-style: italic;">Standings, records &amp; playoff odds</div>
-        </button>
-        <button onclick="sw('rostership')" style="background: var(--brown-dark); border: 1px solid var(--brown-mid); border-radius: 2px; padding: 16px 18px; cursor: pointer; transition: border-color 0.2s; text-align: left;" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--brown-mid)'">
-          <div style="font-family: 'Rye', serif; font-size: 0.52rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin-bottom: 6px;">Rostership</div>
-          <div style="font-family: 'Crimson Text', serif; font-size: 0.88rem; color: var(--brown-light); font-style: italic;">Cross-league player ownership</div>
-        </button>
-        <button onclick="sw('trades')" style="background: var(--brown-dark); border: 1px solid var(--brown-mid); border-radius: 2px; padding: 16px 18px; cursor: pointer; transition: border-color 0.2s; text-align: left;" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--brown-mid)'">
-          <div style="font-family: 'Rye', serif; font-size: 0.52rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin-bottom: 6px;">Open Trades</div>
-          <div style="font-family: 'Crimson Text', serif; font-size: 0.88rem; color: var(--brown-light); font-style: italic;">Pending trades across leagues</div>
-        </button>
-        <button onclick="sw('player')" style="background: var(--brown-dark); border: 1px solid var(--brown-mid); border-radius: 2px; padding: 16px 18px; cursor: pointer; transition: border-color 0.2s; text-align: left;" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--brown-mid)'">
-          <div style="font-family: 'Rye', serif; font-size: 0.52rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin-bottom: 6px;">Player Finder</div>
-          <div style="font-family: 'Crimson Text', serif; font-size: 0.88rem; color: var(--brown-light); font-style: italic;">Dynasty values &amp; roster lookup</div>
-        </button>
-        <button onclick="sw('lineups')" style="background: var(--brown-dark); border: 1px solid var(--brown-mid); border-radius: 2px; padding: 16px 18px; cursor: pointer; transition: border-color 0.2s; text-align: left;" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--brown-mid)'">
-          <div style="font-family: 'Rye', serif; font-size: 0.52rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin-bottom: 6px;">Lineup Checker</div>
-          <div style="font-family: 'Crimson Text', serif; font-size: 0.88rem; color: var(--brown-light); font-style: italic;">Optimal lineup &amp; start/sit</div>
-        </button>
-        <button onclick="sw('drafts')" style="background: var(--brown-dark); border: 1px solid var(--brown-mid); border-radius: 2px; padding: 16px 18px; cursor: pointer; transition: border-color 0.2s; text-align: left;" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--brown-mid)'">
-          <div style="font-family: 'Rye', serif; font-size: 0.52rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin-bottom: 6px;">Draft Queue</div>
-          <div style="font-family: 'Crimson Text', serif; font-size: 0.88rem; color: var(--brown-light); font-style: italic;">Upcoming drafts at a glance</div>
-        </button>
-      </div>
-      <div style="height: 1px; background: linear-gradient(to right, transparent, var(--brown-mid), transparent); margin-bottom: 24px;"></div>
-      <p style="font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--brown-light); font-style: italic;">
-        ${S.auth
-          ? 'Add your Sleeper username in <a href="/myprofile" style="color:var(--gold);">your profile</a> to load your leagues and get started.'
-          : 'Enter your Sleeper username above to load your leagues and get started.'}
-        Play in ESPN leagues too? <a href="/espn-setup" style="color:var(--gold);">Here's how to connect them.</a>
-      </p>
-    </div>
-  `);
-}

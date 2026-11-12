@@ -74,7 +74,7 @@ async function saveTokenToAccount() {
 }
 
 (async function () {
-  render('home');
+  sw(new URLSearchParams(location.search).get('tab') || 'home', { history: 'replace' });
 
   function _applyAuth(user) {
     S.auth = user;

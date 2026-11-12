@@ -4,8 +4,9 @@
 async function renderDraftQueue(isRefresh = false) {
   if (!isRefresh) {
     setC(`<div>
+      ${viewBarHtml('drafts', 'drafts')}
       <div class="tab-header">
-        <div class="section-head" style="margin-bottom:0;flex:1;"><h2>Active Drafts</h2><div class="section-head-line"></div></div>
+        <div class="section-head" style="margin-bottom:0;flex:1;"><h2>Live Drafts</h2><div class="section-head-line"></div></div>
         <button class="ghost-btn" style="margin-left:16px;" onclick="renderDraftQueue(true)">↻ Refresh</button>
       </div>
       <div id="draft-body">${loading('Loading active drafts')}</div>
@@ -30,7 +31,8 @@ async function renderDraftQueue(isRefresh = false) {
     const active = allDrafts.filter(d => d?.status === 'drafting' || d?.status === 'paused');
     const target = document.getElementById('draft-body');
     if (!target) return;
-    if (!active.length) { target.innerHTML = '<div class="empty-state"><p>No active drafts right now</p></div>'; return; }
+    if (!active.length) { target.innerHTML = `<div class="empty-state"><p>No live drafts right now</p>
+      <p style="margin-top:8px;font-size:0.9rem;">Scheduled drafts can be set up ahead of time in the <a href="/?tab=tracker" data-tab="tracker" style="color:var(--gold-ink);">Draft tracker</a>.</p></div>`; return; }
 
     const details = await Promise.all(active.map(async d => {
       const [picks, tradedPicks] = await Promise.all([
@@ -73,6 +75,7 @@ async function renderDraftQueue(isRefresh = false) {
           <div class="data-row"><span class="data-row-label">Current round</span><span class="data-row-val">${Math.min(Math.floor(done/teams)+1,rounds)}</span></div>
         </div>
         <div class="draft-bar"><div class="draft-bar-fill" style="width:${pct}%"></div></div>
+        <button class="setup-btn" style="margin-top:14px;width:100%;" onclick="trackDraft(${jsArg(String(d.draft_id))})">Track this draft →</button>
       </div>`;
     }).join('')}</div>`;
   } catch(e) {
@@ -363,8 +366,16 @@ function loadStoredTrackerRankings() {
 }
 
 
+// "Track this draft" on a Live Drafts card: open the tracker with that draft
+// already selected (populateDraftSelector picks T.pendingDraft up).
+function trackDraft(draftId) {
+  T.pendingDraft = draftId;
+  sw('tracker');
+}
+
 function renderDraftTracker() {
   setC(`<div>
+    ${viewBarHtml('drafts', 'tracker')}
     <div class="tab-header">
       <div class="section-head" style="margin-bottom:0;flex:1;"><h2>Draft Tracker</h2><div class="section-head-line"></div></div>
     </div>
@@ -488,9 +499,13 @@ async function populateDraftSelector() {
   options.sort((a, b) => (a.isLive !== b.isLive) ? (a.isLive ? -1 : 1) : (a.start - b.start));
   sel.innerHTML = '<option value="">— select a draft —</option>' +
     options.map(o => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join('');
-  // Auto-select only when there's exactly one live draft.
+  // A draft picked from a Live Drafts card wins; otherwise auto-select only when
+  // there's exactly one live draft.
+  const pending = T.pendingDraft && options.find(o => o.value === T.pendingDraft);
+  T.pendingDraft = null;
   const live = options.filter(o => o.isLive);
-  if (live.length === 1) { sel.value = live[0].value; selectDraft(live[0].value); }
+  const pick = pending ? pending.value : live.length === 1 ? live[0].value : null;
+  if (pick) { sel.value = pick; selectDraft(pick); }
 }
 
 async function loadSleeperADP() {

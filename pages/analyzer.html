@@ -6,7 +6,7 @@
   <title>League Analyzer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Rye&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared-styles.css?v=20261106">
+  <link rel="stylesheet" href="/shared-styles.css?v=20261111">
   <style>
     /* Viewport-relative so a wide screen actually gets used — the roster
        columns inside the cards are what needs the room (player names were
@@ -40,11 +40,11 @@
       padding: 8px 14px; min-width: 800px;
     }
     .az-th-team {
-      font-family: 'Rye', serif; font-size: 0.46rem; letter-spacing: 0.18em;
+      font-family: 'Rye', serif; font-size: 0.62rem; letter-spacing: 0.18em;
       text-transform: uppercase; color: var(--gold);
     }
     .az-th {
-      font-family: 'Rye', serif; font-size: 0.46rem; letter-spacing: 0.16em;
+      font-family: 'Rye', serif; font-size: 0.62rem; letter-spacing: 0.16em;
       text-transform: uppercase; color: var(--gold); text-align: center;
     }
     .az-th-sortable { cursor: pointer; user-select: none; transition: color 0.15s; }
@@ -70,7 +70,7 @@
 
     .az-team-col { display: flex; align-items: center; gap: 10px; overflow: hidden; }
     .az-rank-num {
-      font-family: 'Rye', serif; font-size: 0.46rem; letter-spacing: 0.08em;
+      font-family: 'Rye', serif; font-size: 0.62rem; letter-spacing: 0.08em;
       color: var(--brown-light); min-width: 24px; flex-shrink: 0;
     }
     .az-rank-1 { color: var(--gold-light); }
@@ -162,7 +162,7 @@
     .pf-player-row { --mrb-size: 0.8rem; }   /* ranks read at .pf-player-val's size */
     .pf-player-via  { font-size: 0.7rem; color: var(--brown-light); font-style: italic; }
 
-    .az-badge { font-size: 0.57rem; padding: 6px 14px; border: 1.5px solid; display: inline-block; }
+    .az-badge { font-size: 0.65rem; padding: 6px 14px; border: 1.5px solid; display: inline-block; }
     .az-badge-dynasty  { color: var(--gold);        border-color: var(--gold);        }
     .az-badge-redraft  { color: var(--green-light);  border-color: var(--green-light); }
     .az-badge-bestball { color: var(--brown-light);  border-color: var(--brown-light); }
@@ -170,7 +170,7 @@
     /* ── League switcher ── */
     .az-switcher-bar { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 14px; align-items: center; }
     .az-trade-btn {
-      font-family: 'Rye', serif; font-size: 0.44rem; letter-spacing: 0.14em;
+      font-family: 'Rye', serif; font-size: 0.62rem; letter-spacing: 0.14em;
       text-transform: uppercase; padding: 7px 13px; border: 1.5px solid var(--brown-mid);
       border-radius: 2px; background: transparent; color: var(--brown-mid);
       cursor: pointer; transition: all 0.15s; white-space: nowrap; display: none;
@@ -185,7 +185,7 @@
     }
     .az-trade-panel-hdr {
       padding: 9px 13px; border-bottom: 1px solid var(--brown-mid);
-      font-family: 'Rye', serif; font-size: 0.4rem; letter-spacing: 0.16em;
+      font-family: 'Rye', serif; font-size: 0.61rem; letter-spacing: 0.16em;
       text-transform: uppercase; color: var(--brown-light);
     }
     .az-trade-item {
@@ -198,7 +198,7 @@
     .az-trade-item-sub { font-size: 0.74rem; color: var(--brown-light); margin-top: 1px; }
     .az-switcher-wrap { position: relative; }
     .az-switcher-btn {
-      font-family: 'Rye', serif; font-size: 0.44rem; letter-spacing: 0.14em;
+      font-family: 'Rye', serif; font-size: 0.62rem; letter-spacing: 0.14em;
       text-transform: uppercase; padding: 7px 13px; border: 1.5px solid var(--brown-mid);
       border-radius: 2px; background: transparent; color: var(--brown-mid);
       cursor: pointer; transition: all 0.15s; white-space: nowrap;
@@ -228,14 +228,14 @@
     .az-switcher-empty { padding: 12px 14px; font-family: 'Crimson Text', serif; font-size: 0.86rem; color: var(--brown-light); font-style: italic; }
     /* Matches the (ESPN) tag trade-analyzer.html's league picker already uses. */
     .az-switcher-tag {
-      font-family: 'Rye', serif; font-size: 0.42rem; letter-spacing: 0.1em;
+      font-family: 'Rye', serif; font-size: 0.61rem; letter-spacing: 0.1em;
       color: var(--brown-light); margin-left: 7px; vertical-align: middle;
     }
 
     /* ── Trade Targets button + panel ── */
     .az-targets-wrap { position: relative; }
     .az-targets-btn {
-      font-family: 'Rye', serif; font-size: 0.44rem; letter-spacing: 0.14em;
+      font-family: 'Rye', serif; font-size: 0.62rem; letter-spacing: 0.14em;
       text-transform: uppercase; padding: 7px 13px; border: 1.5px solid var(--brown-mid);
       border-radius: 2px; background: transparent; color: var(--brown-mid);
       cursor: pointer; transition: all 0.15s; white-space: nowrap;
@@ -249,7 +249,7 @@
     }
     .az-tgt-hdr {
       padding: 9px 13px; border-bottom: 1px solid var(--brown-mid);
-      font-family: 'Rye', serif; font-size: 0.4rem; letter-spacing: 0.16em;
+      font-family: 'Rye', serif; font-size: 0.61rem; letter-spacing: 0.16em;
       text-transform: uppercase; color: var(--brown-light); display: flex; justify-content: space-between; align-items: center;
     }
     .az-tgt-myrow {
@@ -271,7 +271,7 @@
       display: flex; gap: 5px; flex-wrap: wrap; align-items: center;
     }
     .az-tgt-needs-lbl {
-      font-family: 'Rye', serif; font-size: 0.38rem; letter-spacing: 0.14em; text-transform: uppercase;
+      font-family: 'Rye', serif; font-size: 0.60rem; letter-spacing: 0.14em; text-transform: uppercase;
       color: var(--brown-light); flex-shrink: 0; margin-right: 2px;
     }
     .az-tgt-need-chip {
@@ -294,7 +294,7 @@
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .az-tgt-analyze {
-      font-family: 'Rye', serif; font-size: 0.38rem; letter-spacing: 0.1em; text-transform: uppercase;
+      font-family: 'Rye', serif; font-size: 0.60rem; letter-spacing: 0.1em; text-transform: uppercase;
       padding: 3px 8px; border: 1px solid var(--brown-mid); border-radius: 2px;
       color: var(--brown-light); background: transparent; white-space: nowrap; flex-shrink: 0;
       text-decoration: none; transition: all 0.12s;
@@ -348,7 +348,7 @@
     <div class="banner">
       <div style="position:relative;z-index:1;padding:18px 20px;display:flex;justify-content:space-between;align-items:flex-start;">
         <div class="banner-text">
-          <a href="/?tab=leagues" class="banner-back">← League Summaries</a>
+          <a href="/" class="banner-back">← Sleeper Helper</a>
           <h1>League <span>Analyzer</span></h1>
           <div class="az-league-title" id="league-title">Loading…</div>
           <div class="banner-divider"></div>
@@ -356,6 +356,7 @@
         <div id="auth-chip"></div>
       </div>
     </div>
+  <nav id="sh-nav" class="tab-bar"></nav>
 
     <div class="az-wrap">
       <div class="az-switcher-bar">
@@ -385,10 +386,11 @@
     </div>
   </div>
 
-  <script src="/shared-core.js?v=20261106"></script>
-  <script src="/shared-utils.js?v=20261106"></script>
-  <script src="/league-engine.js?v=20261106"></script>
-  <script src="/shared-auth.js?v=20261106"></script>
+  <script src="/shared-nav.js?v=20261111"></script>
+  <script src="/shared-core.js?v=20261111"></script>
+  <script src="/shared-utils.js?v=20261111"></script>
+  <script src="/league-engine.js?v=20261111"></script>
+  <script src="/shared-auth.js?v=20261111"></script>
   <script>
   'use strict';
 
@@ -1265,8 +1267,17 @@
   // ── Init ──────────────────────────────────────────────────────────────────────
 
   async function init() {
-    SharedAuth.init({ onLogin: () => {}, onLogout: () => {} });
-    if (!lgId) { document.getElementById('content').innerHTML = errHtml(new Error('No league ID in URL')); return; }
+    const authP = SharedAuth.init({ onLogin: () => {}, onLogout: () => {} });
+    // Opened from the menu, with no league yet: the page becomes the league
+    // picker (the same list the Switch League button shows).
+    if (!lgId) {
+      document.getElementById('league-title').textContent = 'Choose a league';
+      for (const id of ['az-trade-btn', 'az-ranks-btn']) { const b = document.getElementById(id); if (b) b.style.display = 'none'; }
+      document.getElementById('content').innerHTML = '<div class="empty-state"><p>Pick one of your leagues to see every team ranked by roster value.</p></div>';
+      await authP;
+      toggleSwitcher({ stopPropagation() {} });
+      return;
+    }
     document.getElementById('content').innerHTML = loading('Loading league data…');
     try { await loadAndRender(); } catch(e) { document.getElementById('content').innerHTML = errHtml(e); }
   }
@@ -1688,7 +1699,8 @@
 
   document.addEventListener('click', e => {
     const panel = document.getElementById('az-switcher-panel');
-    if (panel && !panel.contains(e.target) && !e.target.closest('.az-switcher-wrap')) {
+    // With no league open the picker IS the page, so it stays open.
+    if (panel && lgId && !panel.contains(e.target) && !e.target.closest('.az-switcher-wrap')) {
       panel.style.display = 'none';
     }
     const tPanel = document.getElementById('az-trade-panel');
@@ -1979,7 +1991,7 @@
 
     const POS_CLS = { QB: 'rs-pos-QB', RB: 'rs-pos-RB', WR: 'rs-pos-WR', TE: 'rs-pos-TE' };
 
-    const noPrefNote = myPref ? '' : `<div class="az-tgt-nopref">Set your contender/rebuilder preference in <a href="/rootforme.html" style="color:var(--gold);">Root For Me</a> for tailored results.</div>`;
+    const noPrefNote = myPref ? '' : `<div class="az-tgt-nopref">Set your contender/rebuilder preference in <a href="/rootforme" style="color:var(--gold);">Root For Me</a> for tailored results.</div>`;
 
     const targetsHtml = targets.length === 0
       ? `<div class="az-tgt-empty">No clear trade targets found for this league.</div>`
@@ -2008,7 +2020,7 @@
           return `<div class="az-tgt-item">
             <div class="az-tgt-item-top">
               <span class="az-tgt-tname">${esc(tDisplay)}</span>
-              <a class="az-tgt-analyze" href="/trade-analyzer?league=${encodeURIComponent(lgId)}&b=${team.rosterId}">Analyze ⇄</a>
+              <a class="az-tgt-analyze" target="_blank" rel="noopener" href="/trade-analyzer?league=${encodeURIComponent(lgId)}&b=${team.rosterId}">Analyze ⇄</a>
             </div>
             <div class="az-tgt-reasons">${reasonsHtml}</div>
             <div class="az-tgt-oddsline" style="margin-top:4px;">${tArchHtml}${team.playoffOdds != null ? ` · ${Math.round(team.playoffOdds * 100)}% ${isPointsOnly ? 'most points' : 'playoff odds'}` : ''}</div>
@@ -2081,7 +2093,7 @@
         const owner = (t.ownerName && t.ownerName !== name) ? t.ownerName : null;
         const rank  = ranks.overall?.[t.rosterId];
         const rec   = `${t.wins}-${t.losses}`;
-        return `<a class="az-trade-item" href="/trade-analyzer?league=${encodeURIComponent(lgId)}&b=${t.rosterId}">
+        return `<a class="az-trade-item" target="_blank" rel="noopener" href="/trade-analyzer?league=${encodeURIComponent(lgId)}&b=${t.rosterId}">
           ${esc(name)}
           <div class="az-trade-item-sub">${owner ? esc(owner) + ' · ' : ''}${rec}${rank ? ' · #' + rank + ' overall' : ''}</div>
         </a>`;

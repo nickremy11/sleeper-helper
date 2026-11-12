@@ -288,7 +288,7 @@ function scoutPosRanks(scoring, opts) {
 }
 
 async function renderScout() {
-  if (!S.leagues.length) { setC('<div class="empty-state"><p>No leagues found for this user</p></div>'); return; }
+  if (!S.leagues.length) { setC(viewBarHtml('findtrade', 'scout') + '<div class="empty-state"><p>No leagues found for this user</p></div>'); return; }
 
   const modeLbl = SC.mode === 'buy' ? 'looking to buy' : 'trying to sell';
   const pill = (cur, val, txt, onclick) =>
@@ -387,6 +387,7 @@ async function renderScout() {
          : `you are stacked at ${SC.pos} (≥ ${rd.count} in the top ${rd.rank} by ${srcNoun}) — a surplus to sell from.`}`;
 
   setC(`
+    ${viewBarHtml('findtrade', 'scout')}
     <div class="section-head"><h2>Scout</h2><div class="section-head-line"></div></div>
     ${formatTabs}
     <div style="font-family:'Crimson Text',serif;font-style:italic;color:var(--brown-light);font-size:0.9rem;margin-bottom:16px;">${summary}</div>
@@ -639,7 +640,7 @@ function scoutDrawResults() {
     const teamName = rid => names[rid] || ('Roster ' + rid);
     const head = `
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
-        <a href="/analyzer?league=${encodeURIComponent(res.lgId)}" class="card-link">${esc(res.name)}</a>
+        <a href="/analyzer?league=${encodeURIComponent(res.lgId)}" target="_blank" rel="noopener" class="card-link">${esc(res.name)}</a>
         ${res.isEspn ? '<span class="badge badge-outline">ESPN</span>' : ''}
         ${scoutClassBadge(res.myClass, res.myOdds)}
       </div>`;
@@ -658,7 +659,7 @@ function scoutDrawResults() {
           <div class="data-row" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
             <span style="font-family:'Crimson Text',serif;color:var(--parchment);font-size:0.92rem;font-weight:600;">${esc(teamName(t.rid))}</span>
             ${scoutClassBadge(t.cls, t.odds)}
-            <a class="ghost-btn" style="text-decoration:none;" href="/trade-analyzer?league=${encodeURIComponent(res.lgId)}&b=${t.rid}">Analyze ⇄</a>
+            <a class="ghost-btn" style="text-decoration:none;" target="_blank" rel="noopener" href="/trade-analyzer?league=${encodeURIComponent(res.lgId)}&b=${t.rid}">Analyze ⇄</a>
           </div>`).join('')}`;
     } else {
       body = res.teams.map(t => `
@@ -667,7 +668,7 @@ function scoutDrawResults() {
             <span style="font-family:'Crimson Text',serif;color:var(--parchment);font-size:0.92rem;font-weight:600;">${esc(teamName(t.rid))}</span>
             ${scoutClassBadge(t.cls, t.odds)}
             ${SC.format === 'redraft' ? `<span class="badge badge-outline">${t.players.length} ${SC.pos} surplus</span>` : ''}
-            <a class="ghost-btn" style="text-decoration:none;" href="/trade-analyzer?league=${encodeURIComponent(res.lgId)}&b=${t.rid}">Analyze ⇄</a>
+            <a class="ghost-btn" style="text-decoration:none;" target="_blank" rel="noopener" href="/trade-analyzer?league=${encodeURIComponent(res.lgId)}&b=${t.rid}">Analyze ⇄</a>
           </div>
           <div>${t.players.map(p => scoutPlayerLine(p)).join('<br>')}</div>
         </div>`).join('');
