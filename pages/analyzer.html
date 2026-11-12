@@ -348,7 +348,7 @@
     <div class="banner">
       <div style="position:relative;z-index:1;padding:18px 20px;display:flex;justify-content:space-between;align-items:flex-start;">
         <div class="banner-text">
-          <a href="/" class="banner-back">← Sleeper Helper</a>
+          <a href="/" class="banner-back" id="az-back">← Sleeper Helper</a>
           <h1>League <span>Analyzer</span></h1>
           <div class="az-league-title" id="league-title">Loading…</div>
           <div class="banner-divider"></div>
@@ -1267,6 +1267,15 @@
   // ── Init ──────────────────────────────────────────────────────────────────────
 
   async function init() {
+    // Arrived from League Summaries (the one place that opens this page in the
+    // same tab): the back link returns there instead of to Home.
+    try {
+      const ref = document.referrer ? new URL(document.referrer) : null;
+      if (ref && ref.origin === location.origin && new URLSearchParams(ref.search).get('tab') === 'leagues') {
+        const b = document.getElementById('az-back');
+        b.href = '/?tab=leagues'; b.textContent = '← League Summaries';
+      }
+    } catch {}
     const authP = SharedAuth.init({ onLogin: () => {}, onLogout: () => {} });
     // Opened from the menu, with no league yet: the page becomes the league
     // picker (the same list the Switch League button shows).

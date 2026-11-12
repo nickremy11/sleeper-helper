@@ -1123,7 +1123,7 @@ function lsDrawTable() {
   const tbody = `<tbody id="ls-tbody">${rows.map(row => {
     // League name cell
     const nameCls = row.prefContender ? ' ls-contender-name' : '';
-    const nameCell = `<td><a href="/analyzer?league=${encodeURIComponent(row.lgId)}" target="_blank" rel="noopener" class="row-link${nameCls}">${esc(row.name)}</a></td>`;
+    const nameCell = `<td><a href="/analyzer?league=${encodeURIComponent(row.lgId)}" class="row-link${nameCls}">${esc(row.name)}</a></td>`;
 
     // Standing cell
     let standingCell;

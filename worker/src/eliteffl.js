@@ -339,9 +339,16 @@ export async function syncEliteFFL(env, { dryRun = false } = {}) {
   const kona = await espn('view=kona_player_info', { players: { filterIds: { value: picks.map(p => p.playerId) } } });
   const info = {};
   (kona.players || []).forEach(p => { info[p.id] = { name: p.player.fullName, pos: ELITEFFL_POS[p.player.defaultPositionId] || '?' }; });
+  // Season PPG in the league's own scoring: ESPN's actual season line (source 0,
+  // period 0, split 0) for this season — appliedAverage is per game played.
+  const ppgOf = {};
   (lg.teams || []).forEach(t => (t.roster?.entries || []).forEach(e => {
     const pl = e.playerPoolEntry?.player;
-    if (pl && !info[pl.id]) info[pl.id] = { name: pl.fullName, pos: ELITEFFL_POS[pl.defaultPositionId] || '?' };
+    if (!pl) return;
+    if (!info[pl.id]) info[pl.id] = { name: pl.fullName, pos: ELITEFFL_POS[pl.defaultPositionId] || '?' };
+    const line = (pl.stats || []).find(x => x.statSourceId === 0 && x.scoringPeriodId === 0
+      && x.statSplitTypeId === 0 && x.seasonId === season);
+    if (line && line.appliedAverage != null) ppgOf[pl.id] = Math.round(line.appliedAverage * 10) / 10;
   }));
   const missing = picks.filter(p => !info[p.playerId]);
   if (missing.length) throw new Error(`No name for ${missing.length} drafted player(s)`);
@@ -414,13 +421,14 @@ export async function syncEliteFFL(env, { dryRun = false } = {}) {
     want.set(name.toLowerCase(), {
       owner: ownerOf[t.id], player_name: name, position: pos,
       times_kept: n + 1, original_price: orig, keeper_cost: p.bidAmount + 5 * 2 ** n,
+      ppg: ppgOf[id] ?? null,
     });
   }));
 
   const ins = r => env.DB.prepare(
-    `INSERT INTO eliteffl_keeper_options (owner, player_name, position, times_kept, original_price, keeper_cost, sort_order, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, 0, ?)`
-  ).bind(r.owner, r.player_name, r.position, r.times_kept, r.original_price, r.keeper_cost, now);
+    `INSERT INTO eliteffl_keeper_options (owner, player_name, position, times_kept, original_price, keeper_cost, ppg, sort_order, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`
+  ).bind(r.owner, r.player_name, r.position, r.times_kept, r.original_price, r.keeper_cost, r.ppg, now);
   const stmts = [];
   if (koYear !== season + 1) {
     // New draft year → replace the chart, backing the old one up first.
@@ -430,13 +438,17 @@ export async function syncEliteFFL(env, { dryRun = false } = {}) {
     want.forEach(r => stmts.push(ins(r)));
     out.added = want.size;
   } else {
-    out.added = 0; out.removed = 0; out.moved = 0;
+    out.added = 0; out.removed = 0; out.moved = 0; out.ppgUpdated = 0;
     want.forEach((r, k) => {
       const cur = koBy.get(k);
-      if (!cur) { stmts.push(ins(r)); out.added++; }
-      else if (cur.owner !== r.owner) {
-        stmts.push(env.DB.prepare('UPDATE eliteffl_keeper_options SET owner = ?, updated_at = ? WHERE id = ?').bind(r.owner, now, cur.id));
-        out.moved++;
+      if (!cur) { stmts.push(ins(r)); out.added++; return; }
+      // Owner follows a trade; PPG follows the season. Nothing else is touched.
+      const ppg = r.ppg ?? cur.ppg;
+      if (cur.owner !== r.owner || cur.ppg !== ppg) {
+        stmts.push(env.DB.prepare('UPDATE eliteffl_keeper_options SET owner = ?, ppg = ?, updated_at = ? WHERE id = ?')
+          .bind(r.owner, ppg, now, cur.id));
+        if (cur.owner !== r.owner) out.moved++;
+        if (cur.ppg !== ppg) out.ppgUpdated++;
       }
     });
     (koRows || []).forEach(cur => {

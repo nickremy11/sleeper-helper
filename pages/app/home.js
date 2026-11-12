@@ -20,13 +20,14 @@ function renderHome() {
       <section class="dash-card" id="dash-lineups" aria-live="polite">${dashHead('Lineups', 'lineups')}${loading('Checking lineups')}</section>
       <section class="dash-card" id="dash-trades"  aria-live="polite">${dashHead('Open Trades', 'trades')}${loading('Scanning trades')}</section>
       <section class="dash-card" id="dash-drafts"  aria-live="polite">${dashHead('Drafts', 'drafts')}${loading('Checking drafts')}</section>
-      <section class="dash-card" id="dash-leagues">${dashHead('Your Leagues', 'leagues')}${dashLeaguesHtml()}</section>
+      <section class="dash-card" id="dash-leagues">${dashHead('Your Leagues', 'leagues')}${loading('Reading your leagues')}</section>
     </div>
     <p class="dash-foot">Looking for something else? <a href="/?tab=guide" data-tab="guide">Every tool, one line each, in the Guide →</a></p>
   </div>`);
   dashLineups(regular);
   dashTrades();
   dashDrafts();
+  dashLeagues();
 }
 
 function dashHead(title, tab) {
@@ -103,23 +104,36 @@ async function dashDrafts() {
   } catch (e) { fill(dashLine('Couldn’t check drafts: ' + esc(e.message), 'bad')); }
 }
 
-// Nothing fetched here: League Summaries owns standings and odds. If it has run
-// this session, its numbers show; otherwise the card says where to find them.
-function dashLeaguesHtml() {
-  const sl = S.leagues.filter(l => l.source !== 'espn').length;
-  const es = S.leagues.length - sl;
-  const counts = dashLine(`${sl} Sleeper${es ? ` · ${es} ESPN` : ''} league${S.leagues.length === 1 ? '' : 's'}`);
-  const data = Object.values(LS.leagueData || {});
-  if (!LS.loaded || !data.length) return counts + dashLine('Standings, records and playoff odds are in League Summaries.', 'dim');
+// Scoped to the leagues you're playing for this year: every redraft league plus
+// the dynasty leagues tagged Contender (Root For Me / League Summaries).
+// Rebuilders and untagged dynasty leagues are left out, and so are guillotine
+// leagues, whose record means something else. Standings and odds are League
+// Summaries' — shown if it has run this session, never fetched from here; the
+// only read is the contender tags (one call, skipped once anything has loaded them).
+function dashInScope(lgId) {
+  if (lsIsGuillotine(lgId)) return false;
+  return rsLeagueCategory(lgId) === 'redraft' || RS.prefs[lgId]?.contender === true;
+}
+async function dashLeagues() {
+  const fill = body => dashFill('dash-leagues', 'Your Leagues', 'leagues', body);
+  try { if (RS._storedPrefs === undefined) await rsLoadPrefs(); } catch {}
+  const scoped = S.leagues.filter(l => dashInScope(l.league_id));
+  const redraft = scoped.filter(l => rsLeagueCategory(l.league_id) === 'redraft').length;
+  const counts = dashLine(`<span class="dash-lg">${scoped.length}</span> of ${S.leagues.length} leagues
+    <span class="dash-sub">contenders + redraft · ${scoped.length - redraft} contending dynasty, ${redraft} redraft</span>`);
+  const data = scoped.map(l => LS.leagueData?.[l.league_id]).filter(Boolean);
+  if (!LS.loaded || !data.length) {
+    return fill(counts + dashLine('Standings, records and playoff odds are in League Summaries.', 'dim'));
+  }
   let w = 0, l = 0, inPo = 0, haveOdds = 0;
   for (const d of data) {
     w += d.wins || 0; l += d.losses || 0;
     if (d.playoffOdds != null) { haveOdds++; if (d.playoffOdds > 0.5) inPo++; }
   }
-  return counts + `<div class="dash-stats">
+  fill(counts + `<div class="dash-stats" style="margin-top:10px;">
       <div><b>${w}–${l}</b><span>combined record</span></div>
       ${haveOdds ? `<div><b>${inPo}</b><span>of ${haveOdds} likely in the playoffs</span></div>` : ''}
-    </div>`;
+    </div>`);
 }
 
 // ── Welcome (no leagues loaded yet) ─────────────────────────────────────────────
