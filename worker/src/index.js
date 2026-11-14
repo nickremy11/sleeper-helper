@@ -20,6 +20,8 @@
  *   GET  /api/fantasycalc         → FantasyCalc values (KV-cached 24h; optional ?isDynasty=&numQbs=&ppr=&includePickValues=, default = dynasty/2QB/full-PPR)
  *   GET  /api/aggregate-adp       → JuiceBoxOne consensus ADP CSV, offense only (KV-cached 12h)
  *   GET  /api/fantasypros/ros     → FantasyPros consensus rest-of-season ranks (?scoring=half|ppr|std, KV-cached 6h)
+ *   GET  /api/devy/espn           → devy players' current pos/school/class/stats from ESPN college football (?p=[{n,pos,sch}] ≤10, KV 7d) — devy.js
+ *   GET  /api/devy                → a devy league's Google Sheet, every tab as CSV (?league=&prev=, allowlisted, KV-cached 10m) — devy.js
  *   GET  /api/espn/scoreboard     → NFL week schedule: team → kickoff ISO (KV-cached 5m)
  *   GET  /api/espn/games          → NFL week games with pairings [{home,away,kickoff}] (KV-cached 5m)
  *   GET  /api/espn/settings       → get ESPN league IDs + credential status (auth required)
@@ -55,6 +57,7 @@ import { handleAuth, getAuthUser, decryptStoredToken } from './auth.js';
 import { handleDataSite } from './data.js';
 import { handleEliteFFL, syncEliteFFL } from './eliteffl.js';
 import { handleProjections } from './projections.js';
+import { handleDevy, handleDevyEspn } from './devy.js';
 import { getCors, CORS, cacheFor, jsonBody, kvCachedJson } from './http.js';
 
 const SLEEPER_BASE  = 'https://api.sleeper.app/v1';
@@ -139,6 +142,14 @@ export default {
 
     if (url.pathname === '/api/fantasypros/ros' && request.method === 'GET') {
       return handleFantasyProsRos(env, url);
+    }
+
+    if (url.pathname === '/api/devy' && request.method === 'GET') {
+      return handleDevy(env, url);
+    }
+
+    if (url.pathname === '/api/devy/espn' && request.method === 'GET') {
+      return handleDevyEspn(env, url);
     }
 
     if (url.pathname === '/api/espn/scoreboard' && request.method === 'GET') {

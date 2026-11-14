@@ -1712,3 +1712,384 @@ function mrgDraw(busy = '') {
 
   el.innerHTML = controls + mrgUnrankedHtml(mine, onBoard) + grid;
 }
+
+// ── Devy leagues (devy*) ─────────────────────────────────────────────────────
+// Sleeper has no college players, so a devy league rosters each one as a
+// placeholder — every K and every IDP player on a roster is one, whatever slot
+// Sleeper shows it in. The league's Google Sheet (GET /api/devy, allowlisted in
+// worker/src/devy.js) is the source of truth for WHO they are:
+//
+//   - the "Devy Players" tab: each manager's current devy players, in blocks of
+//     columns headed by Sleeper usernames (plus a Player/College/Position table)
+//   - draft tabs ("Startup", "2025 Draft"…): placeholder NFL player → devy player
+//
+// Ownership is Sleeper's: the placeholder is what moves in a trade. The sheet
+// supplies names; when it lists a player under a different manager, that's
+// flagged (`note`), not obeyed.
+//
+// Which placeholder is which devy player, in order of trust:
+//   1. the manager's Sleeper nickname on the placeholder (roster.metadata
+//      p_nick_{pid}) that matches a name on THEIR sheet list
+//   2. a draft-tab row for this placeholder whose devy player is on their list
+//   3. the nickname matching someone on ANOTHER manager's list → conflict note
+//   4. the nickname alone, else the newest draft-tab row → "not on the sheet"
+//   5. nothing → unnamed
+// Draft tabs are only a hint: placeholders get reused after a player graduates,
+// and the logs carry typos ("Yunghoe Koo"), hence the fuzzy name match.
+
+const DEVY_PLACEHOLDER_POS = new Set(['K','P','DL','LB','DB','DE','DT','CB','S','FS','SS','IDL','OLB','ILB','MLB','SAF','NT']);
+
+function devyIsPlaceholder(rawPlayer) { return !!rawPlayer && DEVY_PLACEHOLDER_POS.has(rawPlayer.position); }
+
+// Edit distance where swapping two adjacent letters costs 1 ("Rueben" →
+// "Reuban" is a swap + one letter = 2), same rule as index.html's luFuzzyMatch.
+function devyLev(a, b) {
+  if (a === b) return 0;
+  if (Math.abs(a.length - b.length) > 3) return 9;
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+    }
+  }
+  return d[a.length][b.length];
+}
+
+// Does a candidate (normName'd, possibly "name + school" from a nickname)
+// refer to the sheet name `key`? Typos up to 1 edit (2 for 10+ letters), and a
+// candidate that runs on past the name ("kemario taylor mississippi st").
+function devyNameMatch(cand, key) {
+  if (!cand || !key) return false;
+  if (cand === key) return true;
+  const tol = key.length >= 10 ? 2 : 1;
+  if (key.length >= 6 && devyLev(cand, key) <= tol) return true;
+  if (cand.length > key.length && cand[key.length] === ' ' && devyLev(cand.slice(0, key.length), key) <= 1) return true;
+  return false;
+}
+
+// "Nate Sheppard RB Duke" · "Jojo Trader, NC State" · "Devin Neal - RB Kansas"
+// · "DJ Lagway, UF, QB" · "Jaron-Keawe Sagapolutele,QBcal" → {name, pos, school}
+function devyParseNick(raw) {
+  const s = String(raw || '').replace(/["“”]/g, '').replace(/\s+/g, ' ').trim();
+  if (!s) return null;
+  const parts = s.split(/\s*,\s*|\s+[-–—]\s+/).filter(Boolean);
+  let name = parts[0] || '', pos = null, school = null;
+  const m = name.match(/^(.*?)\s+(QB|RB|WR|TE)\b\s*(.*)$/i);
+  if (m) { name = m[1]; pos = m[2].toUpperCase(); school = m[3] || null; }
+  for (const p of parts.slice(1)) {
+    const pm = p.match(/^(QB|RB|WR|TE)\b\s*(.*)$/i) || p.match(/^(.*?)\s*\b(QB|RB|WR|TE)$/i);
+    if (pm && /^(QB|RB|WR|TE)$/i.test(pm[1])) { pos = pos || pm[1].toUpperCase(); school = school || pm[2] || null; }
+    else if (pm) { pos = pos || pm[2].toUpperCase(); school = school || pm[1] || null; }
+    else school = school || p;
+  }
+  return { name: name.trim(), pos, school: school ? school.trim() : null };
+}
+
+// tabs: [{name, csv}] from /api/devy; users: Sleeper /league/{id}/users.
+// → { owners: {userId: [name]}, info: {key: {name, pos, school}}, log: [{ph, devy, year}] newest first }
+function devyParseSheet(tabs, users, { rename = {} } = {}) {
+  // Sheet typos fixed by the league config (worker/src/devy.js `rename`), applied to every name read.
+  const fixes = {};
+  for (const [from, to] of Object.entries(rename || {})) fixes[normName(from)] = to;
+  const fix = n => fixes[normName(n)] || n;
+  const uKey = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const ulist = (users || []).map(u => ({ id: u.user_id, k: uKey(u.display_name) })).filter(u => u.k);
+  const matchUser = cell => {
+    const c = uKey(cell);
+    if (c.length < 3) return null;
+    const exact = ulist.filter(u => u.k === c);
+    if (exact.length === 1) return exact[0].id;
+    const pre = ulist.filter(u => Math.min(u.k.length, c.length) >= 5 && (u.k.startsWith(c) || c.startsWith(u.k)));
+    if (pre.length === 1) return pre[0].id;
+    const fz = ulist.filter(u => c.length >= 6 && devyLev(u.k, c) <= 2);
+    return fz.length === 1 ? fz[0].id : null;
+  };
+  const owners = {}, info = {}, log = [];
+  const addInfo = (name, pos, school) => {
+    const key = normName(name); if (!key) return;
+    const cur = info[key] || (info[key] = { name: name.trim(), pos: null, school: null });
+    cur.pos = cur.pos || pos || null; cur.school = cur.school || school || null;
+  };
+  for (const tab of tabs || []) {
+    const rows = csvRows(tab.csv).map(r => r.map(c => (c || '').trim()));
+    const lc = r => r.map(c => c.toLowerCase());
+    // A table header: Player/Devy Player + College or Position.
+    const tableCols = new Set();
+    rows.forEach((r, hi) => {
+      const L = lc(r);
+      const devyC = L.indexOf('devy player') !== -1 ? L.indexOf('devy player') : L.indexOf('player');
+      const isLog = L.includes('devy player') && (L.includes('placeholder') || L.includes('player'));
+      if (devyC === -1 || (!isLog && L.indexOf('college') === -1 && L.indexOf('position') === -1)) return;
+      const colC = L.indexOf('college'), posC = L.indexOf('position');
+      const phC = L.indexOf('placeholder') !== -1 ? L.indexOf('placeholder') : (L.indexOf('devy player') !== -1 ? L.indexOf('player') : -1);
+      const mgrC = L.indexOf('manager');
+      [devyC, colC, posC, phC, mgrC, L.indexOf('pick'), L.indexOf('startup pick')].forEach(c => { if (c >= 0) tableCols.add(c); });
+      const ym = String(tab.name || '').match(/(\d{4})/);
+      for (let i = hi + 1; i < rows.length; i++) {
+        const r2 = rows[i], nm = r2[devyC];
+        if (!nm) continue;
+        if (lc(r2).includes('player') && lc(r2).includes('college')) break;   // next table
+        addInfo(fix(nm), posC >= 0 ? r2[posC] : null, colC >= 0 ? r2[colC] : null);
+        if (phC >= 0 && r2[phC]) log.push({ ph: normName(r2[phC]), devy: fix(nm), year: ym ? +ym[1] : 0 });
+      }
+    });
+    // Manager blocks: a row with 2+ cells naming league users (outside the
+    // table columns above) heads a block; names run down until the next one.
+    const heads = [];
+    rows.forEach((r, i) => {
+      const cols = [];
+      r.forEach((c, j) => { if (!tableCols.has(j)) { const id = matchUser(c); if (id) cols.push([j, id]); } });
+      if (cols.length >= 2) heads.push({ i, cols });
+    });
+    heads.forEach((h, n) => {
+      const end = n + 1 < heads.length ? heads[n + 1].i : rows.length;
+      for (const [j, id] of h.cols) {
+        const list = owners[id] || (owners[id] = []);
+        for (let i = h.i + 1; i < end; i++) { const v = rows[i][j]; if (v) list.push(fix(v)); }
+      }
+    });
+  }
+  log.sort((a, b) => b.year - a.year);
+  return { owners, info, log };
+}
+
+// Has this devy player already reached the NFL? Sleeper's player map is the
+// test: an offensive player with his name at his position, whose record is a
+// real one (a college or a team — Sleeper keeps bare stubs for some prospects).
+// College is NOT required to match: transfers are routine (Jaydn Ott Cal →
+// Oklahoma), and the sheet keeps the school he was drafted from.
+// Position must match, or "Ryan Williams" WR Alabama graduates as an NFL RB.
+function devyNflIndex(allPlayers) {
+  const idx = {};
+  for (const p of Object.values(allPlayers || {})) {
+    if (!['QB','RB','WR','TE'].includes(p?.position) || !(p.college || p.team)) continue;
+    const k = normName(p.full_name || `${p.first_name || ''} ${p.last_name || ''}`);
+    if (k) (idx[k] = idx[k] || []).push(p);
+  }
+  return idx;
+}
+function devyInNfl(nflIdx, name, pos) {
+  const hits = nflIdx[normName(name || '')];
+  if (!hits?.length) return false;
+  const want = String(pos || '').toUpperCase().split(/[\/, ]+/).filter(Boolean);
+  return want.length > 0 && hits.some(p => want.includes(p.position));
+}
+
+// → { byPid: {pid: {name, pos, school, src, note, nfl?}}, missing: {rosterId: [{name, pos, school}]} }
+// src: 'sheet' (on the owner's list) | 'other' (on another manager's list) | 'nick' | 'log' | null
+// nfl: true = he has graduated (or the placeholder IS a former devy player, e.g.
+// Travis Hunter). hidden: graduated or on the config's ignore list — the slot is
+// dead weight and hosts skip it entirely (not listed, not tradeable). Hidden
+// names are dropped from `missing` too, whose entries carry a `note` on why.
+function devyResolve({ rosters, users, allPlayers, sheet, ignore = [] }) {
+  const userName = {};
+  for (const u of users || []) userName[u.user_id] = u.display_name || u.user_id;
+  const remaining = {};   // userId → Map(key → sheet name)
+  for (const [uid, names] of Object.entries(sheet.owners)) {
+    remaining[uid] = new Map(names.map(n => [normName(n), n]));
+  }
+  const fullName = p => p.full_name || `${p.first_name || ''} ${p.last_name || ''}`.trim();
+  const slots = [];       // {pid, uid, rid, nick, logs}
+  for (const r of rosters || []) {
+    for (const pid of r.players || []) {
+      const p = allPlayers?.[pid];
+      if (!devyIsPlaceholder(p)) continue;
+      const nick = devyParseNick(r.metadata?.[`p_nick_${pid}`]);
+      const phKey = normName(fullName(p));
+      const logs = sheet.log.filter(l => devyNameMatch(phKey, l.ph) || devyNameMatch(l.ph, phKey));
+      slots.push({ pid, uid: r.owner_id, rid: r.roster_id, nick, logs });
+    }
+  }
+  const byPid = {};
+  const take = (map, cand) => {
+    if (!map || !cand) return null;
+    const c = normName(cand);
+    for (const [k, v] of map) if (devyNameMatch(c, k)) { map.delete(k); return v; }
+    return null;
+  };
+  const describe = (name, extra) => {
+    const i = sheet.info[normName(name)] || {};
+    return { name, pos: i.pos || extra?.pos || null, school: i.school || extra?.school || null };
+  };
+  const open = () => slots.filter(s => !byPid[s.pid]);
+  const logSays = (s, name) => s.logs.find(l => devyNameMatch(normName(name), normName(l.devy)));
+  // 0: nickname AND a draft-tab row agree — claims first, so when two
+  // placeholders carry the same nickname (one stale), the one the draft tab
+  // backs gets the name (muffdaddy1: Cole Murphy, not Stephen Hauschka, is Duce Robinson).
+  for (const s of open()) {
+    if (!s.nick?.name || !logSays(s, s.nick.name)) continue;
+    const n = take(remaining[s.uid], s.nick.name);
+    if (n) byPid[s.pid] = { ...describe(n, s.nick), src: 'sheet', note: null };
+  }
+  // 1 + 2: the owner's own list, nickname first, then the draft logs.
+  for (const s of open()) { const n = take(remaining[s.uid], s.nick?.name); if (n) byPid[s.pid] = { ...describe(n, s.nick), src: 'sheet', note: null }; }
+  for (const s of open()) {
+    for (const l of s.logs) { const n = take(remaining[s.uid], l.devy); if (n) { byPid[s.pid] = { ...describe(n), src: 'sheet', note: null }; break; } }
+  }
+  // 3: nickname on another manager's list — Sleeper wins, sheet is flagged.
+  for (const s of open()) {
+    if (!s.nick) continue;
+    for (const [uid, map] of Object.entries(remaining)) {
+      if (uid === s.uid) continue;
+      const n = take(map, s.nick.name);
+      if (n) { byPid[s.pid] = { ...describe(n, s.nick), src: 'other', note: `Sheet lists him under ${userName[uid] || 'another manager'}` }; break; }
+    }
+  }
+  // 4 + 5
+  const claimed = new Map();   // normName → placeholder full name, for the duplicate note
+  for (const s of slots) if (byPid[s.pid]?.name) claimed.set(normName(byPid[s.pid].name), fullName(allPlayers[s.pid]));
+  for (const s of open()) {
+    const dup = s.nick?.name && [...claimed].find(([k]) => devyNameMatch(normName(s.nick.name), k));
+    const logged = s.nick?.name && logSays(s, s.nick.name);
+    if (dup) byPid[s.pid] = { ...describe(s.nick.name, s.nick), src: 'nick', note: `Duplicate: ${dup[1]} already holds this nickname (likely a stale placeholder)` };
+    else if (logged) byPid[s.pid] = { ...describe(s.nick.name, s.nick), src: 'log', note: `In the ${logged.year || 'startup'} draft tab — not on the manager's current list` };
+    else if (s.nick?.name) byPid[s.pid] = { ...describe(s.nick.name, s.nick), src: 'nick', note: 'Named by Sleeper nickname — not on the sheet' };
+    else if (s.logs[0]) byPid[s.pid] = { ...describe(s.logs[0].devy), src: 'log', note: `From the ${s.logs[0].year || 'startup'} draft tab — not on the current sheet` };
+    else byPid[s.pid] = { name: null, pos: null, school: null, src: null, note: 'No name on Sleeper or the sheet' };
+  }
+  // Graduates. An unnamed placeholder that is itself a former devy player
+  // (in the sheet's player table) has graduated onto his own roster spot.
+  const nflIdx = devyNflIndex(allPlayers);
+  const ignoreSet = new Set((ignore || []).map(normName));
+  const ignored = n => ignoreSet.has(normName(n));
+  for (const s of slots) {
+    const d = byPid[s.pid];
+    if (d.name ? devyInNfl(nflIdx, d.name, d.pos) : !!sheet.info[normName(fullName(allPlayers[s.pid]))]) d.nfl = true;
+    if (d.nfl || (d.name && ignored(d.name))) d.hidden = true;
+  }
+  // Sheet names with no placeholder: say what happened to the one he was
+  // drafted with, when a draft tab names it — dropped, or now on another
+  // roster under a different devy name (placeholders get recycled).
+  const rosterOf = {}, rosterOwner = {};
+  for (const r of rosters || []) { rosterOwner[r.roster_id] = r.owner_id; for (const pid of r.players || []) rosterOf[pid] = r.roster_id; }
+  const phByName = {};
+  for (const [pid, p] of Object.entries(allPlayers || {})) {
+    if (!devyIsPlaceholder(p)) continue;
+    const k = normName(fullName(p));
+    if (k && (!phByName[k] || rosterOf[pid])) phByName[k] = pid;
+  }
+  const whyMissing = name => {
+    const l = sheet.log.find(x => devyNameMatch(normName(name), normName(x.devy)));
+    if (!l) return 'No placeholder on Sleeper';
+    const pid = phByName[l.ph];
+    const ph = pid ? fullName(allPlayers[pid]) : l.ph;
+    const where = `Drafted with ${ph} (${l.year || 'startup'})`;
+    if (!pid || !rosterOf[pid]) return `${where} — since dropped; no placeholder on Sleeper`;
+    const now = byPid[pid]?.name;
+    return `${where} — now on ${userName[rosterOwner[rosterOf[pid]]] || 'another'}'s roster${now ? ` as ${now}` : ''}`;
+  };
+  const missing = {};
+  for (const r of rosters || []) {
+    const left = [...(remaining[r.owner_id]?.values() || [])].map(n => describe(n))
+      .filter(m => !devyInNfl(nflIdx, m.name, m.pos) && !ignored(m.name))
+      .map(m => ({ ...m, note: whyMissing(m.name) }));
+    if (left.length) missing[r.roster_id] = left;
+  }
+  return { byPid, missing };
+}
+
+// Fetch + resolve. null for a league with no devy sheet (or on any failure —
+// a devy league then just looks like it did before this existed).
+async function devyLoad({ apiBase, leagueId, prevLeagueId, rosters, users, allPlayers }) {
+  try {
+    const qs = `league=${encodeURIComponent(leagueId)}${prevLeagueId ? `&prev=${encodeURIComponent(prevLeagueId)}` : ''}`;
+    const res = await fetch(`${apiBase}/devy?${qs}`).then(r => r.ok ? r.json() : null);
+    if (!res?.devy) return null;
+    const sheet = devyParseSheet(res.tabs, users, { rename: res.rename });
+    return { ...devyResolve({ rosters, users, allPlayers, sheet, ignore: res.ignore }), sheetUrl: res.sheetUrl };
+  } catch (e) {
+    console.warn('[devy] load failed', e);
+    return null;
+  }
+}
+
+// ── ESPN enrichment ── current position / school / class / season stats for
+// every devy name (GET /api/devy/espn, worker/src/devy.js). The sheet's school
+// is where he was drafted from; ESPN's is where he plays now. Fills `d.espn`
+// in place on byPid entries and missing entries (an object, or false = ESPN
+// has no confident match), calling onUpdate after each batch so the host can
+// redraw. Never throws; the sheet's pos/school stay the fallback.
+async function devyEnrich({ apiBase, devy, onUpdate }) {
+  if (!devy) return;
+  const entries = [...Object.values(devy.byPid).filter(d => !d.hidden && d.name), ...Object.values(devy.missing).flat()];
+  const byName = new Map();
+  for (const e of entries) { if (!byName.has(e.name)) byName.set(e.name, []); byName.get(e.name).push(e); }
+  const names = [...byName.keys()];
+  const batches = [];
+  for (let i = 0; i < names.length; i += 10) batches.push(names.slice(i, i + 10));
+  const run = async batch => {
+    const p = batch.map(n => { const e = byName.get(n)[0]; return { n, pos: e.pos || '', sch: e.school || '' }; });
+    const res = await fetch(`${apiBase}/devy/espn?p=${encodeURIComponent(JSON.stringify(p))}`).then(r => r.ok ? r.json() : null).catch(() => null);
+    if (!res) return;
+    for (const n of batch) for (const e of byName.get(n)) e.espn = res.results?.[n] || false;
+    try { onUpdate?.(); } catch {}
+  };
+  for (let i = 0; i < batches.length; i += 3) await Promise.all(batches.slice(i, i + 3).map(run));
+}
+
+const DEVY_CLS = { freshman: 'Fr', sophomore: 'So', junior: 'Jr', senior: 'Sr', graduate: 'Gr' };
+function devyClsShort(c) {
+  if (!c) return '';
+  const m = String(c).toLowerCase().match(/(redshirt\s+)?(freshman|sophomore|junior|senior|graduate)/);
+  return m ? (m[1] ? 'RS ' : '') + DEVY_CLS[m[2]] : c;
+}
+
+// First NFL draft a devy player can enter: three seasons out of high school.
+// ESPN reports academic class only (no redshirt flag), so this is the EARLIEST
+// eligible year — a redshirt sophomore is eligible a year before it says, and
+// a junior may go back to school. A senior (or anyone past year 4) is out of
+// eligibility: `final`. When ESPN's latest stats are an older season ("2025
+// season stats"), the class is aged forward to the current one.
+// → {year, final, yrs} or null. `now` is injectable for tests.
+const DEVY_CLASS_YRS = { freshman: 1, sophomore: 2, junior: 3, senior: 4, graduate: 5 };
+function devyDraftYear(e, now = new Date()) {
+  const m = String(e?.cls || '').toLowerCase().match(/(redshirt\s+)?(freshman|sophomore|junior|senior|graduate)/);
+  if (!m) return null;
+  const season = now.getMonth() >= 2 ? now.getFullYear() : now.getFullYear() - 1;   // CFB season the stats belong to
+  const statsYr = +(String(e.statsLabel || '').match(/(\d{4})/) || [])[1] || season;
+  const yrs = DEVY_CLASS_YRS[m[2]] + (m[1] ? 1 : 0) + Math.max(0, season - statsYr);
+  const next = season + 1;
+  return { year: next + Math.max(0, 3 - yrs), final: yrs >= 4, yrs };
+}
+
+// What to show for one devy entry: `line` ("QB · UCLA · Sr"), `draftYear` /
+// `draftFinal` (devyDraftYear), `stats`
+// ("982 YDS · 4 TD · 4 INT"), `moved` (a transfer since the sheet was written,
+// or a match ESPN made at a different school — worth a glance), `title`, `url`.
+function devyInfo(d) {
+  const e = d?.espn;
+  if (!e) {
+    return { line: [d?.pos, d?.school].filter(Boolean).join(' · '), stats: '', moved: false, url: null, draftYear: null, draftFinal: false,
+             title: e === false ? 'Not found on ESPN — position/school from the sheet' : 'Position/school from the sheet' };
+  }
+  const moved = !e.schoolMatched && !!d.school;
+  const line = [e.pos || d.pos, e.team, devyClsShort(e.cls)].filter(Boolean).join(' · ');
+  const dy = devyDraftYear(e);
+  const draftTitle = !dy ? '' : dy.final
+    ? `Draft: ${dy.year} — out of college eligibility after this season`
+    : `Draft: eligible ${dy.year} at the earliest (${dy.yrs === 3 ? 'can declare or return to school' : 'a year earlier if he redshirted'})`;
+  const title = [
+    draftTitle,
+    `ESPN: ${e.name}${e.jersey ? ' #' + e.jersey : ''} · ${e.pos || '?'} · ${e.teamFull || e.team || '?'}${e.cls ? ' · ' + e.cls : ''}`,
+    e.stats ? `${e.statsLabel || 'Season'}: ${e.stats}` : '',
+    d.school ? `Sheet: ${[d.pos, d.school].filter(Boolean).join(' · ')}${moved ? ' — transferred (or check the match)' : ''}` : '',
+  ].filter(Boolean).join('\n');
+  return { line, stats: e.stats || '', moved, title, url: e.url, draftYear: dy?.year || null, draftFinal: !!dy?.final };
+}
+
+// One line of label for a resolved placeholder: "Arch Manning" + "QB · Texas".
+// "'27" chip for the earliest draft year; solid when he has no eligibility left.
+function devyDraftChip(info) {
+  if (!info?.draftYear) return '';
+  return `<span class="devy-yr${info.draftFinal ? ' devy-yr-final' : ''}">'${String(info.draftYear).slice(2)}</span>`;
+}
+
+function devyLabel(d, placeholderName) {
+  return {
+    name: d?.name || `Unnamed devy (${placeholderName || '?'})`,
+    sub: [d?.pos, d?.school].filter(Boolean).join(' · '),
+  };
+}

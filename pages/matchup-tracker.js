@@ -72,7 +72,8 @@ function lmBestLineup(lines, rosterPositions) {
   return out;
 }
 
-// `now` is the platform's own team score. A lineup's final builds on it so a player
+// `now` is the platform's own team score. `lines` may carry extra display fields
+// (slot, team, inj) — they ride along untouched. A lineup's final builds on it so a player
 // we couldn't price still counts; best ball sums its re-picked lineup instead.
 function lmProjectSide({ lines, now, bestBall, rosterPositions }) {
   const counted = bestBall ? lmBestLineup(lines, rosterPositions) : lines;
@@ -84,6 +85,8 @@ function lmProjectSide({ lines, now, bestBall, rosterPositions }) {
     maxSd: counted.reduce((m, l) => Math.max(m, l.sd), 0),
     left: counted.filter(l => l.left).length,
     done: lines.every(l => l.f <= 0),
+    lines,      // every priced line, for the click-in lineup view
+    counted,    // the lines the score is built from — all of them, or best ball's re-picked lineup
   };
 }
 

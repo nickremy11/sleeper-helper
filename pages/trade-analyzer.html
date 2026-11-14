@@ -6,7 +6,7 @@
   <title>Trade Analyzer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Rye&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared-styles.css?v=20261111">
+  <link rel="stylesheet" href="/shared-styles.css?v=20261113">
   <style>
     .ta-wrap { max-width: 1060px; margin: 0 auto; padding: 24px 16px 60px; }
 
@@ -322,8 +322,8 @@
   </div>
 
   <script src="/shared-nav.js?v=20261111"></script>
-  <script src="/shared-core.js?v=20261111"></script>
-  <script src="/shared-utils.js?v=20261111"></script>
+  <script src="/shared-core.js?v=20261113"></script>
+  <script src="/shared-utils.js?v=20261113"></script>
   <script src="/league-engine.js?v=20261111"></script>
   <script src="/shared-auth.js?v=20261111"></script>
   <script>
@@ -411,7 +411,7 @@
   function pickKey(k)  { return `k:${k.season}_${k.round}_${k.originalRosterId}`; }
   function playerKey(p){ return `p:${p.pid}`; }
 
-  const POS_CLS = { QB:'rs-pos-QB', RB:'rs-pos-RB', WR:'rs-pos-WR', TE:'rs-pos-TE', DL:'rs-pos-DL', LB:'rs-pos-LB', DB:'rs-pos-DB' };
+  const POS_CLS = { QB:'rs-pos-QB', RB:'rs-pos-RB', WR:'rs-pos-WR', TE:'rs-pos-TE', DL:'rs-pos-DL', LB:'rs-pos-LB', DB:'rs-pos-DB', DEVY:'rs-pos-DEVY' };
 
   function slotCls(slot, playerPos) {
     if (slot === 'FLEX' || slot === 'WRRB_FLEX' || slot === 'REC_FLEX') return 'rs-pos-FLEX';
@@ -467,6 +467,15 @@
     const fcMap      = buildFcMap(fcRes, { redraft: !isDynasty });
     const fcPickMap  = buildPickValueMap(fcRes);
     const { players, byName } = buildPlayerMap(playersRes);   // byName feeds the My Ranks badge index
+    // Devy league: every K/IDP is a college-player placeholder. It becomes a
+    // tradeable DEVY asset under the devy name — its pid is still the
+    // placeholder's, which is exactly what a Sleeper proposal must send.
+    const devy = typeof devyLoad === 'function'
+      ? await devyLoad({ apiBase: API, leagueId: lgId, prevLeagueId: leagueRes?.previous_league_id, rosters: rostersRes, users: usersRes, allPlayers: playersRes })
+      : null;
+    // ESPN position / school / class — non-blocking; one redraw when it lands
+    // (taRedraw is a no-op until the page has painted).
+    if (devy && typeof devyEnrich === 'function') devyEnrich({ apiBase: API, devy }).then(() => taRedraw());
 
     const userMap = {};
     for (const u of (usersRes || [])) {
@@ -499,8 +508,8 @@
     const rp           = leagueRes?.roster_positions || [];
     const te2Mult      = rp.filter(p => p === 'TE').length >= 2 ? 1.4 : 1.0;
     const IDP_SLOTS    = new Set(['DL','LB','DB','DE','DT','IDP_FLEX','CB','S']);
-    const hasIDP       = rp.some(p => IDP_SLOTS.has(p));
-    const isBB         = leagueRes?.settings?.best_ball === 1;
+    const hasIDP       = !devy && rp.some(p => IDP_SLOTS.has(p));
+    const isBB       = leagueRes?.settings?.best_ball === 1;
     const category     = isBB ? 'bestball' : lgType === 2 ? 'dynasty' : 'redraft';
     const lgName       = leagueRes?.name || lgId;
     const playoffTeams = leagueRes?.settings?.playoff_teams ?? Math.floor(numTeams / 2);
@@ -530,6 +539,15 @@
       const playerList = [];
 
       for (const pid of (roster.players || [])) {
+        const d = devy?.byPid[pid];
+        if (d) {
+          if (d.hidden) continue;   // graduated or ignored — the placeholder is dead weight
+          const ph = playersRes[pid] || {};
+          const lbl = devyLabel(d, ph.full_name || ph.last_name);
+          playerList.push({ pid, name: lbl.name, devy: d, devyNote: d.note, placeholder: ph.full_name || ph.last_name || pid,
+                            pos: 'DEVY', val: 0, yearsExp: 0, isStarter: false });
+          continue;
+        }
         const p = players[pid]; if (!p) continue;
         const pos = crNormPos(p.position); if (!pos) continue;
         const val = (fcMap[pid] ?? 0) * (pos === 'TE' ? te2Mult : 1.0);
@@ -540,7 +558,8 @@
         playerList.push({ pid, name: p.full_name || pid, pos, val, yearsExp: p.years_exp ?? 0, isStarter: starterSet.has(pid) });
       }
       playerList.sort((a, b) => {
-        const ORDER = ['QB','RB','WR','TE','DL','LB','DB'];
+        const ORDER = ['QB','RB','WR','TE','DL','LB','DB','DEVY'];
+        if (a.pos === 'DEVY' && b.pos === 'DEVY') return String(a.name).localeCompare(String(b.name));
         return ORDER.indexOf(a.pos) !== ORDER.indexOf(b.pos) ? ORDER.indexOf(a.pos) - ORDER.indexOf(b.pos) : b.val - a.val;
       });
 
@@ -1172,13 +1191,24 @@
       }).join('')}</div>`;
     };
 
-    const POS_ORDER = ['QB','RB','WR','TE','DL','LB','DB'];
+    const POS_ORDER = ['QB','RB','WR','TE','DL','LB','DB','DEVY'];
     const byPos = {};
     for (const pl of team.playerList) (byPos[pl.pos] = byPos[pl.pos] || []).push(pl);
 
     const playerSections = POS_ORDER.filter(p => byPos[p]?.length).map(pos => {
       const rows = byPos[pos].map(pl => {
         const key = playerKey(pl); const sel = routes.has(key);
+        if (pos === 'DEVY') {
+          // Devy name + "QB · Texas"; the NFL placeholder Sleeper will actually trade sits on the right.
+          const info = devyInfo(pl.devy);
+          return `<div class="ta-asset-row${sel ? ' selected' : ''}" onclick="toggleAsset(${sideIdx},'${key}')" title="${esc([pl.devyNote, info.title, 'Sleeper placeholder: ' + pl.placeholder].filter(Boolean).join('\n'))}">
+            <div class="ta-check"></div>
+            <span class="ta-asset-name">${esc(pl.name)}${info.line ? `<span class="devy-sub${info.moved ? ' devy-moved' : ''}">${esc(info.line)}</span>` : ''}</span>
+            ${pl.devyNote ? '<span class="devy-warn">⚠</span>' : ''}
+            ${devyDraftChip(info)}
+            <span class="devy-ph">${esc(pl.placeholder)}</span>
+          </div>${sel ? destPickerHtml(key) : ''}`;
+        }
         // My Ranks identifier beside the name. The name stops stretching when
         // there is one so the rank reads against it, not against the value.
         const badge = mrbBadge(pl.pid);

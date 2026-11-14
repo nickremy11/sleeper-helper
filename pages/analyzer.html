@@ -6,7 +6,7 @@
   <title>League Analyzer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Rye&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared-styles.css?v=20261111">
+  <link rel="stylesheet" href="/shared-styles.css?v=20261113">
   <style>
     /* Viewport-relative so a wide screen actually gets used — the roster
        columns inside the cards are what needs the room (player names were
@@ -387,8 +387,8 @@
   </div>
 
   <script src="/shared-nav.js?v=20261111"></script>
-  <script src="/shared-core.js?v=20261111"></script>
-  <script src="/shared-utils.js?v=20261111"></script>
+  <script src="/shared-core.js?v=20261113"></script>
+  <script src="/shared-utils.js?v=20261113"></script>
   <script src="/league-engine.js?v=20261111"></script>
   <script src="/shared-auth.js?v=20261111"></script>
   <script>
@@ -415,6 +415,9 @@
   // for redraft leagues regardless of best-ball status.
   let isDynasty = false;
   let isBB      = false;
+  // Devy league (worker/src/devy.js allowlist): every K/IDP is a college-player
+  // placeholder, shown under its devy name with no value. Null otherwise.
+  let devySheetUrl = null;
   // SFB-style leagues (400+ pods that each run their own regular season, no
   // in-platform playoff bracket, then feed a shared cross-pod standings pool)
   // need a different "how am I doing" readout than playoff odds — expected
@@ -749,6 +752,11 @@
     const fcMap      = buildFcMap(fcRes, { redraft: !isDynasty });
     const fcPickMap  = buildPickValueMap(fcRes);
     const { players, byName } = buildPlayerMap(playersRes);
+    // Placeholders → devy names. Raw playersRes, since buildPlayerMap drops K.
+    const devy = typeof devyLoad === 'function'
+      ? await devyLoad({ apiBase: API, leagueId: lgId, prevLeagueId: leagueRes?.previous_league_id, rosters: rostersRes, users: usersRes, allPlayers: playersRes })
+      : null;
+    devySheetUrl = devy ? (devy.sheetUrl || '') : null;
 
     const userMap = {};
     for (const u of (usersRes || [])) {
@@ -792,8 +800,9 @@
     // fixed 1.4x this replaced.
     const teValueMult  = 1 + bonusRecTe * 0.4;
     const IDP_SLOTS    = new Set(['DL','LB','DB','DE','DT','IDP_FLEX','CB','S']);
-    hasIDP             = rp.some(p => IDP_SLOTS.has(p));
-    isBB               = leagueRes?.settings?.best_ball === 1;
+    // A devy league's IDP slots hold placeholders, not defenders — no DL column.
+    hasIDP             = !devy && rp.some(p => IDP_SLOTS.has(p));
+    isBB             = leagueRes?.settings?.best_ball === 1;
     isBigPool          = BIG_POOL_LEAGUES.has(lgId);
     isPointsOnly       = POINTS_ONLY_LEAGUES.has(lgId);
     if (!isDynasty && sortKey === 'overall') sortKey = 'chances';
@@ -816,6 +825,15 @@
       const playerList = [];
 
       for (const pid of (roster.players || [])) {
+        const d = devy?.byPid[pid];
+        if (d) {
+          if (d.hidden) continue;   // graduated or ignored — the placeholder is dead weight
+          const ph = playersRes[pid] || {};
+          const lbl = devyLabel(d, ph.full_name || `${ph.first_name || ''} ${ph.last_name || ''}`.trim());
+          playerList.push({ pid, name: lbl.name, devy: d, devyNote: d.note, placeholder: ph.full_name || ph.last_name || pid,
+                            pos: 'DEVY', val: 0, isStarter: false });
+          continue;
+        }
         const p = players[pid];
         if (!p) continue;
         const pos = crNormPos(p.position);
@@ -827,7 +845,8 @@
         playerList.push({ pid, name: p.full_name || pid, pos, val, isStarter: starterSet.has(pid) });
       }
       playerList.sort((a, b) => {
-        const ORDER = ['QB','RB','WR','TE','DL','LB','DB'];
+        const ORDER = ['QB','RB','WR','TE','DL','LB','DB','DEVY'];
+        if (a.pos === 'DEVY' && b.pos === 'DEVY') return String(a.name).localeCompare(String(b.name));
         const ai = ORDER.indexOf(a.pos), bi = ORDER.indexOf(b.pos);
         return ai !== bi ? ai - bi : (b.val ?? -1) - (a.val ?? -1);
       });
@@ -857,9 +876,16 @@
         posValues: { QB: Math.round(posValues.QB), RB: Math.round(posValues.RB), WR: Math.round(posValues.WR), TE: Math.round(posValues.TE), DL: Math.round(posValues.DL) },
         draft: Math.round(draftValue),
         playerList, pickList, standing: 0,
+        devyMissing: devy?.missing[roster.roster_id] || [],
         playoffChances: { label: '—', cls: 'az-chances-nervy' },
       };
     });
+
+    // Current position / school / class / stats from ESPN — non-blocking, one
+    // redraw when every batch is in (open cards are kept open by azRedraw).
+    if (devy && typeof devyEnrich === 'function') {
+      devyEnrich({ apiBase: API, devy }).then(() => { if (window._azTeams) azRedraw(); });
+    }
 
     // Compute standings and playoff chances. Points-only leagues stand by
     // total points-for, not record.
@@ -1353,7 +1379,13 @@
   // ranks grid takes over — so a badge load that finishes while the grid is up
   // must not redraw, exactly as the narrow-breakpoint resize handler must not.
   // The grid reads its own board, so it loses nothing by being left alone.
-  function azRedraw() { if (!_azRanksOpen) renderAll(); }
+  function azRedraw() {
+    if (_azRanksOpen) return;
+    // Keep expanded team cards expanded across the redraw.
+    const open = new Set([...document.querySelectorAll('details.az-card[open]')].map(d => d.dataset.rid));
+    renderAll();
+    for (const d of document.querySelectorAll('details.az-card')) if (open.has(d.dataset.rid)) d.open = true;
+  }
 
   // Signed out, or no sets built yet, renders nothing at all — this is an extra
   // read on the page, never a call to action.
@@ -1420,6 +1452,7 @@
     const flagsHtml = `<div class="az-flags">
       ${keeperBadge}${bbBadge}
       <span class="az-flag">${numTeams} Teams</span>
+      ${devySheetUrl != null ? `<a class="az-flag az-flag-hi" href="${esc(devySheetUrl)}" target="_blank" rel="noopener" title="K and IDP players are college-player placeholders, named from this sheet">Devy · sheet ↗</a>` : ''}
       ${(formatFlags || []).map(f => `<span class="az-flag${f.hi ? ' az-flag-hi' : ''}">${f.label}</span>`).join('')}
     </div>` + azRankSourceBar();
 
@@ -1531,13 +1564,48 @@
           { pos: 'LB', cls: 'rs-pos-LB' },
           { pos: 'DB', cls: 'rs-pos-DB' },
         ] : []),
+        ...(devySheetUrl != null ? [{ pos: 'DEVY', cls: 'rs-pos-DEVY' }] : []),
       ];
 
       // Map pos → rank key (DL/LB/DB all use the 'DL' rank)
       const posRankKey = { QB:'QB', RB:'RB', WR:'WR', TE:'TE', DL:'DL', LB:'DL', DB:'DL' };
 
+      // A devy player: name, "QB · Texas", a ⚠ when the sheet and Sleeper
+      // disagree, and the NFL placeholder he sits behind (what Sleeper trades).
+      // Second line: ESPN season stats, when ESPN matched him.
+      const devyNameHtml = (name, info) => info.url
+        ? `<a class="devy-link" href="${esc(info.url)}" target="_blank" rel="noopener">${esc(name)}</a>`
+        : esc(name);
+      const devyRow = p => {
+        const info = devyInfo(p.devy);
+        return `<div class="pf-player-row devy-row" title="${esc([p.devyNote, info.title, 'Sleeper placeholder: ' + p.placeholder].filter(Boolean).join('\n'))}">
+          <span style="min-width:12px;flex-shrink:0;"></span>
+          <span class="pf-player-name">${devyNameHtml(p.name, info)}${info.line ? `<span class="devy-sub${info.moved ? ' devy-moved' : ''}">${esc(info.line)}</span>` : ''}</span>
+          ${p.devyNote ? '<span class="devy-warn">⚠</span>' : ''}
+          <span class="pf-gap"></span>
+          ${devyDraftChip(info)}
+          <span class="devy-ph">${esc(p.placeholder)}</span>
+          ${info.stats ? `<span class="devy-stats">${esc(info.stats)}</span>` : ''}
+        </div>`;
+      };
+      const devyMissingHtml = () => !team.devyMissing?.length ? '' :
+        `<div class="devy-missing-hdr">On the sheet, no Sleeper placeholder:</div>` +
+        team.devyMissing.map(m => { const info = devyInfo(m); return `<div class="pf-player-row devy-row devy-missing" title="${esc([m.note, info.title].filter(Boolean).join('\n'))}">
+          <span style="min-width:12px;flex-shrink:0;"></span>
+          <span class="pf-player-name">${devyNameHtml(m.name, info)}${info.line ? `<span class="devy-sub${info.moved ? ' devy-moved' : ''}">${esc(info.line)}</span>` : ''}</span>
+          <span class="pf-gap"></span>${devyDraftChip(info)}
+          ${m.note ? `<span class="devy-stats">${esc(m.note)}</span>` : ''}
+        </div>`; }).join('');
+
       const posGroupsHtml = POS_GROUPS.map(({ pos, cls }) => {
         const posPlayers = team.playerList.filter(p => p.pos === pos);
+        if (pos === 'DEVY') {
+          if (!posPlayers.length && !team.devyMissing?.length) return '';
+          return `<div class="az-pos-section">
+            <div class="az-pos-header"><span class="rs-pos ${cls}">DEVY</span><span class="devy-sub">${posPlayers.length}</span></div>
+            ${posPlayers.map(p => [devyInfo(p.devy).draftYear || 9999, p]).sort((a, b) => a[0] - b[0] || String(a[1].name).localeCompare(String(b[1].name))).map(x => devyRow(x[1])).join('')}${devyMissingHtml()}
+          </div>`;
+        }
         if (!posPlayers.length) return '';
         const rk  = (ranks[posRankKey[pos]] || {})[team.rosterId];
         const rkBg = rk ? rankColor(rk, teams.length) : 'transparent';
@@ -1583,7 +1651,7 @@
         </div>`;
       })() : '';
 
-      return `<details class="az-card">
+      return `<details class="az-card" data-rid="${team.rosterId}">
         <summary class="az-card-row" style="grid-template-columns:${tpl};">
           <div class="az-team-col">
             <div class="az-rank-num${rankCls}">#${rank}</div>

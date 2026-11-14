@@ -60,6 +60,10 @@
 }
 .load-btn:hover { background: var(--gold); color: var(--brown-dark); }
 .load-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.week-at { margin-left: auto; font-family: 'Crimson Text', serif; font-size: 0.85rem; font-style: italic; color: var(--brown-light); white-space: nowrap; }
+.week-auto { display: flex; align-items: center; gap: 4px; font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--brown-light); cursor: pointer; white-space: nowrap; }
+.week-auto input { accent-color: var(--gold); margin: 0; }
+.week-at + .week-auto + .load-btn { margin-left: 0; }
 
 /* ── LEAGUE TABLE ── */
 .league-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
@@ -347,6 +351,44 @@ details.pos-group[open] > summary .pos-group-toggle { transform: rotate(90deg); 
 .lm-sub-opp { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .lm-proj { white-space: nowrap; }
 .lm-med { white-space: nowrap; }
+/* Click-in lineup view: both sides, slot by slot */
+.lm-row { cursor: pointer; border-radius: 2px; }
+.lm-row:hover { background: rgba(255,255,255,0.025); }
+.lm-row.open { background: rgba(255,255,255,0.035); }
+.lm-caret { font-size: 0.6rem; color: var(--brown-light); transition: transform 0.15s; display: inline-block; margin-right: 6px; }
+.lm-row.open .lm-caret { transform: rotate(90deg); color: var(--gold); }
+.lm-detail { margin: 10px 0 2px; cursor: default; }
+.lm-lu { width: 100%; border-collapse: collapse; table-layout: fixed; font-family: 'Crimson Text', serif; }
+.lm-lu th { font-family: 'Rye', serif; font-size: 0.61rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); padding: 4px 6px; border-bottom: 1px solid var(--brown-mid); font-weight: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lm-lu th.lm-lu-r { text-align: right; }
+.lm-lu td { padding: 5px 6px; border-bottom: 1px dashed rgba(255,255,255,0.07); vertical-align: middle; }
+.lm-lu tr:last-child td { border-bottom: none; }
+.lm-lu .lm-lu-slot { width: 52px; text-align: center; font-family: 'Rye', serif; font-size: 0.6rem; letter-spacing: 0.06em; color: var(--brown-light); }
+.lm-lu .lm-lu-pts { width: 62px; white-space: nowrap; }
+.lm-lu .lm-lu-pts.r { text-align: right; }
+.lm-lu-name { color: var(--parchment); font-size: 0.92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lm-lu-sub { font-size: 0.75rem; color: var(--brown-light); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lm-lu-r .lm-lu-name, .lm-lu-r .lm-lu-sub { text-align: right; }
+.lm-lu-now { font-family: 'Playfair Display', serif; font-size: 0.95rem; color: var(--cream); }
+.lm-lu-proj { font-size: 0.72rem; color: var(--brown-light); }
+.lm-lu-delta { font-size: 0.72rem; color: #7fd07f; font-weight: 600; }
+.lm-lu-live .lm-lu-sub b { color: #7fd07f; font-weight: 600; }
+.lm-lu-done .lm-lu-name { color: var(--brown-light); }
+.lm-lu-bench { opacity: 0.45; }
+.lm-lu-inj { color: #e05252; font-weight: 600; }
+.lm-lu-tot td { border-top: 1px solid var(--brown-mid); border-bottom: none; padding-top: 7px; }
+.lm-lu-tot .lm-lu-now { font-size: 1.05rem; font-weight: 700; }
+@keyframes lm-flash { from { background: rgba(127,208,127,0.28); } to { background: transparent; } }
+.lm-lu td.lm-lu-flash { animation: lm-flash 2.4s ease-out; }
+@media (max-width: 600px) {
+  .week-bar { flex-wrap: wrap; }
+  .week-at { flex-basis: 100%; order: 10; margin-left: 0; }
+  .week-auto { margin-left: auto; }
+  .lm-lu .lm-lu-slot { width: 34px; font-size: 0.6rem; letter-spacing: 0; }
+  .lm-lu .lm-lu-pts { width: 48px; }
+  .lm-lu td { padding: 4px 3px; }
+  .lm-lu-name { font-size: 0.82rem; }
+}
 @media (max-width: 640px) {
   .lm-refresh { margin-left: 0; width: 100%; justify-content: space-between; }
   .lm-refresh-btn { flex-basis: auto; padding: 7px 14px; }
@@ -454,7 +496,11 @@ details.pos-group[open] > summary .pos-group-toggle { transform: rotate(90deg); 
       <button class="week-arrow" id="week-prev" onclick="changeWeek(-1)">◀</button>
       <span class="week-num" id="week-num">—</span>
       <button class="week-arrow" id="week-next" onclick="changeWeek(1)">▶</button>
-      <button class="load-btn" id="load-btn" onclick="loadMatchups()">Load Matchups</button>
+      <span class="week-at" id="week-at"></span>
+      <label class="week-auto" title="While an NFL game is in progress, refresh scores every 2 minutes (only while this tab is visible)">
+        <input type="checkbox" id="auto-refresh" onchange="setAutoRefresh(this.checked)" /> Auto
+      </label>
+      <button class="load-btn" id="load-btn" onclick="refreshScores()" disabled>↻ Refresh</button>
     </div>
   </div>
 
@@ -510,7 +556,7 @@ details.pos-group[open] > summary .pos-group-toggle { transform: rotate(90deg); 
 <script src="/shared-core.js?v=20261111"></script>
 <script src="/shared-utils.js?v=20261111"></script>
 <script src="/miracle.js?v=20261111"></script>
-<script src="/matchup-tracker.js?v=20261111"></script>
+<script src="/matchup-tracker.js?v=20261113"></script>
 <script>
 // ── Constants ─────────────────────────────────────────────────────────────────
 const API = SH_API;
@@ -547,7 +593,15 @@ const S = {
   processedGames:  null, // cached after loadMatchups
   activeDetail:    null, // { gameKey, pid }
   psActiveDetail:  null, // pid for players section
+  rid:             {},   // {lgId: my roster_id} — Sleeper; persisted per season, so a load/refresh reads /matchups only
+  loadSeq:         0,    // bumped by every load + refresh; a stale one drops its result
+  loadedWeek:      null, // the week currently on screen (null until the first load lands)
+  at:              null, // when the scores on screen were read
+  refreshing:      false,
+  mnmAutoWeek:     null, // the Miracle auto-opens once per week, so a Refresh never re-opens one you closed
 };
+
+const RFM_AUTO_MS = 120000;   // auto-refresh cadence while an NFL game is in progress
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
@@ -633,6 +687,9 @@ async function loadLeagues() {
     document.getElementById('week-section').style.display    = '';
     document.getElementById('week-num').textContent          = S.week;
     updateWeekArrows();
+    ridLoad();
+    // No Load button: the week loads on arrival, and Refresh only re-reads scores.
+    loadMatchups();
   } catch (e) {
     statusEl.className  = 'setup-status err';
     statusEl.textContent = e.message || 'Failed to load leagues';
@@ -749,9 +806,22 @@ function renderLeagueTable() {
 
 // ── Week Controls ─────────────────────────────────────────────────────────────
 function changeWeek(delta) {
-  S.week = Math.max(1, Math.min(18, S.week + delta));
+  const w = Math.max(1, Math.min(18, S.week + delta));
+  if (w === S.week) return;
+  S.week = w;
   document.getElementById('week-num').textContent = S.week;
   updateWeekArrows();
+  loadMatchups();
+}
+
+// My roster_id per Sleeper league never moves within a season, so it's read once
+// (from /rosters) and kept — every later load or refresh is one /matchups call.
+const ridKey = () => `rfm_rid_${S.userId}_${S.season}`;
+function ridLoad() {
+  try { S.rid = JSON.parse(localStorage.getItem(ridKey()) || '{}') || {}; } catch { S.rid = {}; }
+}
+function ridSave() {
+  try { localStorage.setItem(ridKey(), JSON.stringify(S.rid)); } catch {}
 }
 
 function updateWeekArrows() {
@@ -760,10 +830,14 @@ function updateWeekArrows() {
 }
 
 // ── Load Matchups ─────────────────────────────────────────────────────────────
+// The full load: player map, projections, schedule, every league's matchup. Runs
+// by itself when the page opens and when the week changes — there's no Load
+// button. After that, Refresh (refreshScores) re-reads only what moves in a game.
 async function loadMatchups() {
-  const btn = document.getElementById('load-btn');
-  btn.disabled = true;
-  btn.textContent = 'Loading…';
+  const seq = ++S.loadSeq;
+  S.refreshing = false;
+  S.loadedWeek = null;
+  rfmBarDraw('Loading…');
 
   const gamesSection = document.getElementById('games-section');
   gamesSection.style.display = '';
@@ -772,6 +846,7 @@ async function loadMatchups() {
   container.innerHTML = '<div class="loading-state"><div class="spinner"></div>Fetching matchup data…</div>';
   document.getElementById('players-container').innerHTML = '';
   document.getElementById('players-summary-info').textContent = '';
+  const week = S.week;
 
   try {
     // Players must load before matchups so ESPN name lookup can resolve Sleeper IDs
@@ -779,10 +854,11 @@ async function loadMatchups() {
     // there degrades that section, never the rest of the page.
     const [players, nflGames, stats, proj] = await Promise.all([
       fetch(`${API}/players`).then(r => r.json()),
-      fetch(`${API}/espn/games?week=${S.week}&season=${S.season}`).then(r => r.ok ? r.json() : []),
-      fetch(`${API}/sleeper/stats/nfl/regular/${S.season}/${S.week}`).then(r => r.ok ? r.json() : null).catch(() => null),
-      fetch(`${API}/sleeper/projections/nfl/regular/${S.season}/${S.week}`).then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch(`${API}/espn/games?week=${week}&season=${S.season}`).then(r => r.ok ? r.json() : []),
+      fetch(`${API}/sleeper/stats/nfl/regular/${S.season}/${week}`).then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch(`${API}/sleeper/projections/nfl/regular/${S.season}/${week}`).then(r => r.ok ? r.json() : null).catch(() => null),
     ]);
+    if (seq !== S.loadSeq) return;   // the week changed while this ran
     S.playerMap = players || {};
     S.nflGames  = nflGames || [];
     S.mnmStats  = stats || {};
@@ -791,11 +867,16 @@ async function loadMatchups() {
     // Every league, not just contending ones: Live Matchups has a Rebuilders filter.
     // Everything else on the page reads the contending subset.
     S.espnSkips = [];
-    const allResults = await lmFetchAll(S.week);
+    const allResults = await lmFetchAll(week);
+    if (seq !== S.loadSeq) return;
     S.matchupResults = allResults.filter(r => S.prefs[r.league.league_id]?.contender);
     S.activeDetail   = null;
     S.psActiveDetail = null;
     S.processedGames = null;
+    S.loadedWeek     = week;
+    S.at             = Date.now();
+    LM.open.clear();
+    LM.prevPts = {};
 
     renderGameCards();
     renderPlayersSection();
@@ -812,30 +893,134 @@ async function loadMatchups() {
       if (box) box.innerHTML = `<div class="err-state">Monday Night Miracle failed: ${esc(e.message)}</div>`;
     }
   } catch (e) {
-    container.innerHTML = `<div class="err-state">Failed to load matchup data: ${esc(e.message)}</div>`;
+    if (seq === S.loadSeq) container.innerHTML = `<div class="err-state">Failed to load matchup data: ${esc(e.message)}</div>`;
   } finally {
-    btn.disabled = false;
-    btn.textContent = 'Load Matchups';
+    if (seq === S.loadSeq) rfmBarDraw();
   }
 }
+
+// Refresh: scores, game clocks, and (when the Miracle is showing) the week's stat
+// lines — nothing else. Everything on screen is redrawn IN PLACE: open game cards,
+// the open player detail, open Live Matchups lineups and collapsed position groups
+// all survive, so a refresh never reads as a reload.
+async function refreshScores() {
+  if (S.refreshing || S.loadedWeek == null) return;
+  const seq = ++S.loadSeq;
+  const week = S.loadedWeek;
+  S.refreshing = true;
+  rfmBarDraw();
+  lmDraw();
+  const mnmShown = document.getElementById('mnm-section')?.style.display !== 'none';
+  try {
+    S.espnSkips = [];
+    const [games, results, stats] = await Promise.all([
+      fetch(`${API}/espn/games?week=${week}&season=${S.season}`).then(r => r.ok ? r.json() : null).catch(() => null),
+      lmFetchAll(week, true),
+      mnmShown
+        ? fetch(`${API}/sleeper/stats/nfl/regular/${S.season}/${week}`, { cache: 'no-cache' }).then(r => r.ok ? r.json() : null).catch(() => null)
+        : null,
+    ]);
+    if (seq !== S.loadSeq) return;   // a week change started while this ran
+    if (games?.length) S.nflGames = games;
+    if (stats) S.mnmStats = stats;
+    // A whole-page outage shouldn't wipe what's on screen; keep the last good read.
+    if (!results.length && LM.results.length) return;
+    S.matchupResults = results.filter(r => S.prefs[r.league.league_id]?.contender);
+    S.at = Date.now();
+
+    rfmKeepOpen(() => { renderGameCards(); renderPlayersSection(); });
+    try { lmLoaded(results); } catch {}
+    try { renderMiracle(); } catch {}
+  } finally {
+    if (seq === S.loadSeq) {
+      S.refreshing = false;
+      rfmBarDraw();
+      lmDraw();
+    }
+  }
+}
+
+// Re-render the game cards + player list, then put back what the user had open.
+function rfmKeepOpen(render) {
+  const openCards = [...document.querySelectorAll('.game-card.open')].map(el => el.id);
+  const closedGroups = [...document.querySelectorAll('#players-container details.pos-group:not([open]) .pos-group-label')]
+    .map(el => el.textContent);
+  const detail = S.activeDetail, psDetail = S.psActiveDetail;
+  const psGame = psDetail ? (S.processedGames || []).find(g => g.players[psDetail])?.key : null;
+  S.activeDetail = S.psActiveDetail = null;
+
+  render();
+
+  for (const id of openCards) document.getElementById(id)?.classList.add('open');
+  for (const el of document.querySelectorAll('#players-container details.pos-group')) {
+    if (closedGroups.includes(el.querySelector('.pos-group-label')?.textContent)) el.open = false;
+  }
+  if (detail && document.getElementById(`pr-${detail.gameKey}-${detail.pid}`)) togglePlayerDetail(detail.gameKey, detail.pid);
+  if (psDetail && psGame && document.getElementById(`ps-pr-${psDetail}`)) togglePlayerSectionDetail(psDetail, psGame);
+}
+
+// The week bar's right side: when the scores were read, and the one Refresh button.
+function rfmBarDraw(busy) {
+  const btn = document.getElementById('load-btn');
+  const at = document.getElementById('week-at');
+  if (btn) {
+    btn.disabled = !!busy || S.refreshing || S.loadedWeek == null;
+    btn.textContent = busy || (S.refreshing ? 'Refreshing…' : '↻ Refresh');
+  }
+  if (at) at.textContent = S.at && S.loadedWeek != null
+    ? `as of ${new Date(S.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}` : '';
+}
+
+// ── Auto-refresh ──────────────────────────────────────────────────────────────
+// Only while an NFL game this week is actually in progress, and only while the tab
+// is visible — a background tab polling ~70 leagues all Sunday helps nobody.
+function rfmGamesLive() {
+  const now = Date.now();
+  return S.nflGames.some(g => g.state === 'in'
+    || (g.state !== 'post' && new Date(g.kickoff).getTime() <= now && now - new Date(g.kickoff).getTime() < 5 * 3600e3));
+}
+function rfmAutoOn() {
+  try { return localStorage.getItem('rfm_auto_refresh') !== '0'; } catch { return true; }
+}
+function setAutoRefresh(on) {
+  try { localStorage.setItem('rfm_auto_refresh', on ? '1' : '0'); } catch {}
+}
+function rfmAutoTick() {
+  if (!rfmAutoOn() || document.visibilityState !== 'visible') return;
+  if (S.refreshing || S.loadedWeek == null || !rfmGamesLive()) return;
+  if (S.at && Date.now() - S.at < RFM_AUTO_MS - 5000) return;
+  refreshScores();
+}
+setInterval(rfmAutoTick, 15000);
+// Coming back to the tab mid-game catches up straight away.
+document.addEventListener('visibilitychange', rfmAutoTick);
+document.getElementById('auto-refresh').checked = rfmAutoOn();
 
 // `fresh` revalidates past the 60s browser cache on /matchups — a Refresh button
 // that can hand back the score you're already looking at is no Refresh at all.
 async function fetchLeagueMatchup(league, week = S.week, fresh = false) {
   if (league.source === 'espn') return fetchEspnLeagueMatchup(league, week);
+  const lgId = league.league_id;
+  const known = S.rid[lgId];
   const [rosters, matchups] = await Promise.all([
-    fetch(`${API}/sleeper/league/${league.league_id}/rosters`).then(r => r.json()),
-    fetch(`${API}/sleeper/league/${league.league_id}/matchups/${week}`, fresh ? { cache: 'no-cache' } : undefined).then(r => r.json()),
+    known != null ? null : fetch(`${API}/sleeper/league/${lgId}/rosters`).then(r => r.json()),
+    fetch(`${API}/sleeper/league/${lgId}/matchups/${week}`, fresh ? { cache: 'no-cache' } : undefined).then(r => r.json()),
   ]);
 
-  const myRoster = (rosters || []).find(r => r.owner_id === S.userId);
-  if (!myRoster) return null;
+  let rid = known;
+  if (rid == null) {
+    rid = (rosters || []).find(r => r.owner_id === S.userId)?.roster_id;
+    if (rid == null) return null;
+    S.rid[lgId] = rid;
+    ridSave();
+  }
 
-  const myMatchup  = (matchups || []).find(m => m.roster_id === myRoster.roster_id);
-  if (!myMatchup) return null;
+  const myMatchup  = (matchups || []).find(m => m.roster_id === rid);
+  // A cached id that no longer finds me gets re-read from /rosters next time.
+  if (!myMatchup) { if (known != null) { delete S.rid[lgId]; ridSave(); } return null; }
 
   const oppMatchup = (matchups || []).find(m =>
-    m.matchup_id === myMatchup.matchup_id && m.roster_id !== myRoster.roster_id
+    m.matchup_id === myMatchup.matchup_id && m.roster_id !== rid
   );
 
   return { league, myMatchup, oppMatchup: oppMatchup || null, scoring: league.scoring_settings || {}, allMatchups: matchups || [] };
@@ -904,7 +1089,7 @@ async function fetchEspnLeagueMatchup(league, week = S.week) {
         // Unresolved players still project: ESPN gives their team and position,
         // which is all the tracker needs.
         const known = !!(pid && S.playerMap[pid]);
-        line.push({ pid: known ? pid : null, name: fullName, pts, proj,
+        line.push({ pid: known ? pid : null, name: fullName, pts, proj, slotId: entry.lineupSlotId,
                     team: ESPN_TEAM_MAP[pData.proTeamId] || null, pos: ESPN_POS_MAP[pData.defaultPositionId] || '',
                     inj: entry.injuryStatus || pData.injuryStatus || null });
         if (!known) continue;
@@ -1316,11 +1501,19 @@ function toggleGame(key) {
 // and the Miracle are built around a Load, and re-running them would collapse what's
 // open and re-simulate Monday night just to move a score.
 const LM = {
-  results: [], rows: [], week: null, at: null, refreshing: false, token: 0,
+  results: [], rows: [], week: null,
   names: {},    // {lgId: {rosterId: team name}} — Sleeper, fetched once
   skips: [],    // [{name, reason}] Sleeper leagues whose read failed
   filter: { fmt: 'all', role: 'all', lineup: 'all' },
+  open: new Set(),  // lgIds whose lineups are expanded — survives every Refresh
+  prevPts: {},      // {lineKey: pts} from the previous read, for the +x.x since-last-refresh marks
 };
+// ESPN lineupSlotId → label, and the order a lineup reads in. Local, like
+// index.html's ESPN_SLOT, because shared-utils' map folds 3/5 into FLEX and drops K/D-ST.
+const LM_ESPN_SLOT = { 0: 'QB', 1: 'TQB', 2: 'RB', 3: 'RB/WR', 4: 'WR', 5: 'WR/TE', 6: 'TE', 7: 'OP', 8: 'DT', 9: 'DE',
+  10: 'LB', 11: 'DL', 12: 'CB', 13: 'S', 14: 'DB', 15: 'DP', 16: 'D/ST', 17: 'K', 19: 'HC', 23: 'FLEX', 24: 'ER' };
+const LM_ESPN_ORDER = [0, 1, 2, 3, 4, 5, 6, 23, 7, 16, 17, 8, 9, 11, 10, 12, 13, 14, 15, 19, 24];
+const LM_SLOT_LABEL = { SUPER_FLEX: 'SF', REC_FLEX: 'W/T', WRRB_FLEX: 'W/R', IDP_FLEX: 'IDP', DEF: 'D/ST' };
 // index.html's LU_BAD_INJ, plus how ESPN spells two of them.
 const LM_OUT = new Set(['OUT', 'IR', 'SUS', 'NA', 'PUP', 'DNR', 'COV', 'DNP', 'O', 'SUSPENSION', 'INJURY_RESERVE']);
 
@@ -1336,37 +1529,15 @@ async function lmFetchAll(week, fresh = false) {
   return res.filter(Boolean);
 }
 
+// Called by the full load and by every Refresh. Open lineups and filters live in
+// LM, so the redraw puts the section back exactly as it was, with new numbers.
 function lmLoaded(results) {
-  LM.token++;               // drops a Refresh still in flight
-  LM.refreshing = false;
   LM.results = results;
-  LM.week = S.week;
-  LM.at = Date.now();
+  LM.week = S.loadedWeek;
   document.getElementById('lm-section').style.display = '';
   lmBuild();
   lmDraw();
   lmLoadNames();
-}
-
-async function lmRefresh() {
-  if (LM.refreshing || LM.week == null) return;
-  LM.refreshing = true;
-  const token = ++LM.token;
-  lmDraw();
-  try {
-    S.espnSkips = [];
-    const [games, results] = await Promise.all([
-      fetch(`${API}/espn/games?week=${LM.week}&season=${S.season}`).then(r => r.ok ? r.json() : null).catch(() => null),
-      lmFetchAll(LM.week, true),
-    ]);
-    if (token !== LM.token) return;   // a Load started while this ran
-    if (games?.length) S.nflGames = games;
-    LM.results = results;
-    LM.at = Date.now();
-    lmBuild();
-  } finally {
-    if (token === LM.token) { LM.refreshing = false; lmDraw(); }
-  }
 }
 
 function lmGameFrac() {
@@ -1386,21 +1557,64 @@ function lmSide(m, r, fracs) {
   const sleeperPts = pid => S.mnmProj?.[pid] ? mnmScore(S.mnmProj[pid], scoring) : 0;
   const isOut = s => LM_OUT.has(String(s || '').toUpperCase());
 
+  // Slot, team and injury ride along on each line for the click-in lineup view.
+  const slotsOf = (lg.roster_positions || []).filter(s => !['BN', 'IR', 'TAXI'].includes(s));
+  const empties = [];
   const lines = m.line
-    ? m.line.map(p => lmLine({
-        pid: p.pid, name: p.name, pts: p.pts, pos: p.pos,
-        proj: p.proj ?? (p.pid ? sleeperPts(p.pid) : 0),
-        f: fracs[p.pid ? S.playerMap[p.pid]?.team : p.team] ?? fracs[p.team] ?? 0,
-        out: isOut(p.inj),
-      }))
-    : ((bestBall ? m.players : m.starters) || []).filter(pid => pid && pid !== '0').map(pid => {
+    ? [...m.line]
+        .sort((a, b) => lmEspnSlotRank(a.slotId) - lmEspnSlotRank(b.slotId))
+        .map(p => {
+          const team = p.pid ? (S.playerMap[p.pid]?.team || p.team) : p.team;
+          return {
+            ...lmLine({
+              pid: p.pid, name: p.name, pts: p.pts, pos: p.pos,
+              proj: p.proj ?? (p.pid ? sleeperPts(p.pid) : 0),
+              f: fracs[team] ?? fracs[p.team] ?? 0,
+              out: isOut(p.inj),
+            }),
+            slot: LM_ESPN_SLOT[p.slotId] || p.pos || '', team, inj: p.inj || null,
+          };
+        })
+    : ((bestBall ? m.players : m.starters) || []).map((pid, i) => {
+        const slot = bestBall ? null : (LM_SLOT_LABEL[slotsOf[i]] || slotsOf[i] || '');
+        if (!pid || pid === '0') { if (!bestBall) empties.push({ idx: i, slot }); return null; }
         const pl = S.playerMap[pid];
-        return lmLine({
-          pid, name: mnmName(pid), pts: m.players_points?.[pid] || 0, pos: pl?.position,
-          proj: sleeperPts(pid), f: fracs[pl?.team] ?? 0, out: isOut(pl?.injury_status),
-        });
-      });
-  return lmProjectSide({ lines, now: m.custom_points ?? m.points ?? 0, bestBall, rosterPositions: lg.roster_positions });
+        return {
+          ...lmLine({
+            pid, name: mnmName(pid), pts: m.players_points?.[pid] || 0, pos: pl?.position,
+            proj: sleeperPts(pid), f: fracs[pl?.team] ?? 0, out: isOut(pl?.injury_status),
+          }),
+          slot: slot ?? (pl?.position || ''), idx: i, team: pl?.team || null, inj: pl?.injury_status || null,
+        };
+      }).filter(Boolean);
+  const side = lmProjectSide({ lines, now: m.custom_points ?? m.points ?? 0, bestBall, rosterPositions: lg.roster_positions });
+  // A cached older /matchup-tracker.js doesn't return these; the lineup view needs them.
+  side.lines = side.lines || lines;
+  side.counted = side.counted || (bestBall ? lmBestLineup(lines, lg.roster_positions) : lines);
+  side.empties = empties;
+  side.bestBall = bestBall;
+  return side;
+}
+
+const lmEspnSlotRank = id => { const i = LM_ESPN_ORDER.indexOf(Number(id)); return i < 0 ? 99 : i; };
+const lmLineKey = (lgId, side, l) => `${lgId}|${side}|${l.pid || l.name}`;
+
+// "+6.2 since the last refresh" — stamped onto each line, then the new numbers
+// become the baseline. Only increases are marked; a stat correction down is noise.
+function lmStampDeltas() {
+  const next = {};
+  const had = Object.keys(LM.prevPts).length > 0;
+  for (const r of LM.rows) {
+    for (const [key, side] of [['my', r.my], ['opp', r.opp]]) {
+      for (const l of side.lines) {
+        const k = lmLineKey(r.lg.league_id, key, l);
+        const prev = LM.prevPts[k];
+        l.delta = had && prev != null && l.pts - prev > 0.05 ? l.pts - prev : 0;
+        next[k] = l.pts;
+      }
+    }
+  }
+  LM.prevPts = next;
 }
 
 function lmBuild() {
@@ -1425,6 +1639,8 @@ function lmBuild() {
   }
   LM.rows = rows;
   LM.noOpp = noOpp;
+  lmStampDeltas();
+  LM.builtAt = Date.now();
 }
 
 // Opponent names only; drawn without them first so 70 extra requests never hold up
@@ -1478,9 +1694,10 @@ function lmRowHtml(r) {
   const left = r.final ? 'Final' : `${my.left} left v ${opp.left}`;
   const median = r.medianP == null ? ''
     : `<span class="lm-med ${r.medianP >= 0.5 ? 'mnm-good' : 'mnm-bad'}">Median ${Math.round(r.medianP * 100)}%</span>`;
-  return `<div class="mnm-mu lm-row">
+  const open = LM.open.has(lg.league_id);
+  return `<div class="mnm-mu lm-row${open ? ' open' : ''}" onclick="lmToggle(event, ${jsArg(lg.league_id)})">
     <div class="mnm-mu-head">
-      <span class="mnm-mu-name">${esc(lg.name || 'League')}${value ? ` <span class="mnm-mu-val">$${value}</span>` : ''}${lg.source === 'espn' ? ' <span class="lm-tag">ESPN</span>' : ''}</span>
+      <span class="mnm-mu-name"><span class="lm-caret">▶</span>${esc(lg.name || 'League')}${value ? ` <span class="mnm-mu-val">$${value}</span>` : ''}${lg.source === 'espn' ? ' <span class="lm-tag">ESPN</span>' : ''}</span>
       <span class="mnm-mu-score">${lmNum(my.now)} – ${lmNum(opp.now)}</span>
       <span class="lm-pct">${pctLabel}</span>
     </div>
@@ -1490,6 +1707,84 @@ function lmRowHtml(r) {
       ${median}
       ${r.final ? '' : `<span class="lm-proj">Proj ${lmNum(my.proj)} – ${lmNum(opp.proj)}</span>`}
     </div>
+    ${open ? lmDetailHtml(r, opponent) : ''}
+  </div>`;
+}
+
+// Clicking a matchup opens both lineups under it. Clicks inside the open lineup
+// (e.g. selecting a name) don't close it.
+function lmToggle(ev, lgId) {
+  if (ev?.target?.closest?.('.lm-detail')) return;
+  if (LM.open.has(lgId)) LM.open.delete(lgId); else LM.open.add(lgId);
+  lmDraw();
+}
+
+// One side as display rows: Sleeper by roster slot (empty slots included), ESPN in
+// lineup-slot order, best ball as the counted lineup then everyone else dimmed.
+function lmSideRows(side) {
+  if (side.bestBall) {
+    const counted = new Set(side.counted);
+    const bench = side.lines.filter(l => !counted.has(l)).sort((a, b) => b.expFinal - a.expFinal);
+    return [...side.counted.map(l => ({ slot: l.pos, line: l })), ...bench.map(l => ({ slot: 'BN', line: l, bench: true }))];
+  }
+  if (side.lines.some(l => l.idx != null) || side.empties.length) {
+    const out = [];
+    for (const l of side.lines) out[l.idx] = { slot: l.slot, line: l };
+    for (const e of side.empties) out[e.idx] = { slot: e.slot, line: null };
+    return out.filter(Boolean);
+  }
+  return side.lines.map(l => ({ slot: l.slot, line: l }));
+}
+
+function lmGameShort(team) {
+  const g = team && S.nflGames.find(x => x.home === team || x.away === team);
+  if (!g) return { txt: team ? 'no game' : '', live: false };
+  if (g.state === 'in') return { txt: `${+g.period > 4 ? 'OT' : `Q${g.period}`} ${g.clock || ''}`.trim(), live: true };
+  if (g.state === 'post') return { txt: 'Final', live: false, done: true };
+  const k = new Date(g.kickoff);
+  return { txt: isNaN(k) ? '' : k.toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' }), live: false };
+}
+
+function lmDetailHtml(r, opponent) {
+  const mine = lmSideRows(r.my), theirs = lmSideRows(r.opp);
+  const flash = Date.now() - (LM.builtAt || 0) < 3000;
+  const nameCell = (x, right) => {
+    if (!x) return `<td${right ? ' class="lm-lu-r"' : ''}></td>`;
+    const l = x.line;
+    if (!l) return `<td${right ? ' class="lm-lu-r"' : ''}><div class="lm-lu-name" style="font-style:italic;color:var(--brown-light)">empty</div></td>`;
+    const g = lmGameShort(l.team);
+    const inj = l.inj && !/^(active|healthy|act|normal)$/i.test(l.inj)
+      ? ` <span class="lm-lu-inj">${esc(String(l.inj).slice(0, 1).toUpperCase())}</span>` : '';
+    const sub = [l.pos, l.team, g.live ? `<b>${esc(g.txt)}</b>` : esc(g.txt)].filter(Boolean).join(' · ');
+    const cls = ['lm-lu-player', right ? 'lm-lu-r' : '', g.live ? 'lm-lu-live' : '', g.done ? 'lm-lu-done' : '', x.bench ? 'lm-lu-bench' : ''].filter(Boolean).join(' ');
+    return `<td class="${cls}"><div class="lm-lu-name" title="${esc(l.name || '')}">${esc(l.name || '—')}${inj}</div><div class="lm-lu-sub">${sub}</div></td>`;
+  };
+  const ptsCell = (x, right) => {
+    const l = x?.line;
+    if (!l) return `<td class="lm-lu-pts${right ? ' r' : ''}"></td>`;
+    const delta = l.delta ? `<span class="lm-lu-delta">+${lmNum(l.delta)}</span> ` : '';
+    const proj = l.left ? `<div class="lm-lu-proj">proj ${lmNum(l.expFinal)}</div>` : '';
+    const cls = `lm-lu-pts${right ? ' r' : ''}${x.bench ? ' lm-lu-bench' : ''}${flash && l.delta ? ' lm-lu-flash' : ''}`;
+    return `<td class="${cls}">${right ? '' : delta}<span class="lm-lu-now">${lmNum(l.pts)}</span>${right ? ` ${delta}` : ''}${proj}</td>`;
+  };
+  const n = Math.max(mine.length, theirs.length);
+  let body = '';
+  for (let i = 0; i < n; i++) {
+    const a = mine[i], b = theirs[i];
+    const slot = a?.slot && b?.slot && a.slot !== b.slot ? `${a.slot}/${b.slot}` : (a?.slot || b?.slot || '');
+    body += `<tr>${nameCell(a)}${ptsCell(a)}<td class="lm-lu-slot">${esc(slot)}</td>${ptsCell(b, true)}${nameCell(b, true)}</tr>`;
+  }
+  const tot = (s, right) => `<td class="lm-lu-pts${right ? ' r' : ''}"><span class="lm-lu-now">${lmNum(s.now)}</span>${r.final ? '' : `<div class="lm-lu-proj">proj ${lmNum(s.proj)}</div>`}</td>`;
+  const left = s => s.left ? `${s.left} still to play` : 'all played';
+  body += `<tr class="lm-lu-tot"><td><div class="lm-lu-sub">${left(r.my)}</div></td>${tot(r.my)}<td class="lm-lu-slot">Total</td>${tot(r.opp, true)}<td class="lm-lu-r"><div class="lm-lu-sub">${left(r.opp)}</div></td></tr>`;
+  const at = S.at ? new Date(S.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
+  return `<div class="lm-detail">
+    <table class="lm-lu">
+      <colgroup><col><col class="lm-lu-pts"><col class="lm-lu-slot"><col class="lm-lu-pts"><col></colgroup>
+      <thead><tr><th>Me</th><th></th><th></th><th></th><th class="lm-lu-r">${esc(opponent)}</th></tr></thead>
+      <tbody>${body}</tbody>
+    </table>
+    <div class="mnm-note" style="margin-top:6px">Points as of ${at}${r.my.bestBall ? ' · best ball: the dimmed players aren\'t in the projected lineup' : ''}. Green +x.x = scored since the last refresh. Proj = now + projection for what's left of his game.</div>
   </div>`;
 }
 
@@ -1502,17 +1797,17 @@ function lmDraw() {
       <span class="lm-filter-lbl">${f.lbl}</span>
       ${f.opts.map(([v, l]) => `<button class="lm-pill${LM.filter[f.key] === v ? ' active' : ''}" onclick="lmSetFilter('${f.key}','${v}')">${l}</button>`).join('')}
     </div>`).join('');
-  const at = LM.at ? new Date(LM.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
+  const at = S.at ? new Date(S.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
   const bar = `<div class="lm-bar">
       <div class="lm-filters">${pills}</div>
       <div class="lm-refresh">
         <span class="lm-at">Week ${LM.week} · as of ${at}</span>
-        <button class="load-btn lm-refresh-btn" onclick="lmRefresh()"${LM.refreshing ? ' disabled' : ''}>${LM.refreshing ? 'Refreshing…' : '↻ Refresh'}</button>
+        <button class="load-btn lm-refresh-btn" onclick="refreshScores()"${S.refreshing ? ' disabled' : ''}>${S.refreshing ? 'Refreshing…' : '↻ Refresh'}</button>
       </div>
     </div>`;
 
   const skips = [...LM.skips, ...S.espnSkips];
-  const notes = `<div class="mnm-note">${skips.length ? `Couldn't read: ${skips.map(x => `${esc(x.name)} (${esc(x.reason)})`).join(', ')}. ` : ''}${LM.noOpp ? `${LM.noOpp} league${LM.noOpp !== 1 ? 's have' : ' has'} no head-to-head game this week. ` : ''}Win % is the score now plus projections for what's left of each game. Scores are live on Refresh; game clocks can lag up to 5 minutes.</div>`;
+  const notes = `<div class="mnm-note">${skips.length ? `Couldn't read: ${skips.map(x => `${esc(x.name)} (${esc(x.reason)})`).join(', ')}. ` : ''}${LM.noOpp ? `${LM.noOpp} league${LM.noOpp !== 1 ? 's have' : ' has'} no head-to-head game this week. ` : ''}Win % is the score now plus projections for what's left of each game. Click a matchup for both lineups. Scores update on Refresh (every 2 minutes with Auto on while a game is live); game clocks can lag up to 5 minutes.</div>`;
 
   if (!S.mnmProj || !S.nflGames.length) {
     box.innerHTML = `<div class="mnm-card">${bar}<div class="err-state" style="margin-top:12px">${
@@ -1611,7 +1906,11 @@ function renderMiracle() {
   const now = Date.now();
   const isMondayET = new Date(now).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'America/New_York' }) === 'Mon';
   const underway = monday.some(g => mnmRemainingFrac(g, now) < 1);
-  if (details && (isMondayET || underway)) details.open = true;   // fires ontoggle → run
+  // Once per week, so a Refresh never re-opens a Miracle you closed.
+  if (details && (isMondayET || underway) && S.mnmAutoWeek !== S.loadedWeek) {
+    S.mnmAutoWeek = S.loadedWeek;
+    details.open = true;   // fires ontoggle → run
+  }
   if (details?.open) mnmRunAndDraw();
   else box.innerHTML = '';
 }

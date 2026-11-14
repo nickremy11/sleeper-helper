@@ -25,6 +25,8 @@ function loading(msg = 'Loading…') { return `<div class="loading-state"><div c
 const NAME_ALIASES = {
   'kenneth gainwell': 'kenny gainwell',
   'nicholas singleton': 'nick singleton',
+  'nicolas singleton': 'nick singleton',   // devy sheet spelling
+
   'bam knight': 'zonovan knight',
 };
 
