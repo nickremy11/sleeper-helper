@@ -6,7 +6,7 @@
   <title>League Analyzer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Rye&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared-styles.css?v=20261114">
+  <link rel="stylesheet" href="/shared-styles.css?v=20261115">
   <style>
     /* Viewport-relative so a wide screen actually gets used — the roster
        columns inside the cards are what needs the room (player names were
@@ -388,7 +388,7 @@
 
   <script src="/shared-nav.js?v=20261111"></script>
   <script src="/shared-core.js?v=20261113"></script>
-  <script src="/shared-utils.js?v=20261114"></script>
+  <script src="/shared-utils.js?v=20261116"></script>
   <script src="/league-engine.js?v=20261111"></script>
   <script src="/shared-auth.js?v=20261111"></script>
   <script>
@@ -884,7 +884,7 @@
     // Current position / school / class / stats from ESPN — non-blocking, one
     // redraw when every batch is in (open cards are kept open by azRedraw).
     if (devy && typeof devyEnrich === 'function') {
-      devyEnrich({ apiBase: API, devy }).then(() => { if (window._azTeams) azRedraw(); });
+      devyEnrich({ devy }).then(() => { if (window._azTeams) azRedraw(); });
     }
 
     // Compute standings and playoff chances. Points-only leagues stand by
@@ -1587,12 +1587,12 @@
         const devyPlayers = team.playerList.filter(p => p.pos === 'DEVY');
         if (!devyPlayers.length && !team.devyMissing?.length) return '';
         const rows = devyPlayers.map(p => ({ p, info: devyInfo(p.devy) }))
-          .sort((a, b) => (a.info.draftYear || 9999) - (b.info.draftYear || 9999) || String(a.p.name).localeCompare(String(b.p.name)))
+          .sort((a, b) => devyCompare({ ...a.p.devy, name: a.p.name }, { ...b.p.devy, name: b.p.name }))
           .map(({ p, info }) => devyGridRow({
             name: p.name, info, warn: !!p.devyNote, last: p.placeholder,
             title: [p.devyNote, info.title, 'Sleeper placeholder: ' + p.placeholder].filter(Boolean).join('\n'),
           })).join('');
-        const missing = (team.devyMissing || []).map(m => { const info = devyInfo(m); return devyGridRow({
+        const missing = [...(team.devyMissing || [])].sort(devyCompare).map(m => { const info = devyInfo(m); return devyGridRow({
             name: m.name, info, missing: true, last: 'no placeholder',
             title: [m.note, info.title].filter(Boolean).join('\n'),
           }); }).join('');

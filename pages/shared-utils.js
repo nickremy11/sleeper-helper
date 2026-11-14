@@ -2007,30 +2007,110 @@ async function devyLoad({ apiBase, leagueId, prevLeagueId, rosters, users, allPl
 }
 
 // ── ESPN enrichment ── current position / school / class / season stats for
-// every devy name (GET /api/devy/espn, worker/src/devy.js). The sheet's school
-// is where he was drafted from; ESPN's is where he plays now. Fills `d.espn`
-// in place on byPid entries and missing entries (an object, or false = ESPN
-// has no confident match), calling onUpdate after each batch so the host can
-// redraw. Never throws; the sheet's pos/school stay the fallback.
-async function devyEnrich({ apiBase, devy, onUpdate }) {
+// every devy name, from ESPN's college-football search + athlete detail.
+// Called FROM THE BROWSER: ESPN's site APIs send Access-Control-Allow-Origin: *,
+// and a Worker-side proxy came back empty in production (ESPN answering
+// Cloudflare egress differently), which a browser fetch sidesteps.
+// The sheet's school is where he was drafted from; ESPN's is where he plays now.
+// Fills `d.espn` in place on byPid and missing entries (object, or false = no
+// confident match); `d.espnError` when ESPN couldn't be reached (never cached).
+// Results are cached per player in localStorage: 7 days for a match, 6 h for
+// a miss. Never throws; the sheet's pos/school stay the fallback.
+const DEVY_ESPN_SEARCH = q => `https://site.web.api.espn.com/apis/search/v2?query=${encodeURIComponent(q)}&limit=15&type=player`;
+const DEVY_ESPN_ATHLETE = id => `https://site.web.api.espn.com/apis/common/v3/sports/football/college-football/athletes/${id}`;
+const DEVY_ESPN_TTL_HIT = 7 * 86400e3, DEVY_ESPN_TTL_MISS = 6 * 3600e3;
+const DEVY_POS_GROUP = { QB: 'QB', RB: 'RB', HB: 'RB', FB: 'RB', WR: 'WR', TE: 'TE', ATH: 'ATH' };
+const DEVY_SKILL = new Set(['QB', 'RB', 'WR', 'TE', 'ATH']);
+
+// Name: exact, one typo ("Eyiss" in the sheet, "Elyiss" at ESPN), or the same
+// first + last token ("Ryan Coleman-Williams" is Ryan Williams).
+function devyEspnNameMatch(want, got) {
+  const A = normName(want), B = normName(got), a = A.split(' '), b = B.split(' ');
+  if (!a[0] || !b[0]) return false;
+  if (A === B || (A.length >= 8 && devyLev(A, B) <= 1)) return true;
+  return a[0] === b[0] && a[a.length - 1] === b[b.length - 1];
+}
+function devyEspnSchoolMatch(sheetSchool, subtitle) {
+  const sch = normName(sheetSchool), t = normName(subtitle);
+  if (!sch || !t) return false;
+  return t === sch || t.startsWith(sch + ' ') || (sch.length >= 4 && t.split(' ').slice(0, 3).join(' ').includes(sch));
+}
+// College-football results whose name matches, newest ESPN id first (current
+// players have the highest ids — a 2015 namesake at Mercer sorts last).
+function devyEspnCandidates(searchJson, name) {
+  const out = [];
+  for (const g of searchJson?.results || []) for (const c of g.contents || []) {
+    if (c.defaultLeagueSlug !== 'college-football' || !devyEspnNameMatch(name, c.displayName)) continue;
+    const id = (String(c.uid || '').match(/~a:(\d+)/) || [])[1];
+    if (id) out.push({ id, name: c.displayName, team: c.subtitle || '' });
+  }
+  return out.sort((x, y) => +y.id - +x.id);
+}
+function devyEspnAthlete(a, id) {
+  const stats = (a?.statsSummary?.statistics || []).slice(0, 4).map(st => `${st.displayValue} ${st.abbreviation}`).join(' · ');
+  return {
+    espnId: id, name: a?.displayName || null, pos: a?.position?.abbreviation || null,
+    team: a?.team?.location || a?.team?.displayName || null, teamFull: a?.team?.displayName || null,
+    cls: a?.displayExperience || null, jersey: a?.jersey || null,
+    stats: stats || null, statsLabel: a?.statsSummary?.displayName || null,
+    url: `https://www.espn.com/college-football/player/_/id/${id}`,
+  };
+}
+// One player. Throws when ESPN can't be reached (so it isn't cached as a miss).
+// Same school → any skill position (he can move TE → WR: Duce Robinson).
+// Different school (a transfer, or a namesake) → exact position + a class +
+// stats, unless he's the ONLY exact-name college player ESPN has.
+async function devyEspnLookup({ n, pos, sch }) {
+  const get = async url => { const r = await fetch(url); if (!r.ok) throw new Error(`ESPN ${r.status}`); return r.json(); };
+  const res = await get(DEVY_ESPN_SEARCH(n));
+  let cands = devyEspnCandidates(res, n);
+  if (!cands.length && res?.didYouMean && normName(res.didYouMean) !== normName(n)) cands = devyEspnCandidates(await get(DEVY_ESPN_SEARCH(res.didYouMean)), n);
+  if (!cands.length) return null;
+  const want = String(pos || '').toUpperCase().split(/[\/, ]+/).map(x => DEVY_POS_GROUP[x] || x).filter(Boolean);
+  const bySchool = cands.filter(c => devyEspnSchoolMatch(sch, c.team));
+  const lone = cands.length === 1 && normName(cands[0].name) === normName(n);
+  for (const c of [...bySchool, ...cands.filter(c => !bySchool.includes(c))].slice(0, 3)) {
+    const a = (await get(DEVY_ESPN_ATHLETE(c.id)))?.athlete;
+    if (!a) continue;
+    const info = devyEspnAthlete(a, c.id), g = DEVY_POS_GROUP[info.pos] || info.pos, schoolHit = bySchool.includes(c);
+    const ok = schoolHit ? DEVY_SKILL.has(g)
+      : lone ? DEVY_SKILL.has(g) && !!info.cls
+      : want.includes(g) && !!info.cls && !!info.stats;
+    if (ok) return { ...info, schoolMatched: schoolHit };
+  }
+  return null;
+}
+
+async function devyEnrich({ devy, onUpdate }) {
   if (!devy) return;
   const entries = [...Object.values(devy.byPid).filter(d => !d.hidden && d.name), ...Object.values(devy.missing).flat()];
   const byName = new Map();
   for (const e of entries) { if (!byName.has(e.name)) byName.set(e.name, []); byName.get(e.name).push(e); }
-  const names = [...byName.keys()];
-  const batches = [];
-  for (let i = 0; i < names.length; i += 10) batches.push(names.slice(i, i + 10));
-  const run = async batch => {
-    const p = batch.map(n => { const e = byName.get(n)[0]; return { n, pos: e.pos || '', sch: e.school || '' }; });
-    const res = await fetch(`${apiBase}/devy/espn?p=${encodeURIComponent(JSON.stringify(p))}`).then(r => r.ok ? r.json() : null).catch(() => null);
-    if (!res) return;
-    for (const n of batch) for (const e of byName.get(n)) {
-      if (res.errors?.[n]) { e.espnError = res.errors[n]; continue; }   // ESPN unreachable — not a "no match"
-      e.espn = res.results?.[n] || false;
+  const cacheKey = q => `devy_espn_v4|${normName(q.n)}|${String(q.pos || '').toUpperCase()}|${normName(q.sch)}`;
+  const todo = [];
+  for (const [n, list] of byName) {
+    const q = { n, pos: list[0].pos || '', sch: list[0].school || '' };
+    let c = null;
+    try { c = JSON.parse(localStorage.getItem(cacheKey(q)) || 'null'); } catch {}
+    if (c && Date.now() - c.at < (c.hit ? DEVY_ESPN_TTL_HIT : DEVY_ESPN_TTL_MISS)) { for (const e of list) e.espn = c.hit || false; }
+    else todo.push(q);
+  }
+  // Four players at a time — polite to ESPN, ~10 s for a cold 150-player league.
+  let i = 0;
+  const worker = async () => {
+    while (i < todo.length) {
+      const q = todo[i++];
+      try {
+        const hit = await devyEspnLookup(q);
+        for (const e of byName.get(q.n)) e.espn = hit || false;
+        try { localStorage.setItem(cacheKey(q), JSON.stringify({ at: Date.now(), hit })); } catch {}
+      } catch (err) {
+        for (const e of byName.get(q.n)) e.espnError = String(err?.message || err);
+      }
     }
-    try { onUpdate?.(); } catch {}
   };
-  for (let i = 0; i < batches.length; i += 3) await Promise.all(batches.slice(i, i + 3).map(run));
+  await Promise.all(Array.from({ length: 4 }, worker));
+  try { onUpdate?.(); } catch {}
 }
 
 const DEVY_CLS = { freshman: 'Fr', sophomore: 'So', junior: 'Jr', senior: 'Sr', graduate: 'Gr' };
@@ -2085,6 +2165,20 @@ function devyInfo(d) {
 }
 
 // One line of label for a resolved placeholder: "Arch Manning" + "QB · Texas".
+// Devy list order: QB, RB, WR, TE (ESPN's current position, else the sheet's;
+// "RB/WR" sorts by its first), then earliest draft year, then name.
+// Takes devy entries (byPid / missing items) — `name` is read off them.
+const DEVY_POS_ORDER = ['QB', 'RB', 'WR', 'TE'];
+function devyCompare(a, b) {
+  const posIdx = d => {
+    const p = String(d?.espn?.pos || d?.pos || '').toUpperCase().split(/[\/, ]+/)[0];
+    const i = DEVY_POS_ORDER.indexOf(DEVY_POS_GROUP[p] || p);
+    return i === -1 ? 9 : i;
+  };
+  const yr = d => devyDraftYear(d?.espn)?.year || 9999;
+  return posIdx(a) - posIdx(b) || yr(a) - yr(b) || String(a?.name || '').localeCompare(String(b?.name || ''));
+}
+
 // "'27" chip for the earliest draft year; solid when he has no eligibility left.
 function devyDraftChip(info) {
   if (!info?.draftYear) return '';

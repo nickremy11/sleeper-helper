@@ -12,7 +12,7 @@ const pages = path.join(__dirname, '..', 'pages');
 const src = ['shared-core.js', 'shared-utils.js', 'league-engine.js'].map(f => fs.readFileSync(path.join(pages, f), 'utf8')).join('\n');
 const ctx = { console, URLSearchParams, location: { hostname: 'helper.ffhistorian.com' }, window: { addEventListener() {} } };
 vm.createContext(ctx);
-const E = vm.runInContext(`${src}\n;({ devyParseNick, devyParseSheet, devyResolve, devyNameMatch, devyDraftYear })`, ctx);
+const E = vm.runInContext(`${src}\n;({ devyParseNick, devyParseSheet, devyResolve, devyNameMatch, devyDraftYear, devyEspnNameMatch, devyEspnSchoolMatch, devyEspnCandidates, devyEspnLookup })`, ctx);
 const plain = v => JSON.parse(JSON.stringify(v));
 
 const users = [
@@ -140,20 +140,18 @@ test('config: ignore + rename, punters are placeholders, missing names say why',
   assert.strictEqual(r.missing[2], undefined);   // Gone Guy ignored
 });
 
-test('ESPN matching (worker/src/devy.js): names, schools, candidates', async () => {
-  const W = await import(path.join(__dirname, '..', 'worker', 'src', 'devy.js'));
-  assert.ok(W.espnNameMatch('Ryan Williams', 'Ryan Coleman-Williams'));   // first + last token
-  assert.ok(W.espnNameMatch('Eyiss Williams', 'Elyiss Williams'));        // sheet typo
-  assert.ok(W.espnNameMatch('Eric Singleton', 'Eric Singleton Jr.'));
-  assert.ok(!W.espnNameMatch('Jordan Davison', 'Jordan Marshall'));
-  assert.ok(W.espnSchoolMatch('Ohio State', 'Ohio State Buckeyes'));
+test('ESPN matching: names, schools, candidates', () => {
+  assert.ok(E.devyEspnNameMatch('Ryan Williams', 'Ryan Coleman-Williams'));   // first + last token
+  assert.ok(E.devyEspnNameMatch('Eyiss Williams', 'Elyiss Williams'));        // sheet typo
+  assert.ok(E.devyEspnNameMatch('Eric Singleton', 'Eric Singleton Jr.'));
+  assert.ok(!E.devyEspnNameMatch('Jordan Davison', 'Jordan Marshall'));
+  assert.ok(E.devyEspnSchoolMatch('Ohio State', 'Ohio State Buckeyes'));
   const search = { results: [{ contents: [
     { displayName: 'Bo Jackson', defaultLeagueSlug: 'college-football', subtitle: 'Auburn Tigers', uid: 's:20~l:23~a:560118' },
     { displayName: 'Bo Jackson', defaultLeagueSlug: 'mlb', subtitle: 'Royals', uid: 's:1~l:10~a:1' },
     { displayName: 'Bo Jackson', defaultLeagueSlug: 'college-football', subtitle: 'Ohio State Buckeyes', uid: 's:20~l:23~a:5141517' },
   ] }] };
-  const c = W.espnCandidates(search, 'Bo Jackson');
-  assert.deepStrictEqual(c.map(x => x.id), ['5141517', '560118']);   // college only, newest first
+  assert.deepStrictEqual(plain(E.devyEspnCandidates(search, 'Bo Jackson').map(x => x.id)), ['5141517', '560118']);   // college only, newest first
 });
 
 test('draft year: three seasons out of high school, from the ESPN class', () => {
