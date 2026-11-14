@@ -2024,7 +2024,10 @@ async function devyEnrich({ apiBase, devy, onUpdate }) {
     const p = batch.map(n => { const e = byName.get(n)[0]; return { n, pos: e.pos || '', sch: e.school || '' }; });
     const res = await fetch(`${apiBase}/devy/espn?p=${encodeURIComponent(JSON.stringify(p))}`).then(r => r.ok ? r.json() : null).catch(() => null);
     if (!res) return;
-    for (const n of batch) for (const e of byName.get(n)) e.espn = res.results?.[n] || false;
+    for (const n of batch) for (const e of byName.get(n)) {
+      if (res.errors?.[n]) { e.espnError = res.errors[n]; continue; }   // ESPN unreachable — not a "no match"
+      e.espn = res.results?.[n] || false;
+    }
     try { onUpdate?.(); } catch {}
   };
   for (let i = 0; i < batches.length; i += 3) await Promise.all(batches.slice(i, i + 3).map(run));
@@ -2063,7 +2066,8 @@ function devyInfo(d) {
   const e = d?.espn;
   if (!e) {
     return { line: [d?.pos, d?.school].filter(Boolean).join(' · '), stats: '', moved: false, url: null, draftYear: null, draftFinal: false,
-             title: e === false ? 'Not found on ESPN — position/school from the sheet' : 'Position/school from the sheet' };
+             title: d?.espnError ? `ESPN lookup failed (${d.espnError}) — position/school from the sheet`
+                  : e === false ? 'Not found on ESPN — position/school from the sheet' : 'Position/school from the sheet' };
   }
   const moved = !e.schoolMatched && !!d.school;
   const line = [e.pos || d.pos, e.team, devyClsShort(e.cls)].filter(Boolean).join(' · ');

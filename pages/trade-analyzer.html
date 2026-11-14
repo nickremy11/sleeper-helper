@@ -6,7 +6,7 @@
   <title>Trade Analyzer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Rye&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared-styles.css?v=20261113">
+  <link rel="stylesheet" href="/shared-styles.css?v=20261114">
   <style>
     .ta-wrap { max-width: 1060px; margin: 0 auto; padding: 24px 16px 60px; }
 
@@ -323,7 +323,7 @@
 
   <script src="/shared-nav.js?v=20261111"></script>
   <script src="/shared-core.js?v=20261113"></script>
-  <script src="/shared-utils.js?v=20261113"></script>
+  <script src="/shared-utils.js?v=20261114"></script>
   <script src="/league-engine.js?v=20261111"></script>
   <script src="/shared-auth.js?v=20261111"></script>
   <script>
@@ -1201,12 +1201,13 @@
         if (pos === 'DEVY') {
           // Devy name + "QB · Texas"; the NFL placeholder Sleeper will actually trade sits on the right.
           const info = devyInfo(pl.devy);
-          return `<div class="ta-asset-row${sel ? ' selected' : ''}" onclick="toggleAsset(${sideIdx},'${key}')" title="${esc([pl.devyNote, info.title, 'Sleeper placeholder: ' + pl.placeholder].filter(Boolean).join('\n'))}">
+          // Two lines — the panels are narrow, and one line truncated every name.
+          return `<div class="ta-asset-row ta-devy-row${sel ? ' selected' : ''}" onclick="toggleAsset(${sideIdx},'${key}')" title="${esc([pl.devyNote, info.title, 'Sleeper placeholder: ' + pl.placeholder].filter(Boolean).join('\n'))}">
             <div class="ta-check"></div>
-            <span class="ta-asset-name">${esc(pl.name)}${info.line ? `<span class="devy-sub${info.moved ? ' devy-moved' : ''}">${esc(info.line)}</span>` : ''}</span>
-            ${pl.devyNote ? '<span class="devy-warn">⚠</span>' : ''}
+            <span class="ta-devy-name">${esc(pl.name)}${pl.devyNote ? ' <span class="devy-warn">⚠</span>' : ''}</span>
             ${devyDraftChip(info)}
             <span class="devy-ph">${esc(pl.placeholder)}</span>
+            <span class="ta-devy-sub${info.moved ? ' devy-moved' : ''}">${esc([info.line, info.stats].filter(Boolean).join('  ·  '))}</span>
           </div>${sel ? destPickerHtml(key) : ''}`;
         }
         // My Ranks identifier beside the name. The name stops stretching when

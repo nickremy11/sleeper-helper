@@ -311,3 +311,25 @@ footer a:hover { color: var(--gold-light); }
 /* Earliest NFL draft year ('27). Outline = eligible, may return; solid = out of eligibility. */
 .devy-yr { font-size: 0.66rem; font-weight: 600; color: #e6c15a; border: 1px solid rgba(230,193,90,0.55); border-radius: 2px; padding: 0 4px; flex-shrink: 0; margin-right: 4px; }
 .devy-yr-final { background: rgba(230,193,90,0.85); color: #2a1d0e; border-color: transparent; }
+/* Analyzer: devy as a full-width row of the team card, one grid line per player. */
+.devy-section { grid-column: 1 / -1; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 10px; }
+.devy-grid { display: grid; grid-template-columns: 38px minmax(150px, 1.2fr) minmax(170px, 1.2fr) minmax(180px, 1.5fr) minmax(130px, 1fr); column-gap: 14px; }
+.devy-grow { display: contents; font-family: 'Crimson Text', serif; font-size: 0.86rem; color: var(--parchment); }
+.devy-grow > span { padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.04); min-width: 0; overflow-wrap: anywhere; align-self: center; }
+.devy-ghead > span { font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brown-light); border-bottom-color: rgba(255,255,255,0.1); }
+.devy-c-name { font-weight: 600; }
+.devy-c-info { font-size: 0.78rem; color: var(--brown-light); }
+.devy-c-stats { font-size: 0.74rem; color: var(--brown-light); }
+.devy-c-ph { font-size: 0.72rem; color: var(--brown-light); opacity: 0.8; }
+.devy-grow.devy-missing > span { opacity: 0.6; font-style: italic; }
+.devy-grid .devy-missing-hdr { grid-column: 1 / -1; margin-top: 8px; }
+@media (max-width: 760px) {
+  .devy-grid { grid-template-columns: 38px 1fr 1fr; }
+  .devy-ghead { display: none; }
+  .devy-c-stats, .devy-c-ph { grid-column: 2 / -1; padding-top: 0 !important; }
+}
+/* Trade analyzer: two-line devy asset rows. */
+.ta-devy-row { flex-wrap: wrap; row-gap: 1px; }
+.ta-devy-name { flex: 1 1 auto; min-width: 0; font-family: 'Crimson Text', serif; font-size: 0.88rem; color: var(--parchment); overflow-wrap: anywhere; }
+.ta-devy-sub { flex-basis: 100%; padding-left: 24px; font-size: 0.7rem; color: var(--brown-light); font-style: italic; }
+.ta-devy-sub.devy-moved { color: #e6c15a; font-style: normal; }

@@ -6,7 +6,7 @@
   <title>League Analyzer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Rye&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared-styles.css?v=20261113">
+  <link rel="stylesheet" href="/shared-styles.css?v=20261114">
   <style>
     /* Viewport-relative so a wide screen actually gets used — the roster
        columns inside the cards are what needs the room (player names were
@@ -388,7 +388,7 @@
 
   <script src="/shared-nav.js?v=20261111"></script>
   <script src="/shared-core.js?v=20261113"></script>
-  <script src="/shared-utils.js?v=20261113"></script>
+  <script src="/shared-utils.js?v=20261114"></script>
   <script src="/league-engine.js?v=20261111"></script>
   <script src="/shared-auth.js?v=20261111"></script>
   <script>
@@ -1564,48 +1564,50 @@
           { pos: 'LB', cls: 'rs-pos-LB' },
           { pos: 'DB', cls: 'rs-pos-DB' },
         ] : []),
-        ...(devySheetUrl != null ? [{ pos: 'DEVY', cls: 'rs-pos-DEVY' }] : []),
       ];
 
       // Map pos → rank key (DL/LB/DB all use the 'DL' rank)
       const posRankKey = { QB:'QB', RB:'RB', WR:'WR', TE:'TE', DL:'DL', LB:'DL', DB:'DL' };
 
-      // A devy player: name, "QB · Texas", a ⚠ when the sheet and Sleeper
-      // disagree, and the NFL placeholder he sits behind (what Sleeper trades).
-      // Second line: ESPN season stats, when ESPN matched him.
+      // DEVY gets its own full-width row under the position columns: a narrow
+      // column truncated every name. One grid row per player —
+      // draft year · player · pos/school/class · season stats · Sleeper placeholder.
       const devyNameHtml = (name, info) => info.url
         ? `<a class="devy-link" href="${esc(info.url)}" target="_blank" rel="noopener">${esc(name)}</a>`
         : esc(name);
-      const devyRow = p => {
-        const info = devyInfo(p.devy);
-        return `<div class="pf-player-row devy-row" title="${esc([p.devyNote, info.title, 'Sleeper placeholder: ' + p.placeholder].filter(Boolean).join('\n'))}">
-          <span style="min-width:12px;flex-shrink:0;"></span>
-          <span class="pf-player-name">${devyNameHtml(p.name, info)}${info.line ? `<span class="devy-sub${info.moved ? ' devy-moved' : ''}">${esc(info.line)}</span>` : ''}</span>
-          ${p.devyNote ? '<span class="devy-warn">⚠</span>' : ''}
-          <span class="pf-gap"></span>
-          ${devyDraftChip(info)}
-          <span class="devy-ph">${esc(p.placeholder)}</span>
-          ${info.stats ? `<span class="devy-stats">${esc(info.stats)}</span>` : ''}
+      const devyGridRow = ({ name, info, warn, title, last, missing }) => `
+        <div class="devy-grow${missing ? ' devy-missing' : ''}" title="${esc(title)}">
+          <span class="devy-c-yr">${devyDraftChip(info)}</span>
+          <span class="devy-c-name">${devyNameHtml(name, info)}${warn ? ' <span class="devy-warn">⚠</span>' : ''}</span>
+          <span class="devy-c-info${info.moved ? ' devy-moved' : ''}">${esc(info.line || '')}</span>
+          <span class="devy-c-stats">${esc(info.stats || '')}</span>
+          <span class="devy-c-ph">${esc(last || '')}</span>
+        </div>`;
+      const devySectionHtml = () => {
+        const devyPlayers = team.playerList.filter(p => p.pos === 'DEVY');
+        if (!devyPlayers.length && !team.devyMissing?.length) return '';
+        const rows = devyPlayers.map(p => ({ p, info: devyInfo(p.devy) }))
+          .sort((a, b) => (a.info.draftYear || 9999) - (b.info.draftYear || 9999) || String(a.p.name).localeCompare(String(b.p.name)))
+          .map(({ p, info }) => devyGridRow({
+            name: p.name, info, warn: !!p.devyNote, last: p.placeholder,
+            title: [p.devyNote, info.title, 'Sleeper placeholder: ' + p.placeholder].filter(Boolean).join('\n'),
+          })).join('');
+        const missing = (team.devyMissing || []).map(m => { const info = devyInfo(m); return devyGridRow({
+            name: m.name, info, missing: true, last: 'no placeholder',
+            title: [m.note, info.title].filter(Boolean).join('\n'),
+          }); }).join('');
+        return `<div class="az-pos-section devy-section">
+          <div class="az-pos-header"><span class="rs-pos rs-pos-DEVY">DEVY</span><span class="devy-sub">${devyPlayers.length}</span></div>
+          <div class="devy-grid">
+            <div class="devy-grow devy-ghead"><span>Draft</span><span>Player</span><span>Pos · School · Class</span><span>Season</span><span>Sleeper placeholder</span></div>
+            ${rows}
+            ${missing ? `<div class="devy-missing-hdr">On the sheet, no Sleeper placeholder:</div>${missing}` : ''}
+          </div>
         </div>`;
       };
-      const devyMissingHtml = () => !team.devyMissing?.length ? '' :
-        `<div class="devy-missing-hdr">On the sheet, no Sleeper placeholder:</div>` +
-        team.devyMissing.map(m => { const info = devyInfo(m); return `<div class="pf-player-row devy-row devy-missing" title="${esc([m.note, info.title].filter(Boolean).join('\n'))}">
-          <span style="min-width:12px;flex-shrink:0;"></span>
-          <span class="pf-player-name">${devyNameHtml(m.name, info)}${info.line ? `<span class="devy-sub${info.moved ? ' devy-moved' : ''}">${esc(info.line)}</span>` : ''}</span>
-          <span class="pf-gap"></span>${devyDraftChip(info)}
-          ${m.note ? `<span class="devy-stats">${esc(m.note)}</span>` : ''}
-        </div>`; }).join('');
 
       const posGroupsHtml = POS_GROUPS.map(({ pos, cls }) => {
         const posPlayers = team.playerList.filter(p => p.pos === pos);
-        if (pos === 'DEVY') {
-          if (!posPlayers.length && !team.devyMissing?.length) return '';
-          return `<div class="az-pos-section">
-            <div class="az-pos-header"><span class="rs-pos ${cls}">DEVY</span><span class="devy-sub">${posPlayers.length}</span></div>
-            ${posPlayers.map(p => [devyInfo(p.devy).draftYear || 9999, p]).sort((a, b) => a[0] - b[0] || String(a[1].name).localeCompare(String(b[1].name))).map(x => devyRow(x[1])).join('')}${devyMissingHtml()}
-          </div>`;
-        }
         if (!posPlayers.length) return '';
         const rk  = (ranks[posRankKey[pos]] || {})[team.rosterId];
         const rkBg = rk ? rankColor(rk, teams.length) : 'transparent';
@@ -1663,7 +1665,7 @@
           ${rankCellsHtml}
           <span class="az-chevron">›</span>
         </summary>
-        <div class="az-card-body">${posGroupsHtml}${picksHtml}</div>
+        <div class="az-card-body">${posGroupsHtml}${picksHtml}${devySheetUrl != null ? devySectionHtml() : ''}</div>
       </details>`;
     }).join('');
 

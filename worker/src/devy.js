@@ -72,7 +72,7 @@ export async function handleDevy(env, url) {
 // different position.
 const ESPN_SEARCH = q => `https://site.web.api.espn.com/apis/search/v2?query=${encodeURIComponent(q)}&limit=15&type=player`;
 const ESPN_ATHLETE = id => `https://site.web.api.espn.com/apis/common/v3/sports/football/college-football/athletes/${id}`;
-const DEVY_ESPN_TTL_HIT = 7 * 86400, DEVY_ESPN_TTL_MISS = 86400;
+const DEVY_ESPN_TTL_HIT = 7 * 86400, DEVY_ESPN_TTL_MISS = 6 * 3600;
 
 const dNorm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
   .replace(/-/g, ' ').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim().replace(/\s+(jr|sr|ii|iii|iv|v)$/, '');
@@ -125,7 +125,12 @@ const SKILL = new Set(['QB', 'RB', 'WR', 'TE', 'ATH']);
 
 async function espnLookup({ n, pos, sch }) {
   const ua = { headers: { 'User-Agent': 'Mozilla/5.0 (sleeper-helper)' } };
-  const search = q => fetch(ESPN_SEARCH(q), ua).then(r => r.ok ? r.json() : null).catch(() => null);
+  // A failed request THROWS (so the caller doesn't cache it); an empty result is a real miss.
+  const search = async q => {
+    const r = await fetch(ESPN_SEARCH(q), ua);
+    if (!r.ok) throw new Error(`ESPN search ${r.status}`);
+    return r.json();
+  };
   let res = await search(n);
   let cands = espnCandidates(res, n);
   // Nothing: try ESPN's own spelling suggestion, still held to the name match.
@@ -137,7 +142,9 @@ async function espnLookup({ n, pos, sch }) {
   // School match first; else up to 3 newest by id.
   const order = [...bySchool, ...cands.filter(c => !bySchool.includes(c))].slice(0, 3);
   for (const c of order) {
-    const a = await fetch(ESPN_ATHLETE(c.id), ua).then(r => r.ok ? r.json() : null).then(j => j?.athlete).catch(() => null);
+    const ar = await fetch(ESPN_ATHLETE(c.id), ua);
+    if (!ar.ok) throw new Error(`ESPN athlete ${ar.status}`);
+    const a = (await ar.json())?.athlete;
     if (!a) continue;
     const info = athleteInfo(a, c.id);
     const g = POS_GROUP[info.pos] || info.pos;
@@ -160,17 +167,20 @@ export async function handleDevyEspn(env, url) {
   if (!Array.isArray(list) || !list.length || list.length > 10) {
     return new Response('p must be a JSON array of 1-10 {n,pos,sch}', { status: 400, headers: CORS });
   }
-  const results = {};
+  const results = {}, errors = {};
   await Promise.all(list.map(async q => {
     if (!q?.n) return;
-    const key = `devy_espn_v2_${dNorm(q.n)}|${String(q.pos || '').toUpperCase()}|${dNorm(q.sch)}`.slice(0, 480);
+    const key = `devy_espn_v3_${dNorm(q.n)}|${String(q.pos || '').toUpperCase()}|${dNorm(q.sch)}`.slice(0, 480);
     const cached = await env.SLEEPER_KV.get(key, 'json');
     if (cached) { results[q.n] = cached.hit; return; }
-    const hit = await espnLookup(q).catch(() => null);
+    let hit;
+    try { hit = await espnLookup(q); }
+    catch (e) { results[q.n] = null; errors[q.n] = String(e?.message || e); return; }   // upstream failure: not cached
     results[q.n] = hit;
     await env.SLEEPER_KV.put(key, JSON.stringify({ hit }), { expirationTtl: hit ? DEVY_ESPN_TTL_HIT : DEVY_ESPN_TTL_MISS });
   }));
-  return new Response(JSON.stringify({ results }), {
-    headers: { ...CORS, 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600' },
+  const failed = Object.keys(errors).length > 0;
+  return new Response(JSON.stringify({ results, errors }), {
+    headers: { ...CORS, 'Content-Type': 'application/json', 'Cache-Control': failed ? 'no-store' : 'public, max-age=3600' },
   });
 }
