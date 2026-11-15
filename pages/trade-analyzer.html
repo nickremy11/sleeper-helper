@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Trade Analyzer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Rye&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared-styles.css?v=20261115">
+  <link href="https://fonts.googleapis.com/css2?family=Graduate&family=Bitter:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/shared-styles.css?v=20261116">
   <style>
     .ta-wrap { max-width: 1060px; margin: 0 auto; padding: 24px 16px 60px; }
 
@@ -15,27 +15,27 @@
 
     .az-badge { font-size: 0.65rem; padding: 5px 12px; }
     .az-badge-dynasty  { background: rgba(201,150,42,0.2); color: var(--gold-light); border: 1px solid rgba(201,150,42,0.4); }
-    .az-badge-bestball { background: rgba(91,155,213,0.2); color: #8eb8e5; border: 1px solid rgba(91,155,213,0.4); }
-    .az-badge-redraft  { background: rgba(92,184,92,0.15); color: #7ed07e; border: 1px solid rgba(92,184,92,0.3); }
+    .az-badge-bestball { background: rgba(91,155,213,0.2); color: #1f5f9a; border: 1px solid rgba(91,155,213,0.4); }
+    .az-badge-redraft  { background: rgba(92,184,92,0.15); color: #2e7d32; border: 1px solid rgba(92,184,92,0.3); }
     .az-league-title { font-size: clamp(1rem,2.5vw,1.4rem); }
 
     /* ── Position pill ── */
-    .rs-pos { font-family: 'Rye', serif; font-size: 0.61rem; letter-spacing: 0.1em; padding: 3px 7px; }
-    .rs-pos-QB   { background: rgba(139,26,26,0.5);  color: #ff9999; border: 1px solid rgba(139,26,26,0.7); }
-    .rs-pos-RB   { background: rgba(45,74,30,0.5);   color: #a8e08a; border: 1px solid rgba(45,74,30,0.7); }
-    .rs-pos-WR   { background: rgba(30,50,100,0.5);  color: #80aaee; border: 1px solid rgba(30,50,100,0.7); }
-    .rs-pos-TE   { background: rgba(100,60,10,0.5);  color: #e0aa60; border: 1px solid rgba(100,60,10,0.7); }
-    .rs-pos-DL   { background: rgba(80,30,100,0.5);  color: #c890ee; border: 1px solid rgba(80,30,100,0.7); }
-    .rs-pos-LB   { background: rgba(80,30,100,0.5);  color: #c890ee; border: 1px solid rgba(80,30,100,0.7); }
-    .rs-pos-DB   { background: rgba(80,30,100,0.5);  color: #c890ee; border: 1px solid rgba(80,30,100,0.7); }
-    .rs-pos-PICK { background: rgba(50,50,50,0.7);   color: var(--parchment); border: 1px solid rgba(255,255,255,0.15); }
-    .rs-pos-FLEX { background: rgba(60,40,10,0.5);   color: #d4a060; border: 1px solid rgba(120,80,20,0.7); }
-    .rs-pos-SF   { background: rgba(80,20,20,0.5);   color: #ff8080; border: 1px solid rgba(139,26,26,0.7); }
-    .rs-pos-IDP  { background: rgba(60,20,80,0.5);   color: #cc88ee; border: 1px solid rgba(80,30,100,0.7); }
+    .rs-pos { font-family: var(--font-display), serif; font-size: 0.61rem; letter-spacing: 0.1em; padding: 3px 7px; }
+    .rs-pos-QB   { background: rgba(139,26,26,0.5);  color: #b3261e; border: 1px solid rgba(139,26,26,0.7); }
+    .rs-pos-RB   { background: rgba(45,74,30,0.15);   color: #2e7d32; border: 1px solid rgba(45,74,30,0.7); }
+    .rs-pos-WR   { background: rgba(30,50,100,0.15);  color: #1f5f9a; border: 1px solid rgba(30,50,100,0.7); }
+    .rs-pos-TE   { background: rgba(100,60,10,0.5);  color: #8a5a00; border: 1px solid rgba(100,60,10,0.7); }
+    .rs-pos-DL   { background: rgba(80,30,100,0.5);  color: #7b3fa0; border: 1px solid rgba(80,30,100,0.7); }
+    .rs-pos-LB   { background: rgba(80,30,100,0.5);  color: #7b3fa0; border: 1px solid rgba(80,30,100,0.7); }
+    .rs-pos-DB   { background: rgba(80,30,100,0.5);  color: #7b3fa0; border: 1px solid rgba(80,30,100,0.7); }
+    .rs-pos-PICK { background: rgba(50,50,50,0.12);   color: var(--parchment); border: 1px solid rgba(var(--tint),0.15); }
+    .rs-pos-FLEX { background: rgba(60,40,10,0.5);   color: #8a5a00; border: 1px solid rgba(120,80,20,0.7); }
+    .rs-pos-SF   { background: rgba(80,20,20,0.5);   color: #b3261e; border: 1px solid rgba(139,26,26,0.7); }
+    .rs-pos-IDP  { background: rgba(60,20,80,0.5);   color: #7b3fa0; border: 1px solid rgba(80,30,100,0.7); }
 
     /* ── Step header ── */
     .ta-step-hdr {
-      font-family: 'Rye', serif; font-size: 0.65rem; letter-spacing: 0.22em;
+      font-family: var(--font-display), serif; font-size: 0.65rem; letter-spacing: 0.22em;
       text-transform: uppercase; color: var(--brown-light); margin-bottom: 14px;
     }
 
@@ -48,23 +48,23 @@
     }
     .ta-team-card:hover { border-color: var(--gold); }
     /* Solid dark tinted backgrounds so text remains readable */
-    .ta-team-card.selected-a { border: 2px solid #5cb85c; background: #192813; }
-    .ta-team-card.selected-b { border: 2px solid #5b9bd5; background: #111e2e; }
-    .ta-team-card.selected-c { border: 2px solid #d6a84a; background: #2a1f0c; }
+    .ta-team-card.selected-a { border: 2px solid #2e7d32; background: #dfe8cf; }
+    .ta-team-card.selected-b { border: 2px solid #1f5f9a; background: #dbe6f2; }
+    .ta-team-card.selected-c { border: 2px solid #8a5a00; background: #f3e6c4; }
     .ta-team-badge {
-      display: inline-block; font-family: 'Rye', serif; font-size: 0.61rem; letter-spacing: 0.1em;
+      display: inline-block; font-family: var(--font-display), serif; font-size: 0.61rem; letter-spacing: 0.1em;
       padding: 3px 8px; border-radius: 2px; margin-bottom: 6px; text-transform: uppercase;
     }
-    .ta-team-badge-a { background: rgba(92,184,92,0.25); color: #7ed07e; border: 1px solid rgba(92,184,92,0.5); }
-    .ta-team-badge-b { background: rgba(91,155,213,0.25); color: #8eb8e5; border: 1px solid rgba(91,155,213,0.5); }
-    .ta-team-badge-c { background: rgba(214,168,74,0.25); color: #e0b15c; border: 1px solid rgba(214,168,74,0.5); }
-    .ta-team-name   { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 0.9rem; color: var(--cream); }
-    .ta-team-owner  { font-family: 'Crimson Text', serif; font-size: 0.78rem; color: var(--brown-light); margin-top: 2px; }
-    .ta-team-record { font-family: 'Crimson Text', serif; font-size: 0.78rem; color: var(--parchment); margin-top: 4px; }
+    .ta-team-badge-a { background: rgba(92,184,92,0.25); color: #2e7d32; border: 1px solid rgba(92,184,92,0.5); }
+    .ta-team-badge-b { background: rgba(91,155,213,0.25); color: #1f5f9a; border: 1px solid rgba(91,155,213,0.5); }
+    .ta-team-badge-c { background: rgba(214,168,74,0.25); color: #8a5a00; border: 1px solid rgba(214,168,74,0.5); }
+    .ta-team-name   { font-family: var(--font-head), serif; font-weight: 700; font-size: 0.9rem; color: var(--cream); }
+    .ta-team-owner  { font-family: var(--font-body), serif; font-size: 0.78rem; color: var(--brown-light); margin-top: 2px; }
+    .ta-team-record { font-family: var(--font-body), serif; font-size: 0.78rem; color: var(--parchment); margin-top: 4px; }
 
     /* ── Buttons ── */
     .ta-btn {
-      font-family: 'Rye', serif; font-size: 0.66rem; letter-spacing: 0.2em;
+      font-family: var(--font-display), serif; font-size: 0.66rem; letter-spacing: 0.2em;
       text-transform: uppercase; padding: 11px 26px; border: 1.5px solid var(--gold);
       border-radius: 2px; background: rgba(201,150,42,0.12); color: var(--gold);
       cursor: pointer; transition: all 0.15s; white-space: nowrap;
@@ -72,24 +72,24 @@
     .ta-btn:hover:not(:disabled) { background: rgba(201,150,42,0.25); color: var(--gold-light); border-color: var(--gold-light); }
     .ta-btn:disabled { opacity: 0.35; cursor: not-allowed; }
     .ta-btn-secondary {
-      font-family: 'Rye', serif; font-size: 0.64rem; letter-spacing: 0.15em;
+      font-family: var(--font-display), serif; font-size: 0.64rem; letter-spacing: 0.15em;
       text-transform: uppercase; padding: 8px 16px; border: 1.5px solid var(--brown-mid);
       border-radius: 2px; background: transparent; color: var(--brown-light);
       cursor: pointer; transition: all 0.15s; white-space: nowrap;
     }
     .ta-btn-secondary:hover { border-color: var(--gold); color: var(--gold); background: rgba(201,150,42,0.06); }
     .ta-btn-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 24px; }
-    .ta-btn-note { font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--brown-light); font-style: italic; }
+    .ta-btn-note { font-family: var(--font-body), serif; font-size: 0.85rem; color: var(--brown-light); font-style: italic; }
     .ta-btn-note a { color: var(--gold-light); }
 
     /* ── Propose in Sleeper ── */
     .ta-propose {
       background: var(--brown-dark); border: 1.5px solid var(--gold); border-radius: 3px;
-      padding: 14px 16px; margin-bottom: 20px; font-family: 'Crimson Text', serif; color: var(--parchment);
+      padding: 14px 16px; margin-bottom: 20px; font-family: var(--font-body), serif; color: var(--parchment);
     }
-    .ta-propose.ok  { border-color: #5cb85c; }
-    .ta-propose.err { border-color: #e05252; }
-    .ta-propose-title { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 0.95rem; color: var(--cream); margin-bottom: 10px; }
+    .ta-propose.ok  { border-color: #2e7d32; }
+    .ta-propose.err { border-color: #b3261e; }
+    .ta-propose-title { font-family: var(--font-head), serif; font-weight: 700; font-size: 0.95rem; color: var(--cream); margin-bottom: 10px; }
     .ta-propose-sides { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 10px; }
     .ta-propose-side { flex: 1 1 200px; min-width: 0; }
     .ta-propose-item { font-size: 0.9rem; padding: 2px 0; }
@@ -108,14 +108,14 @@
       max-height: 320px; overflow-y: auto;
     }
     .ta-addteam-item {
-      display: block; padding: 9px 14px; font-family: 'Crimson Text', serif;
+      display: block; padding: 9px 14px; font-family: var(--font-body), serif;
       font-size: 0.9rem; color: var(--parchment); text-decoration: none; cursor: pointer;
-      border-bottom: 1px dashed rgba(255,255,255,0.05); transition: background 0.1s;
+      border-bottom: 1px dashed rgba(var(--tint),0.05); transition: background 0.1s;
     }
     .ta-addteam-item:last-child { border-bottom: none; }
-    .ta-addteam-item:hover { background: rgba(255,255,255,0.06); color: var(--cream); }
+    .ta-addteam-item:hover { background: rgba(var(--tint),0.06); color: var(--cream); }
     .ta-addteam-item-sub { font-size: 0.75rem; color: var(--brown-light); margin-top: 1px; }
-    .ta-addteam-empty { padding: 12px 14px; font-family: 'Crimson Text', serif; font-size: 0.86rem; color: var(--brown-light); font-style: italic; }
+    .ta-addteam-empty { padding: 12px 14px; font-family: var(--font-body), serif; font-size: 0.86rem; color: var(--brown-light); font-style: italic; }
 
     /* ── Trade summary visual ── */
     .ta-summary-box {
@@ -126,19 +126,19 @@
     }
     .ta-summary-side { flex: 1 1 200px; min-width: 180px; }
     .ta-summary-team-lbl {
-      font-family: 'Rye', serif; font-size: 0.62rem; letter-spacing: 0.14em;
+      font-family: var(--font-display), serif; font-size: 0.62rem; letter-spacing: 0.14em;
       text-transform: uppercase; margin-bottom: 8px;
     }
     .ta-summary-row {
       display: flex; align-items: center; gap: 7px; padding: 4px 0;
-      border-bottom: 1px dashed rgba(255,255,255,0.05); font-family: 'Crimson Text', serif;
+      border-bottom: 1px dashed rgba(var(--tint),0.05); font-family: var(--font-body), serif;
     }
     .ta-summary-row:last-of-type { border-bottom: none; }
     .ta-summary-player { font-size: 0.88rem; color: var(--parchment); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .ta-summary-dest   { font-size: 0.7rem; color: var(--gold-light); font-style: italic; white-space: nowrap; }
     .ta-summary-val    { font-size: 0.78rem; color: var(--brown-light); white-space: nowrap; }
-    .ta-summary-total  { font-family: 'Crimson Text', serif; font-size: 0.82rem; color: var(--gold-light); margin-top: 8px; border-top: 1px solid var(--brown-mid); padding-top: 6px; }
-    .ta-summary-empty  { font-family: 'Crimson Text', serif; font-style: italic; font-size: 0.82rem; color: var(--brown-light); padding: 4px 0; }
+    .ta-summary-total  { font-family: var(--font-body), serif; font-size: 0.82rem; color: var(--gold-light); margin-top: 8px; border-top: 1px solid var(--brown-mid); padding-top: 6px; }
+    .ta-summary-empty  { font-family: var(--font-body), serif; font-style: italic; font-size: 0.82rem; color: var(--brown-light); padding: 4px 0; }
     .ta-summary-divider { display: flex; align-items: center; justify-content: center; color: var(--gold); font-size: 1.2rem; flex: 0 0 auto; }
 
     /* ── Trade builder panels ── */
@@ -151,22 +151,22 @@
       display: flex; align-items: flex-start; gap: 10px;
     }
     .ta-panel-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
-    .ta-panel-dot-a { background: #5cb85c; }
-    .ta-panel-dot-b { background: #5b9bd5; }
-    .ta-panel-dot-c { background: #d6a84a; }
+    .ta-panel-dot-a { background: #2e7d32; }
+    .ta-panel-dot-b { background: #1f5f9a; }
+    .ta-panel-dot-c { background: #8a5a00; }
     .ta-panel-hdr-info { flex: 1; min-width: 0; }
-    .ta-panel-title { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 0.9rem; color: var(--cream); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .ta-panel-sub { font-family: 'Crimson Text', serif; font-size: 0.75rem; color: var(--brown-light); margin-top: 2px; }
-    .ta-panel-total { font-family: 'Crimson Text', serif; font-size: 0.8rem; color: var(--gold-light); margin-left: auto; white-space: nowrap; align-self: center; }
+    .ta-panel-title { font-family: var(--font-head), serif; font-weight: 700; font-size: 0.9rem; color: var(--cream); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ta-panel-sub { font-family: var(--font-body), serif; font-size: 0.75rem; color: var(--brown-light); margin-top: 2px; }
+    .ta-panel-total { font-family: var(--font-body), serif; font-size: 0.8rem; color: var(--gold-light); margin-left: auto; white-space: nowrap; align-self: center; }
 
-    .ta-asset-section { border-bottom: 1px dashed rgba(255,255,255,0.06); }
+    .ta-asset-section { border-bottom: 1px dashed rgba(var(--tint),0.06); }
     .ta-asset-section:last-child { border-bottom: none; }
-    .ta-asset-pos-hdr { font-family: 'Rye', serif; font-size: 0.61rem; letter-spacing: 0.14em; text-transform: uppercase; padding: 7px 14px 4px; }
+    .ta-asset-pos-hdr { font-family: var(--font-display), serif; font-size: 0.61rem; letter-spacing: 0.14em; text-transform: uppercase; padding: 7px 14px 4px; }
     .ta-asset-row {
       display: flex; align-items: center; gap: 8px; padding: 5px 14px;
       cursor: pointer; transition: background 0.1s;
     }
-    .ta-asset-row:hover { background: rgba(255,255,255,0.04); }
+    .ta-asset-row:hover { background: rgba(var(--tint),0.04); }
     .ta-asset-row.selected { background: rgba(201,150,42,0.09); }
     .ta-check {
       width: 15px; height: 15px; border: 1.5px solid var(--brown-mid);
@@ -175,9 +175,9 @@
     .ta-asset-row.selected .ta-check { background: var(--gold); border-color: var(--gold); }
     .ta-check::after { content: '✓'; font-size: 9px; color: var(--ink); position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; opacity: 0; }
     .ta-asset-row.selected .ta-check::after { opacity: 1; }
-    .ta-asset-name { font-family: 'Crimson Text', serif; font-size: 0.88rem; color: var(--parchment); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ta-asset-name { font-family: var(--font-body), serif; font-size: 0.88rem; color: var(--parchment); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .ta-asset-via  { font-style: italic; font-size: 0.72rem; color: var(--brown-light); }
-    .ta-asset-val  { font-family: 'Crimson Text', serif; font-size: 0.78rem; color: var(--brown-light); white-space: nowrap; flex-shrink: 0; }
+    .ta-asset-val  { font-family: var(--font-body), serif; font-size: 0.78rem; color: var(--brown-light); white-space: nowrap; flex-shrink: 0; }
     .ta-asset-row.ta-ranked .ta-asset-name { flex: 0 1 auto; }
     .ta-gap { flex: 1 1 auto; min-width: 8px; }
     .ta-asset-row { --mrb-size: 0.78rem; }   /* ranks read at .ta-asset-val's size */
@@ -185,7 +185,7 @@
     /* ── Per-asset destination picker (3-team trades) ── */
     .ta-dest-row { display: flex; gap: 6px; padding: 0 14px 7px 37px; flex-wrap: wrap; }
     .ta-dest-pill {
-      font-family: 'Rye', serif; font-size: 0.61rem; letter-spacing: 0.08em; text-transform: uppercase;
+      font-family: var(--font-display), serif; font-size: 0.61rem; letter-spacing: 0.08em; text-transform: uppercase;
       padding: 4px 9px; border-radius: 10px; border: 1px solid var(--brown-mid);
       background: transparent; color: var(--brown-light); cursor: pointer; transition: all 0.12s;
     }
@@ -195,7 +195,7 @@
     /* ── Results section ── */
     .ta-divider { border: none; border-top: 2px solid var(--brown-mid); margin: 4px 0 24px; }
     .ta-results-hdr {
-      font-family: 'Rye', serif; font-size: 0.62rem; letter-spacing: 0.25em;
+      font-family: var(--font-display), serif; font-size: 0.62rem; letter-spacing: 0.25em;
       text-transform: uppercase; color: var(--gold); margin-bottom: 20px;
     }
 
@@ -205,53 +205,53 @@
     .ta-rank-wrap { overflow-x: auto; margin-bottom: 24px; }
     .ta-rank-table { width: auto; border-collapse: separate; border-spacing: 0; }
     .ta-rank-table th {
-      font-family: 'Rye', serif; font-size: 0.61rem; letter-spacing: 0.15em;
+      font-family: var(--font-display), serif; font-size: 0.61rem; letter-spacing: 0.15em;
       text-transform: uppercase; padding: 8px 10px;
-      background: #1e0e05; border-bottom: 1px solid var(--brown-mid); white-space: nowrap;
+      background: var(--brown-dark); border-bottom: 1px solid var(--brown-mid); white-space: nowrap;
     }
     .ta-rank-table th.ta-th-metric { text-align: left; color: var(--brown-light); }
     .ta-rank-table th.ta-th-side { text-align: center; }
     .ta-th-side span { display: inline-block; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
-    .ta-rank-table td { padding: 7px 10px; border-bottom: 1px dashed rgba(255,255,255,0.05); vertical-align: middle; }
+    .ta-rank-table td { padding: 7px 10px; border-bottom: 1px dashed rgba(var(--tint),0.05); vertical-align: middle; }
     .ta-rank-table tr:last-child td { border-bottom: none; }
-    .ta-rank-table tr:hover td { background: rgba(255,255,255,0.02); }
-    .ta-metric-lbl { font-family: 'Rye', serif; font-size: 0.61rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brown-light); white-space: nowrap; }
+    .ta-rank-table tr:hover td { background: rgba(var(--tint),0.02); }
+    .ta-metric-lbl { font-family: var(--font-display), serif; font-size: 0.61rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brown-light); white-space: nowrap; }
     .ta-rank-cell { text-align: center; white-space: nowrap; }
-    .ta-rbadge { display: inline-block; font-family: 'Crimson Text', serif; font-weight: 600; font-size: 0.82rem; padding: 2px 7px; border-radius: 2px; min-width: 26px; text-align: center; color: var(--cream); }
+    .ta-rbadge { display: inline-block; font-family: var(--font-body), serif; font-weight: 600; font-size: 0.82rem; padding: 2px 7px; border-radius: 2px; min-width: 26px; text-align: center; color: var(--cream); }
     .ta-rank-arrow { color: var(--brown-light); margin: 0 3px; font-size: 0.8rem; }
-    .ta-delta { font-family: 'Crimson Text', serif; font-size: 0.73rem; margin-left: 3px; }
-    .ta-delta-up { color: #5cb85c; }
-    .ta-delta-dn { color: #e05252; }
+    .ta-delta { font-family: var(--font-body), serif; font-size: 0.73rem; margin-left: 3px; }
+    .ta-delta-up { color: #2e7d32; }
+    .ta-delta-dn { color: #b3261e; }
     .ta-delta-flat { color: var(--brown-light); }
 
     /* ── Playoff odds ── */
     .ta-odds-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
     .ta-odds-card { flex: 1; min-width: 230px; background: var(--brown-dark); border: 1px solid var(--brown-mid); border-radius: 3px; padding: 14px 16px; }
-    .ta-odds-lbl  { font-family: 'Rye', serif; font-size: 0.61rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brown-light); margin-bottom: 8px; }
-    .ta-odds-metric { margin-top: 12px; padding-top: 10px; border-top: 1px dashed rgba(255,255,255,0.06); }
+    .ta-odds-lbl  { font-family: var(--font-display), serif; font-size: 0.61rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brown-light); margin-bottom: 8px; }
+    .ta-odds-metric { margin-top: 12px; padding-top: 10px; border-top: 1px dashed rgba(var(--tint),0.06); }
     .ta-odds-metric:first-of-type { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--brown-mid); }
-    .ta-odds-metric-lbl { font-family: 'Rye', serif; font-size: 0.61rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--brown-light); margin-bottom: 4px; }
-    .ta-odds-metric-val { font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--parchment); margin-bottom: 5px; }
-    .ta-odds-team { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 0.88rem; margin-bottom: 6px; }
-    .ta-odds-before { font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--parchment); margin-bottom: 3px; }
-    .ta-odds-after  { font-family: 'Crimson Text', serif; font-size: 1.05rem; font-weight: 600; margin-bottom: 8px; }
-    .ta-odds-bar-wrap { height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; position: relative; }
+    .ta-odds-metric-lbl { font-family: var(--font-display), serif; font-size: 0.61rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--brown-light); margin-bottom: 4px; }
+    .ta-odds-metric-val { font-family: var(--font-body), serif; font-size: 0.85rem; color: var(--parchment); margin-bottom: 5px; }
+    .ta-odds-team { font-family: var(--font-head), serif; font-weight: 700; font-size: 0.88rem; margin-bottom: 6px; }
+    .ta-odds-before { font-family: var(--font-body), serif; font-size: 0.85rem; color: var(--parchment); margin-bottom: 3px; }
+    .ta-odds-after  { font-family: var(--font-body), serif; font-size: 1.05rem; font-weight: 600; margin-bottom: 8px; }
+    .ta-odds-bar-wrap { height: 6px; background: rgba(var(--tint),0.08); border-radius: 3px; overflow: hidden; position: relative; }
     .ta-odds-bar-behind { height: 100%; position: absolute; left: 0; border-radius: 3px; opacity: 0.35; }
     .ta-odds-bar-front  { height: 100%; position: absolute; left: 0; border-radius: 3px; opacity: 0.85; }
-    .ta-odds-bye { font-family: 'Crimson Text', serif; font-size: 0.8rem; font-style: italic; color: var(--brown-light); margin-top: 8px; }
-    .ta-delta-up-txt  { color: #5cb85c; }
-    .ta-delta-dn-txt  { color: #e05252; }
+    .ta-odds-bye { font-family: var(--font-body), serif; font-size: 0.8rem; font-style: italic; color: var(--brown-light); margin-top: 8px; }
+    .ta-delta-up-txt  { color: #2e7d32; }
+    .ta-delta-dn-txt  { color: #b3261e; }
     .ta-delta-flat-txt{ color: var(--brown-light); }
 
     /* ── Full lineup display ── */
     .ta-lineup-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 24px; }
     @media (max-width: 620px) { .ta-lineup-grid { grid-template-columns: 1fr; } }
     .ta-lineup-card { background: var(--brown-dark); border: 1px solid var(--brown-mid); border-radius: 3px; padding: 14px; }
-    .ta-lineup-lbl  { font-family: 'Rye', serif; font-size: 0.61rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brown-light); margin-bottom: 10px; }
+    .ta-lineup-lbl  { font-family: var(--font-display), serif; font-size: 0.61rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brown-light); margin-bottom: 10px; }
 
     .ta-full-row {
       display: flex; align-items: center; gap: 9px; padding: 5px 0;
-      border-bottom: 1px dashed rgba(255,255,255,0.05); font-family: 'Crimson Text', serif;
+      border-bottom: 1px dashed rgba(var(--tint),0.05); font-family: var(--font-body), serif;
     }
     .ta-full-row:last-child { border-bottom: none; }
     .ta-full-row.changed { background: rgba(201,150,42,0.05); border-radius: 2px; padding-left: 4px; margin-left: -4px; }
@@ -271,12 +271,12 @@
     .ta-rank-table td:first-child {
       position: sticky; left: 0; z-index: 2;
     }
-    .ta-rank-table th.ta-th-metric { background: #1e0e05; }
+    .ta-rank-table th.ta-th-metric { background: #1f3d22; }
     .ta-rank-table td:first-child {
       background: var(--brown-dark);
       box-shadow: 1px 0 0 var(--brown-mid);
     }
-    .ta-rank-table tr:hover td:first-child { background: #33200f; }
+    .ta-rank-table tr:hover td:first-child { background: #efe6cc; }
 
     /* ── MOBILE ── */
     @media (max-width: 640px) {
@@ -304,7 +304,7 @@
 <body>
   <div class="page-wrap">
     <div class="banner">
-      <div style="position:relative;z-index:1;padding:18px 20px;display:flex;justify-content:space-between;align-items:flex-start;">
+      <div class="banner-inner">
         <div class="banner-text">
           <a id="back-link" href="/" class="banner-back">← Sleeper Helper</a>
           <h1>Trade <span>Analyzer</span></h1>
@@ -321,11 +321,11 @@
     </div>
   </div>
 
-  <script src="/shared-nav.js?v=20261111"></script>
-  <script src="/shared-core.js?v=20261113"></script>
+  <script src="/shared-nav.js?v=20261116"></script>
+  <script src="/shared-core.js?v=20261116"></script>
   <script src="/shared-utils.js?v=20261116"></script>
-  <script src="/league-engine.js?v=20261111"></script>
-  <script src="/shared-auth.js?v=20261111"></script>
+  <script src="/league-engine.js?v=20261116"></script>
+  <script src="/shared-auth.js?v=20261116"></script>
   <script>
   'use strict';
 
@@ -367,19 +367,19 @@
   let _presetNote = '';     // assets from ?t= that couldn't be placed on this page
 
   const SIDE_LABELS = ['A', 'B', 'C'];
-  const SIDE_COLORS = ['#7ed07e', '#8eb8e5', '#e0b15c'];
+  const SIDE_COLORS = ['#2e7d32', '#1f5f9a', '#8a5a00'];
   const SIDE_CLS    = ['a', 'b', 'c'];
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
   function fmtOdds(p) {
     if (p == null)   return { label: '—',    color: 'var(--brown-light)', weight: '400' };
-    if (p >= 0.995)  return { label: 'Lock', color: '#5cb85c',            weight: '700' };
-    if (p <= 0.005)  return { label: 'Out',  color: '#e05252',            weight: '700' };
+    if (p >= 0.995)  return { label: 'Lock', color: '#2e7d32',            weight: '700' };
+    if (p <= 0.005)  return { label: 'Out',  color: '#b3261e',            weight: '700' };
     const pct = Math.round(p * 100);
     return {
       label:  pct + '%',
-      color:  p >= 0.70 ? '#5cb85c' : p >= 0.30 ? 'var(--gold-light)' : '#e05252',
+      color:  p >= 0.70 ? '#2e7d32' : p >= 0.30 ? 'var(--gold-light)' : '#b3261e',
       weight: (p >= 0.70 || p < 0.30) ? '700' : '400',
     };
   }
@@ -397,12 +397,12 @@
   // Same shape as fmtOdds, but inverted — for last-place odds, LOW is good (green), HIGH is bad (red).
   function fmtLastOdds(p) {
     if (p == null)   return { label: '—',    color: 'var(--brown-light)', weight: '400' };
-    if (p >= 0.995)  return { label: 'Lock', color: '#e05252',            weight: '700' };
-    if (p <= 0.005)  return { label: 'Safe', color: '#5cb85c',            weight: '700' };
+    if (p >= 0.995)  return { label: 'Lock', color: '#b3261e',            weight: '700' };
+    if (p <= 0.005)  return { label: 'Safe', color: '#2e7d32',            weight: '700' };
     const pct = Math.round(p * 100);
     return {
       label:  pct + '%',
-      color:  p >= 0.40 ? '#e05252' : p >= 0.15 ? 'var(--gold-light)' : '#5cb85c',
+      color:  p >= 0.40 ? '#b3261e' : p >= 0.15 ? 'var(--gold-light)' : '#2e7d32',
       weight: (p >= 0.40 || p < 0.15) ? '700' : '400',
     };
   }
@@ -1049,7 +1049,7 @@
     document.getElementById('content').innerHTML = `
       <div class="ta-step-hdr">Select a League</div>
       <div id="picker-list" class="ta-team-grid">
-        <div style="color:var(--brown-light);font-family:'Crimson Text',serif;font-style:italic;">Loading your leagues…</div>
+        <div style="color:var(--brown-light);font-family:var(--font-body),serif;font-style:italic;">Loading your leagues…</div>
       </div>
     `;
     loadPickerLeagues();
@@ -1060,10 +1060,10 @@
     if (!el) return;
     const user = SharedAuth.getUser?.();
     if (!user) {
-      el.innerHTML = `<div style="color:var(--brown-light);font-family:'Crimson Text',serif;font-style:italic;">Sign in to load your leagues.</div>`;
+      el.innerHTML = `<div style="color:var(--brown-light);font-family:var(--font-body),serif;font-style:italic;">Sign in to load your leagues.</div>`;
       return;
     }
-    el.innerHTML = `<div style="color:var(--brown-light);font-family:'Crimson Text',serif;font-style:italic;">Loading…</div>`;
+    el.innerHTML = `<div style="color:var(--brown-light);font-family:var(--font-body),serif;font-style:italic;">Loading…</div>`;
 
     const cards = [];
 
@@ -1097,14 +1097,14 @@
         for (const lg of espnLeagues) {
           if (!lg) continue;
           cards.push(`<a class="ta-team-card" href="/trade-analyzer?league=${encodeURIComponent('espn_' + lg.id)}" style="text-decoration:none;">
-            <div class="ta-team-name">${esc(lg.name)} <span style="font-family:'Rye',serif;font-size:0.61rem;letter-spacing:0.1em;color:var(--brown-light);">(ESPN)</span></div>
+            <div class="ta-team-name">${esc(lg.name)} <span style="font-family:var(--font-display),serif;font-size:0.61rem;letter-spacing:0.1em;color:var(--brown-light);">(ESPN)</span></div>
           </a>`);
         }
       }
     } catch {}
 
     if (!cards.length) {
-      cards.push(`<div style="color:var(--brown-light);font-family:'Crimson Text',serif;font-style:italic;">Sign in and set your Sleeper username or ESPN credentials in your profile to load leagues.</div>`);
+      cards.push(`<div style="color:var(--brown-light);font-family:var(--font-body),serif;font-style:italic;">Sign in and set your Sleeper username or ESPN credentials in your profile to load leagues.</div>`);
     }
     el.innerHTML = cards.join('');
   }
@@ -1711,7 +1711,7 @@
         return `<div class="ta-odds-card">
           <div class="ta-odds-lbl">${label}</div>
           <div class="ta-odds-team" style="color:${teamColor};">${name}</div>
-          <div style="font-family:'Crimson Text',serif;font-size:0.85rem;color:var(--brown-light);font-style:italic;">Season complete — standings are locked</div>
+          <div style="font-family:var(--font-body),serif;font-size:0.85rem;color:var(--brown-light);font-style:italic;">Season complete — standings are locked</div>
         </div>`;
       }
       return `<div class="ta-odds-card">

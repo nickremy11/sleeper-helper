@@ -733,7 +733,7 @@ function lsGzSection() {
     if (gz.loading) {
       body = loading('Simulating eliminations…');
     } else if (gz.error) {
-      body = `<div style="color:#c0392b;font-size:0.85rem;margin-bottom:8px;">${esc(gz.error)}</div>
+      body = `<div style="color:#a8321f;font-size:0.85rem;margin-bottom:8px;">${esc(gz.error)}</div>
         <button class="ghost-btn" onclick="lsGzCalculate('${lg.league_id}')">Retry</button>`;
     } else if (!gz.loaded) {
       body = `<button class="setup-btn" onclick="lsGzCalculate('${lg.league_id}')">Calculate Elimination Odds</button>`;
@@ -768,7 +768,7 @@ function lsGzSection() {
     }
     return `
       <div style="margin-top:20px;">
-        <div class="section-head"><h2>${esc(lg.name || 'Unnamed')} <span style="font-family:'Crimson Text',serif;font-size:0.7rem;font-weight:400;text-transform:none;letter-spacing:0;color:var(--brown-light);">— Guillotine</span></h2><div class="section-head-line"></div></div>
+        <div class="section-head"><h2>${esc(lg.name || 'Unnamed')} <span style="font-family:var(--font-body),serif;font-size:0.7rem;font-weight:400;text-transform:none;letter-spacing:0;color:var(--brown-light);">— Guillotine</span></h2><div class="section-head-line"></div></div>
         ${body}
       </div>`;
   }).join('');
@@ -1193,7 +1193,7 @@ function lsDrawTable() {
       : `<button class="ghost-btn" onclick="lsSimulateAllLeagues()">Calculate Playoff Odds</button>`;
 
   const oddsErr = LS.oddsError
-    ? `<div style="color:#c0392b;font-size:0.82rem;margin:8px 0 4px;">${esc(LS.oddsError)}</div>`
+    ? `<div style="color:#a8321f;font-size:0.82rem;margin:8px 0 4px;">${esc(LS.oddsError)}</div>`
     : '';
 
   setC(`

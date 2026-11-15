@@ -106,7 +106,7 @@ function luWeekCtlHtml(w) {
   const on   = luOverrideLive(S.nflState);
   return `<span style="display:inline-flex;gap:4px;align-items:center;">
       <button class="ghost-btn" style="font-size:0.64rem;" title="Previous week" onclick="luStepWeek(-1)"${w <= 1 ? ' disabled' : ''}>◀</button>
-      <span style="font-size:0.65rem;white-space:nowrap;color:${on ? '#d08a30' : 'var(--brown-light)'};">Week ${w}${on ? ' · manual' : ''}</span>
+      <span style="font-size:0.65rem;white-space:nowrap;color:${on ? '#8a5a00' : 'var(--brown-light)'};">Week ${w}${on ? ' · manual' : ''}</span>
       <button class="ghost-btn" style="font-size:0.64rem;" title="Next week" onclick="luStepWeek(1)"${w >= LU_MAX_WEEK ? ' disabled' : ''}>▶</button>
       ${on ? `<button class="ghost-btn" style="font-size:0.64rem;" title="Back to Sleeper's week (${auto})" onclick="luClearWeek()">✕</button>` : ''}
     </span>`;
@@ -126,11 +126,11 @@ async function testSetLineup(idx) {
     const echoed = res?.starters || [];
     const match  = echoed.length === fix.starters.length &&
                    echoed.every((p, i) => String(p) === String(fix.starters[i]));
-    out.style.color = match ? '#5fae5f' : '#d08a30';
+    out.style.color = match ? '#2e7d32' : '#8a5a00';
     out.textContent = match ? '✓ saved — starters echoed back unchanged'
                             : '⚠ saved but starters differ: ' + JSON.stringify(echoed);
   } catch (e) {
-    out.style.color = '#c0504d';
+    out.style.color = '#a8321f';
     out.textContent = '✗ ' + (e.message || 'failed');
   }
 }
@@ -1133,17 +1133,17 @@ function luFaHtml(fix) {
   const ups = luFaUpgrades(fix);
   if (!ups.length) return '';
   return `<div style="padding:6px 16px 8px;border-top:1px dashed var(--brown-mid);">
-    <div style="font-family:'Rye',serif;font-size:0.64rem;letter-spacing:0.1em;text-transform:uppercase;color:#d08a30;margin-bottom:4px;">◎ On the wire — projected to beat your best lineup</div>
+    <div style="font-family:var(--font-display),serif;font-size:0.64rem;letter-spacing:0.1em;text-transform:uppercase;color:#8a5a00;margin-bottom:4px;">◎ On the wire — projected to beat your best lineup</div>
     ${ups.map(u => {
       const p = S.players[u.pid] || {};
       return `<div class="diff-row">
         <span class="diff-slot">${esc(u.slot)}</span>
         <span style="color:var(--parchment);flex:1;">
-          <span style="color:#d08a30;">${esc(luPlayerName(u.pid))}</span>
+          <span style="color:#8a5a00;">${esc(luPlayerName(u.pid))}</span>
           <span style="color:var(--brown-light);font-size:0.75rem;"> ${esc(u.pos)}${p.team ? ' · ' + esc(p.team) : ''} · FA</span>
           <span style="color:var(--brown-light);"> over </span>${esc(luPlayerName(u.cur))}
         </span>
-        <span style="color:var(--brown-light);font-size:0.8rem;white-space:nowrap;flex-shrink:0;">${u.curPts.toFixed(1)} <span style="color:#d08a30;">&rarr; ${u.pts.toFixed(1)}</span> (+${u.gain.toFixed(1)})</span>
+        <span style="color:var(--brown-light);font-size:0.8rem;white-space:nowrap;flex-shrink:0;">${u.curPts.toFixed(1)} <span style="color:#8a5a00;">&rarr; ${u.pts.toFixed(1)}</span> (+${u.gain.toFixed(1)})</span>
       </div>`;
     }).join('')}
   </div>`;
@@ -1156,7 +1156,7 @@ function luToggleFa() {
   luRenderLineupCards();
 }
 
-const LU_LEVEL_COLOR = { bad: '#c0504d', warn: '#d08a30', ok: '#5fae5f', na: 'var(--brown-light)' };
+const LU_LEVEL_COLOR = { bad: '#a8321f', warn: '#8a5a00', ok: '#2e7d32', na: 'var(--brown-light)' };
 
 // Right-hand side of the card summary: reason + points + status badge.
 function luSummaryMeta(fix, idx) {
@@ -1164,24 +1164,24 @@ function luSummaryMeta(fix, idx) {
   const color = LU_LEVEL_COLOR[st.level];
   const pts = st.cur == null ? ''
     : st.gain > 0.05
-      ? `<span style="font-size:0.95rem;color:var(--brown-light);white-space:nowrap;">${st.cur.toFixed(1)} <span style="color:#5fae5f;">→ ${st.opt.toFixed(1)}</span></span>`
+      ? `<span style="font-size:0.95rem;color:var(--brown-light);white-space:nowrap;">${st.cur.toFixed(1)} <span style="color:#2e7d32;">→ ${st.opt.toFixed(1)}</span></span>`
       : `<span style="font-size:0.95rem;color:var(--brown-light);white-space:nowrap;">${st.cur.toFixed(1)} pts</span>`;
   const reason = st.detail
     ? `<span style="font-size:0.85rem;color:${color};">${esc(st.detail)}</span>` : '';
   const icon  = st.level === 'bad' ? '⚠ ' : st.level === 'ok' ? '✓ ' : '';
-  const badge = `<span style="font-family:'Rye',serif;font-size:0.64rem;letter-spacing:0.1em;text-transform:uppercase;color:${color};border:1px solid ${color};border-radius:2px;padding:2px 6px;white-space:nowrap;">${icon}${esc(st.label)}</span>`;
+  const badge = `<span style="font-family:var(--font-display),serif;font-size:0.64rem;letter-spacing:0.1em;text-transform:uppercase;color:${color};border:1px solid ${color};border-radius:2px;padding:2px 6px;white-space:nowrap;">${icon}${esc(st.label)}</span>`;
   // Its own chip rather than folded into the status badge: a free-agent upgrade is
   // a different kind of problem from a bad lineup, and a team can easily have one
   // while already being Optimal.
   const qd  = luQuestionableStarters(fix);
   const doubt = qd.length
-    ? `<span title="Game-time decisions: ${esc(qd.map(q => q.name + ' (' + q.tag + ')').join(', '))}" style="font-family:'Rye',serif;font-size:0.64rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--gold);border:1px dotted var(--gold);border-radius:2px;padding:2px 6px;white-space:nowrap;">? ${qd.length} Q/D</span>`
+    ? `<span title="Game-time decisions: ${esc(qd.map(q => q.name + ' (' + q.tag + ')').join(', '))}" style="font-family:var(--font-display),serif;font-size:0.64rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--gold);border:1px dotted var(--gold);border-radius:2px;padding:2px 6px;white-space:nowrap;">? ${qd.length} Q/D</span>`
     : '';
   const ups = luFaUpgrades(fix);
   const fa  = ups.length
-    ? `<span title="Free agents projected to beat your best lineup" style="font-family:'Rye',serif;font-size:0.64rem;letter-spacing:0.1em;text-transform:uppercase;color:#d08a30;border:1px dashed #d08a30;border-radius:2px;padding:2px 6px;white-space:nowrap;">◎ ${ups.length} FA +${ups[0].gain.toFixed(1)}</span>`
+    ? `<span title="Free agents projected to beat your best lineup" style="font-family:var(--font-display),serif;font-size:0.64rem;letter-spacing:0.1em;text-transform:uppercase;color:#8a5a00;border:1px dashed #8a5a00;border-radius:2px;padding:2px 6px;white-space:nowrap;">◎ ${ups.length} FA +${ups[0].gain.toFixed(1)}</span>`
     : '';
-  return `<span id="lc-meta-${idx}" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">${reason}${pts}${doubt}${fa}${badge}</span>`;
+  return `<span id="lc-meta-${idx}" class="lc-meta" data-level="${st.level}" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">${reason}${pts}${doubt}${fa}${badge}</span>`;
 }
 
 // Render the slot rows for a card. mode 'current' shows live starters with proj
@@ -1229,11 +1229,11 @@ function luBodyRows(fix, mode) {
       return `<div class="diff-row" style="background:rgba(95,174,95,0.07);">
         <span class="diff-slot">${esc(slot)}</span>
         <span style="color:var(--parchment);flex:1;">
-          <span style="color:#c0504d;text-decoration:line-through;">${esc(luPlayerName(cur))}</span>
+          <span style="color:#a8321f;text-decoration:line-through;">${esc(luPlayerName(cur))}</span>
           <span style="color:var(--brown-light);"> → </span>
-          <span style="color:#5fae5f;">${esc(luPlayerName(pr))}</span>
+          <span style="color:#2e7d32;">${esc(luPlayerName(pr))}</span>
         </span>
-        <span style="color:var(--brown-light);font-size:0.8rem;white-space:nowrap;flex-shrink:0;">${have ? luPlayerPts(cur, pc).toFixed(1) : '–'} <span style="color:#5fae5f;">→ ${have ? luPlayerPts(pr, pc).toFixed(1) : '–'}</span></span>
+        <span style="color:var(--brown-light);font-size:0.8rem;white-space:nowrap;flex-shrink:0;">${have ? luPlayerPts(cur, pc).toFixed(1) : '–'} <span style="color:#2e7d32;">→ ${have ? luPlayerPts(pr, pc).toFixed(1) : '–'}</span></span>
       </div>`;
     }
     const pid  = mode === 'diff' ? pr : cur;
@@ -1325,7 +1325,7 @@ function luSlotOptionsHtml(fix, idx, slotIdx) {
       <span class="lc-opt-act"></span>
     </div>`;
 
-  const curRow = cur === '0' ? '' : row(cur, { cls: ' cur', tag: '<span style="color:#5fae5f;">▸ </span>' });
+  const curRow = cur === '0' ? '' : row(cur, { cls: ' cur', tag: '<span style="color:#2e7d32;">▸ </span>' });
 
   const list = cands.map(c => {
     const landSlot = fix.rosterPositions[c.moves[c.moves.length - 1][0]];
@@ -1371,7 +1371,7 @@ async function luSlotSwap(idx, slotIdx, pid) {
   const msg = document.getElementById('lc-opts-msg-' + idx);
   const say = (c, t) => { if (msg) msg.innerHTML = `<span style="color:${c};">${t}</span>`; };
   const plan = lswPlanFor(fix, slotIdx, pid);
-  if (!plan) { say('#c0504d', '✗ ' + esc(luPlayerName(pid)) + ' is no longer an option for this slot'); return false; }
+  if (!plan) { say('#a8321f', '✗ ' + esc(luPlayerName(pid)) + ' is no longer an option for this slot'); return false; }
   say('var(--brown-light)', 'applying…');
   const next = fix.starters.map(String);
   plan.moves.forEach(([k, p]) => { next[k] = String(p); });
@@ -1383,12 +1383,12 @@ async function luSlotSwap(idx, slotIdx, pid) {
     const meta = document.getElementById('lc-meta-' + idx);
     if (meta) meta.outerHTML = luSummaryMeta(fix, idx);
     const box = document.getElementById('lc-opt-' + idx);
-    if (box) box.innerHTML = `<div style="padding:6px 16px;font-size:0.65rem;color:${ok ? '#5fae5f' : '#d08a30'};">${ok
+    if (box) box.innerHTML = `<div style="padding:6px 16px;font-size:0.65rem;color:${ok ? '#2e7d32' : '#8a5a00'};">${ok
       ? '✓ ' + esc(luPlayerName(pid)) + ' is now starting at ' + esc(fix.rosterPositions[slotIdx])
       : '⚠ saved but Sleeper returned a different lineup'}</div>`;
     return ok;
   } catch (e) {
-    say('#c0504d', '✗ ' + esc(e.message || 'failed'));
+    say('#a8321f', '✗ ' + esc(e.message || 'failed'));
     return false;
   }
 }
@@ -1403,7 +1403,7 @@ function optimizeLineup(idx, src) {
   const box  = document.getElementById('lc-opt-' + idx);
   if (!fix || !body || !box) return;
   if (!luCanOptimize(src)) {
-    box.innerHTML = `<div style="padding:6px 16px;font-size:0.65rem;color:#c0504d;">${src === 'ranks'
+    box.innerHTML = `<div style="padding:6px 16px;font-size:0.65rem;color:#a8321f;">${src === 'ranks'
       ? 'No ranking sheet uploaded for week ' + LU.week + '.'
       : 'No projections for week ' + LU.week + ' yet.'}</div>`;
     return;
@@ -1419,14 +1419,14 @@ function optimizeLineup(idx, src) {
 
   body.innerHTML = luBodyRows(fix, 'diff');
   if (!changed) {
-    box.innerHTML = `<div style="padding:6px 16px;font-size:0.7rem;color:#5fae5f;">✓ Already optimal by ${label} — ${cur.toFixed(1)} proj pts</div>`;
+    box.innerHTML = `<div style="padding:6px 16px;font-size:0.7rem;color:#2e7d32;">✓ Already optimal by ${label} — ${cur.toFixed(1)} proj pts</div>`;
     return;
   }
   // The points delta is always measured in Sleeper projections, so in ranks mode
   // it is informational and may be negative — that just means the sheet and the
   // projections disagree, which is the whole reason to compare the two.
   const d  = opt - cur;
-  const dc = d >= 0.05 ? '#5fae5f' : d <= -0.05 ? '#d08a30' : 'var(--brown-light)';
+  const dc = d >= 0.05 ? '#2e7d32' : d <= -0.05 ? '#8a5a00' : 'var(--brown-light)';
   box.innerHTML = `<div style="padding:6px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--brown-mid);">
     <span style="font-size:0.72rem;color:var(--gold-light);">by ${label} · ${cur.toFixed(1)} → <span style="color:${dc};">${opt.toFixed(1)}</span> proj pts (<span style="color:${dc};">${d >= 0 ? '+' : ''}${d.toFixed(1)}</span>)</span>
     ${fix._espn ? '<span style="font-size:0.65rem;color:var(--brown-light);">set it in ESPN</span>'
@@ -1471,10 +1471,10 @@ async function applyLineup(idx) {
     const ok = await luPutStarters(fix, prop);
     const body = document.getElementById('lc-body-' + idx); if (body) body.innerHTML = luBodyRows(fix, 'current');
     const meta = document.getElementById('lc-meta-' + idx); if (meta) meta.outerHTML = luSummaryMeta(fix, idx);
-    setMsg(ok ? '#5fae5f' : '#d08a30', ok ? '✓ lineup set' : '⚠ saved but Sleeper returned a different lineup');
+    setMsg(ok ? '#2e7d32' : '#8a5a00', ok ? '✓ lineup set' : '⚠ saved but Sleeper returned a different lineup');
     return ok;
   } catch (e) {
-    setMsg('#c0504d', '✗ ' + (e.message || 'failed'));
+    setMsg('#a8321f', '✗ ' + (e.message || 'failed'));
     return false;
   }
 }
@@ -1497,7 +1497,7 @@ async function applyAll() {
     const prop = luProposal(fix, 'projections');
     return prop && prop.some((p, i) => String(p) !== String(fix.starters[i]));
   });
-  if (!targets.length) { setS('#5fae5f', 'All lineups already optimal'); return; }
+  if (!targets.length) { setS('#2e7d32', 'All lineups already optimal'); return; }
   let done = 0, fail = 0;
   for (const { fix, idx } of targets) {
     fix._shown = 'projections';
@@ -1505,7 +1505,7 @@ async function applyAll() {
     const ok = await applyLineup(idx);
     if (ok) done++; else fail++;
   }
-  setS(fail ? '#d08a30' : '#5fae5f', `Applied ${done} lineup${done !== 1 ? 's' : ''}${fail ? `, ${fail} failed` : ''}`);
+  setS(fail ? '#8a5a00' : '#2e7d32', `Applied ${done} lineup${done !== 1 ? 's' : ''}${fail ? `, ${fail} failed` : ''}`);
 }
 
 function toggleCollapseAll() {
@@ -1779,7 +1779,7 @@ function lswSetMode(mode) {
   if (mode === 'ranks' && !luHaveRankings()) {
     LSW.mode = null;
     LSW.msg = 'No ranking sheet uploaded for week ' + LU.week + '.';
-    LSW.msgColor = '#c0504d';
+    LSW.msgColor = '#a8321f';
     lswDraw();
     return;
   }
@@ -1832,7 +1832,7 @@ async function lswApplyOne(idx, slotIdx) {
   if (!plan) {
     LSW.done[fix.leagueId] = 'fail';
     LSW.msg = '✗ ' + fix.leagueName + ': ' + luPlayerName(repl) + ' is no longer an option here';
-    LSW.msgColor = '#c0504d';
+    LSW.msgColor = '#a8321f';
     return false;
   }
   LSW.applied[fix.leagueId] = plan.moves.map(([k, pid]) => ({
@@ -1846,7 +1846,7 @@ async function lswApplyOne(idx, slotIdx) {
   } catch (e) {
     LSW.done[fix.leagueId] = 'fail';
     LSW.msg = '✗ ' + fix.leagueName + ': ' + (e.message || 'failed');
-    LSW.msgColor = '#c0504d';
+    LSW.msgColor = '#a8321f';
     return false;
   }
 }
@@ -1855,7 +1855,7 @@ async function lswApplyAll() {
   const targets = lswTargets().filter(t => lswPending(t));
   if (!targets.length) {
     LSW.msg = 'Nothing to apply — choose a replacement first.';
-    LSW.msgColor = '#d08a30';
+    LSW.msgColor = '#8a5a00';
     lswDraw();
     return;
   }
@@ -1867,7 +1867,7 @@ async function lswApplyAll() {
     if (await lswApplyOne(t.idx, t.slotIdx)) done++; else fail++;
   }
   LSW.msg = `Applied ${done} lineup${done === 1 ? '' : 's'}${fail ? `, ${fail} failed` : ''}`;
-  LSW.msgColor = fail ? '#d08a30' : '#5fae5f';
+  LSW.msgColor = fail ? '#8a5a00' : '#2e7d32';
   lswDraw();
   luRefreshCardsInPlace();
 }
@@ -1879,7 +1879,7 @@ async function lswApplySingle(idx, slotIdx) {
   const ok = await lswApplyOne(idx, slotIdx);
   if (!LSW.msg.startsWith('✗')) {
     LSW.msg = ok ? '✓ lineup set' : '⚠ saved but Sleeper returned a different lineup';
-    LSW.msgColor = ok ? '#5fae5f' : '#d08a30';
+    LSW.msgColor = ok ? '#2e7d32' : '#8a5a00';
   }
   lswDraw();
   luRefreshCardsInPlace();
@@ -1901,7 +1901,7 @@ function lswCandRow(t, c, chosen) {
   const ppg = playerSeasonPpg(c.pid, t.fix.scoringSettings || {});
   const gp  = ppg === null ? 0 : playerSeasonGp(c.pid);
   return `<div class="lsw-cand${chosen ? ' chosen' : ''}" onclick="lswChoose('${t.leagueId}','${c.pid}')">
-    <span style="width:14px;flex-shrink:0;color:#5fae5f;">${chosen ? '✓' : ''}</span>
+    <span style="width:14px;flex-shrink:0;color:#2e7d32;">${chosen ? '✓' : ''}</span>
     <span style="color:var(--parchment);flex:1;">${esc(luPlayerName(c.pid))}${inj ? ' ' + inj : ''}${via}</span>
     <span style="color:var(--brown-light);font-size:0.65rem;width:52px;flex-shrink:0;">${esc(luNormPos(p.position) || '')}${p.team ? ' ' + esc(p.team) : ''}</span>
     <span style="color:${lbl ? 'var(--gold-light)' : 'var(--brown-light)'};font-size:0.68rem;width:56px;text-align:right;flex-shrink:0;">${lbl ? esc(lbl) : '—'}</span>
@@ -1919,11 +1919,11 @@ function lswLeagueBlock(t) {
   const applied = state === 'ok';
 
   const head = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 12px;background:var(--brown-mid);">
-      <span style="font-family:'Playfair Display',serif;font-weight:700;font-size:0.9rem;color:var(--cream);">${esc(fix.leagueName)}</span>
-      ${fix._espn ? `<span style="font-family:'Rye',serif;font-size:0.62rem;letter-spacing:0.1em;color:var(--gold-light);">ESPN</span>` : ''}
+      <span style="font-family:var(--font-head),serif;font-weight:700;font-size:0.9rem;color:var(--cream);">${esc(fix.leagueName)}</span>
+      ${fix._espn ? `<span style="font-family:var(--font-display),serif;font-size:0.62rem;letter-spacing:0.1em;color:var(--gold-light);">ESPN</span>` : ''}
       <span class="diff-slot" style="flex:0 0 auto;">${esc(t.slot)}</span>
-      ${state === 'ok'   ? `<span style="font-size:0.65rem;color:#5fae5f;">✓ applied</span>` : ''}
-      ${state === 'fail' ? `<span style="font-size:0.65rem;color:#c0504d;">✗ failed</span>` : ''}
+      ${state === 'ok'   ? `<span style="font-size:0.65rem;color:#2e7d32;">✓ applied</span>` : ''}
+      ${state === 'fail' ? `<span style="font-size:0.65rem;color:#a8321f;">✗ failed</span>` : ''}
       <span style="margin-left:auto;display:flex;gap:8px;align-items:center;">
         ${fix._espn
           ? `<span style="font-size:0.65rem;color:var(--parchment);">set it in ESPN</span>`
@@ -1937,8 +1937,8 @@ function lswLeagueBlock(t) {
     const summary = LSW.applied[t.leagueId] || [];
     return `<div class="lsw-league">${head}
       ${summary.map(m => `<div class="diff-row"><span class="diff-slot">${esc(m.slot)}</span>
-        <span style="color:var(--parchment);flex:1;"><span style="color:#c0504d;text-decoration:line-through;">${esc(m.from)}</span>
-        <span style="color:var(--brown-light);"> → </span><span style="color:#5fae5f;">${esc(m.to)}</span></span>
+        <span style="color:var(--parchment);flex:1;"><span style="color:#a8321f;text-decoration:line-through;">${esc(m.from)}</span>
+        <span style="color:var(--brown-light);"> → </span><span style="color:#2e7d32;">${esc(m.to)}</span></span>
       </div>`).join('')}
     </div>`;
   }
@@ -1949,7 +1949,7 @@ function lswLeagueBlock(t) {
     // "no eligible bench player" lines, which would read as a bug.
     const locked = luLocked(String(fix.starters[t.slotIdx] || '0'));
     return `<div class="lsw-league">${head}
-      <div style="padding:8px 12px;font-size:0.68rem;color:#d08a30;">${locked
+      <div style="padding:8px 12px;font-size:0.68rem;color:#8a5a00;">${locked
         ? '🔒 His game has already started — this slot is locked and can no longer be changed.'
         : `No eligible bench player for a ${esc(t.slot)} slot — nothing to swap in here.`}</div>
     </div>`;
@@ -1963,12 +1963,12 @@ function lswLeagueBlock(t) {
     ? plan.moves.map(([k, into]) => `<div class="diff-row" style="background:rgba(95,174,95,0.07);">
          <span class="diff-slot">${esc(fix.rosterPositions[k])}</span>
          <span style="color:var(--parchment);flex:1;">
-           <span style="color:#c0504d;text-decoration:line-through;">${esc(luPlayerName(fix.starters[k]))}</span>
+           <span style="color:#a8321f;text-decoration:line-through;">${esc(luPlayerName(fix.starters[k]))}</span>
            <span style="color:var(--brown-light);"> → </span>
-           <span style="color:#5fae5f;">${esc(luPlayerName(into))}</span>
+           <span style="color:#2e7d32;">${esc(luPlayerName(into))}</span>
            ${lswRankLabel(into, fix.rosterPositions[k], false, pc) ? `<span style="color:var(--gold-light);font-size:0.65rem;"> ${esc(lswRankLabel(into, fix.rosterPositions[k], false, pc))}</span>` : ''}
          </span>
-         <span style="color:var(--brown-light);font-size:0.8rem;white-space:nowrap;flex-shrink:0;">${luHaveProj() ? luPlayerPts(fix.starters[k], pc).toFixed(1) : '–'} <span style="color:#5fae5f;">→ ${luHaveProj() ? luPlayerPts(into, pc).toFixed(1) : '–'}</span></span>
+         <span style="color:var(--brown-light);font-size:0.8rem;white-space:nowrap;flex-shrink:0;">${luHaveProj() ? luPlayerPts(fix.starters[k], pc).toFixed(1) : '–'} <span style="color:#2e7d32;">→ ${luHaveProj() ? luPlayerPts(into, pc).toFixed(1) : '–'}</span></span>
        </div>`).join('')
     : `<div style="padding:6px 12px;font-size:0.68rem;color:var(--brown-light);">${cands.length} eligible bench player${cands.length === 1 ? '' : 's'} — pick a replacement.</div>`;
 
@@ -2022,8 +2022,8 @@ function lswDraw() {
   if (!rows.length) {   // he isn't starting anywhere — nothing to snapshot
     panel.innerHTML = `<div class="lsw-panel">
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 12px;">
-        <span style="font-family:'Playfair Display',serif;font-size:1rem;color:var(--cream);">${esc(luPlayerName(LSW.pid))}</span>
-        <span style="font-size:0.7rem;color:#5fae5f;">${doneCount ? `✓ swapped out of ${doneCount} lineup${doneCount === 1 ? '' : 's'} — he is no longer starting anywhere` : 'Not in any starting lineup'}</span>
+        <span style="font-family:var(--font-head),serif;font-size:1rem;color:var(--cream);">${esc(luPlayerName(LSW.pid))}</span>
+        <span style="font-size:0.7rem;color:#2e7d32;">${doneCount ? `✓ swapped out of ${doneCount} lineup${doneCount === 1 ? '' : 's'} — he is no longer starting anywhere` : 'Not in any starting lineup'}</span>
         <button class="ghost-btn" style="font-size:0.64rem;margin-left:auto;" onclick="lswClear()">✕ Done</button>
       </div>
     </div>`;
@@ -2032,7 +2032,7 @@ function lswDraw() {
 
   panel.innerHTML = `<div class="lsw-panel">
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 12px;border-bottom:1px solid var(--brown-mid);">
-      <span style="font-family:'Playfair Display',serif;font-size:1rem;color:var(--cream);">${esc(luPlayerName(LSW.pid))}</span>
+      <span style="font-family:var(--font-head),serif;font-size:1rem;color:var(--cream);">${esc(luPlayerName(LSW.pid))}</span>
       <span style="font-size:0.68rem;color:var(--brown-light);">${esc(luNormPos(p.position) || '')}${p.team ? ' · ' + esc(p.team) : ''}</span>
       ${injuryBadge(p.injury_status)}
       <span style="font-size:0.7rem;color:var(--gold-light);">starting in ${rows.length} league${rows.length === 1 ? '' : 's'}${writable !== rows.length ? ` (${rows.length - writable} ESPN, read-only)` : ''}</span>
@@ -2061,6 +2061,20 @@ function luRefreshCardsInPlace() {
   const hidden = cards.style.display === 'none';
   cards.innerHTML = luCardsHtml();
   cards.style.display = hidden ? 'none' : '';
+  const counts = document.getElementById('lu-counts');
+  if (counts) counts.outerHTML = luCountsHtml();
+}
+
+// The three status counts beside the page title. Same statuses as the card
+// badges, so the numbers always add up to the cards below.
+function luCountsHtml() {
+  const n = { bad: 0, warn: 0, ok: 0 };
+  LU.lineups.forEach(f => { const l = luLineupStatus(f).level; if (l in n) n[l]++; });
+  return `<div class="lu-counts" id="lu-counts">
+    <div><b class="${n.bad ? 'bad' : ''}">${n.bad}</b>Action needed</div>
+    <div><b>${n.warn}</b>Could be better</div>
+    <div><b>${n.ok}</b>Optimal</div>
+  </div>`;
 }
 
 // ── Ranking sheet upload ─────────────────────────────────────────────────────
@@ -2080,19 +2094,19 @@ function openRankingsUpload() {
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
   ov.innerHTML = `
     <div style="background:var(--brown-dark);border:1px solid var(--gold);border-radius:4px;max-width:560px;width:100%;padding:20px;max-height:88vh;overflow:auto;">
-      <div style="font-family:'Playfair Display',serif;font-size:1.1rem;color:var(--cream);margin-bottom:8px;">Upload Weekly Rankings — Week ${LU.week}</div>
+      <div style="font-family:var(--font-head),serif;font-size:1.1rem;color:var(--cream);margin-bottom:8px;">Upload Weekly Rankings — Week ${LU.week}</div>
       <div style="font-size:0.7rem;color:var(--brown-light);margin-bottom:10px;line-height:1.5;">
         Pick a ranking-sheet CSV — the wide kind with side-by-side QB / RB / WR / TE / DEF / FLEX / K blocks — or paste a plain list, one player per line, best first. Names are matched to your league players and the team column breaks ties.
       </div>
-      <input type="file" id="lu-rk-file" accept=".csv,.txt" style="color:var(--cream);font-family:'Crimson Text',serif;font-size:0.8rem;margin-bottom:10px;display:block;width:100%;" onchange="luRankFilePicked(this)" />
+      <input type="file" id="lu-rk-file" accept=".csv,.txt" style="color:var(--cream);font-family:var(--font-body),serif;font-size:0.8rem;margin-bottom:10px;display:block;width:100%;" onchange="luRankFilePicked(this)" />
       <div style="border:1px dashed var(--brown-light);border-radius:3px;padding:10px;margin-bottom:10px;">
         <div style="font-size:0.75rem;color:var(--cream);margin-bottom:4px;">🖼 From a screenshot <span style="font-size:0.65rem;color:var(--gold-light);border:1px solid var(--gold);border-radius:2px;padding:0 4px;margin-left:4px;">BETA</span></div>
         <div style="font-size:0.65rem;color:var(--brown-light);margin-bottom:6px;line-height:1.5;">
           An image of the side-by-side sheet (QB / RB / WR / TE / FLEX / TEP FLEX / Defense / Kicker). It's read by an AI model, about 30 seconds, so check the unmatched list afterwards. If the sheet has a <b>TEP FLEX</b> list, leagues with a TE premium use it as their flex ranks.
         </div>
         ${S.auth
-          ? `<input type="file" id="lu-rk-img" accept="image/png,image/jpeg,image/webp" style="color:var(--cream);font-family:'Crimson Text',serif;font-size:0.8rem;display:block;width:100%;" onchange="luRankImagePicked(this)" />`
-          : `<div style="font-size:0.65rem;color:#d08a30;">Sign in to use this.</div>`}
+          ? `<input type="file" id="lu-rk-img" accept="image/png,image/jpeg,image/webp" style="color:var(--cream);font-family:var(--font-body),serif;font-size:0.8rem;display:block;width:100%;" onchange="luRankImagePicked(this)" />`
+          : `<div style="font-size:0.65rem;color:#8a5a00;">Sign in to use this.</div>`}
       </div>
       <textarea id="lu-rk-text" style="width:100%;height:160px;background:var(--brown-mid);color:var(--parchment);border:1px solid var(--brown-light);border-radius:2px;padding:8px;font-family:monospace;font-size:0.8rem;box-sizing:border-box;" placeholder="…or paste here:&#10;Josh Allen&#10;Lamar Jackson&#10;Ja'Marr Chase"></textarea>
       <div id="lu-rk-status" style="font-size:0.7rem;margin:8px 0;color:var(--brown-light);min-height:1em;"></div>
@@ -2117,7 +2131,7 @@ async function luRankFilePicked(input) {
     saveRankingsUpload(f.name);
   } catch (e) {
     const st = document.getElementById('lu-rk-status');
-    if (st) { st.style.color = '#c0504d'; st.textContent = 'Could not read that file: ' + (e.message || 'error'); }
+    if (st) { st.style.color = '#a8321f'; st.textContent = 'Could not read that file: ' + (e.message || 'error'); }
   }
 }
 
@@ -2127,7 +2141,7 @@ function saveRankingsUpload(srcName) {
   if (!ta) return;
   const parsed = luParseRanks(ta.value);
   if (!parsed) {
-    if (st) { st.style.color = '#c0504d'; st.textContent = 'Nothing matched — check that this is a ranking sheet or a plain list of player names.'; }
+    if (st) { st.style.color = '#a8321f'; st.textContent = 'Nothing matched — check that this is a ranking sheet or a plain list of player names.'; }
     return;
   }
   luCommitRanks(parsed, typeof srcName === 'string' ? srcName : 'pasted list');
@@ -2157,7 +2171,7 @@ async function luRankImagePicked(input) {
     LU_IMG = job;
     luImgSettle();
   } catch (e) {
-    say('Could not read that image: ' + (e.message || 'error'), '#c0504d');
+    say('Could not read that image: ' + (e.message || 'error'), '#a8321f');
     input.disabled = false;
   } finally { clearInterval(tick); }
 }
@@ -2185,7 +2199,7 @@ function luImgCommit() {
     LU_IMG = null;
     luCommitRanks(parsed, job.name + (gaps.length ? ` (image, column${gaps.length > 1 ? 's' : ''} ${gaps.join(', ')} missing)` : ' (image)'));
   } catch (e) {
-    if (st) { st.style.color = '#c0504d'; st.textContent = 'Could not read that image: ' + (e.message || 'error'); }
+    if (st) { st.style.color = '#a8321f'; st.textContent = 'Could not read that image: ' + (e.message || 'error'); }
   }
 }
 
@@ -2207,7 +2221,7 @@ function luImgDraw() {
       ${thumb}
       <div style="flex:1;min-width:0;">
         <div style="font-size:0.75rem;color:var(--cream);">Column ${i + 1} of ${n}</div>
-        <div style="font-size:0.65rem;color:${busy ? 'var(--brown-light)' : '#c0504d'};margin:2px 0 6px;">${busy ? 'Reading… (can take a minute or two)' : esc(job.errors[i] || 'not read')}</div>
+        <div style="font-size:0.65rem;color:${busy ? 'var(--brown-light)' : '#a8321f'};margin:2px 0 6px;">${busy ? 'Reading… (can take a minute or two)' : esc(job.errors[i] || 'not read')}</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
           <button class="ghost-btn" style="${btn}" ${busy ? 'disabled' : ''} onclick="luImgRetry(${i})">↻ Retry</button>
           <label class="ghost-btn" style="${btn}cursor:${busy ? 'default' : 'pointer'};${busy ? 'opacity:0.5;pointer-events:none;' : ''}">📷 Upload just this column
@@ -2219,12 +2233,12 @@ function luImgDraw() {
   }).join('');
   st.style.color = 'var(--brown-light)';
   st.innerHTML = `
-    <div style="border:1px solid #c0504d;border-radius:3px;padding:10px;margin:4px 0;">
+    <div style="border:1px solid #a8321f;border-radius:3px;padding:10px;margin:4px 0;">
       <div style="font-size:0.75rem;color:var(--cream);margin-bottom:4px;">Read ${okN} of ${n} columns — ${failed.length} didn't come through</div>
       <div style="font-size:0.65rem;color:var(--brown-light);line-height:1.5;">Retry a column, or upload a screenshot of just that column (header included) to fill it in. The rest of the sheet is kept.</div>
       ${rows}
       <div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap;border-top:1px solid var(--brown-mid);padding-top:8px;">
-        ${lost.length ? `<span style="font-size:0.62rem;color:#d08a30;margin-right:auto;">Column${lost.length > 1 ? 's' : ''} ${lost.join(', ')} continue${lost.length > 1 ? '' : 's'} a missing one and would be left out too.</span>` : ''}
+        ${lost.length ? `<span style="font-size:0.62rem;color:#8a5a00;margin-right:auto;">Column${lost.length > 1 ? 's' : ''} ${lost.join(', ')} continue${lost.length > 1 ? '' : 's'} a missing one and would be left out too.</span>` : ''}
         <button class="ghost-btn" style="${btn}" ${anyBusy ? 'disabled' : ''} onclick="luImgCommit()">Use the ${okN - lost.length} column${okN - lost.length === 1 ? '' : 's'} that worked</button>
       </div>
     </div>`;
@@ -2278,10 +2292,10 @@ function luCommitRanks(parsed, srcName) {
   const blocks = Object.entries(parsed.cols).map(([k, v]) => `${luBlockLabel(k)} ${v.length}`).join(' · ');
   document.getElementById('lu-rk-modal').innerHTML = `
     <div style="background:var(--brown-dark);border:1px solid var(--gold);border-radius:4px;max-width:560px;width:100%;padding:20px;max-height:88vh;overflow:auto;">
-      <div style="font-family:'Playfair Display',serif;font-size:1.1rem;color:var(--cream);margin-bottom:10px;">Rankings loaded — Week ${LU.week}</div>
-      <div style="font-size:0.8rem;color:#5fae5f;margin-bottom:6px;">✓ matched ${parsed.matched} of ${parsed.total} rows</div>
+      <div style="font-family:var(--font-head),serif;font-size:1.1rem;color:var(--cream);margin-bottom:10px;">Rankings loaded — Week ${LU.week}</div>
+      <div style="font-size:0.8rem;color:#2e7d32;margin-bottom:6px;">✓ matched ${parsed.matched} of ${parsed.total} rows</div>
       ${blocks ? `<div style="font-size:0.7rem;color:var(--brown-light);margin-bottom:10px;">${esc(blocks)}</div>` : ''}
-      ${miss.length ? `<div style="font-size:0.7rem;color:#d08a30;margin-bottom:6px;">${miss.length} unmatched — these are ignored:</div>
+      ${miss.length ? `<div style="font-size:0.7rem;color:#8a5a00;margin-bottom:6px;">${miss.length} unmatched — these are ignored:</div>
         <div style="font-size:0.7rem;color:var(--brown-light);font-family:monospace;max-height:150px;overflow:auto;background:var(--brown-mid);padding:8px;border-radius:2px;">${miss.map(esc).join('<br>')}</div>` : ''}
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
         <button class="setup-btn" onclick="document.getElementById('lu-rk-modal').remove()">Done</button>
@@ -2695,7 +2709,7 @@ function luCardsHtml() {
         ? `<button class="ghost-btn" style="font-size:0.64rem;" onclick="event.preventDefault();testSetLineup(${idx})">↻ Re-set current (test)</button>
            <span id="lc-result-test-${idx}" style="font-size:0.65rem;color:var(--brown-light);"></span>`
         : `<span style="font-size:0.65rem;color:var(--brown-light);">preview only — <a href="/myprofile" style="color:var(--gold-light);">add a Sleeper token</a> to apply</span>`;
-      const actions = `<div style="margin:4px 0;padding:0 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      const actions = `<div class="lc-foot" style="margin:4px 0;padding:0 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
              ${optBtns}
              ${note}
            </div>
@@ -2703,7 +2717,7 @@ function luCardsHtml() {
 
     return `<details class="lineup-card" id="lc-${idx}">
       <summary>
-        <span style="font-family:'Playfair Display',serif;font-weight:700;font-size:0.95rem;color:var(--cream);flex-shrink:0;margin-right:12px;">${esc(fix.leagueName)}${fix._espn ? ' <span style="font-family:\'Rye\',serif;font-size:0.62rem;letter-spacing:0.1em;color:var(--brown-light);">ESPN</span>' : ''}</span>
+        <span style="font-family:var(--font-head),serif;font-weight:700;font-size:0.95rem;color:var(--cream);flex-shrink:0;margin-right:12px;">${esc(fix.leagueName)}${fix._espn ? ' <span style="font-family:var(--font-display),serif;font-size:0.62rem;letter-spacing:0.1em;color:var(--brown-light);">ESPN</span>' : ''}</span>
         ${luSummaryMeta(fix, idx)}
       </summary>
       <div id="lc-body-${idx}">${luBodyRows(fix, 'current')}</div>
@@ -2728,16 +2742,16 @@ function luRenderLineupCards() {
     // Only "Apply all" is a write. Optimize all, the sheet upload and the ranks
     // grid are read-only, so the whole toolbar used to vanish for tokenless users
     // for no reason — including the upload they need before ranks work at all.
-    const toolbar = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+    const toolbar = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex:1;">
            <button class="setup-btn" ${canProj ? '' : 'disabled'} onclick="optimizeAll()">⚡ Optimize all</button>
-           ${canWrite ? `<button class="setup-btn" ${canProj ? '' : 'disabled'} onclick="applyAll()">✓ Apply all</button>` : ''}
+           ${canWrite ? `<button class="setup-btn go" ${canProj ? '' : 'disabled'} onclick="applyAll()">✓ Apply all</button>` : ''}
            <button class="ghost-btn" id="lu-collapse-btn" style="font-size:0.64rem;" onclick="toggleCollapseAll()">Expand all</button>
            <span style="width:1px;height:18px;background:var(--brown-mid);"></span>
            ${luWeekCtlHtml(w)}
            <span style="width:1px;height:18px;background:var(--brown-mid);"></span>
            <span style="font-size:0.65rem;color:${canRank ? 'var(--gold-light)' : 'var(--brown-light)'};">${esc(luRanksSummary())}</span>
            <button class="ghost-btn" style="font-size:0.64rem;" onclick="openRankingsUpload()">⬆ Upload rankings</button>
-           <button class="ghost-btn" style="font-size:0.64rem;${LU.faOn ? 'color:#d08a30;border-color:#d08a30;' : ''}" title="Flag free agents projected to beat your best lineup (redraft leagues only)" onclick="luToggleFa()">◎ FA watch: ${LU.faOn ? 'on' : 'off'}</button>
+           <button class="ghost-btn" style="font-size:0.64rem;${LU.faOn ? 'color:#8a5a00;border-color:#8a5a00;' : ''}" title="Flag free agents projected to beat your best lineup (redraft leagues only)" onclick="luToggleFa()">◎ FA watch: ${LU.faOn ? 'on' : 'off'}</button>
            <span id="lu-allstatus" style="font-size:0.6rem;color:var(--brown-light);width:100%;text-align:right;"></span>
          </div>`;
 
@@ -2754,15 +2768,13 @@ function luRenderLineupCards() {
 
     setC(`<div>
       ${viewBarHtml('lineups', 'lineups')}
-      <div class="tab-header" style="margin-bottom:16px;align-items:flex-start;">
-        <div class="section-head" style="margin-bottom:0;flex:1;"><h2>Lineup Check — Week ${w}</h2><div class="section-head-line"></div></div>
-        <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;">
-          ${refreshBar}
-          ${toolbar}
-        </div>
+      <div class="section-head" style="margin-bottom:14px;"><h2>Lineups — Week ${w}</h2><div class="section-head-line"></div>${luCountsHtml()}</div>
+      <div style="display:flex;gap:8px 16px;align-items:flex-start;flex-wrap:wrap;margin-bottom:14px;">
+        ${toolbar}
+        ${refreshBar}
       </div>
       ${luSwapBarHtml()}
-      <div id="lu-cards" style="border:1px solid var(--brown-mid);border-radius:2px;overflow:hidden;background:var(--brown-dark);">${cardsHtml}</div>
+      <div id="lu-cards" class="lu-cards">${cardsHtml}</div>
     </div>`);
     lswDraw();     // restore an in-progress swap across a tab re-render
   } catch(e) { setC(errHtml(e)); }
@@ -2773,13 +2785,13 @@ function luRenderLineupCards() {
 // survives every panel redraw.
 function luSwapBarHtml() {
   return `<div style="margin-bottom:14px;">
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-      <span style="font-size:0.62rem;color:var(--gold-light);font-family:'Rye',serif;letter-spacing:0.08em;">🚑 Injury swap</span>
+    <div class="lsw-bar" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <span style="font-size:0.62rem;color:var(--gold-light);font-family:var(--font-display),serif;letter-spacing:0.08em;">🚑 Injury swap</span>
       <div style="position:relative;flex:1;min-width:220px;max-width:340px;">
         <input id="lu-swap-q" type="text" autocomplete="off" placeholder="Search a starter to replace everywhere…"
                value="${esc(LSW.q)}" oninput="lswSearch(this.value)"
                onblur="setTimeout(() => { const b = document.getElementById('lu-swap-sug'); if (b) b.style.display = 'none'; }, 180)"
-               style="width:100%;box-sizing:border-box;background:var(--brown-mid);color:var(--parchment);border:1px solid var(--brown-light);border-radius:2px;padding:5px 8px;font-family:'Crimson Text',serif;font-size:0.8rem;" />
+               style="width:100%;box-sizing:border-box;background:var(--brown-mid);color:var(--parchment);border:1px solid var(--brown-light);border-radius:2px;padding:5px 8px;font-family:var(--font-body),serif;font-size:0.8rem;" />
         <div id="lu-swap-sug" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:50;background:var(--brown-dark);border:1px solid var(--gold);border-radius:2px;max-height:260px;overflow:auto;"></div>
       </div>
       <span style="font-size:0.65rem;color:var(--brown-light);">finds every league where he's in your starting lineup</span>

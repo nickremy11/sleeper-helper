@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Auction Draft Tracker</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Rye&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared-styles.css?v=20261111">
+  <link href="https://fonts.googleapis.com/css2?family=Graduate&family=Bitter:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/shared-styles.css?v=20261116">
   <style>
     .auc-wrap { max-width: 1300px; margin: 0 auto; padding: 20px 16px 60px; }
 
@@ -17,23 +17,23 @@
       border-radius: 4px; padding: 28px 32px;
     }
     .auc-setup-title {
-      font-family: 'Rye', serif; font-size: 0.85rem; letter-spacing: 0.18em;
+      font-family: var(--font-display), serif; font-size: 0.85rem; letter-spacing: 0.18em;
       text-transform: uppercase; color: var(--gold); margin-bottom: 22px;
     }
     .auc-field { margin-bottom: 18px; }
     .auc-label {
-      display: block; font-family: 'Rye', serif; font-size: 0.62rem;
+      display: block; font-family: var(--font-display), serif; font-size: 0.62rem;
       letter-spacing: 0.16em; text-transform: uppercase;
       color: var(--brown-light); margin-bottom: 7px;
     }
     .auc-input, .auc-select {
       width: 100%; padding: 9px 12px; background: rgba(0,0,0,0.3);
       border: 1px solid var(--brown-mid); border-radius: 3px;
-      color: var(--cream); font-family: 'Crimson Text', serif; font-size: 0.98rem;
+      color: var(--cream); font-family: var(--font-body), serif; font-size: 0.98rem;
       outline: none; box-sizing: border-box;
     }
     .auc-input:focus, .auc-select:focus { border-color: var(--gold); }
-    .auc-select option { background: #1e0e05; }
+    .auc-select option { background: var(--brown-dark); }
     .auc-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
     .auc-csv-drop {
       border: 2px dashed var(--brown-mid); border-radius: 4px;
@@ -44,20 +44,20 @@
       border-color: var(--gold); background: rgba(201,150,42,0.05);
     }
     .auc-csv-drop-label {
-      font-family: 'Crimson Text', serif; font-size: 1rem; color: var(--brown-light);
+      font-family: var(--font-body), serif; font-size: 1rem; color: var(--brown-light);
     }
     .auc-csv-drop-label span { color: var(--gold); cursor: pointer; text-decoration: underline; }
     .auc-csv-hint {
-      font-family: 'Crimson Text', serif; font-size: 0.78rem;
+      font-family: var(--font-body), serif; font-size: 0.78rem;
       color: var(--brown-light); margin-top: 8px; font-style: italic;
     }
     .auc-import-summary {
-      font-family: 'Crimson Text', serif; font-size: 0.9rem;
+      font-family: var(--font-body), serif; font-size: 0.9rem;
       color: var(--green-light); margin-top: 10px;
     }
-    .auc-import-err { color: #e05252; }
+    .auc-import-err { color: #b3261e; }
     .auc-btn {
-      font-family: 'Rye', serif; font-size: 0.64rem; letter-spacing: 0.16em;
+      font-family: var(--font-display), serif; font-size: 0.64rem; letter-spacing: 0.16em;
       text-transform: uppercase; padding: 11px 28px;
       background: var(--gold); color: var(--brown-dark);
       border: none; border-radius: 3px; cursor: pointer;
@@ -73,7 +73,7 @@
     .auc-resume-banner {
       background: rgba(201,150,42,0.1); border: 1px solid var(--gold);
       border-radius: 3px; padding: 12px 16px; margin-bottom: 20px;
-      font-family: 'Crimson Text', serif; font-size: 0.92rem; color: var(--cream);
+      font-family: var(--font-body), serif; font-size: 0.92rem; color: var(--cream);
       display: flex; align-items: center; justify-content: space-between; gap: 12px;
     }
 
@@ -89,17 +89,17 @@
     .auc-stats-row1 {
       display: flex; gap: 28px; align-items: center; flex-wrap: wrap;
       margin-bottom: 12px; padding-bottom: 10px;
-      border-bottom: 1px dashed rgba(255,255,255,0.08);
+      border-bottom: 1px dashed rgba(var(--tint),0.08);
     }
     .auc-stat-item { text-align: center; }
     .auc-stat-val {
-      font-family: 'Playfair Display', serif; font-weight: 700;
+      font-family: var(--font-head), serif; font-weight: 700;
       font-size: 1.3rem; color: var(--gold);
     }
     .auc-stat-val.inflation-low  { color: var(--green-light); }
-    .auc-stat-val.inflation-high { color: #e05252; }
+    .auc-stat-val.inflation-high { color: #b3261e; }
     .auc-stat-label {
-      font-family: 'Rye', serif; font-size: 0.60rem; letter-spacing: 0.14em;
+      font-family: var(--font-display), serif; font-size: 0.60rem; letter-spacing: 0.14em;
       text-transform: uppercase; color: var(--brown-light); margin-top: 2px;
     }
     .auc-stats-row2 { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -111,17 +111,17 @@
       display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
     }
     .auc-pos-tile-pct {
-      font-family: 'Crimson Text', serif; font-size: 0.78rem;
+      font-family: var(--font-body), serif; font-size: 0.78rem;
       color: var(--brown-light); margin-left: auto;
     }
     .auc-pos-tile-bar {
-      height: 3px; background: rgba(255,255,255,0.08); border-radius: 2px;
+      height: 3px; background: rgba(var(--tint),0.08); border-radius: 2px;
       margin-bottom: 7px; overflow: hidden;
     }
     .auc-pos-tile-bar-fill { height: 100%; border-radius: 2px; opacity: 0.7; }
     .auc-pos-tile-players { display: flex; flex-direction: column; gap: 2px; }
     .auc-pos-player {
-      font-family: 'Crimson Text', serif; font-size: 0.82rem; color: var(--parchment);
+      font-family: var(--font-body), serif; font-size: 0.82rem; color: var(--parchment);
       display: flex; justify-content: space-between; gap: 6px;
     }
     .auc-pos-player-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -138,7 +138,7 @@
     }
     .auc-pills { display: flex; gap: 6px; flex-wrap: wrap; }
     .auc-pill {
-      font-family: 'Rye', serif; font-size: 0.61rem; letter-spacing: 0.14em;
+      font-family: var(--font-display), serif; font-size: 0.61rem; letter-spacing: 0.14em;
       text-transform: uppercase; padding: 5px 11px;
       border: 1.5px solid var(--brown-mid); border-radius: 2px;
       background: transparent; color: var(--brown-light);
@@ -154,21 +154,21 @@
       flex: 1; min-width: 120px; padding: 7px 10px;
       background: rgba(0,0,0,0.25); border: 1px solid var(--brown-mid);
       border-radius: 3px; color: var(--cream);
-      font-family: 'Crimson Text', serif; font-size: 0.92rem; outline: none;
+      font-family: var(--font-body), serif; font-size: 0.92rem; outline: none;
     }
     .auc-search:focus { border-color: var(--gold); }
     .auc-search::placeholder { color: var(--brown-light); }
     .auc-team-filter {
       padding: 7px 10px; background: rgba(0,0,0,0.25);
       border: 1px solid var(--brown-mid); border-radius: 3px;
-      color: var(--cream); font-family: 'Crimson Text', serif;
+      color: var(--cream); font-family: var(--font-body), serif;
       font-size: 0.9rem; outline: none;
     }
     .auc-team-filter:focus { border-color: var(--gold); }
-    .auc-team-filter option { background: #1e0e05; }
+    .auc-team-filter option { background: var(--brown-dark); }
     .auc-show-drafted {
       display: flex; align-items: center; gap: 6px;
-      font-family: 'Crimson Text', serif; font-size: 0.86rem;
+      font-family: var(--font-body), serif; font-size: 0.86rem;
       color: var(--brown-light); cursor: pointer; white-space: nowrap;
     }
     .auc-show-drafted input { cursor: pointer; accent-color: var(--gold); }
@@ -176,10 +176,10 @@
     /* ── Pool table ── */
     .auc-pool-table { width: 100%; border-collapse: collapse; }
     .auc-pool-table thead tr {
-      background: #1e0e05;
+      background: #1f3d22;
     }
     .auc-pool-table th {
-      font-family: 'Rye', serif; font-size: 0.60rem; letter-spacing: 0.16em;
+      font-family: var(--font-display), serif; font-size: 0.60rem; letter-spacing: 0.16em;
       text-transform: uppercase; color: var(--gold); padding: 8px 10px;
       text-align: left; white-space: nowrap; border-bottom: 1px solid var(--brown-mid);
     }
@@ -188,17 +188,17 @@
     .auc-pool-table th.sort-active { color: var(--gold-light); }
     .auc-pool-table th.num, .auc-pool-table td.num { text-align: right; }
     .auc-pool-table tbody tr {
-      border-bottom: 1px dashed rgba(255,255,255,0.04);
+      border-bottom: 1px dashed rgba(var(--tint),0.04);
       transition: background 0.1s; cursor: pointer;
     }
-    .auc-pool-table tbody tr:hover { background: rgba(255,255,255,0.04); }
+    .auc-pool-table tbody tr:hover { background: rgba(var(--tint),0.04); }
     .auc-pool-table tbody tr.drafted {
       opacity: 0.45; cursor: default;
     }
     .auc-pool-table tbody tr.drafted td { text-decoration: line-through; }
     .auc-pool-table tbody tr.drafted td.no-strike { text-decoration: none; }
     .auc-pool-table td {
-      font-family: 'Crimson Text', serif; font-size: 0.9rem;
+      font-family: var(--font-body), serif; font-size: 0.9rem;
       color: var(--parchment); padding: 7px 10px;
     }
     .auc-pool-table td.val-my { color: var(--gold); font-weight: 600; }
@@ -217,7 +217,7 @@
     }
     .auc-pool-empty {
       padding: 28px 16px; text-align: center;
-      font-family: 'Crimson Text', serif; font-size: 0.92rem;
+      font-family: var(--font-body), serif; font-size: 0.92rem;
       color: var(--brown-light); font-style: italic;
     }
     .auc-undo-btn {
@@ -226,20 +226,20 @@
       line-height: 1; vertical-align: middle;
       text-decoration: none !important;
     }
-    .auc-undo-btn:hover { color: #e05252; }
+    .auc-undo-btn:hover { color: #b3261e; }
 
     /* ── Position badges ── */
     .auc-pos {
-      display: inline-block; font-family: 'Crimson Text', serif; font-weight: 700;
+      display: inline-block; font-family: var(--font-body), serif; font-weight: 700;
       font-size: 0.76rem; letter-spacing: 0.06em; text-transform: uppercase;
       padding: 2px 6px; border-radius: 2px; min-width: 30px; text-align: center;
     }
-    .auc-pos-QB { background: rgba(224,82,82,0.18);  color: #e05252; }
-    .auc-pos-RB { background: rgba(92,184,92,0.18);  color: #5cb85c; }
-    .auc-pos-WR { background: rgba(91,192,222,0.18); color: #5bc0de; }
-    .auc-pos-TE { background: rgba(232,115,75,0.18); color: #e8734b; }
-    .auc-pos-K  { background: rgba(210,205,195,0.1); color: #a8a49e; }
-    .auc-pos-DST { background: rgba(155,89,182,0.18); color: #9b59b6; }
+    .auc-pos-QB { background: rgba(224,82,82,0.18);  color: #b3261e; }
+    .auc-pos-RB { background: rgba(92,184,92,0.18);  color: #2e7d32; }
+    .auc-pos-WR { background: rgba(91,192,222,0.18); color: #0e6f8c; }
+    .auc-pos-TE { background: rgba(232,115,75,0.18); color: #b8461f; }
+    .auc-pos-K  { background: rgba(var(--tint),0.1); color: #5b6259; }
+    .auc-pos-DST { background: rgba(155,89,182,0.18); color: #7b3fa0; }
 
     /* ── Sort indicator ── */
     .sort-arrow { margin-left: 4px; }
@@ -250,15 +250,15 @@
       border-radius: 4px; overflow: hidden; display: flex; flex-direction: column;
     }
     .auc-teams-header {
-      padding: 10px 14px; background: #1e0e05;
+      padding: 10px 14px; background: #1f3d22;
       border-bottom: 1px solid var(--brown-mid);
-      font-family: 'Rye', serif; font-size: 0.64rem; letter-spacing: 0.18em;
+      font-family: var(--font-display), serif; font-size: 0.64rem; letter-spacing: 0.18em;
       text-transform: uppercase; color: var(--gold);
       display: flex; align-items: center; justify-content: space-between;
     }
     .auc-teams-list { overflow-y: visible; }
     .auc-team-card {
-      border-bottom: 1px dashed rgba(255,255,255,0.06); padding: 10px 14px;
+      border-bottom: 1px dashed rgba(var(--tint),0.06); padding: 10px 14px;
     }
     .auc-team-card:last-child { border-bottom: none; }
     .auc-team-name-row {
@@ -266,29 +266,29 @@
       margin-bottom: 5px;
     }
     .auc-team-name {
-      font-family: 'Playfair Display', serif; font-weight: 700;
+      font-family: var(--font-head), serif; font-weight: 700;
       font-size: 0.88rem; color: var(--cream);
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .auc-team-budget {
-      font-family: 'Crimson Text', serif; font-size: 0.82rem;
+      font-family: var(--font-body), serif; font-size: 0.82rem;
       color: var(--brown-light); flex-shrink: 0; margin-left: 8px;
     }
     .auc-team-budget span { color: var(--gold); font-weight: 600; }
     .auc-budget-bar {
-      height: 4px; background: rgba(255,255,255,0.08);
+      height: 4px; background: rgba(var(--tint),0.08);
       border-radius: 2px; margin-bottom: 6px; overflow: hidden;
     }
     .auc-budget-bar-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
     .auc-team-needs {
-      font-family: 'Crimson Text', serif; font-size: 0.76rem;
+      font-family: var(--font-body), serif; font-size: 0.76rem;
       color: var(--brown-light); margin-bottom: 5px;
     }
     .auc-team-needs span { color: var(--parchment); }
     .auc-team-roster { display: flex; flex-direction: column; gap: 2px; }
     .auc-team-player {
       display: flex; align-items: center; gap: 6px;
-      font-family: 'Crimson Text', serif; font-size: 0.8rem; color: var(--parchment);
+      font-family: var(--font-body), serif; font-size: 0.8rem; color: var(--parchment);
     }
     .auc-team-player-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .auc-team-player-price { color: var(--gold); font-weight: 600; flex-shrink: 0; }
@@ -298,13 +298,13 @@
     .auc-team-card details summary { cursor: pointer; list-style: none; }
     .auc-team-card details summary::-webkit-details-marker { display: none; }
     .auc-roster-toggle {
-      font-family: 'Crimson Text', serif; font-size: 0.76rem;
+      font-family: var(--font-body), serif; font-size: 0.76rem;
       color: var(--brown-light); margin-top: 4px; display: inline-block;
     }
     .auc-roster-toggle:hover { color: var(--gold); }
     .auc-add-team-btn {
       margin: 10px 14px;
-      font-family: 'Crimson Text', serif; font-size: 0.86rem;
+      font-family: var(--font-body), serif; font-size: 0.86rem;
       color: var(--brown-light); background: none; border: 1px dashed var(--brown-mid);
       border-radius: 3px; padding: 7px 14px; cursor: pointer; width: calc(100% - 28px);
       transition: all 0.12s;
@@ -317,17 +317,17 @@
     .auc-pool-table tbody tr.tier-odd:hover  { background: rgba(201,150,42,0.13); }
     .auc-pool-table tbody tr.tier-even:hover { background: rgba(91,192,222,0.10); }
     .auc-tier-badge {
-      display: inline-block; font-family: 'Rye', serif; font-size: 0.59rem;
+      display: inline-block; font-family: var(--font-display), serif; font-size: 0.59rem;
       letter-spacing: 0.08em; padding: 1px 4px; border-radius: 2px;
       vertical-align: middle; margin-left: 5px; opacity: 0.65;
     }
     .auc-tier-badge-odd  { background: rgba(201,150,42,0.18); color: var(--gold); }
-    .auc-tier-badge-even { background: rgba(91,192,222,0.15); color: #5bc0de; }
+    .auc-tier-badge-even { background: rgba(91,192,222,0.15); color: #0e6f8c; }
 
     /* ── Player notes (target / avoid / dart throw) ── */
     .auc-note-btns { display: flex; gap: 6px; margin-left: auto; }
     .auc-note-btn {
-      font-family: 'Rye', serif; font-size: 0.61rem; letter-spacing: 0.1em;
+      font-family: var(--font-display), serif; font-size: 0.61rem; letter-spacing: 0.1em;
       text-transform: uppercase; padding: 6px 10px; border-radius: 3px;
       border: 1.5px solid transparent; cursor: pointer; opacity: 0.75;
       transition: opacity 0.12s;
@@ -341,7 +341,7 @@
       position: relative;
     }
     .auc-notes-label {
-      font-family: 'Rye', serif; font-size: 0.62rem; letter-spacing: 0.14em;
+      font-family: var(--font-display), serif; font-size: 0.62rem; letter-spacing: 0.14em;
       text-transform: uppercase; padding: 3px 8px; border-radius: 2px;
       display: inline-block; margin-bottom: 8px;
     }
@@ -349,23 +349,23 @@
     .auc-note-input {
       width: 100%; padding: 7px 10px; background: rgba(0,0,0,0.2);
       border: 1px solid var(--brown-mid); border-radius: 3px;
-      color: var(--cream); font-family: 'Crimson Text', serif; font-size: 0.88rem;
+      color: var(--cream); font-family: var(--font-body), serif; font-size: 0.88rem;
     }
     .auc-note-input:focus { border-color: var(--gold); }
     .auc-note-suggest {
       position: absolute; top: calc(100% + 3px); left: 0; right: 0; z-index: 50;
-      background: #1e0e05; border: 1px solid var(--brown-mid); border-radius: 3px;
+      background: var(--brown-dark); border: 1px solid var(--brown-mid); border-radius: 3px;
       max-height: 220px; overflow-y: auto;
     }
     .auc-note-suggest:empty { border: none; }
     .auc-note-suggest-item {
-      padding: 6px 10px; font-family: 'Crimson Text', serif; font-size: 0.86rem;
+      padding: 6px 10px; font-family: var(--font-body), serif; font-size: 0.86rem;
       color: var(--cream); cursor: pointer;
     }
     .auc-note-suggest-item:hover { background: rgba(201,150,42,0.12); }
     .auc-note-suggest-meta { color: var(--brown-light); font-size: 0.78rem; margin-left: 4px; }
     .auc-note-suggest-empty {
-      padding: 6px 10px; font-family: 'Crimson Text', serif; font-size: 0.82rem;
+      padding: 6px 10px; font-family: var(--font-body), serif; font-size: 0.82rem;
       font-style: italic; color: var(--brown-light);
     }
 
@@ -374,7 +374,7 @@
 
     .auc-note-target, .auc-note-target-label { background: var(--gold); color: var(--brown-dark); }
     .auc-note-avoid,  .auc-note-avoid-label  { background: var(--red);  color: var(--cream); }
-    .auc-note-dart,   .auc-note-dart-label  { background: #8fd3f4; color: #0d3b4f; }
+    .auc-note-dart,   .auc-note-dart-label  { background: #0e6f8c; color: #0d3b4f; }
 
     /* ── Modal ── */
     .auc-modal-backdrop {
@@ -386,17 +386,17 @@
       border-radius: 4px; padding: 28px 28px 22px; width: 340px; max-width: 90vw;
     }
     .auc-modal-title {
-      font-family: 'Playfair Display', serif; font-weight: 700;
+      font-family: var(--font-head), serif; font-weight: 700;
       font-size: 1.1rem; color: var(--cream); margin-bottom: 4px;
     }
     .auc-modal-sub {
-      font-family: 'Crimson Text', serif; font-size: 0.82rem;
+      font-family: var(--font-body), serif; font-size: 0.82rem;
       color: var(--brown-light); margin-bottom: 20px;
     }
     .auc-modal-actions { display: flex; gap: 10px; margin-top: 20px; }
     .auc-modal-err {
-      font-family: 'Crimson Text', serif; font-size: 0.84rem;
-      color: #e05252; margin-top: 6px; min-height: 18px;
+      font-family: var(--font-body), serif; font-size: 0.84rem;
+      color: #b3261e; margin-top: 6px; min-height: 18px;
     }
 
     /* ── Poll status ── */
@@ -407,14 +407,14 @@
     .auc-poll-dot.live { background: var(--green-light); animation: pulse 1.4s infinite; }
     @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
     .auc-poll-status {
-      font-family: 'Crimson Text', serif; font-size: 0.8rem; color: var(--brown-light);
+      font-family: var(--font-body), serif; font-size: 0.8rem; color: var(--brown-light);
     }
   </style>
 </head>
 <body>
   <div class="page-wrap">
     <div class="banner">
-      <div style="position:relative;z-index:1;padding:18px 20px;display:flex;justify-content:space-between;align-items:flex-start;">
+      <div class="banner-inner">
         <div class="banner-text">
           <a href="/" class="banner-back">← Sleeper Helper</a>
           <h1>Auction <span>Draft Tracker</span></h1>
@@ -451,10 +451,10 @@
     </div>
   </div>
 
-  <script src="/shared-nav.js?v=20261111"></script>
-  <script src="/shared-core.js?v=20261111"></script>
-  <script src="/shared-utils.js?v=20261111"></script>
-  <script src="/shared-auth.js?v=20261111"></script>
+  <script src="/shared-nav.js?v=20261116"></script>
+  <script src="/shared-core.js?v=20261116"></script>
+  <script src="/shared-utils.js?v=20261116"></script>
+  <script src="/shared-auth.js?v=20261116"></script>
   <script>
   'use strict';
 
@@ -852,9 +852,9 @@
   }
 
   function budgetColor(pct) {
-    if (pct < 50) return '#5cb85c';
+    if (pct < 50) return '#2e7d32';
     if (pct < 80) return 'var(--gold)';
-    return '#e05252';
+    return '#b3261e';
   }
 
   // ─── Modal ────────────────────────────────────────────────────────────────────
@@ -972,14 +972,14 @@
     const sleeperFieldHtml = A._sleeperFetchState === 'no-user' ? `
       <div class="auc-field">
         <label class="auc-label">Sleeper League (optional — enables live sync)</label>
-        <div style="font-family:'Crimson Text',serif;font-size:0.86rem;color:var(--brown-light);font-style:italic;">
+        <div style="font-family:var(--font-body),serif;font-size:0.86rem;color:var(--brown-light);font-style:italic;">
           Set your Sleeper username in your <a href="/myprofile" style="color:var(--gold);">profile</a> to enable Sleeper live sync.
         </div>
       </div>`
       : A._sleeperFetchState === 'error' ? `
       <div class="auc-field">
         <label class="auc-label">Sleeper League (optional — enables live sync)</label>
-        <div style="font-family:'Crimson Text',serif;font-size:0.86rem;color:#e05252;">
+        <div style="font-family:var(--font-body),serif;font-size:0.86rem;color:#b3261e;">
           Could not look up Sleeper leagues for "${esc(A._sleeperUsername || '')}" — check the username in your <a href="/myprofile" style="color:var(--gold);">profile</a>.
         </div>
       </div>`
@@ -1012,7 +1012,7 @@
           <select id="setup-league" class="auc-select" onchange="onLeagueSelect(this.value)">${espnOptions}</select>
           <div style="margin-top:8px;">
             <a href="#" id="espn-csv-export-link" onclick="exportEspnDollarCsv(event)"
-              style="font-family:'Crimson Text',serif;font-size:0.82rem;color:var(--gold);text-decoration:underline;cursor:pointer;">
+              style="font-family:var(--font-body),serif;font-size:0.82rem;color:var(--gold);text-decoration:underline;cursor:pointer;">
               ⇩ Export ESPN $ values as CSV
             </a>
           </div>
@@ -1033,11 +1033,11 @@
         </div>
 
         <div class="auc-field">
-          <label class="auc-label">Starting Lineup <span style="font-family:'Crimson Text',serif;text-transform:none;letter-spacing:normal;font-style:italic;color:var(--brown-light);">— drives each team's "Needs" hint; auto-filled when you pick an ESPN/Sleeper league above</span></label>
+          <label class="auc-label">Starting Lineup <span style="font-family:var(--font-body),serif;text-transform:none;letter-spacing:normal;font-style:italic;color:var(--brown-light);">— drives each team's "Needs" hint; auto-filled when you pick an ESPN/Sleeper league above</span></label>
           <div style="display:flex;gap:10px;flex-wrap:wrap;">
             ${LINEUP_REQ_POS.map(pos => `
               <div style="display:flex;flex-direction:column;align-items:center;gap:5px;">
-                <label style="font-family:'Rye',serif;font-size:0.61rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--brown-light);">${pos}</label>
+                <label style="font-family:var(--font-display),serif;font-size:0.61rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--brown-light);">${pos}</label>
                 <input type="number" min="0" class="auc-input lineup-req-input" data-pos="${pos}"
                   value="${(A.lineupReqs || DEFAULT_LINEUP_REQS)[pos]}"
                   style="width:56px;padding:7px 4px;text-align:center;">
@@ -1128,14 +1128,14 @@
 
         // Team name mapper (appears when keepers detected)
         const teamMapHtml = keeperTeams.length ? `
-          <div style="margin-top:14px;padding-top:12px;border-top:1px dashed rgba(255,255,255,0.08);">
+          <div style="margin-top:14px;padding-top:12px;border-top:1px dashed rgba(var(--tint),0.08);">
             <div class="auc-label" style="margin-bottom:8px;">Team Names — rename if needed</div>
-            <div style="font-family:'Crimson Text',serif;font-size:0.8rem;color:var(--brown-light);margin-bottom:10px;">
+            <div style="font-family:var(--font-body),serif;font-size:0.8rem;color:var(--brown-light);margin-bottom:10px;">
               Use any shorthand you like (Nick, James, etc.). These map the "Team Drafted To" values from your CSV.
             </div>
             ${keeperTeams.map(t => `
               <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-                <span style="font-family:'Crimson Text',serif;font-size:0.85rem;color:var(--brown-light);min-width:120px;overflow:hidden;text-overflow:ellipsis;" title="${esc(t)}">${esc(t)}</span>
+                <span style="font-family:var(--font-body),serif;font-size:0.85rem;color:var(--brown-light);min-width:120px;overflow:hidden;text-overflow:ellipsis;" title="${esc(t)}">${esc(t)}</span>
                 <span style="color:var(--brown-light);font-size:0.9rem;">→</span>
                 <input class="auc-input team-name-input" data-csv-id="${esc(t)}" value="${esc(t)}"
                   style="flex:1;padding:6px 10px;" placeholder="Display name">
@@ -1148,7 +1148,7 @@
         const keeperPreviewHtml = keepers > 0
           ? `<div style="margin-top:10px;">
               <div class="auc-label" style="margin-bottom:6px;">Keepers detected (sample)</div>
-              <table style="width:100%;border-collapse:collapse;font-family:'Crimson Text',serif;font-size:0.82rem;">
+              <table style="width:100%;border-collapse:collapse;font-family:var(--font-body),serif;font-size:0.82rem;">
                 <tr style="color:var(--brown-light);">
                   <td style="padding:2px 8px 4px 0;">Player</td>
                   <td style="padding:2px 8px 4px;">Pos</td>
@@ -1164,11 +1164,11 @@
               </table>
             </div>`
           : detectedCols.draftedFor !== undefined
-            ? `<div style="margin-top:8px;font-family:'Crimson Text',serif;font-size:0.8rem;color:var(--brown-light);">
+            ? `<div style="margin-top:8px;font-family:var(--font-body),serif;font-size:0.8rem;color:var(--brown-light);">
                 <em>0 keepers detected</em> — "$ Drafted For" column found but all values empty/zero.
                 ${samplePlayer ? `Sample My $ parsed: ${samplePlayer.name} = $${samplePlayer.myVal}` : ''}
               </div>`
-            : `<div style="margin-top:8px;font-family:'Crimson Text',serif;font-size:0.8rem;color:var(--brown-light);font-style:italic;">
+            : `<div style="margin-top:8px;font-family:var(--font-body),serif;font-size:0.8rem;color:var(--brown-light);font-style:italic;">
                 No keeper columns detected. Use "$ Drafted For" and "Team Drafted To" headers for keepers.
               </div>`;
 
@@ -1177,7 +1177,7 @@
             ✓ ${players.length} players loaded${keepers ? `, ${keepers} keepers` : ''}.
             ${samplePlayer ? `<span style="color:var(--brown-light);font-size:0.85rem;margin-left:8px;">Sample: ${esc(samplePlayer.name)} My$=${samplePlayer.myVal}</span>` : ''}
           </div>
-          <div style="font-family:'Crimson Text',serif;font-size:0.8rem;margin-top:8px;line-height:1.8;">${colPills}</div>
+          <div style="font-family:var(--font-body),serif;font-size:0.8rem;margin-top:8px;line-height:1.8;">${colPills}</div>
           ${keeperPreviewHtml}
           ${teamMapHtml}`;
         document.getElementById('start-btn').disabled = false;
@@ -1415,7 +1415,7 @@
 
   function renderStatsBar(stats, inflation, inflPct, inflCls) {
     const tiles = posTiles();
-    const TILE_COLORS = { QB: '#e05252', RB: '#5cb85c', WR: '#5bc0de', TE: '#e8734b' };
+    const TILE_COLORS = { QB: '#b3261e', RB: '#2e7d32', WR: '#0e6f8c', TE: '#b8461f' };
 
     return `
     <div class="auc-stats-bar">
@@ -1457,7 +1457,7 @@
                 <div class="auc-pos-player">
                   <span class="auc-pos-player-name">${esc(p.name)}</span>
                   <span class="auc-pos-player-val">${fmtDollar(p._inf)}</span>
-                </div>`).join('') : '<div style="font-family:Crimson Text,serif;font-size:0.78rem;color:var(--brown-light);font-style:italic;">None available</div>'}
+                </div>`).join('') : '<div style="font-family:var(--font-body),serif;font-size:0.78rem;color:var(--brown-light);font-style:italic;">None available</div>'}
             </div>
           </div>`;
         }).join('')}
@@ -1622,7 +1622,7 @@
       return `
       <div class="auc-team-card">
         <div class="auc-team-name-row">
-          <div class="auc-team-name" title="Click to rename" style="cursor:pointer;" onclick="renameTeam(${jsArg(t.id)})">${esc(t.name)} <span style="font-size:0.7rem;color:var(--brown-light);font-family:'Crimson Text',serif;">✎</span></div>
+          <div class="auc-team-name" title="Click to rename" style="cursor:pointer;" onclick="renameTeam(${jsArg(t.id)})">${esc(t.name)} <span style="font-size:0.7rem;color:var(--brown-light);font-family:var(--font-body),serif;">✎</span></div>
           <div class="auc-team-budget">$${spent} / <span>$${remaining}</span> left</div>
         </div>
         <div class="auc-budget-bar">
@@ -1633,7 +1633,7 @@
         <details>
           <summary class="auc-roster-toggle">▸ ${t.players.length} player${t.players.length !== 1 ? 's' : ''}</summary>
           <div class="auc-team-roster" style="margin-top:6px;">${rosterRows}</div>
-        </details>` : '<div style="font-family:Crimson Text,serif;font-size:0.78rem;color:var(--brown-light);font-style:italic;margin-top:2px;">No players yet</div>'}
+        </details>` : '<div style="font-family:var(--font-body),serif;font-size:0.78rem;color:var(--brown-light);font-style:italic;margin-top:2px;">No players yet</div>'}
       </div>`;
     }).join('');
 
@@ -1744,7 +1744,7 @@
     const el = document.getElementById('espn-team-mapping');
     if (!leagueId) { if (el) el.innerHTML = ''; window._espnTeams = null; return; }
 
-    if (el) el.innerHTML = `<div style="font-family:'Crimson Text',serif;font-size:0.86rem;color:var(--brown-light);padding:8px 0;">Loading teams…</div>`;
+    if (el) el.innerHTML = `<div style="font-family:var(--font-body),serif;font-size:0.86rem;color:var(--brown-light);padding:8px 0;">Loading teams…</div>`;
 
     try {
       const r = await fetch(`${API}/espn/fantasy/${leagueId}?view=mTeam&view=mSettings`, { credentials: 'include' });
@@ -1762,14 +1762,14 @@
       }
 
       if (!window._espnTeams.length) {
-        if (el) el.innerHTML = `<div style="font-family:'Crimson Text',serif;font-size:0.82rem;color:var(--brown-light);font-style:italic;padding:8px 0;">No teams found for this league.</div>`;
+        if (el) el.innerHTML = `<div style="font-family:var(--font-body),serif;font-size:0.82rem;color:var(--brown-light);font-style:italic;padding:8px 0;">No teams found for this league.</div>`;
         return;
       }
 
       if (el) el.innerHTML = `
-        <div style="border-top:1px dashed rgba(255,255,255,0.08);padding-top:14px;margin-top:2px;">
+        <div style="border-top:1px dashed rgba(var(--tint),0.08);padding-top:14px;margin-top:2px;">
           <div class="auc-label" style="margin-bottom:6px;">Team Nicknames</div>
-          <div style="font-family:'Crimson Text',serif;font-size:0.8rem;color:var(--brown-light);margin-bottom:12px;">
+          <div style="font-family:var(--font-body),serif;font-size:0.8rem;color:var(--brown-light);margin-bottom:12px;">
             Give each ESPN team a shorthand. Use the <em>same shorthand</em> in your CSV's
             <strong style="color:var(--parchment);">Team Drafted To</strong> column for keepers.
           </div>
@@ -1777,7 +1777,7 @@
             const espnName = t.name || t.abbrev || `Team ${t.id}`;
             return `
               <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-                <span style="font-family:'Crimson Text',serif;font-size:0.82rem;color:var(--brown-light);
+                <span style="font-family:var(--font-body),serif;font-size:0.82rem;color:var(--brown-light);
                              flex:1.2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
                       title="${esc(espnName)}">${esc(espnName)}</span>
                 <span style="color:var(--brown-light);flex-shrink:0;">→</span>
@@ -1791,7 +1791,7 @@
           }).join('')}
         </div>`;
     } catch (err) {
-      if (el) el.innerHTML = `<div style="font-family:'Crimson Text',serif;font-size:0.82rem;color:#e05252;padding:8px 0;">Could not load ESPN teams: ${esc(err.message)}</div>`;
+      if (el) el.innerHTML = `<div style="font-family:var(--font-body),serif;font-size:0.82rem;color:#b3261e;padding:8px 0;">Could not load ESPN teams: ${esc(err.message)}</div>`;
       window._espnTeams = null;
     }
   }
@@ -2040,7 +2040,7 @@
     const el = document.getElementById('sleeper-team-mapping');
     if (!leagueId) { if (el) el.innerHTML = ''; window._sleeperTeams = null; window._sleeperDraft = null; return; }
 
-    if (el) el.innerHTML = `<div style="font-family:'Crimson Text',serif;font-size:0.86rem;color:var(--brown-light);padding:8px 0;">Loading teams…</div>`;
+    if (el) el.innerHTML = `<div style="font-family:var(--font-body),serif;font-size:0.86rem;color:var(--brown-light);padding:8px 0;">Loading teams…</div>`;
 
     try {
       const [rosters, users, league, drafts] = await Promise.all([
@@ -2052,7 +2052,7 @@
 
       const auctionDrafts = (drafts || []).filter(d => d.type === 'auction');
       if (!auctionDrafts.length) {
-        if (el) el.innerHTML = `<div style="font-family:'Crimson Text',serif;font-size:0.82rem;color:#e05252;padding:8px 0;">No auction draft found for this league. (Snake drafts aren't supported by this tool.)</div>`;
+        if (el) el.innerHTML = `<div style="font-family:var(--font-body),serif;font-size:0.82rem;color:#b3261e;padding:8px 0;">No auction draft found for this league. (Snake drafts aren't supported by this tool.)</div>`;
         window._sleeperTeams = null; window._sleeperDraft = null;
         return;
       }
@@ -2076,21 +2076,21 @@
       if (league?.roster_positions) applyLineupReqsToInputs(lineupReqsFromSleeperPositions(league.roster_positions));
 
       if (!window._sleeperTeams.length) {
-        if (el) el.innerHTML = `<div style="font-family:'Crimson Text',serif;font-size:0.82rem;color:var(--brown-light);font-style:italic;padding:8px 0;">No teams found for this league.</div>`;
+        if (el) el.innerHTML = `<div style="font-family:var(--font-body),serif;font-size:0.82rem;color:var(--brown-light);font-style:italic;padding:8px 0;">No teams found for this league.</div>`;
         return;
       }
 
       if (el) el.innerHTML = `
-        <div style="border-top:1px dashed rgba(255,255,255,0.08);padding-top:14px;margin-top:2px;">
+        <div style="border-top:1px dashed rgba(var(--tint),0.08);padding-top:14px;margin-top:2px;">
           <div class="auc-label" style="margin-bottom:6px;">Team Nicknames</div>
-          <div style="font-family:'Crimson Text',serif;font-size:0.8rem;color:var(--brown-light);margin-bottom:12px;">
+          <div style="font-family:var(--font-body),serif;font-size:0.8rem;color:var(--brown-light);margin-bottom:12px;">
             ${draft.status === 'complete' ? '<em style="color:var(--gold);">This draft has already completed — picks won\'t sync live.</em><br>' : ''}
             Give each team a shorthand. Use the <em>same shorthand</em> in your CSV's
             <strong style="color:var(--parchment);">Team Drafted To</strong> column for keepers.
           </div>
           ${window._sleeperTeams.map(t => `
               <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-                <span style="font-family:'Crimson Text',serif;font-size:0.82rem;color:var(--brown-light);
+                <span style="font-family:var(--font-body),serif;font-size:0.82rem;color:var(--brown-light);
                              flex:1.2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
                       title="${esc(t.name)}">${esc(t.name)}</span>
                 <span style="color:var(--brown-light);flex-shrink:0;">→</span>
@@ -2102,7 +2102,7 @@
               </div>`).join('')}
         </div>`;
     } catch (err) {
-      if (el) el.innerHTML = `<div style="font-family:'Crimson Text',serif;font-size:0.82rem;color:#e05252;padding:8px 0;">Could not load Sleeper teams: ${esc(err.message)}</div>`;
+      if (el) el.innerHTML = `<div style="font-family:var(--font-body),serif;font-size:0.82rem;color:#b3261e;padding:8px 0;">Could not load Sleeper teams: ${esc(err.message)}</div>`;
       window._sleeperTeams = null; window._sleeperDraft = null;
     }
   }

@@ -11,7 +11,7 @@ function renderWaivers() {
       <input type="file" id="wv-file" accept=".csv,.txt" class="wv-file-input" onchange="wvUploadRankings(this)" />
       ${WV.redraftRankings.length
         ? `<span class="setup-status ok" style="margin:0;">${WV.redraftRankings.length} players loaded${WV.rankUnmatched ? ` · ${WV.rankUnmatched} unmatched` : ''}</span>`
-        : `<span style="font-family:'Crimson Text',serif;font-size:0.82rem;font-style:italic;color:var(--brown-light);">CSV with a Player column (Position / Overall / Team read if present), or one name per line</span>`}
+        : `<span style="font-family:var(--font-body),serif;font-size:0.82rem;font-style:italic;color:var(--brown-light);">CSV with a Player column (Position / Overall / Team read if present), or one name per line</span>`}
     </div>` : '';
 
   // Loads by itself on arrival (and after a mode switch) — the button is for
@@ -28,7 +28,7 @@ function renderWaivers() {
       <button class="pos-pill${isDyn?' active':''}" onclick="wvSetMode('dynasty')">Dynasty</button>
       <button class="pos-pill${WV.mode==='redraft'?' active':''}" onclick="wvSetMode('redraft')">Redraft</button>
       <button class="pos-pill${isMR?' active':''}" onclick="wvSetMode('myranks')">vs My Ranks</button>
-      <span style="font-family:'Crimson Text',serif;font-size:0.82rem;font-style:italic;color:var(--brown-light);margin-left:4px;">
+      <span style="font-family:var(--font-body),serif;font-size:0.82rem;font-style:italic;color:var(--brown-light);margin-left:4px;">
         ${isDyn ? 'Scans dynasty leagues · FC value ≥ 100 (TE ×2)'
         : isMR  ? 'A My Ranks set as a grid, one league at a time · green is your roster, yellow is a free agent'
         :         'Your ranking sheet as a grid, one redraft league at a time · guillotine leagues excluded'}
@@ -384,7 +384,7 @@ function wvGridHtml() {
     </select>`;
 
   const note = !owned
-    ? `<span style="font-size:0.6rem;color:#e08b88;">rosters didn't load for this league — nothing highlighted</span>` : '';
+    ? `<span style="font-size:0.6rem;color:#b3261e;">rosters didn't load for this league — nothing highlighted</span>` : '';
 
   const controls = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
       <span style="font-size:0.65rem;color:var(--brown-light);">League:</span>${leagueSel}
@@ -393,7 +393,7 @@ function wvGridHtml() {
       ${note}
       <span style="flex:1;"></span>
       <span style="font-size:0.6rem;color:var(--brown-light);display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
-        <span><span style="display:inline-block;width:9px;height:9px;background:rgba(95,174,95,0.6);border-left:3px solid #5fae5f;margin-right:4px;"></span>my roster</span>
+        <span><span style="display:inline-block;width:9px;height:9px;background:rgba(95,174,95,0.6);border-left:3px solid #2e7d32;margin-right:4px;"></span>my roster</span>
         <span><span style="display:inline-block;width:9px;height:9px;background:rgba(235,195,55,0.75);border-left:3px solid #d6a82a;margin-right:4px;"></span>free agent</span>
         <span><span style="display:inline-block;width:9px;height:9px;background:var(--brown-dark);border:1px solid var(--brown-mid);margin-right:4px;opacity:0.45;"></span>rostered elsewhere</span>
       </span>
@@ -486,7 +486,7 @@ function wvRenderTable() {
   cols.push({ key:'weekProj', label: WV.projWeek ? `Wk ${WV.projWeek} Proj` : 'Proj', title:`Sleeper projection for week ${WV.projWeek ?? '?'} — ${ssLabel}` });
 
   const dash = '<span style="color:var(--brown-light);">—</span>';
-  const numCell = (v, tip) => `<td style="font-family:'Playfair Display',serif;color:var(--cream);"${tip ? ` title="${esc(tip)}"` : ''}>${v != null ? v.toFixed(1) : dash}</td>`;
+  const numCell = (v, tip) => `<td style="font-family:var(--font-head),serif;color:var(--cream);"${tip ? ` title="${esc(tip)}"` : ''}>${v != null ? v.toFixed(1) : dash}</td>`;
   const projCell = row => {
     const gp = playerSeasonGp(row.pid);
     return numCell(row.seasonPpg, row.seasonPpg != null ? `${gp} game${gp === 1 ? '' : 's'} played · ${ssLabel}` : '')
@@ -508,16 +508,16 @@ function wvRenderTable() {
   const tbody = sorted.map(row => {
     const isExp = WV.expandedKey === row.pid;
     const posHtml = `<span class="rs-pos rs-pos-${row.pos}">${row.pos}</span>`;
-    const teamHtml = `<span style="font-family:'Rye',serif;font-size:0.61rem;letter-spacing:0.1em;color:var(--brown-light);margin-left:5px;">${esc(row.team)}</span>`;
+    const teamHtml = `<span style="font-family:var(--font-display),serif;font-size:0.61rem;letter-spacing:0.1em;color:var(--brown-light);margin-left:5px;">${esc(row.team)}</span>`;
     const nameCell = `<button class="rs-name-btn${isExp?' rs-expanded':''}" onclick="wvToggle('${esc(row.pid)}')">${esc(row.name)}${teamHtml} <span class="rs-chevron">▾</span></button>`;
 
     const valCell = isDyn
-      ? `<td style="font-family:'Playfair Display',serif;color:var(--cream);">${row.adjVal}${row.pos==='TE'?`<span style="font-size:0.75rem;color:var(--brown-light);margin-left:3px;">(${row.fcVal}×2)</span>`:''}</td>`
-      : `<td style="font-family:'Playfair Display',serif;color:var(--cream);">#${row.rank}</td>`;
+      ? `<td style="font-family:var(--font-head),serif;color:var(--cream);">${row.adjVal}${row.pos==='TE'?`<span style="font-size:0.75rem;color:var(--brown-light);margin-left:3px;">(${row.fcVal}×2)</span>`:''}</td>`
+      : `<td style="font-family:var(--font-head),serif;color:var(--cream);">#${row.rank}</td>`;
 
     const mainRow = isDyn
-      ? `<tr><td>${nameCell}</td><td>${posHtml}</td>${valCell}<td style="font-family:'Playfair Display',serif;color:var(--cream);">${row.availCount}</td>${projCell(row)}</tr>`
-      : `<tr><td style="font-family:'Playfair Display',serif;color:var(--cream);">#${row.rank}</td><td>${nameCell}</td><td>${posHtml}</td><td style="font-family:'Playfair Display',serif;color:var(--cream);">${row.availCount}</td>${projCell(row)}</tr>`;
+      ? `<tr><td>${nameCell}</td><td>${posHtml}</td>${valCell}<td style="font-family:var(--font-head),serif;color:var(--cream);">${row.availCount}</td>${projCell(row)}</tr>`
+      : `<tr><td style="font-family:var(--font-head),serif;color:var(--cream);">#${row.rank}</td><td>${nameCell}</td><td>${posHtml}</td><td style="font-family:var(--font-head),serif;color:var(--cream);">${row.availCount}</td>${projCell(row)}</tr>`;
 
     const colSpan = cols.length;
     const expandRow = isExp ? `<tr class="rs-expand-row"><td colspan="${colSpan}">

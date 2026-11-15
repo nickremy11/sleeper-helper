@@ -86,7 +86,14 @@ function shNavRender(tab) {
       <div class="tab-group-dropdown" id="grp-${g.id}-menu">${g.items.map(it => shNavLink(it, 'tab-btn', tab)).join('')}</div>
     </div>`;
   }).join('');
-  el.innerHTML = `<div class="tab-bar-inner">${groups}</div>`;
+  // Second row: the tools inside the group you are in, so moving between them
+  // is one click instead of opening the dropdown again.
+  const cur = SH_NAV.find(g => g.items && g.items.some(it => shNavIsActive(it, tab)));
+  const sub = cur
+    ? `<div class="sub-bar" role="navigation" aria-label="${cur.label}"><div class="sub-bar-inner">${cur.items.map(it => shNavLink(it, 'sub-link', tab)).join('')}</div></div>`
+    : '';
+  el.classList.toggle('has-sub', !!cur);
+  el.innerHTML = `<div class="tab-bar-inner">${groups}</div>${sub}`;
 }
 
 function shNavCloseAll(except) {

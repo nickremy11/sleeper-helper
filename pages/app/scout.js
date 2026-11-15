@@ -176,7 +176,7 @@ async function scoutLoadRankSets() {
     } catch (e) { SC.rankSets = []; SC.rankSetErr = e.message; }
   }
   if (!SC.rankSets.length) {
-    sel.outerHTML = `<span style="font-family:'Crimson Text',serif;font-style:italic;color:var(--brown-light);font-size:0.85rem;">${esc(SC.rankSetErr || 'No ranking sets found')} — set them up at <a href="https://myranks.ffhistorian.com" target="_blank" style="color:var(--gold);">My Ranks</a></span>`;
+    sel.outerHTML = `<span style="font-family:var(--font-body),serif;font-style:italic;color:var(--brown-light);font-size:0.85rem;">${esc(SC.rankSetErr || 'No ranking sets found')} — set them up at <a href="https://myranks.ffhistorian.com" target="_blank" style="color:var(--gold);">My Ranks</a></span>`;
     return;
   }
   if (!SC.rankSets.some(o => o.id === SC.rankSet)) SC.rankSet = SC.rankSets[0].id;
@@ -350,27 +350,27 @@ async function renderScout() {
 
   const s = SC.settings;
   const numInput = (val, oninput, w = 52) =>
-    `<input type="number" value="${val}" oninput="${oninput}" style="width:${w}px;background:rgba(255,255,255,0.06);border:1px solid var(--brown-mid);color:var(--cream);font-family:'Crimson Text',serif;font-size:0.9rem;padding:4px 6px;border-radius:2px;" />`;
+    `<input type="number" value="${val}" oninput="${oninput}" style="width:${w}px;background:rgba(var(--tint),0.06);border:1px solid var(--brown-mid);color:var(--cream);font-family:var(--font-body),serif;font-size:0.9rem;padding:4px 6px;border-radius:2px;" />`;
 
   const dynSettings = `
       <div class="setup-label-rye" style="margin-bottom:10px;">Dynasty — veteran age cutoff (age ≥ value = veteran)</div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;">
-        ${['QB', 'RB', 'WR', 'TE'].map(p => `<label style="font-family:'Crimson Text',serif;color:var(--parchment);font-size:0.9rem;">${p} ${numInput(s.vetAge[p], `scoutSetVetAge('${p}',this.value)`)}</label>`).join('')}
+        ${['QB', 'RB', 'WR', 'TE'].map(p => `<label style="font-family:var(--font-body),serif;color:var(--parchment);font-size:0.9rem;">${p} ${numInput(s.vetAge[p], `scoutSetVetAge('${p}',this.value)`)}</label>`).join('')}
       </div>`;
   const rdSettings = `
       <div class="setup-label-rye" style="margin-bottom:10px;">Redraft — positional surplus (≥ count players inside top rank, by the ranking source above)</div>
       <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:16px;">
-        ${['QB', 'RB', 'WR', 'TE'].map(p => `<label style="font-family:'Crimson Text',serif;color:var(--parchment);font-size:0.9rem;">${p}: ≥ ${numInput(s.redraft[p].count, `scoutSetRedraft('${p}','count',this.value)`, 44)} in top ${numInput(s.redraft[p].rank, `scoutSetRedraft('${p}','rank',this.value)`, 48)}</label>`).join('')}
+        ${['QB', 'RB', 'WR', 'TE'].map(p => `<label style="font-family:var(--font-body),serif;color:var(--parchment);font-size:0.9rem;">${p}: ≥ ${numInput(s.redraft[p].count, `scoutSetRedraft('${p}','count',this.value)`, 44)} in top ${numInput(s.redraft[p].rank, `scoutSetRedraft('${p}','rank',this.value)`, 48)}</label>`).join('')}
       </div>`;
   const settingsPanel = SC.showSettings ? `
     <div style="background:var(--brown-dark);border:1px solid var(--brown-mid);border-radius:2px;padding:14px 18px;margin-bottom:18px;">
       ${dynSettings}${rdSettings}
       <div class="setup-label-rye" style="margin-bottom:10px;">Playoff-odds thresholds</div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;">
-        <label style="font-family:'Crimson Text',serif;color:var(--parchment);font-size:0.9rem;">Contending ≥ ${numInput(s.contendPct, "scoutSetThreshold('contendPct',this.value)")}%</label>
-        <label style="font-family:'Crimson Text',serif;color:var(--parchment);font-size:0.9rem;">Rebuilding ≤ ${numInput(s.rebuildPct, "scoutSetThreshold('rebuildPct',this.value)")}%</label>
+        <label style="font-family:var(--font-body),serif;color:var(--parchment);font-size:0.9rem;">Contending ≥ ${numInput(s.contendPct, "scoutSetThreshold('contendPct',this.value)")}%</label>
+        <label style="font-family:var(--font-body),serif;color:var(--parchment);font-size:0.9rem;">Rebuilding ≤ ${numInput(s.rebuildPct, "scoutSetThreshold('rebuildPct',this.value)")}%</label>
       </div>
-      <div style="font-family:'Crimson Text',serif;font-style:italic;color:var(--brown-light);font-size:0.82rem;margin-top:10px;">Teams between the two thresholds count as neither and are skipped.</div>
+      <div style="font-family:var(--font-body),serif;font-style:italic;color:var(--brown-light);font-size:0.82rem;margin-top:10px;">Teams between the two thresholds count as neither and are skipped.</div>
     </div>` : '';
 
   const runBtn = SC.running
@@ -390,13 +390,13 @@ async function renderScout() {
     ${viewBarHtml('findtrade', 'scout')}
     <div class="section-head"><h2>Scout</h2><div class="section-head-line"></div></div>
     ${formatTabs}
-    <div style="font-family:'Crimson Text',serif;font-style:italic;color:var(--brown-light);font-size:0.9rem;margin-bottom:16px;">${summary}</div>
+    <div style="font-family:var(--font-body),serif;font-style:italic;color:var(--brown-light);font-size:0.9rem;margin-bottom:16px;">${summary}</div>
     ${subTabs}
     ${SC.format === 'dynasty' ? myGrp : ''}${posGrp}${srcGrp}${SC.format === 'dynasty' ? topGrp + ageGrp + oppGrp : rdRankGrp + rdCountGrp}
     <div style="display:flex;gap:12px;align-items:center;margin:6px 0 4px;">
       ${runBtn}
       <button class="ghost-btn" onclick="scoutToggleSettings()">${SC.showSettings ? 'Hide' : 'Settings'}</button>
-      ${SC.progress ? `<span style="font-family:'Crimson Text',serif;font-style:italic;color:var(--brown-light);font-size:0.85rem;">${esc(SC.progress)}</span>` : ''}
+      ${SC.progress ? `<span style="font-family:var(--font-body),serif;font-style:italic;color:var(--brown-light);font-size:0.85rem;">${esc(SC.progress)}</span>` : ''}
     </div>
     ${settingsPanel}
     ${SC.error ? errHtml(new Error(SC.error)) : ''}
@@ -616,7 +616,7 @@ function scoutPlayerLine(p) {
   if (SC.format === 'dynasty' && p.age != null) bits.push('age ' + p.age);
   if (p.ppg > 0) bits.push(p.ppg.toFixed(1) + ' PPG');
   bits.push(p.team);
-  return `<span style="font-family:'Crimson Text',serif;color:var(--parchment);font-size:0.92rem;">
+  return `<span style="font-family:var(--font-body),serif;color:var(--parchment);font-size:0.92rem;">
     <strong>${esc(p.name)}</strong>
     <span style="color:var(--brown-light);font-style:italic;"> — ${bits.join(' · ')}</span>
   </span>`;
@@ -628,7 +628,7 @@ function scoutDrawResults() {
   if (SC.running && !SC.results) { el.innerHTML = loading(SC.progress || 'Working…'); return; }
   if (!SC.results) { el.innerHTML = ''; return; }
   const skip = SC.skipNote
-    ? `<div style="font-family:'Crimson Text',serif;color:var(--brown-light);font-style:italic;font-size:0.8rem;margin-bottom:10px;">${esc(SC.skipNote)}</div>`
+    ? `<div style="font-family:var(--font-body),serif;color:var(--brown-light);font-style:italic;font-size:0.8rem;margin-bottom:10px;">${esc(SC.skipNote)}</div>`
     : '';
   if (!SC.results.length) {
     el.innerHTML = skip + '<div class="empty-state"><p>No leagues matched — try loosening the filters or adjusting the thresholds in Settings.</p></div>';
@@ -657,7 +657,7 @@ function scoutDrawResults() {
         <div class="sect">Buyers</div>
         ${res.teams.map(t => `
           <div class="data-row" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-            <span style="font-family:'Crimson Text',serif;color:var(--parchment);font-size:0.92rem;font-weight:600;">${esc(teamName(t.rid))}</span>
+            <span style="font-family:var(--font-body),serif;color:var(--parchment);font-size:0.92rem;font-weight:600;">${esc(teamName(t.rid))}</span>
             ${scoutClassBadge(t.cls, t.odds)}
             <a class="ghost-btn" style="text-decoration:none;" target="_blank" rel="noopener" href="/trade-analyzer?league=${encodeURIComponent(res.lgId)}&b=${t.rid}">Analyze ⇄</a>
           </div>`).join('')}`;
@@ -665,7 +665,7 @@ function scoutDrawResults() {
       body = res.teams.map(t => `
         <div class="data-row" style="padding:8px 0;">
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px;">
-            <span style="font-family:'Crimson Text',serif;color:var(--parchment);font-size:0.92rem;font-weight:600;">${esc(teamName(t.rid))}</span>
+            <span style="font-family:var(--font-body),serif;color:var(--parchment);font-size:0.92rem;font-weight:600;">${esc(teamName(t.rid))}</span>
             ${scoutClassBadge(t.cls, t.odds)}
             ${SC.format === 'redraft' ? `<span class="badge badge-outline">${t.players.length} ${SC.pos} surplus</span>` : ''}
             <a class="ghost-btn" style="text-decoration:none;" target="_blank" rel="noopener" href="/trade-analyzer?league=${encodeURIComponent(res.lgId)}&b=${t.rid}">Analyze ⇄</a>
@@ -677,5 +677,5 @@ function scoutDrawResults() {
     return `<div style="background:var(--brown-dark);border:1px solid var(--brown-mid);border-radius:2px;padding:14px 18px;margin-bottom:10px;">${head}${body}</div>`;
   }).join('');
 
-  el.innerHTML = skip + `<div style="font-family:'Crimson Text',serif;color:var(--brown-light);font-style:italic;font-size:0.85rem;margin-bottom:10px;">${SC.results.length} league${SC.results.length !== 1 ? 's' : ''} matched</div>${cards}`;
+  el.innerHTML = skip + `<div style="font-family:var(--font-body),serif;color:var(--brown-light);font-style:italic;font-size:0.85rem;margin-bottom:10px;">${SC.results.length} league${SC.results.length !== 1 ? 's' : ''} matched</div>${cards}`;
 }

@@ -4,8 +4,8 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>My Profile — FF Historian</title>
-<link href="https://fonts.googleapis.com/css2?family=Rye&family=Playfair+Display:ital,wght@0,700;1,400&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/shared-styles.css?v=20261111" />
+<link href="https://fonts.googleapis.com/css2?family=Graduate&family=Bitter:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/shared-styles.css?v=20261116" />
 <style>
 
 /* ── BANNER ── */
@@ -30,65 +30,65 @@
   padding: 20px 24px; margin-bottom: 10px; box-shadow: 4px 4px 0 var(--brown-mid);
 }
 .field-label {
-  font-family: 'Rye', serif; font-size: 0.65rem; letter-spacing: 0.22em;
+  font-family: var(--font-display), serif; font-size: 0.65rem; letter-spacing: 0.22em;
   text-transform: uppercase; color: var(--gold); display: block; margin-bottom: 7px;
 }
-.field-label-sub { font-family: 'Crimson Text', serif; font-size: 0.82rem; color: var(--brown-light); font-style: italic; margin-left: 8px; letter-spacing: 0; text-transform: none; }
+.field-label-sub { font-family: var(--font-body), serif; font-size: 0.82rem; color: var(--brown-light); font-style: italic; margin-left: 8px; letter-spacing: 0; text-transform: none; }
 .field-row { display: flex; gap: 8px; margin-bottom: 16px; }
 .field-row:last-child { margin-bottom: 0; }
 .field-input {
-  flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--brown-mid);
-  color: var(--cream); font-family: 'Crimson Text', serif; font-size: 1rem;
+  flex: 1; background: rgba(var(--tint),0.06); border: 1px solid var(--brown-mid);
+  color: var(--cream); font-family: var(--font-body), serif; font-size: 1rem;
   padding: 8px 12px; border-radius: 2px; outline: none; transition: border-color 0.2s;
 }
 .field-input:focus { border-color: var(--gold); }
-.field-input::placeholder { color: rgba(255,255,255,0.25); font-style: italic; }
+.field-input::placeholder { color: rgba(var(--tint),0.25); font-style: italic; }
 .field-input:read-only { opacity: 0.55; cursor: default; }
 .field-btn {
   background: var(--green); border: 2px solid var(--gold); color: var(--gold-light);
-  font-family: 'Rye', serif; font-size: 0.65rem; letter-spacing: 0.18em;
+  font-family: var(--font-display), serif; font-size: 0.65rem; letter-spacing: 0.18em;
   text-transform: uppercase; padding: 0 16px; cursor: pointer; border-radius: 2px;
   transition: background 0.2s, color 0.2s; white-space: nowrap;
 }
 .field-btn:hover { background: var(--gold); color: var(--brown-dark); }
 .field-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.field-status { font-family: 'Crimson Text', serif; font-size: 0.85rem; font-style: italic; color: var(--brown-light); min-height: 20px; margin-top: 4px; }
+.field-status { font-family: var(--font-body), serif; font-size: 0.85rem; font-style: italic; color: var(--brown-light); min-height: 20px; margin-top: 4px; }
 .field-status.ok  { color: var(--green-light); }
 .field-status.err { color: var(--red); }
 .field-divider { border: none; border-top: 1px solid var(--brown-mid); margin: 16px 0; }
-.field-hint { font-family: 'Crimson Text', serif; font-size: 0.85rem; font-style: italic; color: var(--brown-light); line-height: 1.6; margin: 2px 0 8px; }
+.field-hint { font-family: var(--font-body), serif; font-size: 0.85rem; font-style: italic; color: var(--brown-light); line-height: 1.6; margin: 2px 0 8px; }
 .field-hint a { color: var(--gold-light); text-decoration: none; border-bottom: 1px dotted var(--gold); }
 .field-hint code {
   font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.85em; font-style: normal;
-  background: rgba(255,255,255,0.08); border: 1px solid var(--brown-mid); color: var(--gold-light);
+  background: rgba(var(--tint),0.08); border: 1px solid var(--brown-mid); color: var(--gold-light);
   border-radius: 2px; padding: 1px 5px;
 }
 .token-saved-row { margin-bottom: 8px; }
 .token-saved-msg {
-  font-family: 'Crimson Text', serif; font-size: 0.88rem; font-style: italic;
+  font-family: var(--font-body), serif; font-size: 0.88rem; font-style: italic;
   color: var(--green-light); margin-bottom: 8px;
 }
-.ghost-btn { font-family: 'Crimson Text', serif; font-size: 0.82rem; padding: 4px 12px; }
+.ghost-btn { font-family: var(--font-body), serif; font-size: 0.82rem; padding: 4px 12px; }
 .ghost-btn:hover { color: var(--gold-light); }
 
 /* ── ESPN DISCOVERY ── */
 .head-help {
-  font-family: 'Crimson Text', serif; font-size: 0.85rem; font-style: italic;
+  font-family: var(--font-body), serif; font-size: 0.85rem; font-style: italic;
   color: var(--brown-light); text-decoration: none; white-space: nowrap;
   border-bottom: 1px dotted var(--brown-light);
 }
 .head-help:hover { color: var(--brown-dark); border-bottom-color: var(--gold); }
-.card-hint { font-family: 'Crimson Text', serif; font-size: 0.85rem; font-style: italic; color: var(--brown-light); margin: -8px 0 14px; }
+.card-hint { font-family: var(--font-body), serif; font-size: 0.85rem; font-style: italic; color: var(--brown-light); margin: -8px 0 14px; }
 .card-hint a { color: var(--gold-light); text-decoration: none; border-bottom: 1px dotted var(--gold); }
 .card-hint a:hover { color: var(--gold); }
 .disc-box { border: 1px solid var(--brown-mid); border-radius: 2px; padding: 12px 14px; margin-bottom: 16px; }
 .disc-head {
-  font-family: 'Rye', serif; font-size: 0.65rem; letter-spacing: 0.18em;
+  font-family: var(--font-display), serif; font-size: 0.65rem; letter-spacing: 0.18em;
   text-transform: uppercase; color: var(--gold); margin-bottom: 10px;
 }
 .disc-row {
   display: flex; align-items: center; gap: 10px; padding: 5px 0;
-  font-family: 'Crimson Text', serif; font-size: 0.95rem; color: var(--cream);
+  font-family: var(--font-body), serif; font-size: 0.95rem; color: var(--cream);
 }
 .disc-row input { accent-color: var(--gold); width: 15px; height: 15px; cursor: pointer; }
 .disc-row label { cursor: pointer; flex: 1; }
@@ -99,12 +99,12 @@
 .danger-card { border-color: var(--red) !important; }
 .danger-btn {
   background: var(--red); border: 2px solid var(--red); color: var(--cream);
-  font-family: 'Rye', serif; font-size: 0.65rem; letter-spacing: 0.18em;
+  font-family: var(--font-display), serif; font-size: 0.65rem; letter-spacing: 0.18em;
   text-transform: uppercase; padding: 0 16px; cursor: pointer; border-radius: 2px;
   transition: opacity 0.2s; white-space: nowrap;
 }
 .danger-btn:hover { opacity: 0.85; }
-.danger-hint { font-family: 'Crimson Text', serif; font-size: 0.85rem; font-style: italic; color: var(--brown-light); margin-bottom: 14px; }
+.danger-hint { font-family: var(--font-body), serif; font-size: 0.85rem; font-style: italic; color: var(--brown-light); margin-bottom: 14px; }
 
 /* ── GUEST STATE ── */
 .guest-card {
@@ -112,7 +112,7 @@
   padding: 32px; text-align: center; margin-top: 48px;
 }
 .guest-card p {
-  font-family: 'Playfair Display', serif; font-style: italic;
+  font-family: var(--font-head), serif; font-style: italic;
   font-size: 1.1rem; color: var(--parchment); margin-bottom: 20px;
 }
 
@@ -268,10 +268,10 @@ footer { padding: 32px 0 20px; }
   </div>
 </div>
 
-<script src="/shared-nav.js?v=20261111"></script>
-  <script src="/shared-auth.js?v=20261111"></script>
-<script src="/shared-core.js?v=20261111"></script>
-<script src="/shared-utils.js?v=20261111"></script>
+<script src="/shared-nav.js?v=20261116"></script>
+  <script src="/shared-auth.js?v=20261116"></script>
+<script src="/shared-core.js?v=20261116"></script>
+<script src="/shared-utils.js?v=20261116"></script>
 <script>
 async function populateFields(user) {
   document.getElementById('field-email').value    = user.email || '';

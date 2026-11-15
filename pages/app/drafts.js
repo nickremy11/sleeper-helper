@@ -384,7 +384,7 @@ function renderDraftTracker() {
       <div style="margin-bottom:14px;">
         <label class="setup-label-rye">Rankings CSV <span class="setup-label-sub">— needs a name column plus a rank and/or tier column; position, team, sleeper_id, adp, target are optional. Columns can be in any order and headers don't need to match exactly.</span></label>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <input type="file" id="csv-file" accept=".csv" style="color:var(--cream);font-family:'Crimson Text',serif;font-size:0.9rem;flex:1;" onchange="loadCSV(event)" />
+          <input type="file" id="csv-file" accept=".csv" style="color:var(--cream);font-family:var(--font-body),serif;font-size:0.9rem;flex:1;" onchange="loadCSV(event)" />
           <button class="setup-btn" onclick="loadSleeperADP()">Use Sleeper ADP</button>
         </div>
         <div class="setup-status" id="csv-status"></div>
@@ -392,7 +392,7 @@ function renderDraftTracker() {
       ${S.auth ? `<hr class="setup-divider" />
       <div style="margin-bottom:14px;">
         <label class="setup-label-rye">My Rankings <span class="setup-label-sub">— select one or more saved sets; multiple sets are combined by average rank</span></label>
-        <div id="myranks-tracker-picker" style="margin-top:6px;font-family:'Crimson Text',serif;font-size:0.9rem;color:var(--brown-light);">Loading…</div>
+        <div id="myranks-tracker-picker" style="margin-top:6px;font-family:var(--font-body),serif;font-size:0.9rem;color:var(--brown-light);">Loading…</div>
         <div class="setup-status" id="myranks-status"></div>
       </div>` : ''}
       <hr class="setup-divider" />
@@ -1005,7 +1005,7 @@ function setTrackerView(view) {
 }
 
 // Position badge colors shared with the board view's left-border accents.
-const TL_POS_COLORS = { QB:'#e05252', RB:'#5cb85c', WR:'#5bc0de', TE:'#e8734b', DEF:'#9b59b6' };
+const TL_POS_COLORS = { QB:'#b3261e', RB:'#2e7d32', WR:'#0e6f8c', TE:'#b8461f', DEF:'#7b3fa0' };
 
 // List view: every loaded player as a row (position, team, tier, aggregate
 // rank, Sleeper ADP, position rank, position ADP, and a colored my-rank-vs-ADP
@@ -1227,7 +1227,7 @@ async function populateMyRanksPicker() {
     }
 
     div.innerHTML = `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-      ${options.map(o => `<label style="display:flex;align-items:center;gap:4px;cursor:pointer;color:var(--cream);font-family:'Crimson Text',serif;font-size:0.9rem;white-space:nowrap;">
+      ${options.map(o => `<label style="display:flex;align-items:center;gap:4px;cursor:pointer;color:var(--cream);font-family:var(--font-body),serif;font-size:0.9rem;white-space:nowrap;">
         <input type="checkbox" value="${esc(o.id)}" onchange="updateMyRanksLoadBtn()" style="accent-color:var(--gold);cursor:pointer;" />
         ${esc(o.label)}
       </label>`).join('')}

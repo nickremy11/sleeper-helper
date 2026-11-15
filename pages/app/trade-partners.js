@@ -13,11 +13,11 @@ function renderTradePartners() {
   setC(`<div>
     ${viewBarHtml('findtrade', 'partners')}
     <div class="section-head"><h2>Trade Partners</h2><div class="section-head-line"></div></div>
-    <div style="font-family:'Crimson Text',serif;font-style:italic;color:var(--brown-light);font-size:0.95rem;margin-bottom:12px;">
+    <div style="font-family:var(--font-body),serif;font-style:italic;color:var(--brown-light);font-size:0.95rem;margin-bottom:12px;">
       Pick a manager to see every league you share with them, then who owns a given player on each side.</div>
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px;">
       ${user1Field}
-      <span style="color:var(--brown-mid);font-family:'Rye',serif;font-size:0.7rem;">vs</span>
+      <span style="color:var(--brown-mid);font-family:var(--font-display),serif;font-size:0.7rem;">vs</span>
       <input id="tp-u2" class="search-input" list="tp-managers" placeholder="${S.userId ? 'Start typing a manager…' : 'Their username…'}" style="${inputStyle}"
         value="${esc(TP.u2Input || '')}" autocomplete="off" onkeydown="if(event.key==='Enter')doTradePartners()" />
       <datalist id="tp-managers"></datalist>

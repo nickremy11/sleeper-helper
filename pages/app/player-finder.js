@@ -240,7 +240,7 @@ function pfRenderResults() {
       <div class="pf-trade-card" id="pf-or-tc-${esc(f.lgId)}">
         <div class="pf-trade-header" onclick="pfToggleOtherRoster('${esc(f.lgId)}', ${f.theirRosterId})">
           <span class="pf-trade-chevron" id="pf-or-chev-${esc(f.lgId)}">›</span>
-          <span style="font-family:'Crimson Text',serif;font-size:0.95rem;color:var(--parchment);">${esc(f.lgName)}</span>
+          <span style="font-family:var(--font-body),serif;font-size:0.95rem;color:var(--parchment);">${esc(f.lgName)}</span>
           <span class="card-meta">${esc(f.ownerName)}</span>
           ${pfOddsSlot(f.lgId, f.theirRosterId)}
         </div>
@@ -262,13 +262,13 @@ function pfTradeTargetsHtml(targets, targetPlayer, myPlayer) {
   const count = targets.length;
   const header = `<div class="sect">Trade Targets — ${count} league${count !== 1 ? 's' : ''} where I have ${esc(myPlayer.full_name)} &amp; ${esc(targetPlayer.full_name)} is available</div>`;
   if (!count) {
-    return header + `<div style="font-family:'Crimson Text',serif;font-size:0.9rem;color:var(--brown-light);font-style:italic;padding:4px 0 8px;">No leagues match — you may already own ${esc(targetPlayer.full_name)}, or ${esc(myPlayer.full_name)} isn't on your roster in any league where ${esc(targetPlayer.full_name)} is owned by someone else.</div>`;
+    return header + `<div style="font-family:var(--font-body),serif;font-size:0.9rem;color:var(--brown-light);font-style:italic;padding:4px 0 8px;">No leagues match — you may already own ${esc(targetPlayer.full_name)}, or ${esc(myPlayer.full_name)} isn't on your roster in any league where ${esc(targetPlayer.full_name)} is owned by someone else.</div>`;
   }
   return header + `<div class="pf-trade-list">${targets.map(t => `
     <div class="pf-trade-card" id="pf-tc-${esc(t.lgId)}">
       <div class="pf-trade-header" onclick="pfToggleComparison('${esc(t.lgId)}', ${t.theirRosterId})">
         <span class="pf-trade-chevron" id="pf-chev-${esc(t.lgId)}">›</span>
-        <span style="font-family:'Crimson Text',serif;font-size:0.95rem;color:var(--parchment);">${esc(t.lgName)}</span>
+        <span style="font-family:var(--font-body),serif;font-size:0.95rem;color:var(--parchment);">${esc(t.lgName)}</span>
         <span class="card-meta">vs. ${esc(t.ownerName)}</span>
         ${pfOddsSlot(t.lgId, t.theirRosterId)}
       </div>

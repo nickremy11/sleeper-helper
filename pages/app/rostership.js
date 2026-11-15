@@ -133,7 +133,7 @@ function rsDrawFull() {
     <div class="rs-lg-panel">
       <div class="rs-lg-header">
         <span class="rs-lg-title">Leagues</span>
-        <span style="font-family:'Crimson Text',serif;font-size:0.85rem;font-style:italic;color:var(--brown-light);" id="rs-lg-info">${nSel}/${S.leagues.length} selected</span>
+        <span style="font-family:var(--font-body),serif;font-size:0.85rem;font-style:italic;color:var(--brown-light);" id="rs-lg-info">${nSel}/${S.leagues.length} selected</span>
         <button class="ghost-btn" onclick="rsSelectAll()">All</button>
         <button class="ghost-btn" onclick="rsDeselectAll()">None</button>
         <button class="ghost-btn" onclick="rsSelectRedraft()">Redraft</button>
@@ -537,14 +537,14 @@ function rsUpdateTable() {
         ${esc(row.name)}<span class="rs-chevron">▾</span>
       </button></td>
       <td><span class="rs-pos rs-pos-${row.pos}">${row.pos}</span></td>
-      <td style="font-family:'Crimson Text',serif;font-size:0.88rem;font-weight:600;letter-spacing:0.04em;color:var(--parchment);">${row.team !== '—' ? esc(row.team) : '—'}</td>
-      <td style="font-family:'Crimson Text',serif;font-size:0.88rem;font-style:italic;color:var(--brown-light);">${expStr}</td>
-      <td style="font-family:'Playfair Display',serif;color:var(--cream);">${row.shares}</td>
+      <td style="font-family:var(--font-body),serif;font-size:0.88rem;font-weight:600;letter-spacing:0.04em;color:var(--parchment);">${row.team !== '—' ? esc(row.team) : '—'}</td>
+      <td style="font-family:var(--font-body),serif;font-size:0.88rem;font-style:italic;color:var(--brown-light);">${expStr}</td>
+      <td style="font-family:var(--font-head),serif;color:var(--cream);">${row.shares}</td>
       <td><div class="rs-pct-wrap">
         <div class="rs-pct-bar"><div class="rs-pct-fill" style="width:${barW}%"></div></div>
         <span class="rs-pct-txt">${pctStr}%</span>
       </div></td>
-      <td style="font-family:'Playfair Display',serif;color:var(--cream);">${valStr}</td>
+      <td style="font-family:var(--font-head),serif;color:var(--cream);">${valStr}</td>
     </tr>${expandHtml}`;
   }).join('');
 

@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>League Analyzer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Rye&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared-styles.css?v=20261115">
+  <link href="https://fonts.googleapis.com/css2?family=Graduate&family=Bitter:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/shared-styles.css?v=20261116">
   <style>
     /* Viewport-relative so a wide screen actually gets used — the roster
        columns inside the cards are what needs the room (player names were
@@ -28,7 +28,7 @@
 
     /* ── Controls row (format flags) ── */
     .az-controls-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
-    .az-th-sub { font-family: 'Crimson Text', serif; font-size: 0.62rem; font-weight: 400; letter-spacing: 0; text-transform: none; opacity: 0.7; }
+    .az-th-sub { font-family: var(--font-body), serif; font-size: 0.62rem; font-weight: 400; letter-spacing: 0; text-transform: none; opacity: 0.7; }
 
     /* ── Scrollable table wrapper ── */
     .az-table-wrap { overflow-x: auto; }
@@ -36,15 +36,15 @@
     /* ── Table header row ── */
     .az-table-header {
       display: grid; align-items: center;
-      background: #1e0e05; border: 1px solid var(--brown-mid); border-radius: 3px 3px 0 0;
+      background: var(--brown-dark); border: 1px solid var(--brown-mid); border-radius: 3px 3px 0 0;
       padding: 8px 14px; min-width: 800px;
     }
     .az-th-team {
-      font-family: 'Rye', serif; font-size: 0.62rem; letter-spacing: 0.18em;
+      font-family: var(--font-display), serif; font-size: 0.62rem; letter-spacing: 0.18em;
       text-transform: uppercase; color: var(--gold);
     }
     .az-th {
-      font-family: 'Rye', serif; font-size: 0.62rem; letter-spacing: 0.16em;
+      font-family: var(--font-display), serif; font-size: 0.62rem; letter-spacing: 0.16em;
       text-transform: uppercase; color: var(--gold); text-align: center;
     }
     .az-th-sortable { cursor: pointer; user-select: none; transition: color 0.15s; }
@@ -63,14 +63,14 @@
 
     .az-card-row {
       display: grid; align-items: center;
-      padding: 10px 14px; border-bottom: 1px dashed rgba(255,255,255,0.05);
+      padding: 10px 14px; border-bottom: 1px dashed rgba(var(--tint),0.05);
     }
-    details.az-card[open] .az-card-row { border-bottom-color: rgba(255,255,255,0.1); }
-    .az-card-row:hover { background: rgba(255,255,255,0.02); }
+    details.az-card[open] .az-card-row { border-bottom-color: rgba(var(--tint),0.1); }
+    .az-card-row:hover { background: rgba(var(--tint),0.02); }
 
     .az-team-col { display: flex; align-items: center; gap: 10px; overflow: hidden; }
     .az-rank-num {
-      font-family: 'Rye', serif; font-size: 0.62rem; letter-spacing: 0.08em;
+      font-family: var(--font-display), serif; font-size: 0.62rem; letter-spacing: 0.08em;
       color: var(--brown-light); min-width: 24px; flex-shrink: 0;
     }
     .az-rank-1 { color: var(--gold-light); }
@@ -78,41 +78,41 @@
     .az-rank-3 { color: var(--parchment); opacity: 0.85; }
     .az-team-info { min-width: 0; }
     .az-team-name {
-      font-family: 'Playfair Display', serif; font-weight: 700; font-size: 0.9rem;
+      font-family: var(--font-head), serif; font-weight: 700; font-size: 0.9rem;
       color: var(--cream); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    .az-owner-name { font-family: 'Crimson Text', serif; font-size: 0.78rem; color: var(--brown-light); }
+    .az-owner-name { font-family: var(--font-body), serif; font-size: 0.78rem; color: var(--brown-light); }
 
     .az-rank-cell { text-align: center; }
     /* Record / All-Play columns — plain values, not rank badges */
     .az-rec-val {
-      display: block; font-family: 'Crimson Text', serif; font-weight: 600;
+      display: block; font-family: var(--font-body), serif; font-weight: 600;
       font-size: 0.84rem; color: var(--cream); white-space: nowrap;
     }
     .az-rec-sub {
-      display: block; font-family: 'Crimson Text', serif; font-size: 0.66rem;
+      display: block; font-family: var(--font-body), serif; font-size: 0.66rem;
       color: var(--brown-light); margin-top: 1px;
     }
     .az-rank-badge {
-      display: inline-block; font-family: 'Crimson Text', serif; font-weight: 600;
+      display: inline-block; font-family: var(--font-body), serif; font-weight: 600;
       font-size: 0.82rem; padding: 2px 6px; border-radius: 2px; min-width: 28px;
       text-align: center; color: var(--cream);
     }
     .az-chances-badge {
-      font-family: 'Crimson Text', serif; font-size: 0.8rem; font-style: italic;
+      font-family: var(--font-body), serif; font-size: 0.8rem; font-style: italic;
       white-space: nowrap;
     }
-    .az-chances-lock  { color: #5cb85c; font-weight: 700; font-style: normal; }
+    .az-chances-lock  { color: #2e7d32; font-weight: 700; font-style: normal; }
     .az-chances-good  { color: var(--gold-light); }
     .az-chances-nervy { color: var(--parchment); }
     .az-chances-long  { color: var(--brown-light); }
 
     /* ── Playoff progress bar ── */
     .az-playoff-cell { padding: 0 8px; display: flex; flex-direction: column; justify-content: center; gap: 3px; }
-    .az-playoff-bar-wrap { width: 100%; height: 5px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; }
-    .az-bye-line { font-family: 'Crimson Text', serif; font-size: 0.68rem; font-style: italic; color: var(--brown-light); white-space: nowrap; }
+    .az-playoff-bar-wrap { width: 100%; height: 5px; background: rgba(var(--tint),0.08); border-radius: 3px; overflow: hidden; }
+    .az-bye-line { font-family: var(--font-body), serif; font-size: 0.68rem; font-style: italic; color: var(--brown-light); white-space: nowrap; }
     .az-playoff-bar-fill { height: 100%; border-radius: 3px; opacity: 0.8; }
-    .az-lastplace-hi  { color: #e05252; opacity: 0.95; }
+    .az-lastplace-hi  { color: #b3261e; opacity: 0.95; }
     .az-lastplace-mid { color: var(--gold-light); opacity: 0.95; }
     .az-lastplace-lo  { color: var(--brown-light); }
 
@@ -129,32 +129,32 @@
        narrow. auto-fit collapses the unused tracks and lets the sections that
        do exist absorb the space. Identical when every track is filled. */
     .az-card-body {
-      padding: 14px 16px 16px; border-top: 1px solid rgba(255,255,255,0.06);
+      padding: 14px 16px 16px; border-top: 1px solid rgba(var(--tint),0.06);
       display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0 16px;
     }
     .az-pos-section { margin-bottom: 14px; }
     .az-pos-header {
       display: flex; align-items: center; gap: 8px;
-      padding: 5px 0 5px; border-bottom: 1px dashed rgba(255,255,255,0.08); margin-bottom: 5px;
+      padding: 5px 0 5px; border-bottom: 1px dashed rgba(var(--tint),0.08); margin-bottom: 5px;
     }
     .az-pos-rank-badge {
-      font-family: 'Crimson Text', serif; font-weight: 600; font-size: 0.76rem;
+      font-family: var(--font-body), serif; font-weight: 600; font-size: 0.76rem;
       padding: 1px 5px; border-radius: 2px; color: var(--cream);
     }
 
     /* ── Player rows ── */
-    .rs-pos { font-family: 'Crimson Text', serif; font-size: 0.82rem; font-weight: 700; letter-spacing: 0.06em; padding: 2px 7px; min-width: 32px; text-align: center; }
-    .rs-pos-QB   { background: rgba(224,82,82,0.18);   color: #e05252; }
-    .rs-pos-RB   { background: rgba(92,184,92,0.18);   color: #5cb85c; }
-    .rs-pos-WR   { background: rgba(91,192,222,0.18);  color: #5bc0de; }
-    .rs-pos-TE   { background: rgba(232,115,75,0.18);  color: #e8734b; }
-    .rs-pos-DL   { background: rgba(155,89,182,0.18);  color: #9b59b6; }
-    .rs-pos-LB   { background: rgba(41,128,185,0.18);  color: #3498db; }
-    .rs-pos-DB   { background: rgba(26,188,156,0.18);  color: #1abc9c; }
-    .rs-pos-PICK { background: rgba(210,205,195,0.14); color: #d8d5ce; }
+    .rs-pos { font-family: var(--font-body), serif; font-size: 0.82rem; font-weight: 700; letter-spacing: 0.06em; padding: 2px 7px; min-width: 32px; text-align: center; }
+    .rs-pos-QB   { background: rgba(224,82,82,0.18);   color: #b3261e; }
+    .rs-pos-RB   { background: rgba(92,184,92,0.18);   color: #2e7d32; }
+    .rs-pos-WR   { background: rgba(91,192,222,0.18);  color: #0e6f8c; }
+    .rs-pos-TE   { background: rgba(232,115,75,0.18);  color: #b8461f; }
+    .rs-pos-DL   { background: rgba(155,89,182,0.18);  color: #7b3fa0; }
+    .rs-pos-LB   { background: rgba(41,128,185,0.18);  color: #1f5f9a; }
+    .rs-pos-DB   { background: rgba(26,188,156,0.18);  color: #0f7a66; }
+    .rs-pos-PICK { background: rgba(var(--tint),0.14); color: #5b6259; }
 
-    .pf-player-row { display: flex; align-items: center; gap: 6px; padding: 3px 4px; border-radius: 2px; margin-bottom: 2px; font-family: 'Crimson Text', serif; font-size: 0.86rem; color: var(--parchment); border-left: 2px solid transparent; }
-    .pf-player-row.starter { background: rgba(255,255,255,0.055); border-left-color: var(--gold); }
+    .pf-player-row { display: flex; align-items: center; gap: 6px; padding: 3px 4px; border-radius: 2px; margin-bottom: 2px; font-family: var(--font-body), serif; font-size: 0.86rem; color: var(--parchment); border-left: 2px solid transparent; }
+    .pf-player-row.starter { background: rgba(var(--tint),0.055); border-left-color: var(--gold); }
     .pf-player-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .pf-player-val  { font-size: 0.8rem; color: var(--brown-light); flex-shrink: 0; }
     .pf-player-row.pf-ranked .pf-player-name { flex: 0 1 auto; }
@@ -170,7 +170,7 @@
     /* ── League switcher ── */
     .az-switcher-bar { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 14px; align-items: center; }
     .az-trade-btn {
-      font-family: 'Rye', serif; font-size: 0.62rem; letter-spacing: 0.14em;
+      font-family: var(--font-display), serif; font-size: 0.62rem; letter-spacing: 0.14em;
       text-transform: uppercase; padding: 7px 13px; border: 1.5px solid var(--brown-mid);
       border-radius: 2px; background: transparent; color: var(--brown-mid);
       cursor: pointer; transition: all 0.15s; white-space: nowrap; display: none;
@@ -185,20 +185,20 @@
     }
     .az-trade-panel-hdr {
       padding: 9px 13px; border-bottom: 1px solid var(--brown-mid);
-      font-family: 'Rye', serif; font-size: 0.61rem; letter-spacing: 0.16em;
+      font-family: var(--font-display), serif; font-size: 0.61rem; letter-spacing: 0.16em;
       text-transform: uppercase; color: var(--brown-light);
     }
     .az-trade-item {
-      display: block; padding: 9px 13px; border-bottom: 1px dashed rgba(255,255,255,0.05);
-      font-family: 'Crimson Text', serif; font-size: 0.9rem; color: var(--parchment);
+      display: block; padding: 9px 13px; border-bottom: 1px dashed rgba(var(--tint),0.05);
+      font-family: var(--font-body), serif; font-size: 0.9rem; color: var(--parchment);
       text-decoration: none; transition: background 0.1s;
     }
     .az-trade-item:last-child { border-bottom: none; }
-    .az-trade-item:hover { background: rgba(255,255,255,0.06); color: var(--cream); }
+    .az-trade-item:hover { background: rgba(var(--tint),0.06); color: var(--cream); }
     .az-trade-item-sub { font-size: 0.74rem; color: var(--brown-light); margin-top: 1px; }
     .az-switcher-wrap { position: relative; }
     .az-switcher-btn {
-      font-family: 'Rye', serif; font-size: 0.62rem; letter-spacing: 0.14em;
+      font-family: var(--font-display), serif; font-size: 0.62rem; letter-spacing: 0.14em;
       text-transform: uppercase; padding: 7px 13px; border: 1.5px solid var(--brown-mid);
       border-radius: 2px; background: transparent; color: var(--brown-mid);
       cursor: pointer; transition: all 0.15s; white-space: nowrap;
@@ -212,30 +212,30 @@
     .az-switcher-search {
       width: 100%; padding: 9px 12px; background: rgba(0,0,0,0.25);
       border: none; border-bottom: 1px solid var(--brown-mid);
-      color: var(--cream); font-family: 'Crimson Text', serif; font-size: 0.95rem;
+      color: var(--cream); font-family: var(--font-body), serif; font-size: 0.95rem;
       outline: none; border-radius: 3px 3px 0 0;
     }
     .az-switcher-search::placeholder { color: var(--brown-light); }
     .az-switcher-list { max-height: 300px; overflow-y: auto; }
     .az-switcher-item {
-      display: block; padding: 9px 14px; font-family: 'Crimson Text', serif;
+      display: block; padding: 9px 14px; font-family: var(--font-body), serif;
       font-size: 0.9rem; color: var(--parchment); text-decoration: none;
-      border-bottom: 1px dashed rgba(255,255,255,0.05); transition: background 0.1s;
+      border-bottom: 1px dashed rgba(var(--tint),0.05); transition: background 0.1s;
     }
     .az-switcher-item:last-child { border-bottom: none; }
-    .az-switcher-item:hover { background: rgba(255,255,255,0.06); color: var(--cream); }
+    .az-switcher-item:hover { background: rgba(var(--tint),0.06); color: var(--cream); }
     .az-switcher-item.current { color: var(--gold-light); font-weight: 600; background: rgba(201,150,42,0.07); pointer-events: none; }
-    .az-switcher-empty { padding: 12px 14px; font-family: 'Crimson Text', serif; font-size: 0.86rem; color: var(--brown-light); font-style: italic; }
+    .az-switcher-empty { padding: 12px 14px; font-family: var(--font-body), serif; font-size: 0.86rem; color: var(--brown-light); font-style: italic; }
     /* Matches the (ESPN) tag trade-analyzer.html's league picker already uses. */
     .az-switcher-tag {
-      font-family: 'Rye', serif; font-size: 0.61rem; letter-spacing: 0.1em;
+      font-family: var(--font-display), serif; font-size: 0.61rem; letter-spacing: 0.1em;
       color: var(--brown-light); margin-left: 7px; vertical-align: middle;
     }
 
     /* ── Trade Targets button + panel ── */
     .az-targets-wrap { position: relative; }
     .az-targets-btn {
-      font-family: 'Rye', serif; font-size: 0.62rem; letter-spacing: 0.14em;
+      font-family: var(--font-display), serif; font-size: 0.62rem; letter-spacing: 0.14em;
       text-transform: uppercase; padding: 7px 13px; border: 1.5px solid var(--brown-mid);
       border-radius: 2px; background: transparent; color: var(--brown-mid);
       cursor: pointer; transition: all 0.15s; white-space: nowrap;
@@ -249,7 +249,7 @@
     }
     .az-tgt-hdr {
       padding: 9px 13px; border-bottom: 1px solid var(--brown-mid);
-      font-family: 'Rye', serif; font-size: 0.61rem; letter-spacing: 0.16em;
+      font-family: var(--font-display), serif; font-size: 0.61rem; letter-spacing: 0.16em;
       text-transform: uppercase; color: var(--brown-light); display: flex; justify-content: space-between; align-items: center;
     }
     .az-tgt-myrow {
@@ -257,44 +257,44 @@
       display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
     }
     .az-tgt-myname {
-      font-family: 'Playfair Display', serif; font-size: 0.9rem; font-weight: 700; color: var(--cream);
+      font-family: var(--font-head), serif; font-size: 0.9rem; font-weight: 700; color: var(--cream);
     }
     .az-tgt-arch {
-      font-family: 'Crimson Text', serif; font-size: 0.75rem; font-weight: 700; padding: 2px 8px;
+      font-family: var(--font-body), serif; font-size: 0.75rem; font-weight: 700; padding: 2px 8px;
       border-radius: 2px; text-transform: uppercase; letter-spacing: 0.05em;
     }
-    .az-tgt-arch-c { background: rgba(92,184,92,0.18); color: #5cb85c; }
-    .az-tgt-arch-r { background: rgba(91,192,222,0.18); color: #5bc0de; }
-    .az-tgt-arch-u { background: rgba(210,205,195,0.14); color: #d8d5ce; }
+    .az-tgt-arch-c { background: rgba(92,184,92,0.18); color: #2e7d32; }
+    .az-tgt-arch-r { background: rgba(91,192,222,0.18); color: #0e6f8c; }
+    .az-tgt-arch-u { background: rgba(var(--tint),0.14); color: #5b6259; }
     .az-tgt-needs {
       padding: 6px 13px 8px; border-bottom: 1px solid var(--brown-mid);
       display: flex; gap: 5px; flex-wrap: wrap; align-items: center;
     }
     .az-tgt-needs-lbl {
-      font-family: 'Rye', serif; font-size: 0.60rem; letter-spacing: 0.14em; text-transform: uppercase;
+      font-family: var(--font-display), serif; font-size: 0.60rem; letter-spacing: 0.14em; text-transform: uppercase;
       color: var(--brown-light); flex-shrink: 0; margin-right: 2px;
     }
     .az-tgt-need-chip {
-      font-family: 'Crimson Text', serif; font-size: 0.76rem; font-weight: 700;
+      font-family: var(--font-body), serif; font-size: 0.76rem; font-weight: 700;
       padding: 2px 7px; border-radius: 2px;
     }
-    .az-tgt-need-full  { background: rgba(224,82,82,0.22); color: #e05252; }
-    .az-tgt-need-light { background: rgba(232,195,100,0.18); color: #e8c364; }
+    .az-tgt-need-full  { background: rgba(224,82,82,0.22); color: #b3261e; }
+    .az-tgt-need-light { background: rgba(232,195,100,0.18); color: #8a5a00; }
     .az-tgt-item {
-      display: block; padding: 9px 13px; border-bottom: 1px dashed rgba(255,255,255,0.05);
+      display: block; padding: 9px 13px; border-bottom: 1px dashed rgba(var(--tint),0.05);
       text-decoration: none; transition: background 0.1s; cursor: pointer;
     }
     .az-tgt-item:last-child { border-bottom: none; }
-    .az-tgt-item:hover { background: rgba(255,255,255,0.05); }
+    .az-tgt-item:hover { background: rgba(var(--tint),0.05); }
     .az-tgt-item-top {
       display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px;
     }
     .az-tgt-tname {
-      font-family: 'Playfair Display', serif; font-size: 0.88rem; font-weight: 700; color: var(--cream);
+      font-family: var(--font-head), serif; font-size: 0.88rem; font-weight: 700; color: var(--cream);
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .az-tgt-analyze {
-      font-family: 'Rye', serif; font-size: 0.60rem; letter-spacing: 0.1em; text-transform: uppercase;
+      font-family: var(--font-display), serif; font-size: 0.60rem; letter-spacing: 0.1em; text-transform: uppercase;
       padding: 3px 8px; border: 1px solid var(--brown-mid); border-radius: 2px;
       color: var(--brown-light); background: transparent; white-space: nowrap; flex-shrink: 0;
       text-decoration: none; transition: all 0.12s;
@@ -302,20 +302,20 @@
     .az-tgt-analyze:hover { border-color: var(--gold); color: var(--gold); }
     .az-tgt-reasons { display: flex; flex-direction: column; gap: 3px; }
     .az-tgt-reason {
-      font-family: 'Crimson Text', serif; font-size: 0.82rem; color: var(--parchment);
+      font-family: var(--font-body), serif; font-size: 0.82rem; color: var(--parchment);
       display: flex; align-items: baseline; gap: 5px;
     }
     .az-tgt-reason-sub { font-size: 0.73rem; color: var(--brown-light); }
     .az-tgt-oddsline {
-      font-family: 'Crimson Text', serif; font-size: 0.73rem; color: var(--brown-light); margin-top: 3px;
+      font-family: var(--font-body), serif; font-size: 0.73rem; color: var(--brown-light); margin-top: 3px;
     }
     .az-tgt-empty {
-      padding: 14px 13px; font-family: 'Crimson Text', serif; font-size: 0.88rem;
+      padding: 14px 13px; font-family: var(--font-body), serif; font-size: 0.88rem;
       color: var(--brown-light); font-style: italic;
     }
     .az-tgt-nopref {
       padding: 8px 13px; background: rgba(201,150,42,0.06); border-bottom: 1px solid var(--brown-mid);
-      font-family: 'Crimson Text', serif; font-size: 0.8rem; color: var(--gold); font-style: italic;
+      font-family: var(--font-body), serif; font-size: 0.8rem; color: var(--gold); font-style: italic;
     }
 
     /* ── MOBILE ── */
@@ -346,7 +346,7 @@
 <body>
   <div class="page-wrap">
     <div class="banner">
-      <div style="position:relative;z-index:1;padding:18px 20px;display:flex;justify-content:space-between;align-items:flex-start;">
+      <div class="banner-inner">
         <div class="banner-text">
           <a href="/" class="banner-back" id="az-back">← Sleeper Helper</a>
           <h1>League <span>Analyzer</span></h1>
@@ -386,11 +386,11 @@
     </div>
   </div>
 
-  <script src="/shared-nav.js?v=20261111"></script>
-  <script src="/shared-core.js?v=20261113"></script>
+  <script src="/shared-nav.js?v=20261116"></script>
+  <script src="/shared-core.js?v=20261116"></script>
   <script src="/shared-utils.js?v=20261116"></script>
-  <script src="/league-engine.js?v=20261111"></script>
-  <script src="/shared-auth.js?v=20261111"></script>
+  <script src="/league-engine.js?v=20261116"></script>
+  <script src="/shared-auth.js?v=20261116"></script>
   <script>
   'use strict';
 
@@ -1509,7 +1509,7 @@
             const ew  = team.expWins   ?? team.wins   ?? 0;
             const el  = team.expLosses ?? team.losses ?? 0;
             const pct = Math.round((team.bigPoolPct ?? 0) * 100);
-            const color = pct >= 70 ? '#5cb85c' : pct >= 30 ? 'var(--gold-light)' : '#e05252';
+            const color = pct >= 70 ? '#2e7d32' : pct >= 30 ? 'var(--gold-light)' : '#b3261e';
             return `<div class="az-rank-cell az-playoff-cell">
               <span class="az-chances-badge" style="color:${color};font-weight:700;">${ew.toFixed(1)}-${el.toFixed(1)}</span>
               <div class="az-playoff-bar-wrap"><div class="az-playoff-bar-fill" style="width:${pct}%;background:${color};"></div></div>
@@ -1519,12 +1519,12 @@
           if (team.playoffOdds != null) {
             const p = team.playoffOdds;
             let label, color, weight, barPct;
-            if (p >= 0.995)      { label = 'Lock'; color = '#5cb85c'; weight = '700'; barPct = 100; }
-            else if (p <= 0.005) { label = 'Out';  color = '#e05252'; weight = '700'; barPct = 0; }
+            if (p >= 0.995)      { label = 'Lock'; color = '#2e7d32'; weight = '700'; barPct = 100; }
+            else if (p <= 0.005) { label = 'Out';  color = '#b3261e'; weight = '700'; barPct = 0; }
             else {
               barPct = Math.round(p * 100);
               label  = barPct + '%';
-              color  = p >= 0.70 ? '#5cb85c' : p >= 0.30 ? 'var(--gold-light)' : '#e05252';
+              color  = p >= 0.70 ? '#2e7d32' : p >= 0.30 ? 'var(--gold-light)' : '#b3261e';
               weight = p >= 0.70 || p < 0.30 ? '700' : '400';
             }
             const byePct = Math.round((team.byeOdds ?? 0) * 100);
@@ -1549,7 +1549,7 @@
         const r  = (ranks[col.key] || {})[team.rosterId];
         if (!r) return `<div class="az-rank-cell"><span class="az-rank-badge" style="background:rgba(0,0,0,0.2);">—</span></div>`;
         const bg = rankColor(r, teams.length);
-        const outline = col.key === sortKey ? 'box-shadow:0 0 0 1px rgba(255,255,255,0.25);' : '';
+        const outline = col.key === sortKey ? 'box-shadow:0 0 0 1px rgba(var(--tint),0.25);' : '';
         return `<div class="az-rank-cell"><span class="az-rank-badge" style="background:${bg};${outline}">${r}</span></div>`;
       }).join('');
 
@@ -2107,7 +2107,7 @@
         }).join('');
 
     return `
-      <div class="az-tgt-hdr"><span>Trade Targets</span><span style="font-family:'Crimson Text',serif;font-size:0.72rem;font-weight:400;letter-spacing:0;text-transform:none;color:var(--brown-light);font-style:italic;">${crData.loaded ? 'Projections' : 'ADP'}</span></div>
+      <div class="az-tgt-hdr"><span>Trade Targets</span><span style="font-family:var(--font-body),serif;font-size:0.72rem;font-weight:400;letter-spacing:0;text-transform:none;color:var(--brown-light);font-style:italic;">${crData.loaded ? 'Projections' : 'ADP'}</span></div>
       <div class="az-tgt-myrow">
         <span class="az-tgt-myname">${esc(myDisplay)}</span>
         ${archHtml}
@@ -2115,7 +2115,7 @@
       ${myPref ? `<div class="az-tgt-needs">
         <span class="az-tgt-needs-lbl">Needs</span>
         ${needChips}${flexChip}
-        ${noNeeds ? '<span style="font-family:\'Crimson Text\',serif;font-size:0.8rem;color:var(--brown-light);font-style:italic;">None detected</span>' : ''}
+        ${noNeeds ? '<span style="font-family:var(--font-body),serif;font-size:0.8rem;color:var(--brown-light);font-style:italic;">None detected</span>' : ''}
       </div>` : ''}
       ${noPrefNote}
       ${targetsHtml}

@@ -59,7 +59,7 @@ async function renderTrades() {
     } else {
       setC(`<div class="empty-state">
         <p>Paste your Sleeper auth token above to see pending trades</p>
-        <p style="margin-top:10px;font-size:0.85rem;color:var(--brown-light);font-family:'Crimson Text',serif;font-style:italic;">
+        <p style="margin-top:10px;font-size:0.85rem;color:var(--brown-light);font-family:var(--font-body),serif;font-style:italic;">
           sleeper.com → DevTools → Network → any graphql request → Authorization header
         </p>
       </div>`);

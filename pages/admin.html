@@ -4,8 +4,8 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Site Lead — FF Historian</title>
-<link href="https://fonts.googleapis.com/css2?family=Rye&family=Playfair+Display:ital,wght@0,700;1,400&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/shared-styles.css?v=20261111" />
+<link href="https://fonts.googleapis.com/css2?family=Graduate&family=Bitter:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/shared-styles.css?v=20261116" />
 <style>
 
 .banner-inner {
@@ -25,37 +25,37 @@
   padding: 20px 24px; box-shadow: 4px 4px 0 var(--brown-mid);
 }
 
-table.accounts { width: 100%; border-collapse: collapse; font-family: 'Crimson Text', serif; }
+table.accounts { width: 100%; border-collapse: collapse; font-family: var(--font-body), serif; }
 table.accounts th {
-  font-family: 'Rye', serif; font-size: 0.64rem; letter-spacing: 0.15em; text-transform: uppercase;
+  font-family: var(--font-display), serif; font-size: 0.64rem; letter-spacing: 0.15em; text-transform: uppercase;
   color: var(--gold); text-align: left; padding: 0 10px 10px; border-bottom: 1px solid var(--brown-mid);
 }
-table.accounts td { padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.06); color: var(--cream); font-size: 0.92rem; vertical-align: middle; }
+table.accounts td { padding: 10px; border-bottom: 1px solid rgba(var(--tint),0.06); color: var(--cream); font-size: 0.92rem; vertical-align: middle; }
 table.accounts tr:last-child td { border-bottom: none; }
-.badge { font-family: 'Rye', serif; letter-spacing: 0.1em; padding: 3px 8px; white-space: nowrap; }
+.badge { font-family: var(--font-display), serif; letter-spacing: 0.1em; padding: 3px 8px; white-space: nowrap; }
 .badge.ok    { background: var(--green); color: var(--gold-light); }
 .badge.pend  { background: var(--brown-mid); color: var(--brown-light); }
 .badge.admin { background: var(--gold); color: var(--brown-dark); }
 .admin-del-btn {
   background: var(--red); border: 1px solid var(--red); color: var(--cream);
-  font-family: 'Rye', serif; font-size: 0.64rem; letter-spacing: 0.12em;
+  font-family: var(--font-display), serif; font-size: 0.64rem; letter-spacing: 0.12em;
   text-transform: uppercase; padding: 5px 10px; cursor: pointer; border-radius: 2px;
   transition: opacity 0.2s; white-space: nowrap;
 }
 .admin-del-btn:hover { opacity: 0.85; }
 .admin-del-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .admin-empty, .admin-loading, .admin-err {
-  font-family: 'Crimson Text', serif; font-style: italic; color: var(--brown-light); padding: 20px 0; text-align: center;
+  font-family: var(--font-body), serif; font-style: italic; color: var(--brown-light); padding: 20px 0; text-align: center;
 }
 .admin-err { color: var(--red); }
-.admin-count { font-family: 'Crimson Text', serif; font-size: 0.85rem; color: var(--brown-light); font-style: italic; margin-bottom: 14px; }
+.admin-count { font-family: var(--font-body), serif; font-size: 0.85rem; color: var(--brown-light); font-style: italic; margin-bottom: 14px; }
 
 .guest-card, .denied-card {
   background: var(--brown-dark); border: 2px solid var(--gold); border-radius: 2px;
   padding: 32px; text-align: center; margin-top: 48px;
 }
 .guest-card p, .denied-card p {
-  font-family: 'Playfair Display', serif; font-style: italic;
+  font-family: var(--font-head), serif; font-style: italic;
   font-size: 1.1rem; color: var(--parchment); margin-bottom: 20px;
 }
 
@@ -111,9 +111,9 @@ footer { padding: 32px 0 20px; }
   </div>
 </div>
 
-<script src="/shared-nav.js?v=20261111"></script>
-  <script src="/shared-core.js?v=20261111"></script>
-<script src="/shared-auth.js?v=20261111"></script>
+<script src="/shared-nav.js?v=20261116"></script>
+  <script src="/shared-core.js?v=20261116"></script>
+<script src="/shared-auth.js?v=20261116"></script>
 <script>
 
 

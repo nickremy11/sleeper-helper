@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="robots" content="noindex, nofollow" />
 <title>Data Room</title>
-<link href="https://fonts.googleapis.com/css2?family=Rye&family=Playfair+Display:ital@1&family=Crimson+Text:wght@400;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="https://helper.ffhistorian.com/shared-styles.css?v=20261111" />
+<link href="https://fonts.googleapis.com/css2?family=Graduate&family=Bitter:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://helper.ffhistorian.com/shared-styles.css?v=20261116" />
 <style>
 :root { --num: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif; }
 
@@ -14,21 +14,21 @@ body { background: var(--cream); }
 
 
 .banner-inner { max-width: 1600px; margin: 0 auto; padding: 18px 24px 14px; }
-.banner a { font-family: 'Rye', serif; font-size: .55rem; letter-spacing: .3em; text-transform: uppercase; color: var(--gold-light); text-decoration: none; opacity: .7; }
+.banner a { font-family: var(--font-display), serif; font-size: .55rem; letter-spacing: .3em; text-transform: uppercase; color: var(--gold-light); text-decoration: none; opacity: .7; }
 .banner h1 { font-size: clamp(1.2rem, 3vw, 1.7rem); margin-top: 6px; }
 
-.banner p { font-family: 'Playfair Display', serif; font-style: italic; font-size: .85rem; color: var(--parchment); opacity: .75; margin-top: 4px; }
+.banner p { font-family: var(--font-head), serif; font-style: italic; font-size: .85rem; color: var(--parchment); opacity: .75; margin-top: 4px; }
 
 .main { max-width: 1600px; margin: 0 auto; padding: 20px 24px 60px; }
 
 .panel { background: var(--brown-dark); border: 2px solid var(--brown-mid); box-shadow: 4px 4px 0 var(--brown-mid); color: var(--parchment); padding: 14px 18px; margin-bottom: 18px; }
-.panel > summary { cursor: pointer; font-family: 'Rye', serif; font-size: .62rem; letter-spacing: .18em; text-transform: uppercase; color: var(--gold-light); list-style: none; }
+.panel > summary { cursor: pointer; font-family: var(--font-display), serif; font-size: .62rem; letter-spacing: .18em; text-transform: uppercase; color: var(--gold-light); list-style: none; }
 .panel > summary::-webkit-details-marker { display: none; }
 .panel > summary::before { content: '▸ '; }
 .panel[open] > summary::before { content: '▾ '; }
 .panel-body { margin-top: 12px; display: grid; gap: 12px; }
 .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-.lbl { font-family: 'Rye', serif; font-size: .5rem; letter-spacing: .15em; text-transform: uppercase; color: var(--gold); min-width: 64px; }
+.lbl { font-family: var(--font-display), serif; font-size: .5rem; letter-spacing: .15em; text-transform: uppercase; color: var(--gold); min-width: 64px; }
 .note { font-size: .9rem; font-style: italic; color: var(--brown-light); }
 .panel .note { color: var(--parchment); opacity: .75; }
 .err { color: #e07a6a; font-style: normal; }
@@ -40,7 +40,7 @@ select, input[type=text], input[type=number] {
 }
 input[type=file] { font-family: var(--num); font-size: .8rem; color: var(--parchment); max-width: 100%; }
 .btn {
-  font-family: 'Rye', serif; font-size: .52rem; letter-spacing: .14em; text-transform: uppercase;
+  font-family: var(--font-display), serif; font-size: .52rem; letter-spacing: .14em; text-transform: uppercase;
   background: var(--green); color: var(--gold-light); border: 1px solid var(--gold); padding: 7px 14px; cursor: pointer; border-radius: 2px;
 }
 .btn:hover:not(:disabled) { background: var(--gold); color: var(--brown-dark); }
