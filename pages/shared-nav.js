@@ -15,6 +15,7 @@ const SH_NAV = [
   { id: 'guide', label: 'Guide', tab: 'guide' },
   { id: 'my-leagues', label: 'My Leagues', items: [
     { label: 'League Summaries', tab: 'leagues' },
+    { label: 'Scoreboard',       href: '/scoreboard' },
     { label: 'League Analyzer',  href: '/analyzer', newTab: true },
     { label: 'Lineups',          tab: 'lineups',    also: ['ranksgrid'] },
     { label: 'Players',          tab: 'rostership', also: ['player'] },

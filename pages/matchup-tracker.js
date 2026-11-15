@@ -1,4 +1,4 @@
-// ── Live Matchups engine (rootforme.html) ────────────────────────────────────
+// ── Live Matchups engine (scoreboard.html) ────────────────────────────────────
 // Pure functions, no DOM. Each starter's final = what he has now + his projection
 // scaled to the part of his game still to play; each side is a normal around the
 // sum of those; a matchup's win % is the margin's normal CDF. A closed form on
@@ -146,7 +146,39 @@ function lmSummary(rows) {
   return s;
 }
 
-const api = { LM_TIERS, lmPhi, lmLine, lmBestLineup, lmProjectSide, lmTier, lmEvaluate, lmMedianOdds, lmSummary };
+// Root For Me's score per player: of the $ riding on him across CONTENDING
+// leagues, the share that's on my side (0 = root hard against, 100 = root hard
+// for). With no $ set anywhere it's 100 if I start him somewhere, else 0.
+// ONE definition: Root For Me's game cards and the Scoreboard's lineups both
+// read it. `results` are fetchLeagueMatchup() rows; best ball counts the whole
+// roster, as it scores whoever comes out best.
+// → {pid: {score, mine, theirs}} (counts of matchups on each side).
+function lmRootScores(results, prefs) {
+  const acc = {};
+  for (const r of results || []) {
+    const pref = prefs?.[r.league?.league_id];
+    if (!pref?.contender) continue;
+    const value = +pref.value || 0;
+    const bb = r.league?.settings?.best_ball === 1;
+    const add = (m, mine) => {
+      for (const pid of ((bb ? m?.players : m?.starters) || [])) {
+        if (!pid || pid === '0') continue;
+        const a = acc[pid] || (acc[pid] = { mineV: 0, theirsV: 0, mine: 0, theirs: 0 });
+        if (mine) { a.mine++; a.mineV += value; } else { a.theirs++; a.theirsV += value; }
+      }
+    };
+    add(r.myMatchup, true);
+    add(r.oppMatchup, false);
+  }
+  const out = {};
+  for (const [pid, a] of Object.entries(acc)) {
+    const total = a.mineV + a.theirsV;
+    out[pid] = { score: total ? Math.round(a.mineV / total * 100) : (a.mine ? 100 : 0), mine: a.mine, theirs: a.theirs };
+  }
+  return out;
+}
+
+const api = { LM_TIERS, lmPhi, lmLine, lmBestLineup, lmProjectSide, lmTier, lmEvaluate, lmMedianOdds, lmSummary, lmRootScores };
 Object.assign(root, api);
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

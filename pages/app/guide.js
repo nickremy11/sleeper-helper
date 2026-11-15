@@ -13,6 +13,8 @@ const GUIDE = [
   { title: 'My Leagues', note: 'Your leagues, week to week.', items: [
     { name:'League Summaries', tab:'leagues',    espn:true,
       desc:'Standings, record, all-play record and simulated playoff odds for every league on one screen. Click a league name to open it in the League Analyzer.' },
+    { name:'Scoreboard',       href:'/scoreboard', espn:true,
+      desc:"Every matchup this week, live: score now, projection for what's left, win %, sorted from Mortal Lock to Lost Cause. Click one for both lineups, each player tagged with his Root For Me score; star a league to pin it to the top." },
     { name:'League Analyzer',  href:'/analyzer', espn:true, newTab:true,
       desc:'Every team in one league ranked by roster value, positional strength, draft capital and starter strength. "View vs Ranks" lays one of your My Ranks boards over the league instead.' },
     { name:'Lineups',          tab:'lineups',    espn:true, write:'Sets lineups',
@@ -50,7 +52,7 @@ const GUIDE = [
     { name:'ROI Tracker',      tab:'roi',        espn:true,
       desc:'Dues, winnings and finish for every league you have played in, year by year, with profit and ROI per season and all time. Finishes come from Sleeper and ESPN; money is entered by hand or imported once from your spreadsheet.' },
     { name:'Root For Me',      href:'/rootforme', espn:true,
-      desc:"Which way to root in each NFL game, weighted by whether you're contending or rebuilding in each league — plus Live Matchups, your projected record with every matchup sorted from Mortal Lock to Lost Cause, and the Monday Night Miracle: what every live matchup needs from the players left, and the box scores that win the most $." },
+      desc:"Which way to root in each NFL game, weighted by whether you're contending or rebuilding in each league — plus the Monday Night Miracle: what every live matchup needs from the players left, and the box scores that win the most $." },
     { name:'My Ranks',         href:'https://myranks.ffhistorian.com',
       desc:'Your own player and pick tiers, kept in one place and shareable with other managers.' },
     { name:'My Profile',       href:'/myprofile',

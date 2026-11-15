@@ -53,6 +53,15 @@ CREATE TABLE IF NOT EXISTS league_preferences (
   PRIMARY KEY (user_id, league_id)
 );
 
+-- Scoreboard favourites: leagues pinned to the top of /scoreboard. A row = a
+-- star. league_id is Sleeper's id or espn_{id}. Saved as a whole set (POST
+-- replaces it), via /api/scoreboard/favorites.
+CREATE TABLE IF NOT EXISTS scoreboard_favorites (
+  user_id    TEXT    NOT NULL,
+  league_id  TEXT    NOT NULL,
+  PRIMARY KEY (user_id, league_id)
+);
+
 -- ── ROI Tracker ──────────────────────────────────────────────────────────────
 -- A league is one row however many seasons it runs; its seasons are joined to
 -- it by roi_seasons.league_id. `id` is client-generated. `platform` is

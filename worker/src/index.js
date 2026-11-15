@@ -28,6 +28,8 @@
  *   GET  /api/espn/fantasy/:id    → proxy ESPN fantasy API using stored credentials (auth required)
  *   GET  /api/rootforme/prefs     → get league preferences for logged-in user
  *   POST /api/rootforme/prefs     → save league preferences for logged-in user
+ *   GET  /api/scoreboard/favorites → {favs: [leagueId]} — Scoreboard's pinned leagues (auth required)
+ *   POST /api/scoreboard/favorites → {favs: [leagueId]} replaces the whole set (auth required)
  *   GET  /api/roi                 → ROI Tracker ledger (leagues + seasons) for logged-in user
  *   POST /api/roi                 → upsert/delete ROI leagues + seasons
  *   GET  /api/eliteffl/picks            → all Elite FFL draft-history rows (public)
@@ -169,6 +171,10 @@ export default {
 
     if (url.pathname === '/api/rootforme/prefs') {
       return handleRootformePrefs(request, env);
+    }
+
+    if (url.pathname === '/api/scoreboard/favorites') {
+      return handleScoreboardFavorites(request, env);
     }
 
     if (url.pathname === '/api/roi') {
@@ -544,6 +550,45 @@ async function handleRootformePrefs(request, env) {
 
     if (stmts.length) await env.DB.batch(stmts);
     return jsonBody(JSON.stringify({ ok: true }));
+  }
+
+  return new Response('Method not allowed', { status: 405, headers: CORS });
+}
+
+// ── Scoreboard favourites ────────────────────────────────────────────────────
+// The leagues pinned to the top of /scoreboard. The client always holds the
+// whole set, so POST replaces it — delete + insert in one batch, so a failed
+// write never leaves half a set.
+const SB_FAVS_MAX = 200;
+
+async function handleScoreboardFavorites(request, env) {
+  const user = await getAuthUser(request, env);
+  if (!user) {
+    return new Response(JSON.stringify({ error: 'Not authenticated' }), { status: 401, headers: CORS });
+  }
+
+  if (request.method === 'GET') {
+    const rows = await env.DB.prepare(
+      'SELECT league_id FROM scoreboard_favorites WHERE user_id = ?'
+    ).bind(user.user_id).all();
+    return jsonBody(JSON.stringify({ favs: (rows.results || []).map(r => r.league_id) }));
+  }
+
+  if (request.method === 'POST') {
+    let body;
+    try { body = await request.json(); } catch {
+      return new Response('Invalid JSON', { status: 400, headers: CORS });
+    }
+    if (!Array.isArray(body?.favs)) return new Response('favs must be an array', { status: 400, headers: CORS });
+    const favs = [...new Set(body.favs.filter(id => typeof id === 'string' && id && id.length <= 64))];
+    if (favs.length > SB_FAVS_MAX) return new Response('Too many favourites', { status: 400, headers: CORS });
+    await env.DB.batch([
+      env.DB.prepare('DELETE FROM scoreboard_favorites WHERE user_id = ?').bind(user.user_id),
+      ...favs.map(id => env.DB.prepare(
+        'INSERT INTO scoreboard_favorites (user_id, league_id) VALUES (?, ?)'
+      ).bind(user.user_id, id)),
+    ]);
+    return jsonBody(JSON.stringify({ ok: true, favs }));
   }
 
   return new Response('Method not allowed', { status: 405, headers: CORS });

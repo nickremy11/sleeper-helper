@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Scoreboard — FF Historian</title>
+<link href="https://fonts.googleapis.com/css2?family=Graduate&family=Bitter:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/shared-styles.css?v=20261116" />
+<style>
+
+/* ── BANNER ── */
+.banner-inner {
+  position: relative; z-index: 1;
+  max-width: 960px; margin: 0 auto;
+  padding: 24px 32px 20px;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+}
+
+/* ── MAIN ── */
+.main { max-width: 960px; margin: 0 auto; padding: 28px 24px 80px; }
+
+/* ── SECTION HEAD ── */
+.section-head { margin-bottom: 16px; }
+.section-head h2 { font-size: 1rem; }
+
+/* ── SETUP CARD ── */
+.setup-card {
+  background: var(--brown-dark); border: 2px solid var(--brown-mid); border-radius: 2px;
+  padding: 18px 22px; margin-bottom: 22px; box-shadow: 4px 4px 0 var(--brown-mid);
+}
+.setup-label { font-family: var(--font-display), serif; font-size: 0.65rem; margin-bottom: 7px; }
+.setup-row { display: flex; gap: 8px; }
+.setup-input { font-family: var(--font-body), serif; padding: 7px 12px; }
+
+.setup-btn {
+  background: var(--green); border: 2px solid var(--gold); color: var(--gold-light);
+  font-family: var(--font-display), serif; font-size: 0.65rem; letter-spacing: 0.18em; text-transform: uppercase;
+  padding: 0 16px; cursor: pointer; border-radius: 2px; transition: background 0.2s, color 0.2s; white-space: nowrap;
+}
+
+.setup-status { font-family: var(--font-body), serif; margin-top: 5px; min-height: 16px; }
+
+.setup-status.err { color: #b3261e; }
+
+/* ── WEEK CONTROLS ── */
+.week-bar {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 20px;
+  background: var(--brown-dark); border: 1px solid var(--brown-mid); border-radius: 2px; padding: 10px 16px;
+}
+.week-label { font-family: var(--font-display), serif; font-size: 0.65rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); }
+.week-num { font-family: var(--font-head), serif; font-size: 1.1rem; font-weight: 700; color: var(--cream); min-width: 28px; text-align: center; }
+.week-arrow { background: none; border: 1px solid var(--brown-mid); color: var(--brown-light); width: 28px; height: 28px; cursor: pointer; border-radius: 2px; font-size: 0.8rem; line-height: 1; transition: border-color 0.2s, color 0.2s; display: flex; align-items: center; justify-content: center; }
+.week-arrow:hover:not(:disabled) { border-color: var(--gold); color: var(--gold); }
+.week-arrow:disabled { opacity: 0.3; cursor: default; }
+.load-btn {
+  margin-left: auto;
+  background: var(--green); border: 2px solid var(--gold); color: var(--gold-light);
+  font-family: var(--font-display), serif; font-size: 0.64rem; letter-spacing: 0.18em; text-transform: uppercase;
+  padding: 7px 18px; cursor: pointer; border-radius: 2px; transition: background 0.2s, color 0.2s;
+}
+.load-btn:hover { background: var(--gold); color: var(--brown-dark); }
+.load-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.week-at { margin-left: auto; font-family: var(--font-body), serif; font-size: 0.85rem; font-style: italic; color: var(--brown-light); white-space: nowrap; }
+.week-auto { display: flex; align-items: center; gap: 4px; font-family: var(--font-body), serif; font-size: 0.85rem; color: var(--brown-light); cursor: pointer; white-space: nowrap; }
+.week-auto input { accent-color: var(--gold); margin: 0; }
+.week-at + .week-auto + .load-btn { margin-left: 0; }
+
+/* ── STATES (rootforme override) ── */
+.err-state {
+  background: rgba(139,26,26,0.2); border: 1px solid var(--red); color: #b3261e;
+}
+
+/* ── SHARED CARD SHAPES (also Root For Me's Miracle) ── */
+.mnm-card {
+  background: var(--brown-dark); border: 2px solid var(--brown-mid); border-radius: 2px;
+  box-shadow: 4px 4px 0 var(--brown-mid); margin-bottom: 16px; padding: 14px 16px;
+}
+.mnm-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+.mnm-tile { background: rgba(var(--tint),0.04); border: 1px solid var(--brown-mid); border-radius: 2px; padding: 8px 10px; }
+.mnm-tile-v { font-family: var(--font-head), serif; font-weight: 700; font-size: 1.25rem; color: var(--cream); }
+.mnm-tile-l { font-family: var(--font-display), serif; font-size: 0.61rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brown-light); margin-top: 2px; }
+.mnm-tile-s { font-family: var(--font-body), serif; font-size: 0.8rem; font-style: italic; color: var(--brown-light); }
+.mnm-note { font-family: var(--font-body), serif; font-size: 0.85rem; font-style: italic; color: var(--brown-light); margin-top: 10px; }
+.mnm-good { color: var(--green-light); }
+.mnm-bad  { color: #b3261e; }
+.mnm-mu { padding: 10px 4px 12px; border-bottom: 1px dashed rgba(var(--tint),0.09); }
+.mnm-mu:last-child { border-bottom: none; }
+.mnm-mu-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.mnm-mu-name { font-family: var(--font-body), serif; font-weight: 600; font-size: 1rem; color: var(--parchment); flex: 1; min-width: 0; }
+.mnm-mu-val { font-family: var(--font-body), serif; color: var(--gold-light); }
+.mnm-mu-score { font-family: var(--font-head), serif; font-size: 0.95rem; color: var(--cream); white-space: nowrap; }
+.mnm-bar { position: relative; height: 6px; background: rgba(224,128,128,0.35); border-radius: 3px; margin: 7px 0 6px; overflow: hidden; }
+.mnm-bar > span { position: absolute; left: 0; top: 0; bottom: 0; background: var(--green-light); }
+.mnm-need { font-family: var(--font-body), serif; font-size: 0.92rem; color: var(--parchment); }
+.mnm-need b { color: var(--gold-light); }
+.mnm-need-p { margin-top: 5px; padding-left: 8px; border-left: 2px solid var(--brown-mid); font-size: 0.88rem; }
+
+/* ── LIVE MATCHUPS ── */
+.lm-bar { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px 18px; margin-bottom: 14px; }
+.lm-filters { display: flex; flex-wrap: wrap; gap: 8px 16px; min-width: 0; }
+.lm-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.lm-filter-lbl { font-family: var(--font-display), serif; font-size: 0.61rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); margin-right: 2px; }
+.lm-pill { background: transparent; border: 1px solid var(--brown-mid); color: var(--brown-light); font-family: var(--font-body), serif; font-size: 0.8rem; padding: 3px 11px; border-radius: 12px; cursor: pointer; transition: all 0.15s; }
+.lm-pill:hover { color: var(--parchment); }
+.lm-pill.active { border-color: var(--gold); color: var(--gold); background: rgba(194,154,83,0.10); }
+.lm-refresh { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.lm-at { font-family: var(--font-body), serif; font-size: 0.85rem; font-style: italic; color: var(--brown-light); white-space: nowrap; }
+.lm-refresh-btn { margin-left: 0; white-space: nowrap; }
+.lm-strip { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin: 12px 0 16px; }
+.lm-strip-cell { border: 1px solid var(--brown-mid); border-top: 3px solid var(--lm-c); border-radius: 2px; padding: 6px 4px; text-align: center; background: rgba(var(--tint),0.03); }
+.lm-strip-cell b { display: block; font-family: var(--font-head), serif; font-size: 1.15rem; color: var(--cream); line-height: 1.1; }
+.lm-strip-cell span { font-family: var(--font-display), serif; font-size: 0.61rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brown-light); }
+.lm-tier { border-left: 3px solid var(--lm-c); padding-left: 12px; margin-bottom: 16px; }
+.lm-t-lock { --lm-c: #2e7d32; } .lm-t-good { --lm-c: #2e7d32; } .lm-t-toss { --lm-c: var(--gold); } .lm-t-bad { --lm-c: #b8461f; } .lm-t-dead { --lm-c: #b3261e; }
+.lm-tier-head { font-family: var(--font-display), serif; font-size: 0.65rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lm-c); margin-bottom: 2px; }
+.lm-tier-head span { font-family: var(--font-body), serif; font-size: 0.85rem; letter-spacing: 0; color: var(--brown-light); margin-left: 4px; }
+.lm-row { padding: 8px 4px 9px; }
+.lm-row .mnm-bar > span { background: var(--lm-c, var(--green-light)); }
+.lm-favs { --lm-c: var(--gold); }
+.lm-favs .lm-pct { color: var(--lm-c); }
+.lm-row.lm-t-lock .lm-pct, .lm-row.lm-t-good .lm-pct { color: #2e7d32; }
+.lm-row.lm-t-toss .lm-pct { color: var(--gold); }
+.lm-row.lm-t-bad .lm-pct { color: #b8461f; }
+.lm-row.lm-t-dead .lm-pct { color: #b3261e; }
+.lm-favs .lm-row.lm-t-lock .mnm-bar > span, .lm-favs .lm-row.lm-t-good .mnm-bar > span { background: #2e7d32; }
+.lm-favs .lm-row.lm-t-toss .mnm-bar > span { background: var(--gold); }
+.lm-favs .lm-row.lm-t-bad .mnm-bar > span { background: #b8461f; }
+.lm-favs .lm-row.lm-t-dead .mnm-bar > span { background: #b3261e; }
+.lm-star { background: none; border: none; padding: 0 2px; margin-right: -4px; cursor: pointer; font-size: 1rem; line-height: 1; color: var(--brown-light); align-self: center; }
+.lm-star:hover { color: var(--gold); }
+.lm-star.on { color: var(--gold); }
+.lm-lu-name { display: flex; align-items: center; gap: 6px; }
+.lm-lu-r .lm-lu-name { justify-content: flex-end; }
+.lm-lu-nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lm-root { flex-shrink: 0; font-family: var(--font-head), serif; font-size: 0.7rem; font-weight: 700; line-height: 1; min-width: 26px; text-align: center; padding: 3px 4px; border-radius: 3px; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.4); cursor: help; }
+.lm-tag { font-family: var(--font-display), serif; font-size: 0.61rem; letter-spacing: 0.1em; color: var(--brown-light); border: 1px solid var(--brown-mid); padding: 1px 4px; border-radius: 2px; vertical-align: middle; }
+.lm-pct { font-family: var(--font-head), serif; font-weight: 700; font-size: 0.95rem; color: var(--lm-c); min-width: 42px; text-align: right; white-space: nowrap; }
+.lm-sub { display: flex; flex-wrap: wrap; gap: 2px 12px; font-family: var(--font-body), serif; font-size: 0.85rem; color: var(--brown-light); }
+.lm-sub-opp { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.lm-proj { white-space: nowrap; }
+.lm-med { white-space: nowrap; }
+/* Click-in lineup view: both sides, slot by slot */
+.lm-row { cursor: pointer; border-radius: 2px; }
+.lm-row:hover { background: rgba(var(--tint),0.025); }
+.lm-row.open { background: rgba(var(--tint),0.035); }
+.lm-caret { font-size: 0.6rem; color: var(--brown-light); transition: transform 0.15s; display: inline-block; margin-right: 6px; }
+.lm-row.open .lm-caret { transform: rotate(90deg); color: var(--gold); }
+.lm-detail { margin: 10px 0 2px; cursor: default; }
+.lm-lu { width: 100%; border-collapse: collapse; table-layout: fixed; font-family: var(--font-body), serif; }
+.lm-lu th { font-family: var(--font-display), serif; font-size: 0.61rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); padding: 4px 6px; border-bottom: 1px solid var(--brown-mid); font-weight: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lm-lu th.lm-lu-r { text-align: right; }
+.lm-lu td { padding: 5px 6px; border-bottom: 1px dashed rgba(var(--tint),0.07); vertical-align: middle; }
+.lm-lu tr:last-child td { border-bottom: none; }
+.lm-lu .lm-lu-slot { width: 52px; text-align: center; font-family: var(--font-display), serif; font-size: 0.6rem; letter-spacing: 0.06em; color: var(--brown-light); }
+.lm-lu .lm-lu-pts { width: 62px; white-space: nowrap; }
+.lm-lu .lm-lu-pts.r { text-align: right; }
+.lm-lu-name { color: var(--parchment); font-size: 0.92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lm-lu-sub { font-size: 0.75rem; color: var(--brown-light); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lm-lu-r .lm-lu-name, .lm-lu-r .lm-lu-sub { text-align: right; }
+.lm-lu-now { font-family: var(--font-head), serif; font-size: 0.95rem; color: var(--cream); }
+.lm-lu-proj { font-size: 0.72rem; color: var(--brown-light); }
+.lm-lu-delta { font-size: 0.72rem; color: #2e7d32; font-weight: 600; }
+.lm-lu-live .lm-lu-sub b { color: #2e7d32; font-weight: 600; }
+.lm-lu-done .lm-lu-name { color: var(--brown-light); }
+.lm-lu-bench { opacity: 0.45; }
+.lm-lu-inj { color: #b3261e; font-weight: 600; }
+.lm-lu-tot td { border-top: 1px solid var(--brown-mid); border-bottom: none; padding-top: 7px; }
+.lm-lu-tot .lm-lu-now { font-size: 1.05rem; font-weight: 700; }
+@keyframes lm-flash { from { background: rgba(127,208,127,0.28); } to { background: transparent; } }
+.lm-lu td.lm-lu-flash { animation: lm-flash 2.4s ease-out; }
+@media (max-width: 600px) {
+  .week-bar { flex-wrap: wrap; }
+  .week-at { flex-basis: 100%; order: 10; margin-left: 0; }
+  .week-auto { margin-left: auto; }
+  .lm-lu .lm-lu-slot { width: 34px; font-size: 0.6rem; letter-spacing: 0; }
+  .lm-lu .lm-lu-pts { width: 48px; }
+  .lm-lu td { padding: 4px 3px; }
+  .lm-lu-name { font-size: 0.82rem; gap: 4px; }
+  .lm-root { min-width: 22px; padding: 2px 3px; font-size: 0.64rem; }
+}
+@media (max-width: 640px) {
+  .lm-refresh { margin-left: 0; width: 100%; justify-content: space-between; }
+  .lm-refresh-btn { flex-basis: auto; padding: 7px 14px; }
+  .lm-strip { gap: 4px; }
+  .lm-strip-cell span { font-size: 0.59rem; letter-spacing: 0.02em; }
+  .lm-tier { padding-left: 8px; }
+}
+
+
+/* ── MOBILE ── */
+@media (max-width: 640px) {
+  .banner-inner { padding: 16px 16px 14px; gap: 10px; }
+  .main { padding: 18px 14px 60px; }
+  .section-head { gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  .section-head h2 { font-size: 0.85rem; }
+  .sb-info { white-space: normal; flex-basis: 100%; }
+  .setup-card { padding: 14px 16px; }
+  .setup-row { flex-wrap: wrap; }
+  .setup-row .setup-input { flex-basis: 100%; }
+  .setup-btn { padding: 10px 16px; }
+  .week-bar { flex-wrap: wrap; padding: 10px 12px; }
+  .load-btn { margin-left: 0; flex-basis: 100%; padding: 10px 18px; }
+}
+.section-head { display: flex; align-items: center; gap: 12px; }
+.sb-info { font-family: var(--font-body), serif; font-size: 0.85rem; color: var(--brown-light); font-style: italic; white-space: nowrap; flex-shrink: 0; }
+
+</style>
+</head>
+<body>
+<div class="page-wrap">
+
+<!-- ── BANNER ── -->
+<header class="banner">
+  <div class="banner-inner">
+    <div class="banner-text">
+      <a href="/" class="banner-back">← Sleeper Helper</a>
+      <h1><span>Scoreboard</span></h1>
+      <p class="banner-sub">Every matchup this week, live</p>
+      <div class="banner-divider"></div>
+    </div>
+    <div id="auth-chip" style="flex-shrink:0;"></div>
+  </div>
+</header>
+  <nav id="sh-nav" class="tab-bar"></nav>
+
+<!-- ── MAIN ── -->
+<main class="main">
+
+  <!-- Setup -->
+  <div id="setup-section">
+    <div class="section-head"><h2>Setup</h2><div class="section-head-line"></div></div>
+    <div class="setup-card">
+      <label class="setup-label">Sleeper Username</label>
+      <div class="setup-row">
+        <input type="text" id="username-input" class="setup-input" placeholder="your Sleeper username" autocomplete="off" spellcheck="false" />
+        <button class="setup-btn" id="username-btn" onclick="submitUsername()">Load Leagues</button>
+      </div>
+      <div class="setup-status" id="setup-status"></div>
+    </div>
+  </div>
+
+  <div id="profile-hint-section" style="display:none;">
+    <div class="section-head"><h2>Setup</h2><div class="section-head-line"></div></div>
+    <div class="setup-card">
+      <div class="setup-status">
+        Add your Sleeper username in <a href="/myprofile" style="color:var(--gold-light);">your profile</a> to load your leagues.
+      </div>
+    </div>
+  </div>
+
+  <!-- Week + Refresh -->
+  <div id="week-section" style="display:none">
+    <div class="week-bar">
+      <span class="week-label">Week</span>
+      <button class="week-arrow" id="week-prev" onclick="changeWeek(-1)">◀</button>
+      <span class="week-num" id="week-num">—</span>
+      <button class="week-arrow" id="week-next" onclick="changeWeek(1)">▶</button>
+      <span class="week-at" id="week-at"></span>
+      <label class="week-auto" title="While an NFL game is in progress, refresh scores every 2 minutes (only while this tab is visible)">
+        <input type="checkbox" id="auto-refresh" onchange="setAutoRefresh(this.checked)" /> Auto
+      </label>
+      <button class="load-btn" id="load-btn" onclick="refreshScores()" disabled>↻ Refresh</button>
+    </div>
+  </div>
+
+  <!-- Live Matchups -->
+  <div id="lm-section" style="display:none; margin-bottom: 28px;">
+    <div class="section-head"><h2>Live Matchups</h2><div class="section-head-line"></div><span id="lm-summary-info" class="sb-info"></span></div>
+    <div id="lm-container"></div>
+  </div>
+
+</main>
+</div>
+
+<script src="/shared-nav.js?v=20261116"></script>
+<script src="/shared-auth.js?v=20261116"></script>
+<script src="/shared-core.js?v=20261116"></script>
+<script src="/shared-utils.js?v=20261116"></script>
+<script src="/miracle.js?v=20261116"></script>
+<script src="/matchup-tracker.js?v=20261117"></script>
+<script src="/league-matchups.js?v=20261117"></script>
+<script>
+// Scoreboard — every head-to-head matchup this week, live: score now, projection
+// for what's left, win %, tiered Mortal Lock → Lost Cause. Split out of Root For Me,
+// which keeps the "who to root for" side; the two share their reads
+// (/league-matchups.js), the maths (/matchup-tracker.js) and the root score
+// (lmRootScores), and the $ / contender prefs set on Root For Me.
+// miracle.js is loaded for mnmRemainingFrac / mnmScore / MNM_KDEF_DEFAULT only.
+const API = SH_API;
+
+const S = {
+  auth:         null,
+  username:     '',
+  userId:       '',
+  season:       String(new Date().getFullYear()),
+  week:         1,
+  leagues:      [],
+  espnSettings: null,
+  prefs:        {},   // Root For Me's {value, contender} per league — read here, edited there
+  playerMap:    {},
+  nflGames:     [],
+  mnmProj:      null, // Sleeper week projections {pid: line}
+  espnSkips:    [],
+  rid:          {},   // {lgId: my roster_id} — shared cache with Root For Me
+  loadSeq:      0,
+  loadedWeek:   null,
+  at:           null,
+  refreshing:   false,
+};
+
+const RFM_AUTO_MS = 120000;   // auto-refresh cadence while an NFL game is in progress
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function init() {
+  const user = await SharedAuth.init({
+    chipContainerId: 'auth-chip',
+    onLogin: async (u) => {
+      S.auth = u;
+      updateSetupVisibility();
+      if (u.sleeper_username && !S.username) {
+        S.username = u.sleeper_username;
+        document.getElementById('username-input').value = S.username;
+        await loadLeagues();
+      } else if (S.leagues.length) {
+        await Promise.all([loadPrefs(), favLoad()]);
+        if (LM.rows.length) { lmBuild(); lmDraw(); }
+      }
+    },
+    onLogout: () => { S.auth = null; updateSetupVisibility(); },
+  });
+  S.auth = user;
+  const stored   = localStorage.getItem('rfm_username');   // shared with Root For Me
+  const fromAuth = S.auth?.sleeper_username;
+  // When signed in, the Sleeper username is tied to the account (changed on /myprofile).
+  S.username = S.auth ? (fromAuth || '') : (stored || '');
+  updateSetupVisibility();
+  if (S.username) {
+    document.getElementById('username-input').value = S.username;
+    await loadLeagues();
+  }
+}
+
+function updateSetupVisibility() {
+  const setup = document.getElementById('setup-section');
+  const hint  = document.getElementById('profile-hint-section');
+  if (!setup || !hint) return;
+  if (S.auth) {
+    setup.style.display = 'none';
+    hint.style.display  = S.auth.sleeper_username ? 'none' : '';
+  } else {
+    setup.style.display = '';
+    hint.style.display  = 'none';
+  }
+}
+
+// ── Username / League Load ────────────────────────────────────────────────────
+async function submitUsername() {
+  const val = document.getElementById('username-input').value.trim();
+  if (!val) return;
+  S.username = val;
+  localStorage.setItem('rfm_username', val);
+  await loadLeagues();
+}
+
+async function loadLeagues() {
+  const statusEl = document.getElementById('setup-status');
+  const btn      = document.getElementById('username-btn');
+  btn.disabled   = true;
+  statusEl.className = 'setup-status';
+  statusEl.textContent = 'Loading…';
+
+  try {
+    const userRes = await fetch(`${API}/sleeper/user/${S.username}`);
+    if (!userRes.ok) throw new Error('User not found');
+    const user = await userRes.json();
+    if (!user.user_id) throw new Error('User not found');
+    S.userId = user.user_id;
+
+    const stateRes = await fetch(`${API}/sleeper/state/nfl`);
+    const nflState = await stateRes.json();
+    S.season = nflState.season || S.season;
+    S.week   = nflState.display_week || nflState.week || 1;
+
+    const lgRes = await fetch(`${API}/sleeper/user/${S.userId}/leagues/nfl/${S.season}`);
+    S.leagues = (await lgRes.json()) || [];
+
+    await loadEspnLeagues();
+    await loadPrefs();
+
+    statusEl.className  = 'setup-status ok';
+    statusEl.textContent = `Loaded ${S.leagues.length} league${S.leagues.length !== 1 ? 's' : ''}`;
+    document.getElementById('week-section').style.display    = '';
+    document.getElementById('week-num').textContent          = S.week;
+    updateWeekArrows();
+    ridLoad();
+    favLoad().then(() => { if (LM.rows.length) lmDraw(); });
+    // No Load button: the week loads on arrival, and Refresh only re-reads scores.
+    loadMatchups();
+  } catch (e) {
+    statusEl.className  = 'setup-status err';
+    statusEl.textContent = e.message || 'Failed to load leagues';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ── Prefs ─────────────────────────────────────────────────────────────────────
+// Read-only here. Leagues default to contending, $0 — the same as Root For Me.
+async function loadPrefs() {
+  const stored = await loadStoredLeaguePrefs(S.auth);
+  S.prefs = {};
+  for (const lg of S.leagues) {
+    S.prefs[lg.league_id] = stored[lg.league_id] ?? { value: 0, contender: true };
+  }
+}
+
+
+// ── Week Controls ─────────────────────────────────────────────────────────────
+function changeWeek(delta) {
+  const w = Math.max(1, Math.min(18, S.week + delta));
+  if (w === S.week) return;
+  S.week = w;
+  document.getElementById('week-num').textContent = S.week;
+  updateWeekArrows();
+  loadMatchups();
+}
+
+function updateWeekArrows() {
+  document.getElementById('week-prev').disabled = S.week <= 1;
+  document.getElementById('week-next').disabled = S.week >= 18;
+}
+
+// ── Load ──────────────────────────────────────────────────────────────────────
+// The full load: player map, projections, schedule, every league's matchup. Runs on
+// arrival and on every week change. After that Refresh re-reads scores + clocks.
+async function loadMatchups() {
+  const seq = ++S.loadSeq;
+  S.refreshing = false;
+  S.loadedWeek = null;
+  rfmBarDraw('Loading…');
+  const section = document.getElementById('lm-section');
+  const box = document.getElementById('lm-container');
+  section.style.display = '';
+  box.innerHTML = '<div class="loading-state"><div class="spinner"></div>Fetching every matchup…</div>';
+  document.getElementById('lm-summary-info').textContent = '';
+  const week = S.week;
+  try {
+    // Players before matchups: the ESPN read resolves names to Sleeper ids off it.
+    const [players, nflGames, proj] = await Promise.all([
+      fetch(`${API}/players`).then(r => r.json()),
+      fetch(`${API}/espn/games?week=${week}&season=${S.season}`).then(r => r.ok ? r.json() : []),
+      fetch(`${API}/sleeper/projections/nfl/regular/${S.season}/${week}`).then(r => r.ok ? r.json() : null).catch(() => null),
+    ]);
+    if (seq !== S.loadSeq) return;
+    S.playerMap = players || {};
+    S.nflGames  = nflGames || [];
+    S.mnmProj   = proj;
+    S.espnSkips = [];
+    const results = await lmFetchAll(week);
+    if (seq !== S.loadSeq) return;
+    S.loadedWeek = week;
+    S.at = Date.now();
+    LM.open.clear();
+    LM.prevPts = {};
+    lmLoaded(results);
+  } catch (e) {
+    if (seq === S.loadSeq) box.innerHTML = `<div class="err-state">Failed to load matchups: ${esc(e.message)}</div>`;
+  } finally {
+    if (seq === S.loadSeq) rfmBarDraw();
+  }
+}
+
+// Refresh: scores and game clocks only, redrawn in place — open lineups, filters
+// and favourites all live in LM, so nothing collapses.
+async function refreshScores() {
+  if (S.refreshing || S.loadedWeek == null) return;
+  const seq = ++S.loadSeq;
+  const week = S.loadedWeek;
+  S.refreshing = true;
+  rfmBarDraw();
+  lmDraw();
+  try {
+    S.espnSkips = [];
+    const [games, results] = await Promise.all([
+      fetch(`${API}/espn/games?week=${week}&season=${S.season}`).then(r => r.ok ? r.json() : null).catch(() => null),
+      lmFetchAll(week, true),
+    ]);
+    if (seq !== S.loadSeq) return;
+    if (games?.length) S.nflGames = games;
+    // A whole-page outage shouldn't wipe what's on screen; keep the last good read.
+    if (!results.length && LM.results.length) return;
+    S.at = Date.now();
+    lmLoaded(results);
+  } finally {
+    if (seq === S.loadSeq) {
+      S.refreshing = false;
+      rfmBarDraw();
+      lmDraw();
+    }
+  }
+}
+
+// The week bar's right side: when the scores were read, and the one Refresh button.
+function rfmBarDraw(busy) {
+  const btn = document.getElementById('load-btn');
+  const at = document.getElementById('week-at');
+  if (btn) {
+    btn.disabled = !!busy || S.refreshing || S.loadedWeek == null;
+    btn.textContent = busy || (S.refreshing ? 'Refreshing…' : '↻ Refresh');
+  }
+  if (at) at.textContent = S.at && S.loadedWeek != null
+    ? `as of ${new Date(S.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}` : '';
+}
+
+// ── Auto-refresh ──────────────────────────────────────────────────────────────
+// Only while an NFL game this week is actually in progress, and only while the tab
+// is visible — a background tab polling ~70 leagues all Sunday helps nobody.
+function rfmGamesLive() {
+  const now = Date.now();
+  return S.nflGames.some(g => g.state === 'in'
+    || (g.state !== 'post' && new Date(g.kickoff).getTime() <= now && now - new Date(g.kickoff).getTime() < 5 * 3600e3));
+}
+function rfmAutoOn() {
+  try { return localStorage.getItem('rfm_auto_refresh') !== '0'; } catch { return true; }
+}
+function setAutoRefresh(on) {
+  try { localStorage.setItem('rfm_auto_refresh', on ? '1' : '0'); } catch {}
+}
+function rfmAutoTick() {
+  if (!rfmAutoOn() || document.visibilityState !== 'visible') return;
+  if (S.refreshing || S.loadedWeek == null || !rfmGamesLive()) return;
+  if (S.at && Date.now() - S.at < RFM_AUTO_MS - 5000) return;
+  refreshScores();
+}
+setInterval(rfmAutoTick, 15000);
+// Coming back to the tab mid-game catches up straight away.
+document.addEventListener('visibilitychange', rfmAutoTick);
+document.getElementById('auto-refresh').checked = rfmAutoOn();
+
+// ── Live Matchups ─────────────────────────────────────────────────────────────
+// How every matchup this week is tracking, from current scores + projections for
+// the part of each starter's game still to play. The maths is /matchup-tracker.js,
+// the reads are /league-matchups.js; this is the plumbing + rendering.
+const LM = {
+  results: [], rows: [], week: null,
+  names: {},    // {lgId: {rosterId: team name}} — Sleeper, fetched once
+  skips: [],    // [{name, reason}] Sleeper leagues whose read failed
+  filter: { fmt: 'all', role: 'all', lineup: 'all' },
+  open: new Set(),  // lgIds whose lineups are expanded — survives every Refresh
+  favs: new Set(),  // favourite lgIds, pinned above the tiers — account when signed in, see favLoad
+  favErr: '',       // a failed favourites load/save, shown in the notes
+  roots: {},        // {pid: {score, mine, theirs}} — Root For Me's score, lmRootScores()
+  prevPts: {},      // {lineKey: pts} from the previous read, for the +x.x since-last-refresh marks
+};
+// ESPN lineupSlotId → label, and the order a lineup reads in. Local, like
+// index.html's ESPN_SLOT, because shared-utils' map folds 3/5 into FLEX and drops K/D-ST.
+const LM_ESPN_SLOT = { 0: 'QB', 1: 'TQB', 2: 'RB', 3: 'RB/WR', 4: 'WR', 5: 'WR/TE', 6: 'TE', 7: 'OP', 8: 'DT', 9: 'DE',
+  10: 'LB', 11: 'DL', 12: 'CB', 13: 'S', 14: 'DB', 15: 'DP', 16: 'D/ST', 17: 'K', 19: 'HC', 23: 'FLEX', 24: 'ER' };
+const LM_ESPN_ORDER = [0, 1, 2, 3, 4, 5, 6, 23, 7, 16, 17, 8, 9, 11, 10, 12, 13, 14, 15, 19, 24];
+const LM_SLOT_LABEL = { SUPER_FLEX: 'SF', REC_FLEX: 'W/T', WRRB_FLEX: 'W/R', IDP_FLEX: 'IDP', DEF: 'D/ST' };
+// index.html's LU_BAD_INJ, plus how ESPN spells two of them.
+const LM_OUT = new Set(['OUT', 'IR', 'SUS', 'NA', 'PUP', 'DNR', 'COV', 'DNP', 'O', 'SUSPENSION', 'INJURY_RESERVE']);
+
+// Every league, rebuilders included (the Role filter covers them).
+async function lmFetchAll(week, fresh = false) {
+  const { results, skips } = await fetchMatchupsFor(S.leagues, week, fresh);
+  LM.skips = skips;
+  return results;
+}
+
+// ── Favourites ───────────────────────────────────────────────────────────────
+// A few leagues pinned to the top of the board whatever the filters say.
+// Signed in: saved to the account (/api/scoreboard/favorites, the whole set per
+// save), so they follow you to every device. Signed out: this browser only.
+// localStorage (keyed to the Sleeper user) is kept either way as the offline copy,
+// and the first signed-in load uploads it when the account has none yet.
+const favKey = () => `sb_favs_${S.userId}`;
+const favLocal = () => { try { return JSON.parse(localStorage.getItem(favKey()) || '[]'); } catch { return []; } };
+const favKeepLocal = () => { try { localStorage.setItem(favKey(), JSON.stringify([...LM.favs])); } catch {} };
+async function favLoad() {
+  LM.favs = new Set(favLocal());
+  LM.favErr = '';
+  if (!S.auth) return;
+  try {
+    const r = await fetch(`${API}/scoreboard/favorites`, { credentials: 'include' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const server = (await r.json()).favs || [];
+    if (!server.length && LM.favs.size) { await favSave(); return; }
+    LM.favs = new Set(server);
+    favKeepLocal();
+  } catch (e) { LM.favErr = `Couldn't load your saved favourites (${e.message}); showing this browser's.`; }
+}
+let _favSeq = 0;
+async function favSave() {
+  favKeepLocal();
+  if (!S.auth) return;
+  const seq = ++_favSeq;
+  try {
+    const r = await fetch(`${API}/scoreboard/favorites`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ favs: [...LM.favs] }),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    if (seq === _favSeq && LM.favErr) { LM.favErr = ''; lmDraw(); }
+  } catch (e) {
+    if (seq !== _favSeq) return;   // a later save supersedes this one
+    LM.favErr = `Couldn't save favourites to your account (${e.message}) — kept in this browser; star again to retry.`;
+    lmDraw();
+  }
+}
+function lmFav(ev, lgId) {
+  ev.stopPropagation();
+  if (LM.favs.has(lgId)) LM.favs.delete(lgId); else LM.favs.add(lgId);
+  lmDraw();
+  favSave();
+}
+
+// Called by the full load and by every Refresh. Open lineups and filters live in
+// LM, so the redraw puts the section back exactly as it was, with new numbers.
+function lmLoaded(results) {
+  LM.results = results;
+  LM.week = S.loadedWeek;
+  lmBuild();
+  lmDraw();
+  lmLoadNames();
+}
+
+function lmGameFrac() {
+  const now = Date.now(), byTeam = {};
+  for (const g of S.nflGames) { const f = mnmRemainingFrac(g, now); byTeam[g.home] = f; byTeam[g.away] = f; }
+  return byTeam;
+}
+
+// A Sleeper side's starters (or whole roster, for best ball) priced from Sleeper's
+// projection under this league's scoring. ESPN's line is already priced by ESPN,
+// and only falls back to Sleeper's numbers for a player ESPN published nothing on.
+function lmSide(m, r, fracs) {
+  const lg = r.league;
+  const isEspn = lg.source === 'espn';
+  const bestBall = lg.settings?.best_ball === 1;
+  const scoring = isEspn ? { ...MNM_KDEF_DEFAULT, ...(r.scoring || {}) } : (lg.scoring_settings || {});
+  const sleeperPts = pid => S.mnmProj?.[pid] ? mnmScore(S.mnmProj[pid], scoring) : 0;
+  const isOut = s => LM_OUT.has(String(s || '').toUpperCase());
+
+  // Slot, team and injury ride along on each line for the click-in lineup view.
+  const slotsOf = (lg.roster_positions || []).filter(s => !['BN', 'IR', 'TAXI'].includes(s));
+  const empties = [];
+  const lines = m.line
+    ? [...m.line]
+        .sort((a, b) => lmEspnSlotRank(a.slotId) - lmEspnSlotRank(b.slotId))
+        .map(p => {
+          const team = p.pid ? (S.playerMap[p.pid]?.team || p.team) : p.team;
+          return {
+            ...lmLine({
+              pid: p.pid, name: p.name, pts: p.pts, pos: p.pos,
+              proj: p.proj ?? (p.pid ? sleeperPts(p.pid) : 0),
+              f: fracs[team] ?? fracs[p.team] ?? 0,
+              out: isOut(p.inj),
+            }),
+            slot: LM_ESPN_SLOT[p.slotId] || p.pos || '', team, inj: p.inj || null,
+          };
+        })
+    : ((bestBall ? m.players : m.starters) || []).map((pid, i) => {
+        const slot = bestBall ? null : (LM_SLOT_LABEL[slotsOf[i]] || slotsOf[i] || '');
+        if (!pid || pid === '0') { if (!bestBall) empties.push({ idx: i, slot }); return null; }
+        const pl = S.playerMap[pid];
+        return {
+          ...lmLine({
+            pid, name: mnmName(pid), pts: m.players_points?.[pid] || 0, pos: pl?.position,
+            proj: sleeperPts(pid), f: fracs[pl?.team] ?? 0, out: isOut(pl?.injury_status),
+          }),
+          slot: slot ?? (pl?.position || ''), idx: i, team: pl?.team || null, inj: pl?.injury_status || null,
+        };
+      }).filter(Boolean);
+  const side = lmProjectSide({ lines, now: m.custom_points ?? m.points ?? 0, bestBall, rosterPositions: lg.roster_positions });
+  // A cached older /matchup-tracker.js doesn't return these; the lineup view needs them.
+  side.lines = side.lines || lines;
+  side.counted = side.counted || (bestBall ? lmBestLineup(lines, lg.roster_positions) : lines);
+  side.empties = empties;
+  side.bestBall = bestBall;
+  return side;
+}
+
+const lmEspnSlotRank = id => { const i = LM_ESPN_ORDER.indexOf(Number(id)); return i < 0 ? 99 : i; };
+const lmLineKey = (lgId, side, l) => `${lgId}|${side}|${l.pid || l.name}`;
+
+// "+6.2 since the last refresh" — stamped onto each line, then the new numbers
+// become the baseline. Only increases are marked; a stat correction down is noise.
+function lmStampDeltas() {
+  const next = {};
+  const had = Object.keys(LM.prevPts).length > 0;
+  for (const r of LM.rows) {
+    for (const [key, side] of [['my', r.my], ['opp', r.opp]]) {
+      for (const l of side.lines) {
+        const k = lmLineKey(r.lg.league_id, key, l);
+        const prev = LM.prevPts[k];
+        l.delta = had && prev != null && l.pts - prev > 0.05 ? l.pts - prev : 0;
+        next[k] = l.pts;
+      }
+    }
+  }
+  LM.prevPts = next;
+}
+
+function lmBuild() {
+  const fracs = lmGameFrac();
+  const rows = [];
+  let noOpp = 0;
+  for (const r of LM.results) {
+    const lg = r.league;
+    if (lg.settings?.type === 3) continue;   // guillotine: no opponent to be ahead of
+    // A null matchup_id is a team with no game this week (points-only, playoff bye).
+    if (!r.oppMatchup || r.myMatchup.matchup_id === null) { noOpp++; continue; }
+    const my = lmSide(r.myMatchup, r, fracs), opp = lmSide(r.oppMatchup, r, fracs);
+    // Nobody's set a lineup yet (schedule posted, week not started).
+    if (!my.proj && !opp.proj && !my.now && !opp.now) { noOpp++; continue; }
+    const row = { lg, my, opp, oppRosterId: r.oppMatchup.roster_id, oppName: r.oppName || null, ...lmEvaluate(my, opp), medianP: null };
+    // Only Sleeper exposes a median game; ESPN's settings have no such flag.
+    if (lg.settings?.league_average_match === 1 && r.allMatchups?.length > 1) {
+      const teams = r.allMatchups.map(m => m.roster_id === r.myMatchup.roster_id ? my : lmSide(m, r, fracs));
+      row.medianP = lmMedianOdds(teams, r.allMatchups.findIndex(m => m.roster_id === r.myMatchup.roster_id));
+    }
+    rows.push(row);
+  }
+  LM.rows = rows;
+  LM.noOpp = noOpp;
+  LM.roots = lmRootScores(LM.results, S.prefs);
+  lmStampDeltas();
+  LM.builtAt = Date.now();
+}
+
+// Opponent names only; drawn without them first so 70 extra requests never hold up
+// the numbers. Team names barely change, so these never refetch.
+async function lmLoadNames() {
+  const want = LM.results.map(r => r.league).filter(lg => lg.source !== 'espn' && !LM.names[lg.league_id]);
+  if (!want.length) return;
+  await Promise.all(want.map(async lg => {
+    try {
+      const [users, rosters] = await Promise.all([
+        fetch(`${API}/sleeper/league/${lg.league_id}/users`).then(r => r.json()),
+        fetch(`${API}/sleeper/league/${lg.league_id}/rosters`).then(r => r.json()),
+      ]);
+      const byUser = {};
+      for (const u of users || []) byUser[u.user_id] = u.metadata?.team_name || u.display_name || null;
+      const out = {};
+      for (const ro of rosters || []) out[ro.roster_id] = byUser[ro.owner_id] || null;
+      LM.names[lg.league_id] = out;
+    } catch { /* the row just reads "vs opponent" */ }
+  }));
+  lmDraw();
+}
+
+function lmSetFilter(key, val) {
+  LM.filter[key] = val;
+  lmDraw();
+}
+
+function lmFiltered() {
+  const { fmt, role, lineup } = LM.filter;
+  return LM.rows.filter(({ lg }) => {
+    const dynasty = leagueIsDynasty(lg);
+    const contender = !!S.prefs[lg.league_id]?.contender;
+    const bb = lg.settings?.best_ball === 1;
+    if (fmt !== 'all' && (fmt === 'dynasty') !== dynasty) return false;
+    if (role !== 'all' && (role === 'contender') !== contender) return false;
+    if (lineup !== 'all' && (lineup === 'bestball') !== bb) return false;
+    return true;
+  });
+}
+
+const lmRec = (w, l, t) => `${w}–${l}${t ? `–${t}` : ''}`;
+const lmNum = n => (Math.round(n * 10) / 10).toFixed(1);
+
+function lmRowHtml(r) {
+  const { lg, my, opp } = r;
+  const value = +(S.prefs[lg.league_id]?.value) || 0;
+  const opponent = r.oppName || LM.names[lg.league_id]?.[r.oppRosterId] || 'opponent';
+  const pct = Math.round(r.p * 100);
+  const pctLabel = r.final ? (r.mu > 0 ? 'Won' : r.mu < 0 ? 'Lost' : 'Tied') : (pct >= 100 ? '>99%' : pct <= 0 ? '<1%' : `${pct}%`);
+  const left = r.final ? 'Final' : `${my.left} left v ${opp.left}`;
+  const median = r.medianP == null ? ''
+    : `<span class="lm-med ${r.medianP >= 0.5 ? 'mnm-good' : 'mnm-bad'}">Median ${Math.round(r.medianP * 100)}%</span>`;
+  const open = LM.open.has(lg.league_id);
+  const fav = LM.favs.has(lg.league_id);
+  return `<div class="mnm-mu lm-row lm-t-${r.tier}${open ? ' open' : ''}" onclick="lmToggle(event, ${jsArg(lg.league_id)})">
+    <div class="mnm-mu-head">
+      <button type="button" class="lm-star${fav ? ' on' : ''}" onclick="lmFav(event, ${jsArg(lg.league_id)})"
+        title="${fav ? 'Unpin from the top' : 'Pin to the top'}" aria-label="${fav ? 'Unfavourite' : 'Favourite'} ${esc(lg.name || 'league')}" aria-pressed="${fav}">${fav ? '★' : '☆'}</button>
+      <span class="mnm-mu-name"><span class="lm-caret">▶</span>${esc(lg.name || 'League')}${value ? ` <span class="mnm-mu-val">$${value}</span>` : ''}${lg.source === 'espn' ? ' <span class="lm-tag">ESPN</span>' : ''}</span>
+      <span class="mnm-mu-score">${lmNum(my.now)} – ${lmNum(opp.now)}</span>
+      <span class="lm-pct">${pctLabel}</span>
+    </div>
+    <div class="mnm-bar"><span style="width:${(r.p * 100).toFixed(1)}%"></span></div>
+    <div class="lm-sub">
+      <span class="lm-sub-opp">vs ${esc(opponent)} · ${left}</span>
+      ${median}
+      ${r.final ? '' : `<span class="lm-proj">Proj ${lmNum(my.proj)} – ${lmNum(opp.proj)}</span>`}
+    </div>
+    ${open ? lmDetailHtml(r, opponent) : ''}
+  </div>`;
+}
+
+// Clicking a matchup opens both lineups under it. Clicks inside the open lineup
+// (e.g. selecting a name) don't close it.
+function lmToggle(ev, lgId) {
+  if (ev?.target?.closest?.('.lm-detail, .lm-star')) return;
+  if (LM.open.has(lgId)) LM.open.delete(lgId); else LM.open.add(lgId);
+  lmDraw();
+}
+
+// One side as display rows: Sleeper by roster slot (empty slots included), ESPN in
+// lineup-slot order, best ball as the counted lineup then everyone else dimmed.
+function lmSideRows(side) {
+  if (side.bestBall) {
+    const counted = new Set(side.counted);
+    const bench = side.lines.filter(l => !counted.has(l)).sort((a, b) => b.expFinal - a.expFinal);
+    return [...side.counted.map(l => ({ slot: l.pos, line: l })), ...bench.map(l => ({ slot: 'BN', line: l, bench: true }))];
+  }
+  if (side.lines.some(l => l.idx != null) || side.empties.length) {
+    const out = [];
+    for (const l of side.lines) out[l.idx] = { slot: l.slot, line: l };
+    for (const e of side.empties) out[e.idx] = { slot: e.slot, line: null };
+    return out.filter(Boolean);
+  }
+  return side.lines.map(l => ({ slot: l.slot, line: l }));
+}
+
+function lmGameShort(team) {
+  const g = team && S.nflGames.find(x => x.home === team || x.away === team);
+  if (!g) return { txt: team ? 'no game' : '', live: false };
+  if (g.state === 'in') return { txt: `${+g.period > 4 ? 'OT' : `Q${g.period}`} ${g.clock || ''}`.trim(), live: true };
+  if (g.state === 'post') return { txt: 'Final', live: false, done: true };
+  const k = new Date(g.kickoff);
+  return { txt: isNaN(k) ? '' : k.toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' }), live: false };
+}
+
+// Root For Me's score for him, the same number its game cards show: of the $ on
+// him across contending leagues, the share on my side. None when he's only in
+// rebuilding leagues (or unresolved, an ESPN name with no Sleeper id).
+function lmRootChip(pid) {
+  const x = pid && LM.roots[pid];
+  if (!x) return '';
+  const where = [x.mine && `starting for you in ${x.mine}`, x.theirs && `against you in ${x.theirs}`].filter(Boolean).join(', ');
+  return `<span class="lm-root" style="background:${rootColor(x.score)}" title="Root For Me ${x.score} — ${esc(scoreLabel(x.score))} (${where} contending matchup${x.mine + x.theirs !== 1 ? 's' : ''})">${x.score}</span>`;
+}
+
+function lmDetailHtml(r, opponent) {
+  const mine = lmSideRows(r.my), theirs = lmSideRows(r.opp);
+  const flash = Date.now() - (LM.builtAt || 0) < 3000;
+  const nameCell = (x, right) => {
+    if (!x) return `<td${right ? ' class="lm-lu-r"' : ''}></td>`;
+    const l = x.line;
+    if (!l) return `<td${right ? ' class="lm-lu-r"' : ''}><div class="lm-lu-name" style="font-style:italic;color:var(--brown-light)">empty</div></td>`;
+    const g = lmGameShort(l.team);
+    const inj = l.inj && !/^(active|healthy|act|normal)$/i.test(l.inj)
+      ? ` <span class="lm-lu-inj">${esc(String(l.inj).slice(0, 1).toUpperCase())}</span>` : '';
+    const sub = [l.pos, l.team, g.live ? `<b>${esc(g.txt)}</b>` : esc(g.txt)].filter(Boolean).join(' · ');
+    const cls = ['lm-lu-player', right ? 'lm-lu-r' : '', g.live ? 'lm-lu-live' : '', g.done ? 'lm-lu-done' : '', x.bench ? 'lm-lu-bench' : ''].filter(Boolean).join(' ');
+    const chip = lmRootChip(l.pid);
+    const name = `<span class="lm-lu-nm" title="${esc(l.name || '')}">${esc(l.name || '—')}${inj}</span>`;
+    return `<td class="${cls}"><div class="lm-lu-name">${right ? chip + name : name + chip}</div><div class="lm-lu-sub">${sub}</div></td>`;
+  };
+  const ptsCell = (x, right) => {
+    const l = x?.line;
+    if (!l) return `<td class="lm-lu-pts${right ? ' r' : ''}"></td>`;
+    const delta = l.delta ? `<span class="lm-lu-delta">+${lmNum(l.delta)}</span> ` : '';
+    const proj = l.left ? `<div class="lm-lu-proj">proj ${lmNum(l.expFinal)}</div>` : '';
+    const cls = `lm-lu-pts${right ? ' r' : ''}${x.bench ? ' lm-lu-bench' : ''}${flash && l.delta ? ' lm-lu-flash' : ''}`;
+    return `<td class="${cls}">${right ? '' : delta}<span class="lm-lu-now">${lmNum(l.pts)}</span>${right ? ` ${delta}` : ''}${proj}</td>`;
+  };
+  const n = Math.max(mine.length, theirs.length);
+  let body = '';
+  for (let i = 0; i < n; i++) {
+    const a = mine[i], b = theirs[i];
+    const slot = a?.slot && b?.slot && a.slot !== b.slot ? `${a.slot}/${b.slot}` : (a?.slot || b?.slot || '');
+    body += `<tr>${nameCell(a)}${ptsCell(a)}<td class="lm-lu-slot">${esc(slot)}</td>${ptsCell(b, true)}${nameCell(b, true)}</tr>`;
+  }
+  const tot = (s, right) => `<td class="lm-lu-pts${right ? ' r' : ''}"><span class="lm-lu-now">${lmNum(s.now)}</span>${r.final ? '' : `<div class="lm-lu-proj">proj ${lmNum(s.proj)}</div>`}</td>`;
+  const left = s => s.left ? `${s.left} still to play` : 'all played';
+  body += `<tr class="lm-lu-tot"><td><div class="lm-lu-sub">${left(r.my)}</div></td>${tot(r.my)}<td class="lm-lu-slot">Total</td>${tot(r.opp, true)}<td class="lm-lu-r"><div class="lm-lu-sub">${left(r.opp)}</div></td></tr>`;
+  const at = S.at ? new Date(S.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
+  return `<div class="lm-detail">
+    <table class="lm-lu">
+      <colgroup><col><col class="lm-lu-pts"><col class="lm-lu-slot"><col class="lm-lu-pts"><col></colgroup>
+      <thead><tr><th>Me</th><th></th><th></th><th></th><th class="lm-lu-r">${esc(opponent)}</th></tr></thead>
+      <tbody>${body}</tbody>
+    </table>
+    <div class="mnm-note" style="margin-top:6px">Points as of ${at}${r.my.bestBall ? ' · best ball: the dimmed players aren\'t in the projected lineup' : ''}. Green +x.x = scored since the last refresh. Proj = now + projection for what's left of his game. The coloured number is his <a href="/rootforme">Root For Me</a> score across your contending leagues (100 = root hard for him, 0 = hard against).</div>
+  </div>`;
+}
+
+function lmDraw() {
+  const box = document.getElementById('lm-container');
+  const info = document.getElementById('lm-summary-info');
+  if (!box) return;
+
+  const pills = LEAGUE_SCOPE_FILTERS.map(f => `<div class="lm-filter">
+      <span class="lm-filter-lbl">${f.lbl}</span>
+      ${f.opts.map(([v, l]) => `<button class="lm-pill${LM.filter[f.key] === v ? ' active' : ''}" onclick="lmSetFilter('${f.key}','${v}')">${l}</button>`).join('')}
+    </div>`).join('');
+  const at = S.at ? new Date(S.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
+  const bar = `<div class="lm-bar">
+      <div class="lm-filters">${pills}</div>
+      <div class="lm-refresh">
+        <span class="lm-at">Week ${LM.week} · as of ${at}</span>
+        <button class="load-btn lm-refresh-btn" onclick="refreshScores()"${S.refreshing ? ' disabled' : ''}>${S.refreshing ? 'Refreshing…' : '↻ Refresh'}</button>
+      </div>
+    </div>`;
+
+  const skips = [...LM.skips, ...S.espnSkips];
+  const notes = `<div class="mnm-note">${LM.favErr ? `<b class="mnm-bad">${esc(LM.favErr)}</b> ` : ''}${skips.length ? `Couldn't read: ${skips.map(x => `${esc(x.name)} (${esc(x.reason)})`).join(', ')}. ` : ''}${LM.noOpp ? `${LM.noOpp} league${LM.noOpp !== 1 ? 's have' : ' has'} no head-to-head game this week. ` : ''}Win % is the score now plus projections for what's left of each game. Click a matchup for both lineups; ☆ pins a league to the top. Scores update on Refresh (every 2 minutes with Auto on while a game is live); game clocks can lag up to 5 minutes.</div>`;
+
+  if (!S.mnmProj || !S.nflGames.length) {
+    box.innerHTML = `<div class="mnm-card">${bar}<div class="err-state" style="margin-top:12px">${
+      !S.mnmProj ? `Couldn't load Week ${LM.week} projections, which these numbers run on.` : `ESPN isn't serving the Week ${LM.week} NFL schedule yet, so there's no telling what's left to play.`
+    }</div></div>`;
+    if (info) info.textContent = '';
+    return;
+  }
+
+  const rows = lmFiltered();
+  const s = lmSummary(rows);
+  if (info) info.textContent = rows.length ? `${lmRec(s.w, s.l, s.t)} projected · as of ${at}` : '';
+
+  const tile = (v, l, sub) => `<div class="mnm-tile"><div class="mnm-tile-v">${v}</div><div class="mnm-tile-l">${l}</div>${sub ? `<div class="mnm-tile-s">${sub}</div>` : ''}</div>`;
+  const tiles = `<div class="mnm-tiles">
+      ${tile(lmRec(s.w, s.l, s.t), 'Projected record', `${s.exp.toFixed(1)} expected wins`)}
+      ${s.medN ? tile(lmRec(s.medW, s.medL, 0), 'Vs median', `${s.medN} median league${s.medN !== 1 ? 's' : ''} · ${s.medExp.toFixed(1)} expected`) : ''}
+      ${s.started ? tile(lmRec(s.upW, s.upL, s.upT), 'Leading right now', 'on the scoreboard') : ''}
+    </div>`;
+  const strip = `<div class="lm-strip">${LM_TIERS.map(t => `<div class="lm-strip-cell lm-t-${t.key}"><b>${s.tiers[t.key]}</b><span>${t.label}</span></div>`).join('')}</div>`;
+
+  // Favourites ignore the filters ("always at the top") and leave the tier lists.
+  const favRows = LM.rows.filter(r => LM.favs.has(r.lg.league_id)).sort((a, b) => b.p - a.p || b.mu - a.mu);
+  const favs = favRows.length ? `<div class="lm-tier lm-favs">
+      <div class="lm-tier-head">★ Favourites <span>${favRows.length}</span></div>
+      ${favRows.map(lmRowHtml).join('')}
+    </div>` : '';
+  const groups = LM_TIERS.map(t => {
+    const inTier = rows.filter(r => r.tier === t.key && !LM.favs.has(r.lg.league_id)).sort((a, b) => b.p - a.p || b.mu - a.mu);
+    if (!inTier.length) return '';
+    return `<div class="lm-tier lm-t-${t.key}">
+        <div class="lm-tier-head">${t.label} <span>${inTier.length}</span></div>
+        ${inTier.map(lmRowHtml).join('')}
+      </div>`;
+  }).join('');
+
+  box.innerHTML = `<div class="mnm-card">${bar}${rows.length
+    ? tiles + strip + favs + groups
+    : favs + `<div class="mnm-need" style="margin-top:12px">${LM.rows.length ? 'No other matchups fit these filters.' : `No head-to-head matchups for Week ${LM.week}.`}</div>`
+  }${notes}</div>`;
+}
+
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function mnmName(pid) {
+  const p = S.playerMap[pid];
+  if (p?.position === 'DEF') return `${pid} D/ST`;
+  return p?.full_name || `${p?.first_name || ''} ${p?.last_name || ''}`.trim() || pid;
+}
+
+function scoreLabel(score) {
+  if (score >= 85) return 'Root hard for him';
+  if (score >= 65) return 'Root for him';
+  if (score >= 45) return 'Neutral';
+  if (score >= 25) return 'Root against him';
+  return 'Root hard against him';
+}
+
+// ── Color ─────────────────────────────────────────────────────────────────────
+function rootColor(score) {
+  const hue = score < 50
+    ? (score / 50) * 42
+    : 42 + ((score - 50) / 50) * 78;
+  return `hsl(${hue.toFixed(0)}, 68%, 35%)`;
+}
+
+document.getElementById('username-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitUsername();
+});
+
+init();
+</script>
+</body>
+</html>
