@@ -735,11 +735,15 @@ function luImageRow(raw, block) {
 }
 
 // Every band's tables, in band order → blocks for luBuildRanks.
+// A `null` band is one that was never read (skipped after failing). It ends the
+// current block: the band after it, if it has no header of its own, would
+// otherwise be appended to the block BEFORE the gap — WR rows filed under RB.
 function luImageToBlocks(bandTables) {
   const blocks = {};
   let cur = null;
   for (const tables of bandTables) {
-    for (const t of tables || []) {
+    if (tables == null) { cur = null; continue; }
+    for (const t of tables) {
       const hdr = String(t?.header || '');
       const hit = hdr && LU_IMG_HEADERS.find(([re]) => re.test(hdr));
       if (hit) cur = hit[1];
@@ -753,30 +757,72 @@ function luImageToBlocks(bandTables) {
   return Object.keys(blocks).length ? blocks : null;
 }
 
-// File → parsed ranks (luBuildRanks shape). onProgress(done, total).
+const LU_IMG_BAND_TIMEOUT_MS = 150_000;
+
+// One band → its tables. Tries twice; the second try (and any manual retry) sends
+// `retry`, which the worker answers at a non-zero temperature — at temperature 0
+// a malformed read comes back byte-for-byte identical, so an identical retry is
+// wasted. A 401 is marked `auth` so the caller stops every band, not just this one.
+async function luReadBand(image, { sheet, part, of, retry = false }) {
+  for (let attempt = 0; ; attempt++) {
+    const again = retry || attempt > 0;
+    // A band normally takes 20–40 s, but Workers AI has had nights at 60–115 s.
+    // Past LU_IMG_BAND_TIMEOUT_MS the read is treated as hung.
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), LU_IMG_BAND_TIMEOUT_MS);
+    let r, j, err;
+    try {
+      r = await fetch('/api/ranks/image', {
+        method: 'POST', credentials: 'include', signal: ctl.signal,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image, sheet, part, of, retry: again }),
+      });
+      j = await r.json().catch(() => ({}));
+    } catch (e) {
+      err = e.name === 'AbortError'
+        ? `took over ${LU_IMG_BAND_TIMEOUT_MS / 1000}s — the image model is overloaded`
+        : (e.message || 'network error');
+    } finally { clearTimeout(timer); }
+    if (r?.ok) return j.tables || [];
+    if (r?.status === 401) throw Object.assign(new Error(j.error || 'Sign in to read a sheet from an image'), { auth: true });
+    if (attempt >= 1) throw new Error(err || j.error || 'HTTP ' + r.status);
+  }
+}
+
+// File → a read job: {name, sheet, bands, results, errors, busy}. results[i] is
+// band i's tables, or null while it has none; errors[i] says why. A failed band
+// no longer sinks the whole sheet — the caller decides what to do with gaps.
 async function luReadSheetImage(file, onProgress) {
   const bands = await luSliceSheetImage(file);
   if (!bands.length) throw new Error('Could not find any columns in that image');
+  const job = {
+    name: file.name, bands,
+    // Groups this upload's band reads in the AI Gateway logs (with part "3/9").
+    sheet: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+    results: bands.map(() => null), errors: bands.map(() => null), busy: new Set(),
+  };
   let done = 0;
   onProgress?.(0, bands.length);
-  // Groups this upload's band reads in the AI Gateway logs (with part "3/9").
-  const sheet = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-  const readBand = async (image, part, attempt = 0) => {
-    const r = await fetch('/api/ranks/image', {
-      method: 'POST', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image, sheet, part, of: bands.length }),
-    });
-    const j = await r.json().catch(() => ({}));
-    if (r.ok) return j.tables || [];
-    if (r.status === 401) throw new Error(j.error || 'Sign in to read a sheet from an image');
-    if (attempt < 1) return readBand(image, part, attempt + 1);   // one retry — a bad read is often a one-off
-    throw new Error(j.error || 'HTTP ' + r.status);
-  };
-  const results = await Promise.all(bands.map((b, i) => readBand(b, i + 1).then(t => { onProgress?.(++done, bands.length); return t; })));
-  const blocks = luImageToBlocks(results);
+  await Promise.all(bands.map((b, i) =>
+    luReadBand(b, { sheet: job.sheet, part: i + 1, of: bands.length })
+      .then(t => { job.results[i] = t; },
+            e => { if (e.auth) throw e; job.errors[i] = e.message || 'error'; })
+      .finally(() => onProgress?.(++done, bands.length))));
+  return job;
+}
+
+// A job → parsed ranks. Unread bands are null, which luImageToBlocks treats as a gap.
+function luImageJobRanks(job) {
+  const blocks = luImageToBlocks(job.results);
   if (!blocks) throw new Error('No ranking tables were read from that image');
   return luBuildRanks(blocks, { image: true });
+}
+
+// Does band i start with a header we recognise? A band that doesn't is a
+// continuation ("WR cont.") and is lost if the band before it is skipped.
+function luBandHasHeader(tables) {
+  const h = String(tables?.[0]?.header || '');
+  return !!h && LU_IMG_HEADERS.some(([re]) => re.test(h));
 }
 
 // Fallback for the older paste-a-list format: one player per line, best first,
@@ -2095,14 +2141,126 @@ async function luRankImagePicked(input) {
   const say = (msg, color) => { if (st) { st.style.color = color || 'var(--brown-light)'; st.textContent = msg; } };
   input.disabled = true;
   say('Slicing the image…');
+  // The columns are read in parallel and tend to finish together, so the count
+  // can sit at 0 for a minute or more — an elapsed clock shows it's still working.
+  const t0 = Date.now();
+  let prog = null;
+  const draw = () => { if (prog) say(`Reading the sheet… ${prog.done} of ${prog.total} columns · ${Math.round((Date.now() - t0) / 1000)}s (usually 30–90s)`); };
+  const tick = setInterval(draw, 1000);
+  LU_IMG = null;
   try {
-    const parsed = await luReadSheetImage(f, (done, total) => say(`Reading the sheet… ${done} of ${total} columns`));
+    const job = await luReadSheetImage(f, (done, total) => { prog = { done, total }; draw(); });
+    clearInterval(tick);
     if (!document.getElementById('lu-rk-modal')) return;   // closed while it read
-    luCommitRanks(parsed, f.name + ' (image)');
+    input.disabled = false;
+    if (job.errors.every(Boolean)) throw new Error(job.errors[0]);   // nothing read at all
+    LU_IMG = job;
+    luImgSettle();
   } catch (e) {
     say('Could not read that image: ' + (e.message || 'error'), '#c0504d');
     input.disabled = false;
+  } finally { clearInterval(tick); }
+}
+
+// ── A sheet with failed columns ──────────────────────────────────────────────
+// The columns that read are kept in LU_IMG; each failed one can be retried,
+// backfilled from a screenshot of just that column, or skipped. Nothing is saved
+// until every column is read or the user chooses to go without the rest.
+let LU_IMG = null;
+
+// Commit once every band is read; otherwise (re)draw the gaps panel.
+function luImgSettle() {
+  const job = LU_IMG;
+  if (!job || !document.getElementById('lu-rk-modal')) return;
+  if (job.results.every(r => r != null)) return luImgCommit();
+  luImgDraw();
+}
+
+function luImgCommit() {
+  const job = LU_IMG;
+  const st = document.getElementById('lu-rk-status');
+  try {
+    const parsed = luImageJobRanks(job);
+    const gaps = job.results.map((r, i) => r == null ? i + 1 : null).filter(Boolean);
+    LU_IMG = null;
+    luCommitRanks(parsed, job.name + (gaps.length ? ` (image, column${gaps.length > 1 ? 's' : ''} ${gaps.join(', ')} missing)` : ' (image)'));
+  } catch (e) {
+    if (st) { st.style.color = '#c0504d'; st.textContent = 'Could not read that image: ' + (e.message || 'error'); }
   }
+}
+
+function luImgDraw() {
+  const job = LU_IMG, st = document.getElementById('lu-rk-status');
+  if (!job || !st) return;
+  const n = job.bands.length;
+  const failed = job.results.map((r, i) => r == null ? i : -1).filter(i => i >= 0);
+  const okN = n - failed.length;
+  const anyBusy = job.busy.size > 0;
+  // Headerless bands right after a gap would be dropped by a skip — name them.
+  const lost = failed.map(i => i + 1).filter(j => j < n && job.results[j] != null && !luBandHasHeader(job.results[j]));
+  const btn = 'font-size:0.64rem;';
+  const rows = failed.map(i => {
+    const busy = job.busy.has(i);
+    // The top of the strip shows the column's header, which is how you tell which one it is.
+    const thumb = `<div style="flex:0 0 120px;height:64px;border:1px solid var(--brown-light);border-radius:2px;background:#fff url(${job.bands[i]}) top center/100% auto no-repeat;"></div>`;
+    return `<div style="display:flex;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--brown-mid);">
+      ${thumb}
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:0.75rem;color:var(--cream);">Column ${i + 1} of ${n}</div>
+        <div style="font-size:0.65rem;color:${busy ? 'var(--brown-light)' : '#c0504d'};margin:2px 0 6px;">${busy ? 'Reading… (can take a minute or two)' : esc(job.errors[i] || 'not read')}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="ghost-btn" style="${btn}" ${busy ? 'disabled' : ''} onclick="luImgRetry(${i})">↻ Retry</button>
+          <label class="ghost-btn" style="${btn}cursor:${busy ? 'default' : 'pointer'};${busy ? 'opacity:0.5;pointer-events:none;' : ''}">📷 Upload just this column
+            <input type="file" accept="image/png,image/jpeg,image/webp" style="display:none;" onchange="luImgBackfill(${i}, this)" />
+          </label>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  st.style.color = 'var(--brown-light)';
+  st.innerHTML = `
+    <div style="border:1px solid #c0504d;border-radius:3px;padding:10px;margin:4px 0;">
+      <div style="font-size:0.75rem;color:var(--cream);margin-bottom:4px;">Read ${okN} of ${n} columns — ${failed.length} didn't come through</div>
+      <div style="font-size:0.65rem;color:var(--brown-light);line-height:1.5;">Retry a column, or upload a screenshot of just that column (header included) to fill it in. The rest of the sheet is kept.</div>
+      ${rows}
+      <div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap;border-top:1px solid var(--brown-mid);padding-top:8px;">
+        ${lost.length ? `<span style="font-size:0.62rem;color:#d08a30;margin-right:auto;">Column${lost.length > 1 ? 's' : ''} ${lost.join(', ')} continue${lost.length > 1 ? '' : 's'} a missing one and would be left out too.</span>` : ''}
+        <button class="ghost-btn" style="${btn}" ${anyBusy ? 'disabled' : ''} onclick="luImgCommit()">Use the ${okN - lost.length} column${okN - lost.length === 1 ? '' : 's'} that worked</button>
+      </div>
+    </div>`;
+}
+
+async function luImgRetry(i) {
+  const job = LU_IMG;
+  if (!job || job.busy.has(i)) return;
+  job.busy.add(i); luImgDraw();
+  try {
+    job.results[i] = await luReadBand(job.bands[i], { sheet: job.sheet, part: i + 1, of: job.bands.length, retry: true });
+    job.errors[i] = null;
+  } catch (e) { job.errors[i] = e.message || 'error'; }
+  job.busy.delete(i);
+  if (LU_IMG === job) luImgSettle();   // a new upload replaced this one meanwhile
+}
+
+// A screenshot of just the missing column. It's sliced like a full sheet (a crop
+// that spans a rule line becomes two bands), and every band's tables fill slot i
+// in order, so a header in the crop starts the right block.
+async function luImgBackfill(i, input) {
+  const job = LU_IMG, f = input.files?.[0];
+  if (!job || !f || job.busy.has(i)) return;
+  job.busy.add(i); luImgDraw();
+  try {
+    const bands = await luSliceSheetImage(f);
+    if (!bands.length) throw new Error('Could not find a column in that image');
+    const parts = await Promise.all(bands.map((b, k) =>
+      luReadBand(b, { sheet: job.sheet, part: i + 1, of: job.bands.length, retry: k > 0 })));
+    const tables = parts.flat();
+    if (!tables.length) throw new Error('No table was read from that screenshot');
+    job.results[i] = tables;
+    job.errors[i] = null;
+  } catch (e) { job.errors[i] = 'Backfill failed: ' + (e.message || 'error'); }
+  job.busy.delete(i);
+  if (LU_IMG === job) luImgSettle();
 }
 
 function luCommitRanks(parsed, srcName) {

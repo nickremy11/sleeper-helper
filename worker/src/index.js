@@ -588,6 +588,41 @@ Transcribe EVERY data row exactly as printed, top to bottom, spelling names exac
 {"tables":[{"header":"<header row text, or null if this strip starts mid-table>","rows":[[rank, "name", "team or pos", "opp", tier]]}]}
 Each row lists its cells in the order the columns are printed. Use null for a missing cell. Tier is the small number at the right edge (null if the table has no Tier column).`;
 
+// The model sometimes gets every row right and then closes the brackets out of
+// order — `]]}}]` for `]]}]}` — and at temperature 0 a retry repeats it exactly.
+// Re-close by tracking the open brackets (outside strings): a closer that doesn't
+// match closes whatever is open first, a closer with nothing open is dropped, and
+// anything still open at the end is closed. Stops at the root object's close, so
+// trailing prose is ignored.
+export function repairJsonBrackets(s) {
+  const want = { '{': '}', '[': ']' };
+  const stack = [];
+  let out = '', inStr = false, esc = false;
+  for (const ch of s) {
+    if (inStr) {
+      out += ch;
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') { inStr = true; out += ch; continue; }
+    if (ch === '{' || ch === '[') { stack.push(ch); out += ch; continue; }
+    if (ch === '}' || ch === ']') {
+      if (!stack.length) continue;
+      const opener = ch === '}' ? '{' : '[';
+      if (!stack.includes(opener)) continue;            // stray closer
+      while (stack[stack.length - 1] !== opener) out += want[stack.pop()];
+      stack.pop(); out += ch;
+      if (!stack.length) return out;
+      continue;
+    }
+    out += ch;
+  }
+  while (stack.length) out += want[stack.pop()];
+  return out;
+}
+
 async function handleRanksImage(request, env) {
   const cors = getCors(request);
   const res  = (data, status = 200) => new Response(JSON.stringify(data), {
@@ -626,7 +661,8 @@ async function handleRanksImage(request, env) {
         { type: 'image_url', image_url: { url: image } },
       ] }],
       max_tokens: 8000,
-      temperature: 0,
+      // A retry gets a little randomness: at 0 a malformed read repeats exactly.
+      temperature: body.retry === true ? 0.3 : 0,
     }, {
       // No caching: a retry after a bad read must reach the model again.
       gateway: { id: RANKS_IMAGE_GATEWAY, skipCache: true, metadata },
@@ -643,8 +679,11 @@ async function handleRanksImage(request, env) {
   const content = choice?.message?.content ?? out?.response;
   let parsed = content && typeof content === 'object' ? content : null;
   if (!parsed && typeof content === 'string') {
-    const a = content.indexOf('{'), b = content.lastIndexOf('}');
-    try { if (a >= 0 && b > a) parsed = JSON.parse(content.slice(a, b + 1)); } catch { /* fall through */ }
+    const a = content.indexOf('{');
+    if (a >= 0) {
+      try { parsed = JSON.parse(content.slice(a, content.lastIndexOf('}') + 1)); }
+      catch { try { parsed = JSON.parse(repairJsonBrackets(content.slice(a))); } catch { /* fall through */ } }
+    }
   }
   if (!Array.isArray(parsed?.tables)) {
     return res({ error: 'Could not read a table from this part of the image', raw: String(content || '').slice(0, 300) }, 502);
