@@ -278,7 +278,7 @@
 <script src="/shared-utils.js?v=20261116"></script>
 <script src="/miracle.js?v=20261116"></script>
 <script src="/matchup-tracker.js?v=20261117"></script>
-<script src="/league-matchups.js?v=20261117"></script>
+<script src="/league-matchups.js?v=20261118"></script>
 <script>
 // Scoreboard — every head-to-head matchup this week, live: score now, projection
 // for what's left, win %, tiered Mortal Lock → Lost Cause. Split out of Root For Me,
@@ -552,14 +552,6 @@ const LM = {
   roots: {},        // {pid: {score, mine, theirs}} — Root For Me's score, lmRootScores()
   prevPts: {},      // {lineKey: pts} from the previous read, for the +x.x since-last-refresh marks
 };
-// ESPN lineupSlotId → label, and the order a lineup reads in. Local, like
-// index.html's ESPN_SLOT, because shared-utils' map folds 3/5 into FLEX and drops K/D-ST.
-const LM_ESPN_SLOT = { 0: 'QB', 1: 'TQB', 2: 'RB', 3: 'RB/WR', 4: 'WR', 5: 'WR/TE', 6: 'TE', 7: 'OP', 8: 'DT', 9: 'DE',
-  10: 'LB', 11: 'DL', 12: 'CB', 13: 'S', 14: 'DB', 15: 'DP', 16: 'D/ST', 17: 'K', 19: 'HC', 23: 'FLEX', 24: 'ER' };
-const LM_ESPN_ORDER = [0, 1, 2, 3, 4, 5, 6, 23, 7, 16, 17, 8, 9, 11, 10, 12, 13, 14, 15, 19, 24];
-const LM_SLOT_LABEL = { SUPER_FLEX: 'SF', REC_FLEX: 'W/T', WRRB_FLEX: 'W/R', IDP_FLEX: 'IDP', DEF: 'D/ST' };
-// index.html's LU_BAD_INJ, plus how ESPN spells two of them.
-const LM_OUT = new Set(['OUT', 'IR', 'SUS', 'NA', 'PUP', 'DNR', 'COV', 'DNP', 'O', 'SUSPENSION', 'INJURY_RESERVE']);
 
 // Every league, rebuilders included (the Role filter covers them).
 async function lmFetchAll(week, fresh = false) {
@@ -626,63 +618,8 @@ function lmLoaded(results) {
   lmLoadNames();
 }
 
-function lmGameFrac() {
-  const now = Date.now(), byTeam = {};
-  for (const g of S.nflGames) { const f = mnmRemainingFrac(g, now); byTeam[g.home] = f; byTeam[g.away] = f; }
-  return byTeam;
-}
-
 // A Sleeper side's starters (or whole roster, for best ball) priced from Sleeper's
-// projection under this league's scoring. ESPN's line is already priced by ESPN,
-// and only falls back to Sleeper's numbers for a player ESPN published nothing on.
-function lmSide(m, r, fracs) {
-  const lg = r.league;
-  const isEspn = lg.source === 'espn';
-  const bestBall = lg.settings?.best_ball === 1;
-  const scoring = isEspn ? { ...MNM_KDEF_DEFAULT, ...(r.scoring || {}) } : (lg.scoring_settings || {});
-  const sleeperPts = pid => S.mnmProj?.[pid] ? mnmScore(S.mnmProj[pid], scoring) : 0;
-  const isOut = s => LM_OUT.has(String(s || '').toUpperCase());
 
-  // Slot, team and injury ride along on each line for the click-in lineup view.
-  const slotsOf = (lg.roster_positions || []).filter(s => !['BN', 'IR', 'TAXI'].includes(s));
-  const empties = [];
-  const lines = m.line
-    ? [...m.line]
-        .sort((a, b) => lmEspnSlotRank(a.slotId) - lmEspnSlotRank(b.slotId))
-        .map(p => {
-          const team = p.pid ? (S.playerMap[p.pid]?.team || p.team) : p.team;
-          return {
-            ...lmLine({
-              pid: p.pid, name: p.name, pts: p.pts, pos: p.pos,
-              proj: p.proj ?? (p.pid ? sleeperPts(p.pid) : 0),
-              f: fracs[team] ?? fracs[p.team] ?? 0,
-              out: isOut(p.inj),
-            }),
-            slot: LM_ESPN_SLOT[p.slotId] || p.pos || '', team, inj: p.inj || null,
-          };
-        })
-    : ((bestBall ? m.players : m.starters) || []).map((pid, i) => {
-        const slot = bestBall ? null : (LM_SLOT_LABEL[slotsOf[i]] || slotsOf[i] || '');
-        if (!pid || pid === '0') { if (!bestBall) empties.push({ idx: i, slot }); return null; }
-        const pl = S.playerMap[pid];
-        return {
-          ...lmLine({
-            pid, name: mnmName(pid), pts: m.players_points?.[pid] || 0, pos: pl?.position,
-            proj: sleeperPts(pid), f: fracs[pl?.team] ?? 0, out: isOut(pl?.injury_status),
-          }),
-          slot: slot ?? (pl?.position || ''), idx: i, team: pl?.team || null, inj: pl?.injury_status || null,
-        };
-      }).filter(Boolean);
-  const side = lmProjectSide({ lines, now: m.custom_points ?? m.points ?? 0, bestBall, rosterPositions: lg.roster_positions });
-  // A cached older /matchup-tracker.js doesn't return these; the lineup view needs them.
-  side.lines = side.lines || lines;
-  side.counted = side.counted || (bestBall ? lmBestLineup(lines, lg.roster_positions) : lines);
-  side.empties = empties;
-  side.bestBall = bestBall;
-  return side;
-}
-
-const lmEspnSlotRank = id => { const i = LM_ESPN_ORDER.indexOf(Number(id)); return i < 0 ? 99 : i; };
 const lmLineKey = (lgId, side, l) => `${lgId}|${side}|${l.pid || l.name}`;
 
 // "+6.2 since the last refresh" — stamped onto each line, then the new numbers

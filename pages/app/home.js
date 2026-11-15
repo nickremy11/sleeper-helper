@@ -1,13 +1,24 @@
 // Home. Before your leagues load it's the welcome page; once they're in, it's
-// "This Week": what needs doing across every league, each card linking to the
-// tool that does it.
+// "This Week": three cards, each linking to the tool that does the work.
 //
 // Every card reuses the tool's own loader and cache, so opening Home warms the
 // tab you go to next instead of costing an extra fetch:
-//   Lineups — luEnsureLineupData (5-min cache) + luLineupStatus, the card badges
-//   Trades  — tradesLoad (5-min cache), the Open Trades scan
-//   Drafts  — one /user/{id}/drafts call, the Draft tracker's own source
-//   Leagues — whatever League Summaries has already loaded; nothing is fetched
+//   Lineups    — luEnsureLineupData (5-min cache) + luLineupStatus, the card badges
+//   Trades     — tradesLoad (5-min cache), the Open Trades scan; offers TO me in
+//                full, plus a warning for any I sent that outlive a kickoff
+//   Scoreboard — the Scoreboard's own reads and maths (league-matchups.js,
+//                matchup-tracker.js): projected record for the leagues I'm
+//                contending in, then the favourites starred on /scoreboard
+
+// league-matchups.js (shared with the Scoreboard) reads a global API, and its
+// lmSide() names players with mnmName — both defined per page.
+const API = SH_API;
+function mnmName(pid) {
+  const p = S.playerMap[pid];
+  if (p?.position === 'DEF') return `${pid} D/ST`;
+  return p?.full_name || `${p?.first_name || ''} ${p?.last_name || ''}`.trim() || pid;
+}
+const DASH = { games: {}, sb: null };
 
 function renderHome() {
   if (!S.userId) { setC(homeWelcomeHtml()); return; }
@@ -19,27 +30,35 @@ function renderHome() {
     <div class="dash-grid">
       <section class="dash-card" id="dash-lineups" aria-live="polite">${dashHead('Lineups', 'lineups')}${loading('Checking lineups')}</section>
       <section class="dash-card" id="dash-trades"  aria-live="polite">${dashHead('Open Trades', 'trades')}${loading('Scanning trades')}</section>
-      <section class="dash-card" id="dash-drafts"  aria-live="polite">${dashHead('Drafts', 'drafts')}${loading('Checking drafts')}</section>
-      <section class="dash-card" id="dash-leagues">${dashHead('Your Leagues', 'leagues')}${loading('Reading your leagues')}</section>
+      <section class="dash-card dash-wide" id="dash-scoreboard" aria-live="polite">${dashHead('Scoreboard', 'scoreboard', '/scoreboard')}${loading('Reading this week’s matchups')}</section>
     </div>
     <p class="dash-foot">Looking for something else? <a href="/?tab=guide" data-tab="guide">Every tool, one line each, in the Guide →</a></p>
   </div>`);
   dashLineups(regular);
-  dashTrades();
-  dashDrafts();
-  dashLeagues();
+  dashTrades(regular);
+  dashScoreboard(regular);
 }
 
-function dashHead(title, tab) {
-  return `<div class="dash-head"><h3>${title}</h3><a href="/?tab=${tab}" data-tab="${tab}">Open →</a></div>`;
+// `href` is for a card whose tool is its own page (the Scoreboard) rather than a tab.
+function dashHead(title, tab, href) {
+  return `<div class="dash-head"><h3>${title}</h3><a href="${href || `/?tab=${tab}`}"${href ? '' : ` data-tab="${tab}"`}>Open →</a></div>`;
 }
 // Fill one card's body, unless the user has already moved on.
-function dashFill(id, title, tab, body) {
+function dashFill(id, title, tab, body, href) {
   if (S.tab !== 'home') return;
   const el = document.getElementById(id);
-  if (el) el.innerHTML = dashHead(title, tab) + body;
+  if (el) el.innerHTML = dashHead(title, tab, href) + body;
 }
 const dashLine = (txt, cls = '') => `<div class="dash-line ${cls}">${txt}</div>`;
+const dashWhen = ms => new Date(ms).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+
+// One week's NFL games (kickoff, state, clock), memoised per week — the Trades
+// warning and the Scoreboard both read it, and the worker caches it for 5 min.
+function dashGames(week) {
+  const season = S.nflState?.season;
+  return DASH.games[week] ||= fetch(`${API}/espn/games?week=${week}&season=${season}`)
+    .then(r => r.ok ? r.json() : []).catch(() => []);
+}
 
 async function dashLineups(regular) {
   const fill = body => dashFill('dash-lineups', 'Lineups', 'lineups', body);
@@ -63,7 +82,11 @@ async function dashLineups(regular) {
   } catch (e) { fill(dashLine('Couldn’t load lineups: ' + esc(e.message), 'bad')); }
 }
 
-async function dashTrades() {
+// Offers TO me in full (what I'd get, what I'd give, who from, when it lapses),
+// then a warning for every trade I SENT that can still be accepted after one of
+// its players' games kicks off — an acceptance after kickoff moves that game's
+// points to the other side, which is rarely what the offer meant.
+async function dashTrades(regular) {
   const fill = body => dashFill('dash-trades', 'Open Trades', 'trades', body);
   if (!S.token && !S.auth?.has_token) {
     return fill(dashLine(S.auth
@@ -71,69 +94,152 @@ async function dashTrades() {
       : 'Paste your Sleeper token above to see pending trades.', 'dim'));
   }
   try {
-    const { all } = await tradesLoad();
+    const { all, rMaps } = await tradesLoad();
     const inc = all.filter(t => t.creator !== S.userId);
-    const out = all.length - inc.length;
+    const out = all.filter(t => t.creator === S.userId);
+    const games = regular ? await dashGames(luWeekFor(S.nflState)) : [];
+    const warns = dashTradeWarnings(out, games);
+
     const stat = `<div class="dash-stats">
       <div><b class="${inc.length ? 'warn' : ''}">${inc.length}</b><span>offered to you</span></div>
-      <div><b>${out}</b><span>you sent</span></div>
+      <div><b>${out.length}</b><span>you sent</span></div>
+      ${warns.length ? `<div><b class="bad">${warns.length}</b><span>sent, expiring after kickoff</span></div>` : ''}
     </div>`;
-    const list = inc.slice(0, 4).map(t => dashLine(`<span class="dash-lg">${esc(t._lgName)}</span><span class="dash-sub">${t.created ? timeAgo(t.created) : ''}</span>`));
-    fill(stat + (list.length ? list.join('') : dashLine('Nothing waiting on you.', 'dim')));
+
+    const incHtml = inc.slice(0, 4).map(t => {
+      const sides = tradeSides(t, rMaps[t._lgId] || {}, t._myRid);
+      const names = s => s.items.map(i => esc(i.txt)).join(', ') || '—';
+      const exp = t.settings?.expires_at ? t.settings.expires_at * 1000 : null;
+      return `<div class="dash-trade">
+        <div class="dash-trade-top"><span class="dash-lg">${esc(t._lgName)}</span>
+          <span class="dash-sub">from ${esc(sides[1].name)}${exp ? ` · expires ${dashWhen(exp)}` : t.created ? ` · ${timeAgo(t.created)}` : ''}</span></div>
+        <div class="dash-trade-row"><b>Get</b> ${names(sides[0])}</div>
+        <div class="dash-trade-row"><b>Give</b> ${names(sides[1])}</div>
+      </div>`;
+    }).join('');
+    const incMore = inc.length > 4 ? dashLine(`+ ${inc.length - 4} more in <a href="/?tab=trades" data-tab="trades">Open Trades</a>`, 'dim') : '';
+
+    const warnHtml = warns.slice(0, 5).map(w => dashLine(
+      `<span class="dash-badge bad">⚠ Expires after kickoff</span><span class="dash-lg">${esc(w.t._lgName)}</span>
+       <span class="dash-sub">expires ${dashWhen(w.exp)} — ${esc(w.name)} (${esc(w.team)}) ${w.state === 'post' ? 'already played' : w.kickoff <= Date.now() ? 'already started' : 'kicks off ' + dashWhen(w.kickoff)}</span>`)).join('');
+    const warnMore = warns.length > 5 ? dashLine(`+ ${warns.length - 5} more`, 'dim') : '';
+
+    fill(stat + (incHtml ? incHtml + incMore : dashLine('Nothing waiting on you.', 'dim')) + warnHtml + warnMore);
   } catch (e) { fill(dashLine('Couldn’t scan trades: ' + esc(e.message), 'bad')); }
 }
 
-async function dashDrafts() {
-  const fill = body => dashFill('dash-drafts', 'Drafts', 'drafts', body);
-  try {
-    const season = S.nflState?.league_create_season || S.nflState?.season || String(new Date().getFullYear());
-    const drafts = await api('/user/' + S.userId + '/drafts/nfl/' + season) || [];
-    const live = drafts.filter(d => d.status === 'drafting' || d.status === 'paused');
-    const soon = drafts.filter(d => d.status === 'pre_draft' && d.start_time && d.start_time > Date.now());
-    const name = d => d.metadata?.name || S.leagues.find(l => l.league_id === d.league_id)?.name || 'Draft';
-    const list = live.slice(0, 4).map(d => dashLine(
-      `<span class="dash-lg">${esc(name(d))}</span><span class="dash-badge ${d.status === 'paused' ? 'warn' : 'ok'}">${d.status === 'paused' ? 'Paused' : 'Live'}</span>
-       <button class="ghost-btn dash-act" onclick="trackDraft(${jsArg(String(d.draft_id))})">Track →</button>`));
-    const next = soon.sort((a, b) => a.start_time - b.start_time)[0];
-    fill(`<div class="dash-stats">
-        <div><b class="${live.length ? 'warn' : ''}">${live.length}</b><span>live now</span></div>
-        <div><b>${soon.length}</b><span>scheduled</span></div>
-      </div>
-      ${list.join('') || dashLine('No drafts in progress.', 'dim')}
-      ${next ? dashLine(`Next: <span class="dash-lg">${esc(name(next))}</span> <span class="dash-sub">${new Date(next.start_time).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>`) : ''}`);
-  } catch (e) { fill(dashLine('Couldn’t check drafts: ' + esc(e.message), 'bad')); }
+// For each trade I sent: the earliest game among its players that kicks off before
+// the offer lapses. Offers with no expiry, and picks (no game), never warn.
+function dashTradeWarnings(out, games) {
+  const kick = {};
+  for (const g of games || []) for (const tm of [g.home, g.away]) kick[tm] = g;
+  const warns = [];
+  for (const t of out) {
+    const exp = t.settings?.expires_at ? t.settings.expires_at * 1000 : null;
+    if (!exp) continue;
+    let worst = null;
+    for (const pid of new Set([...Object.keys(t.adds || {}), ...Object.keys(t.drops || {})])) {
+      const p = S.players[pid], team = p?.team || pid, g = kick[team];
+      const ko = g?.kickoff ? new Date(g.kickoff).getTime() : NaN;
+      if (!(ko < exp)) continue;
+      if (!worst || ko < worst.kickoff) {
+        worst = { t, exp, kickoff: ko, state: g.state, team, name: p?.full_name || (p ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : 'Player ' + pid) };
+      }
+    }
+    if (worst) warns.push(worst);
+  }
+  return warns.sort((a, b) => a.kickoff - b.kickoff);
 }
 
 // Scoped to the leagues you're playing for this year: every redraft league plus
 // the dynasty leagues tagged Contender (Root For Me / League Summaries).
 // Rebuilders and untagged dynasty leagues are left out, and so are guillotine
-// leagues, whose record means something else. Standings and odds are League
-// Summaries' — shown if it has run this session, never fetched from here; the
-// only read is the contender tags (one call, skipped once anything has loaded them).
+// leagues, whose record means something else.
 function dashInScope(lgId) {
   if (lsIsGuillotine(lgId)) return false;
   return rsLeagueCategory(lgId) === 'redraft' || RS.prefs[lgId]?.contender === true;
 }
-async function dashLeagues() {
-  const fill = body => dashFill('dash-leagues', 'Your Leagues', 'leagues', body);
-  try { if (RS._storedPrefs === undefined) await rsLoadPrefs(); } catch {}
-  const scoped = S.leagues.filter(l => dashInScope(l.league_id));
-  const redraft = scoped.filter(l => rsLeagueCategory(l.league_id) === 'redraft').length;
-  const counts = dashLine(`<span class="dash-lg">${scoped.length}</span> of ${S.leagues.length} leagues
-    <span class="dash-sub">contenders + redraft · ${scoped.length - redraft} contending dynasty, ${redraft} redraft</span>`);
-  const data = scoped.map(l => LS.leagueData?.[l.league_id]).filter(Boolean);
-  if (!LS.loaded || !data.length) {
-    return fill(counts + dashLine('Standings, records and playoff odds are in League Summaries.', 'dim'));
+
+// Favourites starred on /scoreboard: the account's copy when signed in (the server
+// wins once it has any), else this browser's — the Scoreboard's own rule (favLoad).
+async function dashFavs() {
+  let favs = [];
+  try { favs = JSON.parse(localStorage.getItem(`sb_favs_${S.userId}`) || '[]'); } catch {}
+  if (S.auth) {
+    try {
+      const r = await fetch(`${API}/scoreboard/favorites`, { credentials: 'include' });
+      if (r.ok) { const s = (await r.json()).favs || []; if (s.length) favs = s; }
+    } catch {}
   }
-  let w = 0, l = 0, inPo = 0, haveOdds = 0;
-  for (const d of data) {
-    w += d.wins || 0; l += d.losses || 0;
-    if (d.playoffOdds != null) { haveOdds++; if (d.playoffOdds > 0.5) inPo++; }
-  }
-  fill(counts + `<div class="dash-stats" style="margin-top:10px;">
-      <div><b>${w}–${l}</b><span>combined record</span></div>
-      ${haveOdds ? `<div><b>${inPo}</b><span>of ${haveOdds} likely in the playoffs</span></div>` : ''}
-    </div>`);
+  return new Set(favs);
+}
+
+const DASH_SB_TTL = 2 * 60 * 1000;
+const DASH_TIER_BADGE = { lock: 'ok', good: 'ok', toss: 'warn', bad: 'bad', dead: 'bad' };
+
+// A compact read of the Scoreboard: the projected record across the leagues I'm
+// contending in (a matchup counts as a win when my projection is ahead), then each
+// favourite's matchup. Same reads and maths as /scoreboard — week included, which
+// follows display_week there — just no lineups, filters or median odds.
+async function dashScoreboard(regular) {
+  const fill = body => dashFill('dash-scoreboard', 'Scoreboard', 'scoreboard', body, '/scoreboard');
+  if (!regular) return fill(dashLine('No regular-season games this week.', 'dim'));
+  const st = S.nflState || {};
+  const week = st.display_week || st.week || 1;
+  if (DASH.sb && DASH.sb.week === week && Date.now() - DASH.sb.at < DASH_SB_TTL) return fill(DASH.sb.html);
+  try {
+    await loadPlayers();
+    try { if (RS._storedPrefs === undefined) await rsLoadPrefs(); } catch {}
+    // The globals league-matchups.js reads, set to this week.
+    S.season = String(st.season); S.week = week; S.playerMap = S.players; S.espnSkips = [];
+    ridLoad();
+    const favs = await dashFavs();
+    const leagues = S.leagues.filter(l => dashInScope(l.league_id) || favs.has(l.league_id));
+    const [games, proj, { results }] = await Promise.all([
+      dashGames(week),
+      fetch(`${API}/sleeper/projections/nfl/regular/${S.season}/${week}`).then(r => r.ok ? r.json() : null).catch(() => null),
+      fetchMatchupsFor(leagues, week),
+    ]);
+    S.nflGames = games || []; S.mnmProj = proj;
+
+    const fracs = lmGameFrac();
+    const rows = [];
+    for (const r of results) {
+      if (r.league.settings?.type === 3) continue;   // guillotine: no opponent to be ahead of
+      if (!r.oppMatchup || r.myMatchup.matchup_id === null) continue;
+      const my = lmSide(r.myMatchup, r, fracs), opp = lmSide(r.oppMatchup, r, fracs);
+      if (!my.proj && !opp.proj && !my.now && !opp.now) continue;   // lineups not set yet
+      rows.push({ lg: r.league, my, opp, ...lmEvaluate(my, opp) });
+    }
+
+    const contending = rows.filter(r => dashInScope(r.lg.league_id));
+    let body;
+    if (!contending.length) {
+      body = dashLine('No contending matchups to project yet — lineups usually appear once the week opens.', 'dim');
+    } else {
+      const s = lmSummary(contending);
+      const tiers = LM_TIERS.filter(t => s.tiers[t.key]).map(t => `${s.tiers[t.key]} ${t.label}`).join(' · ');
+      body = `<div class="dash-stats">
+          <div><b>${s.w}–${s.l}${s.t ? '–' + s.t : ''}</b><span>projected record</span></div>
+          <div><b>${s.exp.toFixed(1)}</b><span>expected wins</span></div>
+          ${s.started ? `<div><b>${s.upW}–${s.upL}${s.upT ? '–' + s.upT : ''}</b><span>ahead right now</span></div>` : ''}
+        </div>
+        ${dashLine(`${contending.length} contending matchup${contending.length === 1 ? '' : 's'} · Week ${week}${tiers ? ' · ' + tiers : ''}`, 'dim')}`;
+    }
+
+    const favRows = rows.filter(r => favs.has(r.lg.league_id)).sort((a, b) => b.p - a.p);
+    const tierLabel = Object.fromEntries(LM_TIERS.map(t => [t.key, t.label]));
+    body += `<div class="dash-subhead">★ Favourites</div>` + (favRows.length
+      ? favRows.map(r => dashLine(
+          `<span class="dash-lg">${esc(r.lg.name)}</span>
+           <span class="dash-sub">${r.my.proj.toFixed(1)} – ${r.opp.proj.toFixed(1)} · ${Math.round(r.p * 100)}% to win</span>
+           <span class="dash-badge ${r.final ? (r.mu > 0 ? 'ok' : 'bad') : DASH_TIER_BADGE[r.tier]}">${r.final ? (r.mu > 0 ? 'Won' : 'Lost') : tierLabel[r.tier]}</span>`)).join('')
+      : dashLine(favs.size
+          ? 'None of your favourites have a matchup this week.'
+          : 'Star leagues on the <a href="/scoreboard">Scoreboard</a> to pin them here.', 'dim'));
+    DASH.sb = { week, at: Date.now(), html: body };
+    fill(body);
+  } catch (e) { fill(dashLine('Couldn’t read the scoreboard: ' + esc(e.message), 'bad')); }
 }
 
 // ── Welcome (no leagues loaded yet) ─────────────────────────────────────────────
