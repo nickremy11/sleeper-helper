@@ -160,8 +160,12 @@
 .lm-lu-now { font-family: var(--font-head), serif; font-size: 0.95rem; color: var(--cream); }
 .lm-lu-proj { font-size: 0.72rem; color: var(--brown-light); }
 .lm-lu-delta { font-size: 0.72rem; color: #2e7d32; font-weight: 600; }
+/* Game state at a glance: playing = bold, yet to play = italic, done for the
+   week = plain (muted). The clock in the sub line says the same thing in words. */
 .lm-lu-live .lm-lu-sub b { color: #2e7d32; font-weight: 600; }
-.lm-lu-done .lm-lu-name { color: var(--brown-light); }
+.lm-lu-live .lm-lu-nm { font-weight: 700; }
+.lm-lu-soon .lm-lu-nm { font-style: italic; }
+.lm-lu-done .lm-lu-nm { color: var(--brown-light); }
 .lm-lu-bench { opacity: 0.45; }
 .lm-lu-inj { color: #b3261e; font-weight: 600; }
 .lm-lu-tot td { border-top: 1px solid var(--brown-mid); border-bottom: none; padding-top: 7px; }
@@ -765,7 +769,7 @@ function lmSideRows(side) {
 
 function lmGameShort(team) {
   const g = team && S.nflGames.find(x => x.home === team || x.away === team);
-  if (!g) return { txt: team ? 'no game' : '', live: false };
+  if (!g) return { txt: team ? 'no game' : '', live: false, done: !!team };   // a bye is done for the week too
   if (g.state === 'in') return { txt: `${+g.period > 4 ? 'OT' : `Q${g.period}`} ${g.clock || ''}`.trim(), live: true };
   if (g.state === 'post') return { txt: 'Final', live: false, done: true };
   const k = new Date(g.kickoff);
@@ -793,7 +797,7 @@ function lmDetailHtml(r, opponent) {
     const inj = l.inj && !/^(active|healthy|act|normal)$/i.test(l.inj)
       ? ` <span class="lm-lu-inj">${esc(String(l.inj).slice(0, 1).toUpperCase())}</span>` : '';
     const sub = [l.pos, l.team, g.live ? `<b>${esc(g.txt)}</b>` : esc(g.txt)].filter(Boolean).join(' · ');
-    const cls = ['lm-lu-player', right ? 'lm-lu-r' : '', g.live ? 'lm-lu-live' : '', g.done ? 'lm-lu-done' : '', x.bench ? 'lm-lu-bench' : ''].filter(Boolean).join(' ');
+    const cls = ['lm-lu-player', right ? 'lm-lu-r' : '', g.live ? 'lm-lu-live' : g.done ? 'lm-lu-done' : 'lm-lu-soon', x.bench ? 'lm-lu-bench' : ''].filter(Boolean).join(' ');
     const chip = lmRootChip(l.pid);
     const name = `<span class="lm-lu-nm" title="${esc(l.name || '')}">${esc(l.name || '—')}${inj}</span>`;
     return `<td class="${cls}"><div class="lm-lu-name">${right ? chip + name : name + chip}</div><div class="lm-lu-sub">${sub}</div></td>`;
@@ -823,7 +827,7 @@ function lmDetailHtml(r, opponent) {
       <thead><tr><th>Me</th><th></th><th></th><th></th><th class="lm-lu-r">${esc(opponent)}</th></tr></thead>
       <tbody>${body}</tbody>
     </table>
-    <div class="mnm-note" style="margin-top:6px">Points as of ${at}${r.my.bestBall ? ' · best ball: the dimmed players aren\'t in the projected lineup' : ''}. Green +x.x = scored since the last refresh. Proj = now + projection for what's left of his game. The coloured number is his <a href="/rootforme">Root For Me</a> score across your contending leagues (100 = root hard for him, 0 = hard against).</div>
+    <div class="mnm-note" style="margin-top:6px">Points as of ${at}${r.my.bestBall ? ' · best ball: the dimmed players aren\'t in the projected lineup' : ''}. <b>Bold</b> = playing now, <i>italic</i> = still to play, plain = done for the week (game over or no game). Green +x.x = scored since the last refresh. Proj = now + projection for what's left of his game. The coloured number is his <a href="/rootforme">Root For Me</a> score across your contending leagues (100 = root hard for him, 0 = hard against).</div>
   </div>`;
 }
 
