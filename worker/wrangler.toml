@@ -45,6 +45,12 @@ preview_id = "182d9454412f4bfc9c9e396dbe53c468"
 [ai]
 binding = "AI"
 
+# ── Email (Cloudflare Email Service) ──────────────────────────────────────────
+# Verification codes, password-reset links and admin alerts (src/auth.js).
+# ffhistorian.com is onboarded for Email Sending; no API key is involved.
+[[send_email]]
+name = "EMAIL"
+
 # ── Durable Objects ───────────────────────────────────────────────────────────
 [[durable_objects.bindings]]
 name       = "DISPERSAL_ROOM"

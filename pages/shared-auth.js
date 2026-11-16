@@ -107,22 +107,16 @@
           '<div id="sh-forgot-form" style="display:none;">' +
             '<label class="sh-modal-label">Email</label>' +
             '<input type="email" id="sh-email-f" class="sh-modal-field" placeholder="your@email.com" />' +
-            '<div class="sh-modal-hint">We\'ll email you a 6-digit code to reset your password.</div>' +
+            '<div class="sh-modal-hint">We\'ll email you a link to choose a new password.</div>' +
             '<div class="sh-modal-err" id="sh-err-f"></div>' +
-            '<button class="sh-modal-submit" onclick="SharedAuth._submitForgot()">Send Reset Code</button>' +
+            '<button class="sh-modal-submit" onclick="SharedAuth._submitForgot()">Email Me a Reset Link</button>' +
             '<div class="sh-modal-link-row"><a href="#" class="sh-modal-link" onclick="SharedAuth._switchTab(\'login\');return false;">Back to sign in</a></div>' +
           '</div>' +
           '<div id="sh-reset-form" style="display:none;">' +
-            '<div class="sh-modal-hint">Enter the code we emailed you and choose a new password.</div>' +
-            '<label class="sh-modal-label">Reset Code</label>' +
-            '<input type="text" inputmode="numeric" maxlength="6" id="sh-reset-code" class="sh-modal-field" placeholder="123456" />' +
-            '<label class="sh-modal-label">New Password</label>' +
-            '<input type="password" id="sh-reset-pass"  class="sh-modal-field" placeholder="min 12 chars" />' +
-            '<label class="sh-modal-label">Confirm New Password</label>' +
-            '<input type="password" id="sh-reset-pass2" class="sh-modal-field" placeholder="••••••••" />' +
+            '<div class="sh-modal-hint" id="sh-reset-hint"></div>' +
             '<div class="sh-modal-err" id="sh-err-reset"></div>' +
-            '<button class="sh-modal-submit" onclick="SharedAuth._submitReset()">Reset Password</button>' +
-            '<div class="sh-modal-link-row"><a href="#" class="sh-modal-link" onclick="SharedAuth._resendResetCode();return false;">Resend code</a></div>' +
+            '<div class="sh-modal-link-row"><a href="#" class="sh-modal-link" onclick="SharedAuth._resendResetLink();return false;">Send it again</a></div>' +
+            '<div class="sh-modal-link-row"><a href="#" class="sh-modal-link" onclick="SharedAuth._switchTab(\'login\');return false;">Back to sign in</a></div>' +
           '</div>' +
         '</div>' +
       '</div>';
@@ -144,9 +138,6 @@
     });
     document.getElementById('sh-email-f').addEventListener('keydown', function (e) {
       if (e.key === 'Enter') SharedAuth._submitForgot();
-    });
-    document.getElementById('sh-reset-pass2').addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') SharedAuth._submitReset();
     });
   }
 
@@ -181,7 +172,7 @@
     _showStep('login');
     _pendingEmail = null;
     ['sh-email-l', 'sh-pass-l', 'sh-email-r', 'sh-pass-r', 'sh-pass-r2',
-     'sh-verify-code', 'sh-email-f', 'sh-reset-code', 'sh-reset-pass', 'sh-reset-pass2'].forEach(function (id) {
+     'sh-verify-code', 'sh-email-f'].forEach(function (id) {
       var el = document.getElementById(id);
       if (el) el.value = '';
     });
@@ -311,6 +302,7 @@
     } catch (e) { err.textContent = e.message; err.style.display = 'block'; }
   }
 
+  // The reset itself happens on /reset-password, reached from the emailed link.
   async function _submitForgot() {
     var email = document.getElementById('sh-email-f').value.trim();
     var err   = document.getElementById('sh-err-f');
@@ -318,36 +310,18 @@
     try {
       await _authPost(_apiBase + '/auth/forgot-password', { email: email });
       _pendingEmail = email;
-      ['sh-reset-code', 'sh-reset-pass', 'sh-reset-pass2'].forEach(function (id) {
-        document.getElementById(id).value = '';
-      });
+      document.getElementById('sh-reset-hint').textContent =
+        'If ' + email + ' has an account, a reset link is on its way. It works once and expires in 30 minutes.';
       document.getElementById('sh-err-reset').style.display = 'none';
       _showStep('reset');
     } catch (e) { err.textContent = e.message; err.style.display = 'block'; }
   }
 
-  async function _resendResetCode() {
+  async function _resendResetLink() {
     var err = document.getElementById('sh-err-reset');
     try {
       await _authPost(_apiBase + '/auth/forgot-password', { email: _pendingEmail });
-      err.textContent = 'Code resent.'; err.style.display = 'block';
-    } catch (e) { err.textContent = e.message; err.style.display = 'block'; }
-  }
-
-  async function _submitReset() {
-    var code  = document.getElementById('sh-reset-code').value.trim();
-    var pass  = document.getElementById('sh-reset-pass').value;
-    var pass2 = document.getElementById('sh-reset-pass2').value;
-    var err   = document.getElementById('sh-err-reset');
-    err.style.display = 'none';
-    if (pass !== pass2) { err.textContent = 'Passwords do not match'; err.style.display = 'block'; return; }
-    try {
-      var data = await _authPost(_apiBase + '/auth/reset-password', { email: _pendingEmail, code: code, newPassword: pass });
-      _user = (data && data.user) || null;
-      if (!_user) await _refreshUser();
-      _renderChip();
-      _closeModal();
-      _loginCbs.forEach(function (cb) { cb(_user); });
+      err.textContent = 'Sent. A new link replaces the old one.'; err.style.display = 'block';
     } catch (e) { err.textContent = e.message; err.style.display = 'block'; }
   }
 
@@ -391,8 +365,7 @@
     _submitVerify:      _submitVerify,
     _resendCode:        _resendCode,
     _submitForgot:      _submitForgot,
-    _resendResetCode:   _resendResetCode,
-    _submitReset:       _submitReset,
+    _resendResetLink:   _resendResetLink,
     _logout:            _logout,
   };
 

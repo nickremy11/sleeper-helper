@@ -1,4 +1,4 @@
-import { requireAdmin } from './auth.js';
+import { requireAdmin, openSecret } from './auth.js';
 import { getCors } from './http.js';
 
 // ── Elite FFL — Draft History + Keeper Options ─────────────────────────────────
@@ -318,10 +318,11 @@ export async function syncEliteFFL(env, { dryRun = false } = {}) {
      WHERE u.is_admin = 1 AND e.espn_s2 IS NOT NULL AND e.swid IS NOT NULL LIMIT 1`
   ).first();
   if (!cred) throw new Error('No Site Lead ESPN cookies stored');
+  const s2 = await openSecret(cred.espn_s2, env);
   const season = eliteSeason();
   const base   = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${season}/segments/0/leagues/${ELITEFFL_ESPN_ID}`;
   const espn   = async (q, filter) => {
-    const headers = { Cookie: `espn_s2=${cred.espn_s2}; SWID=${cred.swid}`, Accept: 'application/json', 'User-Agent': 'Mozilla/5.0' };
+    const headers = { Cookie: `espn_s2=${s2}; SWID=${cred.swid}`, Accept: 'application/json', 'User-Agent': 'Mozilla/5.0' };
     if (filter) headers['X-Fantasy-Filter'] = JSON.stringify(filter);
     const r = await fetch(`${base}?${q}`, { headers });
     if (!r.ok) throw new Error(`ESPN ${r.status} (${q.slice(0, 40)})`);

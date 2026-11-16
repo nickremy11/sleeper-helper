@@ -4,9 +4,12 @@
  * Passwords:  PBKDF2-SHA-256, 100k iterations, random salt.
  * Token enc:  AES-256-GCM with TOKEN_ENCRYPTION_KEY Worker secret (base64 32 bytes).
  * Sessions:   random 64-char hex token stored in D1, set as HttpOnly cookie sh_session.
- * Email:      6-digit OTP for signup verification + password reset, sent via the
- *             Resend REST API (RESEND_API_KEY secret). Admin gets notified on
- *             every account created/deleted.
+ * ESPN:       espn_s2 is stored AES-256-GCM encrypted with the same key
+ *             (sealSecret / openSecret, "enc:v1:" prefix in the existing column).
+ * Email:      6-digit OTP for signup verification, a single-use emailed link for
+ *             password reset. Sent with Cloudflare Email Service (the EMAIL
+ *             send_email binding — no API key). Admin gets notified on every
+ *             account created/deleted.
  */
 
 const SESSION_TTL    = 30 * 24 * 60 * 60;      // seconds
@@ -15,6 +18,9 @@ const SESSION_TTL_MS = SESSION_TTL * 1000;
 const OTP_TTL_MS       = 15 * 60 * 1000;  // code validity window
 const OTP_RESEND_MS    = 45 * 1000;       // min gap between sends
 const OTP_MAX_ATTEMPTS = 5;
+
+const RESET_TTL_MS = 30 * 60 * 1000;      // reset link validity window
+const RESET_PAGE   = 'https://helper.ffhistorian.com/reset-password';
 
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
@@ -73,34 +79,62 @@ export async function decryptStoredToken(encB64, ivB64, secret) {
   return new TextDecoder().decode(dec);
 }
 
-// ── Email sending (Resend) ────────────────────────────────────────────────────
+// ── Stored secrets (ESPN espn_s2) ─────────────────────────────────────────────
+// One column holds "enc:v1:{iv}:{ciphertext}". A value without the prefix is a
+// row written before encryption existed: openSecret returns it as-is so nothing
+// breaks, and encryptLegacyEspnRows() rewrites those rows.
 
-async function resendSend(env, { to, from, subject, html, text }) {
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${env.RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ to, from, subject, html, text }),
-  });
-  if (!res.ok) throw new Error(`Resend send failed: ${res.status} ${await res.text()}`);
+const SEALED_PREFIX = 'enc:v1:';
+
+export async function sealSecret(value, env) {
+  const { enc, iv } = await encryptToken(String(value), env.TOKEN_ENCRYPTION_KEY);
+  return `${SEALED_PREFIX}${iv}:${enc}`;
 }
 
+export async function openSecret(stored, env) {
+  if (!stored) return '';
+  if (!stored.startsWith(SEALED_PREFIX)) return stored;
+  const [iv, enc] = stored.slice(SEALED_PREFIX.length).split(':');
+  return decryptStoredToken(enc, iv, env.TOKEN_ENCRYPTION_KEY);
+}
+
+// Encrypts every espn_s2 still stored in plain text. Safe to run repeatedly:
+// the daily cron calls it, and so does POST /api/auth/admin/encrypt-espn.
+export async function encryptLegacyEspnRows(env) {
+  const { results } = await env.DB.prepare(
+    `SELECT user_id, espn_s2 FROM espn_settings
+     WHERE espn_s2 IS NOT NULL AND espn_s2 != '' AND espn_s2 NOT LIKE '${SEALED_PREFIX}%'`
+  ).all();
+  for (const row of results) {
+    const sealed = await sealSecret(row.espn_s2, env);
+    // Only overwrite the exact value read, so a save racing this can't be clobbered.
+    await env.DB.prepare('UPDATE espn_settings SET espn_s2 = ? WHERE user_id = ? AND espn_s2 = ?')
+      .bind(sealed, row.user_id, row.espn_s2).run();
+  }
+  return results.length;
+}
+
+// ── Email sending (Cloudflare Email Service) ──────────────────────────────────
+// env.EMAIL is the send_email binding in wrangler.toml; ffhistorian.com is
+// onboarded for Email Sending, so any @ffhistorian.com sender works.
+
 async function sendMail(env, { to, subject, html, text }) {
-  await resendSend(env, { to, from: 'Sleeper Helper <noreply@ffhistorian.com>', subject, html, text });
+  await env.EMAIL.send({ to, from: { email: 'noreply@ffhistorian.com', name: 'Sleeper Helper' }, subject, html, text });
 }
 
 async function notifyAdmin(env, subject, text) {
   if (!env.ADMIN_EMAIL) { console.warn('notifyAdmin skipped: ADMIN_EMAIL secret not set'); return; }
   try {
-    await resendSend(env, { to: env.ADMIN_EMAIL, from: 'Sleeper Helper <alerts@ffhistorian.com>', subject, text, html: `<p>${text}</p>` });
+    await env.EMAIL.send({
+      to: env.ADMIN_EMAIL, from: { email: 'alerts@ffhistorian.com', name: 'Sleeper Helper' },
+      subject, text, html: `<p>${text}</p>`,
+    });
   } catch (e) {
-    console.error('notifyAdmin failed:', e);
+    console.error('notifyAdmin failed:', e.code, e);
   }
 }
 
-// ── One-time passcodes (email verification + password reset) ─────────────────
+// ── One-time passcodes (email verification) ──────────────────────────────────
 
 function generateOtp() {
   const n = crypto.getRandomValues(new Uint32Array(1))[0] % 1000000;
@@ -343,6 +377,10 @@ async function resendCode(request, env) {
   return jsonRes({ ok: true });
 }
 
+// Emails a single-use reset link. password_resets holds one row per user:
+// code_hash is the SHA-256 of the link's token, so the database alone can't
+// produce a working link. The token rides in the URL fragment, which browsers
+// never send to a server, so it stays out of request logs and Referer headers.
 async function forgotPassword(request, env) {
   let body;
   try { body = await request.json(); } catch { return errRes('Invalid JSON'); }
@@ -352,8 +390,28 @@ async function forgotPassword(request, env) {
   const user = await env.DB.prepare('SELECT id, email FROM users WHERE email = ?')
     .bind(String(email).toLowerCase()).first();
   if (user) {
-    try { await issueOtp(env, 'password_resets', user.id, user.email, 'Reset your password'); }
-    catch (e) { console.error('forgotPassword send failed:', e); }
+    try {
+      const now = Date.now();
+      const existing = await env.DB.prepare('SELECT sent_at FROM password_resets WHERE user_id = ?').bind(user.id).first();
+      if (!existing || now - existing.sent_at >= OTP_RESEND_MS) {
+        const token = randomHex(32);
+        await env.DB.prepare(
+          `INSERT INTO password_resets (user_id, code_hash, expires_at, attempts, sent_at) VALUES (?, ?, ?, 0, ?)
+           ON CONFLICT(user_id) DO UPDATE SET code_hash = excluded.code_hash, expires_at = excluded.expires_at, attempts = 0, sent_at = excluded.sent_at`
+        ).bind(user.id, await hashOtp(token), now + RESET_TTL_MS, now).run();
+        const link = `${RESET_PAGE}#t=${token}`;
+        await sendMail(env, {
+          to: user.email,
+          subject: 'Reset your password',
+          html: `<div style="font-family:Georgia,serif;max-width:480px">
+            <h2>Reset your password</h2>
+            <p><a href="${link}">Choose a new password</a></p>
+            <p>This link works once and expires in 30 minutes. If you didn't ask for it, ignore this email and your password stays as it is.</p>
+          </div>`,
+          text: `Reset your password\n\nChoose a new password: ${link}\n\nThis link works once and expires in 30 minutes. If you didn't ask for it, ignore this email and your password stays as it is.`,
+        });
+      }
+    } catch (e) { console.error('forgotPassword send failed:', e.code, e); }
   }
   // Always respond ok — don't reveal whether the email has an account.
   return jsonRes({ ok: true });
@@ -362,23 +420,27 @@ async function forgotPassword(request, env) {
 async function resetPassword(request, env) {
   let body;
   try { body = await request.json(); } catch { return errRes('Invalid JSON'); }
-  const { email, code, newPassword } = body ?? {};
-  if (!email || !code || !newPassword) return errRes('Email, code, and new password required');
+  const { token, newPassword } = body ?? {};
+  if (!token || !newPassword) return errRes('Reset link and new password required');
 
-  const user = await env.DB.prepare('SELECT id, email, name, sleeper_username FROM users WHERE email = ?')
-    .bind(String(email).toLowerCase()).first();
-  if (!user) return errRes('Invalid email or code');
+  const badLink = 'This reset link is invalid or has expired — request a new one';
+  const row = await env.DB.prepare('SELECT user_id, expires_at FROM password_resets WHERE code_hash = ?')
+    .bind(await hashOtp(String(token))).first();
+  if (!row || Date.now() > row.expires_at) return errRes(badLink);
 
+  // Checked before the link is consumed, so a rejected password can be retried.
   const pwErr = validatePassword(String(newPassword));
   if (pwErr) return errRes(pwErr);
 
-  const err = await checkOtp(env, 'password_resets', user.id, code);
-  if (err) return errRes(err);
+  const user = await env.DB.prepare('SELECT id, email, name, sleeper_username, is_admin FROM users WHERE id = ?')
+    .bind(row.user_id).first();
+  if (!user) return errRes(badLink);
 
   const { hash, salt } = await hashPassword(String(newPassword));
   await env.DB.batch([
     env.DB.prepare('UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?').bind(hash, salt, user.id),
     env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(user.id),
+    env.DB.prepare('DELETE FROM password_resets WHERE user_id = ?').bind(user.id),
   ]);
   const cookie = await createSession(user.id, env);
   return jsonRes({ ok: true, user: { email: user.email, name: user.name || null, sleeper_username: user.sleeper_username, is_admin: !!user.is_admin } }, 200, { 'Set-Cookie': cookie });
@@ -435,6 +497,11 @@ async function adminDeleteUser(request, env) {
   const deletedEmail = await deleteUserAccount(target.id, env);
   await notifyAdmin(env, 'Account deleted (admin)', `Account deleted by admin action: ${deletedEmail}`);
   return jsonRes({ ok: true });
+}
+
+async function adminEncryptEspn(request, env) {
+  if (!(await requireAdmin(request, env))) return errRes('Not authorized', 401);
+  return jsonRes({ ok: true, encrypted: await encryptLegacyEspnRows(env) });
 }
 
 async function me(request, env) {
@@ -532,6 +599,7 @@ export async function handleAuth(request, env, url) {
   if (p === '/api/auth/delete-account'    && request.method === 'POST') return deleteAccount(request, env);
   if (p === '/api/auth/admin/users'       && request.method === 'GET')  return adminListUsers(request, env);
   if (p === '/api/auth/admin/delete-user' && request.method === 'POST') return adminDeleteUser(request, env);
+  if (p === '/api/auth/admin/encrypt-espn' && request.method === 'POST') return adminEncryptEspn(request, env);
   if (p === '/api/auth/me'       && request.method === 'GET')   return me(request, env);
   if (p === '/api/auth/me'       && request.method === 'PATCH') return updateMe(request, env);
   if (p === '/api/auth/logout'          && request.method === 'POST')  return logout(request, env);

@@ -50,11 +50,11 @@
  * DO binding:      DISPERSAL_ROOM
  * Secret:          TOKEN_ENCRYPTION_KEY  (base64 AES-256 key)
  * Secret:          ADMIN_SECRET  (shared secret for /api/auth/admin/delete-user)
- * Secret:          RESEND_API_KEY  (Resend — verification/reset OTPs, admin alerts)
+ * Binding:         EMAIL  (Cloudflare Email Service — verification codes, reset links, admin alerts)
  */
 
 export { DispersalRoom } from './dispersal.js';
-import { handleAuth, getAuthUser, decryptStoredToken } from './auth.js';
+import { handleAuth, getAuthUser, decryptStoredToken, sealSecret, openSecret, encryptLegacyEspnRows } from './auth.js';
 import { handleDataSite } from './data.js';
 import { handleEliteFFL, syncEliteFFL } from './eliteffl.js';
 import { handleProjections } from './projections.js';
@@ -96,6 +96,9 @@ export default {
   async scheduled(event, env, ctx) {
     ctx.waitUntil(syncEliteFFL(env).then(r => console.log('[eliteffl sync]', JSON.stringify(r)))
       .catch(e => console.error('[eliteffl sync] failed:', e.message)));
+    // Encrypts any ESPN cookie still stored in plain text (rows from before encryption).
+    ctx.waitUntil(encryptLegacyEspnRows(env).then(n => { if (n) console.log('[espn encrypt]', n, 'rows'); })
+      .catch(e => console.error('[espn encrypt] failed:', e.message)));
   },
 
   async fetch(request, env) {
@@ -1057,7 +1060,7 @@ async function handleEspnSettings(request, env) {
          VALUES (?, ?, ?, ?, ?)
          ON CONFLICT(user_id) DO UPDATE
          SET league_ids=excluded.league_ids, espn_s2=excluded.espn_s2, swid=excluded.swid, updated_at=excluded.updated_at`
-      ).bind(user.user_id, league_ids, body.espn_s2, body.swid, now).run();
+      ).bind(user.user_id, league_ids, await sealSecret(body.espn_s2, env), body.swid, now).run();
     } else {
       await env.DB.prepare(
         `INSERT INTO espn_settings (user_id, league_ids, updated_at)
@@ -1110,7 +1113,7 @@ async function handleEspnDiscover(request, env, url) {
     const row = await env.DB.prepare(
       'SELECT espn_s2, swid FROM espn_settings WHERE user_id = ?'
     ).bind(user.user_id).first();
-    s2   = s2   || row?.espn_s2 || '';
+    s2   = s2   || await openSecret(row?.espn_s2, env) || '';
     swid = swid || row?.swid    || '';
   }
   if (!s2 || !swid) return jres({ error: 'ESPN credentials not configured' }, 400);
@@ -1226,7 +1229,7 @@ async function handleEspnFantasy(request, env, url) {
 
   const upstream = await fetch(espnUrl, {
     headers: {
-      'Cookie':     `espn_s2=${row.espn_s2}; SWID=${row.swid}`,
+      'Cookie':     `espn_s2=${await openSecret(row.espn_s2, env)}; SWID=${row.swid}`,
       'User-Agent': 'sleeper-helper/1.0',
       ...(fantasyFilter ? { 'x-fantasy-filter': fantasyFilter } : {}),
     },
