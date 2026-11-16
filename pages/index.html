@@ -553,7 +553,13 @@ a.rs-expand-tag:hover { border-color: var(--gold); color: var(--gold-light); }
 .ls-table tr:last-child td { border-bottom: none; }
 .ls-table tbody tr:hover td { background: rgba(var(--tint),0.025); }
 /* Contender league-name highlight */
-a.row-link.ls-contender-name { color: var(--gold-light); font-weight: 700; }
+a.row-link.ls-contender-name { color: var(--cream); font-weight: 700 !important; }
+.ls-table td:first-child a:not(.ls-contender-name) { font-weight: 400; }
+/* A contender row: gold bar down the left edge, a gold wash across the row and a
+   bold name. Colour alone (green name vs dark-green name) was too close to tell. */
+.ls-table tbody tr.ls-contender td { background: rgba(240,185,58,0.16); }
+.ls-table tbody tr.ls-contender:hover td { background: rgba(240,185,58,0.26); }
+.ls-table tbody tr.ls-contender td:first-child { box-shadow: inset 5px 0 0 var(--accent); }
 /* Playoff spot standing */
 .ls-po-v2 { border: 2px solid var(--gold); padding: 1px 6px; color: var(--gold-light); border-radius: 2px; display: inline-block; line-height: 1.4; }
 /* Playoff chances labels */
@@ -879,7 +885,7 @@ a.row-link.ls-contender-name { color: var(--gold-light); font-weight: 700; }
 <script src="/app/guide.js?v=20261117"></script>
 <script src="/app/drafts.js?v=20261117"></script>
 <script src="/app/rostership.js?v=20261117"></script>
-<script src="/app/league-summaries.js?v=20261118"></script>
+<script src="/app/league-summaries.js?v=20261119"></script>
 <script src="/app/trade-partners.js?v=20261117"></script>
 <script src="/app/scout.js?v=20261117"></script>
 <script src="/app/home.js?v=20261119"></script>

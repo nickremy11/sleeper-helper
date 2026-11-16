@@ -1131,7 +1131,9 @@ function lsDrawTable() {
   const tbody = `<tbody id="ls-tbody">${rows.map(row => {
     // League name cell
     const nameCls = row.prefContender ? ' ls-contender-name' : '';
-    const nameCell = `<td><a href="/analyzer?league=${encodeURIComponent(row.lgId)}" class="row-link${nameCls}">${esc(row.name)}</a></td>`;
+    const star = row.clinchedBye ? '<sup title="Bye clinched" style="font-weight:700;">**</sup>'
+      : row.clinchedPo ? '<sup title="Playoff spot clinched" style="font-weight:700;">*</sup>' : '';
+    const nameCell = `<td><a href="/analyzer?league=${encodeURIComponent(row.lgId)}" class="row-link${nameCls}">${esc(row.name)}</a>${star}</td>`;
 
     // Standing cell
     let standingCell;
@@ -1161,8 +1163,6 @@ function lsDrawTable() {
 
     // Playoff chances cell
     let chancesCell;
-    const star = row.clinchedBye ? '<sup title="Bye clinched" style="font-weight:700;">**</sup>'
-      : row.clinchedPo ? '<sup title="Playoff spot clinched" style="font-weight:700;">*</sup>' : '';
     if (!row.hasData) {
       chancesCell = '<td>—</td>';
     } else if (row.playoffOdds !== undefined && row.playoffOdds !== null) {
@@ -1170,15 +1170,15 @@ function lsDrawTable() {
       const hue  = Math.round(pct * 1.2); // 0→red, 100→green
       const byeHtml = row.byeOdds != null
         ? `<span class="ls-bye-pct">${Math.round(row.byeOdds * 100)}% bye</span>` : '';
-      chancesCell = `<td><span class="ls-odds-pct" style="color:hsl(${hue},70%,38%)">${pct}%${star}</span>${byeHtml}</td>`;
+      chancesCell = `<td><span class="ls-odds-pct" style="color:hsl(${hue},70%,38%)">${pct}%</span>${byeHtml}</td>`;
     } else if (row.playoffOddsError) {
-      chancesCell = `<td><span style="color:var(--brown-light);font-size:0.8rem;" title="${esc(row.playoffOddsError)}">— ⚠︎</span>${star}</td>`;
+      chancesCell = `<td><span style="color:var(--brown-light);font-size:0.8rem;" title="${esc(row.playoffOddsError)}">— ⚠︎</span></td>`;
     } else {
       const { label, cls } = lsPlayoffChancesLabel(row.standing, row.numTeams);
-      chancesCell = `<td><span class="${cls}">${label}</span>${star}</td>`;
+      chancesCell = `<td><span class="${cls}">${label}</span></td>`;
     }
 
-    return `<tr>${nameCell}${standingCell}${recordCell}${apCell}${chancesCell}</tr>`;
+    return `<tr${row.prefContender ? ' class="ls-contender"' : ''}>${nameCell}${standingCell}${recordCell}${apCell}${chancesCell}</tr>`;
   }).join('')}</tbody>`;
 
   const filterBtns = `
