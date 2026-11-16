@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Sleeper Helper — FF Historian</title>
 <link href="https://fonts.googleapis.com/css2?family=Graduate&family=Bitter:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/shared-styles.css?v=20261117" />
+<link rel="stylesheet" href="/shared-styles.css?v=20261118" />
 <script>try{if(/(?:^|; )sh_theme=dark/.test(document.cookie)||localStorage.getItem("sh_theme")==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
 <style>
 
@@ -329,6 +329,18 @@ footer a:hover { color: var(--gold); }
           padding: 3px 7px; border-radius: 2px; white-space: nowrap; line-height: 1.4; }
 .gd-tag-espn  { color: var(--card-text); background: var(--card-hover); border: 1px solid var(--brown-light); }
 .gd-tag-write { color: var(--cream); background: var(--green); border: 1px solid var(--green); }
+.gd-start { background: var(--brown-dark); border: 2px solid var(--brown-mid); padding: 18px 22px; margin: 0 0 26px; }
+.gd-start h3 { font-family: var(--font-display), serif; font-size: 0.65rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--gold); margin-bottom: 8px; }
+.gd-start-lede { color: var(--parchment); margin-bottom: 12px; }
+.gd-start ol { list-style: none; counter-reset: gd; display: grid; gap: 10px; }
+.gd-step { counter-increment: gd; position: relative; padding-left: 34px; }
+.gd-step::before { content: counter(gd); position: absolute; left: 0; top: 0; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--green); color: var(--cream); font-family: var(--font-display), serif; font-size: 0.7rem; display: flex; align-items: center; justify-content: center; }
+.gd-step.done::before { opacity: 0.45; }
+.gd-step-title { font-family: var(--font-head), serif; font-weight: 700; color: var(--cream); }
+.gd-step-body { color: var(--parchment); font-size: 0.95rem; max-width: 62ch; }
+.gd-start a { color: var(--gold-light); }
+.gd-start-more { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--brown-mid); color: var(--parchment); font-size: 0.92rem; }
 .gd-legend { margin-top: 34px; background: var(--brown-dark); border: 2px solid var(--brown-mid);
              box-shadow: 4px 4px 0 var(--brown-mid); border-radius: 2px; padding: 18px 22px; }
 .gd-legend h3 { font-family: var(--font-display), serif; font-size: 0.65rem; letter-spacing: 0.22em;

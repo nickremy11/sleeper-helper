@@ -200,7 +200,7 @@ body {
    everything inside it — hence the child rule, which must stay FIRST so a card
    nested in a card still gets its edge. */
 :is(.card, .setup-card, .mrg-col, .empty-state.dark, .dash-card, .home-tile, .lineup-card,
-.lsw-panel, .gd-legend, .rg-col, .rs-lg-panel, .rs-filter-panel, .rs-table, .ls-table,
+.lsw-panel, .gd-legend, .gd-start, .rg-col, .rs-lg-panel, .rs-filter-panel, .rs-table, .ls-table,
 .tl-table, .tracker-player, .mo-chosen, .mo-lg, .mo-offer, .mo-bar, .pf-trade-card,
 .roi-wrap, .player-dropdown, .az-table-header, details.az-card, .az-trade-panel, .az-switcher-panel, .az-targets-panel,
 .ta-team-card, .ta-propose, .ta-addteam-panel, .ta-summary-box, .ta-panel, .ta-odds-card, .ta-lineup-card,
@@ -208,7 +208,7 @@ body {
 .auc-teams, .auc-modal, .room-header, .asset-table-wrap, .draft-grid-scroll, .roster-card, .search-input,
 .tracker-select, .scout-select, .mrg-select, .mrb-select, .codes-overlay-inner) > * { --brown-mid: var(--rule-in); }
 .card, .setup-card, .mrg-col, .empty-state.dark, .dash-card, .home-tile, .lineup-card,
-.lsw-panel, .gd-legend, .rg-col, .rs-lg-panel, .rs-filter-panel, .rs-table, .ls-table,
+.lsw-panel, .gd-legend, .gd-start, .rg-col, .rs-lg-panel, .rs-filter-panel, .rs-table, .ls-table,
 .tl-table, .tracker-player, .mo-chosen, .mo-lg, .mo-offer, .mo-bar, .pf-trade-card,
 .roi-wrap, .player-dropdown, .az-table-header, details.az-card, .az-trade-panel, .az-switcher-panel, .az-targets-panel,
 .ta-team-card, .ta-propose, .ta-addteam-panel, .ta-summary-box, .ta-panel, .ta-odds-card, .ta-lineup-card,
@@ -472,7 +472,7 @@ button.setup-btn, a.setup-btn { background: var(--ink-bg); border: 2px solid var
 button.setup-btn:hover:not(:disabled), a.setup-btn:hover { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 button.setup-btn.go { background: var(--accent); color: var(--on-accent); }
 :root :is(.card, .setup-card, .home-tile, .mo-offer, .pf-trade-card, .ta-team-card, .ta-panel, .ta-odds-card, .ta-lineup-card,
-          .game-card, .leagues-card, .roster-card, .lsw-panel, .rs-lg-panel, .rs-filter-panel, .gd-legend,
+          .game-card, .leagues-card, .roster-card, .lsw-panel, .rs-lg-panel, .rs-filter-panel, .gd-legend, .gd-start,
           .auc-setup, .auc-stats-bar, .auc-pool, .auc-teams, .auc-modal, .week-bar, .mnm-card, .rc-empty, .empty-state) { border-radius: 10px; border-width: 2px; }
 /* Outline and solid buttons under their many per-page names. Colours and shape
    only — each page keeps its own size and spacing. */
