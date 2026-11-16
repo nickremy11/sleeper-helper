@@ -38,11 +38,11 @@
   /* Surfaces and fixed colours. Dark mode (the block after this one) redefines
      these and the tokens above; nothing else in the site names a light colour. */
   --page:         #f3e9d2;   /* page background */
-  --card:         var(--card);   /* panel background */
-  --card-hover:   var(--card-hover);   /* hovered row / button on a panel */
+  --card:         #fbf5e6;   /* panel background */
+  --card-hover:   #ece3c8;   /* hovered row / button on a panel */
   --edge:         #1f3d22;   /* a panel's or outline button's border */
-  --rule:         var(--rule);   /* row rules inside a panel */
-  --rule-in:      var(--rule-in);   /* dividers inside a panel */
+  --rule:         #d6d6b6;   /* row rules inside a panel */
+  --rule-in:      #c9cba9;   /* dividers inside a panel */
   --card-text:    #1f3d22;
   --card-text2:   #2f4530;
   --card-muted:   #4c5a48;
@@ -53,8 +53,8 @@
   --on-accent:    #1f3d22;   /* text on bright gold */
   --sel-bg:       #1f3d22;   /* a selected pill */
   --sel-fg:       #f0b93a;
-  --c-green: var(--c-green); --c-red: var(--c-red); --c-amber: var(--c-amber); --c-teal: var(--c-teal);
-  --c-orange: var(--c-orange); --c-purple: var(--c-purple); --c-grey: var(--c-grey); --c-blue: var(--c-blue);
+  --c-green: #2e7d32; --c-red: #b3261e; --c-amber: #8a5a00; --c-teal: #0e6f8c;
+  --c-orange: #b8461f; --c-purple: #7b3fa0; --c-grey: #5b6259; --c-blue: #1f5f9a;
 }
 /* ── DARK MODE ──
    <html data-theme="dark">, set by the menu's switch (shThemeSet in shared-nav.js)
