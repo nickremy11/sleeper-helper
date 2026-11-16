@@ -1161,6 +1161,8 @@ function lsDrawTable() {
 
     // Playoff chances cell
     let chancesCell;
+    const star = row.clinchedBye ? '<sup title="Bye clinched" style="font-weight:700;">**</sup>'
+      : row.clinchedPo ? '<sup title="Playoff spot clinched" style="font-weight:700;">*</sup>' : '';
     if (!row.hasData) {
       chancesCell = '<td>—</td>';
     } else if (row.playoffOdds !== undefined && row.playoffOdds !== null) {
@@ -1168,14 +1170,12 @@ function lsDrawTable() {
       const hue  = Math.round(pct * 1.2); // 0→red, 100→green
       const byeHtml = row.byeOdds != null
         ? `<span class="ls-bye-pct">${Math.round(row.byeOdds * 100)}% bye</span>` : '';
-      const star = row.clinchedBye ? '<sup title="Bye clinched" style="font-weight:700;">**</sup>'
-        : row.clinchedPo ? '<sup title="Playoff spot clinched" style="font-weight:700;">*</sup>' : '';
       chancesCell = `<td><span class="ls-odds-pct" style="color:hsl(${hue},70%,38%)">${pct}%${star}</span>${byeHtml}</td>`;
     } else if (row.playoffOddsError) {
-      chancesCell = `<td><span style="color:var(--brown-light);font-size:0.8rem;" title="${esc(row.playoffOddsError)}">— ⚠︎</span></td>`;
+      chancesCell = `<td><span style="color:var(--brown-light);font-size:0.8rem;" title="${esc(row.playoffOddsError)}">— ⚠︎</span>${star}</td>`;
     } else {
       const { label, cls } = lsPlayoffChancesLabel(row.standing, row.numTeams);
-      chancesCell = `<td><span class="${cls}">${label}</span></td>`;
+      chancesCell = `<td><span class="${cls}">${label}</span>${star}</td>`;
     }
 
     return `<tr>${nameCell}${standingCell}${recordCell}${apCell}${chancesCell}</tr>`;
