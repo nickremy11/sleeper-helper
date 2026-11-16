@@ -266,13 +266,19 @@ function lsFinalStandings(d) {
 // Clinched outright: fewer than `playoffTeams` rivals can still reach my win
 // total even by winning out. A rival who could only TIE me still counts against
 // me — ties break on points, which isn't guaranteed.
-function lsClinched(d, regularSeasonWeeks) {
+function lsClinched(d, regularSeasonWeeks, spots = d.playoffTeams) {
+  if (!(spots > 0)) return false;
   const me = d.rosterStats?.[d.myRosterId];
   if (!me) return false;
   const left = Math.max(0, regularSeasonWeeks - d.banked) * (d.median ? 2 : 1);
   const catchers = Object.entries(d.rosterStats)
     .filter(([rid, s]) => Number(rid) !== d.myRosterId && s.wins + left >= me.wins).length;
-  return catchers < d.playoffTeams;
+  return catchers < spots;
+}
+
+// Same test against the bracket's bye slots (none → never clinched).
+function lsClinchedBye(d, regularSeasonWeeks) {
+  return lsClinched(d, regularSeasonWeeks, bracketByeSlots(d.playoffTeams) || 0);
 }
 
 // Writes a sim result onto the league entry (mine + every roster).
@@ -1087,6 +1093,8 @@ function lsDrawTable() {
       playoffOdds:     d?.playoffOdds,
       byeOdds:         d?.byeOdds,
       playoffOddsError: d?.playoffOddsError,
+      clinchedPo:  d ? lsClinched(d, lsRegularSeasonWeeks(lg, d, S.leagueDetails[lg.league_id])) : false,
+      clinchedBye: d ? lsClinchedBye(d, lsRegularSeasonWeeks(lg, d, S.leagueDetails[lg.league_id])) : false,
     };
   });
 
@@ -1160,7 +1168,9 @@ function lsDrawTable() {
       const hue  = Math.round(pct * 1.2); // 0→red, 100→green
       const byeHtml = row.byeOdds != null
         ? `<span class="ls-bye-pct">${Math.round(row.byeOdds * 100)}% bye</span>` : '';
-      chancesCell = `<td><span class="ls-odds-pct" style="color:hsl(${hue},70%,38%)">${pct}%</span>${byeHtml}</td>`;
+      const star = row.clinchedBye ? '<sup title="Bye clinched" style="font-weight:700;">**</sup>'
+        : row.clinchedPo ? '<sup title="Playoff spot clinched" style="font-weight:700;">*</sup>' : '';
+      chancesCell = `<td><span class="ls-odds-pct" style="color:hsl(${hue},70%,38%)">${pct}%${star}</span>${byeHtml}</td>`;
     } else if (row.playoffOddsError) {
       chancesCell = `<td><span style="color:var(--brown-light);font-size:0.8rem;" title="${esc(row.playoffOddsError)}">— ⚠︎</span></td>`;
     } else {
