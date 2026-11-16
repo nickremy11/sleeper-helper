@@ -95,7 +95,7 @@ function renderGuide() {
         <dt>${tagWrite}</dt>
         <dd>Writes back to Sleeper. Everything else only ever reads. ESPN leagues are always read-only — you'll still set those lineups in ESPN.</dd>
       </dl>
-      <div class="gd-legend-foot">Browsing works without an account. Signing in is what saves your settings and lets you <a href="/espn-setup" style="color:var(--brown-mid);">connect ESPN leagues</a>.</div>
+      <div class="gd-legend-foot">Browsing works without an account. Signing in is what saves your settings and lets you <a href="/espn-setup">connect ESPN leagues</a>.</div>
     </div>
   </div>`);
 }

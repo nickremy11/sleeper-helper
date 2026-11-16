@@ -1005,7 +1005,7 @@ function setTrackerView(view) {
 }
 
 // Position badge colors shared with the board view's left-border accents.
-const TL_POS_COLORS = { QB:'#b3261e', RB:'#2e7d32', WR:'#0e6f8c', TE:'#b8461f', DEF:'#7b3fa0' };
+const TL_POS_COLORS = { QB:'var(--c-red)', RB:'var(--c-green)', WR:'var(--c-teal)', TE:'var(--c-orange)', DEF:'var(--c-purple)' };
 
 // List view: every loaded player as a row (position, team, tier, aggregate
 // rank, Sleeper ADP, position rank, position ADP, and a colored my-rank-vs-ADP

@@ -6,7 +6,8 @@
   <title>Trade Analyzer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Graduate&family=Bitter:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared-styles.css?v=20261116">
+  <link rel="stylesheet" href="/shared-styles.css?v=20261117">
+<script>try{if(/(?:^|; )sh_theme=dark/.test(document.cookie)||localStorage.getItem("sh_theme")==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
   <style>
     .ta-wrap { max-width: 1060px; margin: 0 auto; padding: 24px 16px 60px; }
 
@@ -15,23 +16,23 @@
 
     .az-badge { font-size: 0.65rem; padding: 5px 12px; }
     .az-badge-dynasty  { background: rgba(201,150,42,0.2); color: var(--gold-light); border: 1px solid rgba(201,150,42,0.4); }
-    .az-badge-bestball { background: rgba(91,155,213,0.2); color: #1f5f9a; border: 1px solid rgba(91,155,213,0.4); }
-    .az-badge-redraft  { background: rgba(92,184,92,0.15); color: #2e7d32; border: 1px solid rgba(92,184,92,0.3); }
+    .az-badge-bestball { background: rgba(91,155,213,0.2); color: var(--c-blue); border: 1px solid rgba(91,155,213,0.4); }
+    .az-badge-redraft  { background: rgba(92,184,92,0.15); color: var(--c-green); border: 1px solid rgba(92,184,92,0.3); }
     .az-league-title { font-size: clamp(1rem,2.5vw,1.4rem); }
 
     /* ── Position pill ── */
     .rs-pos { font-family: var(--font-display), serif; font-size: 0.61rem; letter-spacing: 0.1em; padding: 3px 7px; }
-    .rs-pos-QB   { background: rgba(139,26,26,0.5);  color: #b3261e; border: 1px solid rgba(139,26,26,0.7); }
-    .rs-pos-RB   { background: rgba(45,74,30,0.15);   color: #2e7d32; border: 1px solid rgba(45,74,30,0.7); }
-    .rs-pos-WR   { background: rgba(30,50,100,0.15);  color: #1f5f9a; border: 1px solid rgba(30,50,100,0.7); }
-    .rs-pos-TE   { background: rgba(100,60,10,0.5);  color: #8a5a00; border: 1px solid rgba(100,60,10,0.7); }
-    .rs-pos-DL   { background: rgba(80,30,100,0.5);  color: #7b3fa0; border: 1px solid rgba(80,30,100,0.7); }
-    .rs-pos-LB   { background: rgba(80,30,100,0.5);  color: #7b3fa0; border: 1px solid rgba(80,30,100,0.7); }
-    .rs-pos-DB   { background: rgba(80,30,100,0.5);  color: #7b3fa0; border: 1px solid rgba(80,30,100,0.7); }
+    .rs-pos-QB   { background: rgba(139,26,26,0.5);  color: var(--c-red); border: 1px solid rgba(139,26,26,0.7); }
+    .rs-pos-RB   { background: rgba(45,74,30,0.15);   color: var(--c-green); border: 1px solid rgba(45,74,30,0.7); }
+    .rs-pos-WR   { background: rgba(30,50,100,0.15);  color: var(--c-blue); border: 1px solid rgba(30,50,100,0.7); }
+    .rs-pos-TE   { background: rgba(100,60,10,0.5);  color: var(--c-amber); border: 1px solid rgba(100,60,10,0.7); }
+    .rs-pos-DL   { background: rgba(80,30,100,0.5);  color: var(--c-purple); border: 1px solid rgba(80,30,100,0.7); }
+    .rs-pos-LB   { background: rgba(80,30,100,0.5);  color: var(--c-purple); border: 1px solid rgba(80,30,100,0.7); }
+    .rs-pos-DB   { background: rgba(80,30,100,0.5);  color: var(--c-purple); border: 1px solid rgba(80,30,100,0.7); }
     .rs-pos-PICK { background: rgba(50,50,50,0.12);   color: var(--parchment); border: 1px solid rgba(var(--tint),0.15); }
-    .rs-pos-FLEX { background: rgba(60,40,10,0.5);   color: #8a5a00; border: 1px solid rgba(120,80,20,0.7); }
-    .rs-pos-SF   { background: rgba(80,20,20,0.5);   color: #b3261e; border: 1px solid rgba(139,26,26,0.7); }
-    .rs-pos-IDP  { background: rgba(60,20,80,0.5);   color: #7b3fa0; border: 1px solid rgba(80,30,100,0.7); }
+    .rs-pos-FLEX { background: rgba(60,40,10,0.5);   color: var(--c-amber); border: 1px solid rgba(120,80,20,0.7); }
+    .rs-pos-SF   { background: rgba(80,20,20,0.5);   color: var(--c-red); border: 1px solid rgba(139,26,26,0.7); }
+    .rs-pos-IDP  { background: rgba(60,20,80,0.5);   color: var(--c-purple); border: 1px solid rgba(80,30,100,0.7); }
 
     /* ── Step header ── */
     .ta-step-hdr {
@@ -48,16 +49,16 @@
     }
     .ta-team-card:hover { border-color: var(--gold); }
     /* Solid dark tinted backgrounds so text remains readable */
-    .ta-team-card.selected-a { border: 2px solid #2e7d32; background: #dfe8cf; }
-    .ta-team-card.selected-b { border: 2px solid #1f5f9a; background: #dbe6f2; }
-    .ta-team-card.selected-c { border: 2px solid #8a5a00; background: #f3e6c4; }
+    .ta-team-card.selected-a { border: 2px solid var(--c-green); background: rgba(46,125,50,0.16); }
+    .ta-team-card.selected-b { border: 2px solid var(--c-blue); background: rgba(31,95,154,0.16); }
+    .ta-team-card.selected-c { border: 2px solid var(--c-amber); background: rgba(200,140,20,0.2); }
     .ta-team-badge {
       display: inline-block; font-family: var(--font-display), serif; font-size: 0.61rem; letter-spacing: 0.1em;
       padding: 3px 8px; border-radius: 2px; margin-bottom: 6px; text-transform: uppercase;
     }
-    .ta-team-badge-a { background: rgba(92,184,92,0.25); color: #2e7d32; border: 1px solid rgba(92,184,92,0.5); }
-    .ta-team-badge-b { background: rgba(91,155,213,0.25); color: #1f5f9a; border: 1px solid rgba(91,155,213,0.5); }
-    .ta-team-badge-c { background: rgba(214,168,74,0.25); color: #8a5a00; border: 1px solid rgba(214,168,74,0.5); }
+    .ta-team-badge-a { background: rgba(92,184,92,0.25); color: var(--c-green); border: 1px solid rgba(92,184,92,0.5); }
+    .ta-team-badge-b { background: rgba(91,155,213,0.25); color: var(--c-blue); border: 1px solid rgba(91,155,213,0.5); }
+    .ta-team-badge-c { background: rgba(214,168,74,0.25); color: var(--c-amber); border: 1px solid rgba(214,168,74,0.5); }
     .ta-team-name   { font-family: var(--font-head), serif; font-weight: 700; font-size: 0.9rem; color: var(--cream); }
     .ta-team-owner  { font-family: var(--font-body), serif; font-size: 0.78rem; color: var(--brown-light); margin-top: 2px; }
     .ta-team-record { font-family: var(--font-body), serif; font-size: 0.78rem; color: var(--parchment); margin-top: 4px; }
@@ -87,8 +88,8 @@
       background: var(--brown-dark); border: 1.5px solid var(--gold); border-radius: 3px;
       padding: 14px 16px; margin-bottom: 20px; font-family: var(--font-body), serif; color: var(--parchment);
     }
-    .ta-propose.ok  { border-color: #2e7d32; }
-    .ta-propose.err { border-color: #b3261e; }
+    .ta-propose.ok  { border-color: var(--c-green); }
+    .ta-propose.err { border-color: var(--c-red); }
     .ta-propose-title { font-family: var(--font-head), serif; font-weight: 700; font-size: 0.95rem; color: var(--cream); margin-bottom: 10px; }
     .ta-propose-sides { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 10px; }
     .ta-propose-side { flex: 1 1 200px; min-width: 0; }
@@ -151,9 +152,9 @@
       display: flex; align-items: flex-start; gap: 10px;
     }
     .ta-panel-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
-    .ta-panel-dot-a { background: #2e7d32; }
-    .ta-panel-dot-b { background: #1f5f9a; }
-    .ta-panel-dot-c { background: #8a5a00; }
+    .ta-panel-dot-a { background: var(--c-green); }
+    .ta-panel-dot-b { background: var(--c-blue); }
+    .ta-panel-dot-c { background: var(--c-amber); }
     .ta-panel-hdr-info { flex: 1; min-width: 0; }
     .ta-panel-title { font-family: var(--font-head), serif; font-weight: 700; font-size: 0.9rem; color: var(--cream); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .ta-panel-sub { font-family: var(--font-body), serif; font-size: 0.75rem; color: var(--brown-light); margin-top: 2px; }
@@ -220,8 +221,8 @@
     .ta-rbadge { display: inline-block; font-family: var(--font-body), serif; font-weight: 600; font-size: 0.82rem; padding: 2px 7px; border-radius: 2px; min-width: 26px; text-align: center; color: var(--cream); }
     .ta-rank-arrow { color: var(--brown-light); margin: 0 3px; font-size: 0.8rem; }
     .ta-delta { font-family: var(--font-body), serif; font-size: 0.73rem; margin-left: 3px; }
-    .ta-delta-up { color: #2e7d32; }
-    .ta-delta-dn { color: #b3261e; }
+    .ta-delta-up { color: var(--c-green); }
+    .ta-delta-dn { color: var(--c-red); }
     .ta-delta-flat { color: var(--brown-light); }
 
     /* ── Playoff odds ── */
@@ -239,8 +240,8 @@
     .ta-odds-bar-behind { height: 100%; position: absolute; left: 0; border-radius: 3px; opacity: 0.35; }
     .ta-odds-bar-front  { height: 100%; position: absolute; left: 0; border-radius: 3px; opacity: 0.85; }
     .ta-odds-bye { font-family: var(--font-body), serif; font-size: 0.8rem; font-style: italic; color: var(--brown-light); margin-top: 8px; }
-    .ta-delta-up-txt  { color: #2e7d32; }
-    .ta-delta-dn-txt  { color: #b3261e; }
+    .ta-delta-up-txt  { color: var(--c-green); }
+    .ta-delta-dn-txt  { color: var(--c-red); }
     .ta-delta-flat-txt{ color: var(--brown-light); }
 
     /* ── Full lineup display ── */
@@ -271,12 +272,12 @@
     .ta-rank-table td:first-child {
       position: sticky; left: 0; z-index: 2;
     }
-    .ta-rank-table th.ta-th-metric { background: #1f3d22; }
+    .ta-rank-table th.ta-th-metric { background: var(--ink-bg); }
     .ta-rank-table td:first-child {
       background: var(--brown-dark);
       box-shadow: 1px 0 0 var(--brown-mid);
     }
-    .ta-rank-table tr:hover td:first-child { background: #efe6cc; }
+    .ta-rank-table tr:hover td:first-child { background: var(--card-hover); }
 
     /* ── MOBILE ── */
     @media (max-width: 640px) {
@@ -321,11 +322,11 @@
     </div>
   </div>
 
-  <script src="/shared-nav.js?v=20261116"></script>
-  <script src="/shared-core.js?v=20261116"></script>
-  <script src="/shared-utils.js?v=20261116"></script>
-  <script src="/league-engine.js?v=20261116"></script>
-  <script src="/shared-auth.js?v=20261116"></script>
+  <script src="/shared-nav.js?v=20261117"></script>
+  <script src="/shared-core.js?v=20261117"></script>
+  <script src="/shared-utils.js?v=20261117"></script>
+  <script src="/league-engine.js?v=20261117"></script>
+  <script src="/shared-auth.js?v=20261117"></script>
   <script>
   'use strict';
 
@@ -367,19 +368,19 @@
   let _presetNote = '';     // assets from ?t= that couldn't be placed on this page
 
   const SIDE_LABELS = ['A', 'B', 'C'];
-  const SIDE_COLORS = ['#2e7d32', '#1f5f9a', '#8a5a00'];
+  const SIDE_COLORS = ['var(--c-green)', 'var(--c-blue)', 'var(--c-amber)'];
   const SIDE_CLS    = ['a', 'b', 'c'];
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
   function fmtOdds(p) {
     if (p == null)   return { label: '—',    color: 'var(--brown-light)', weight: '400' };
-    if (p >= 0.995)  return { label: 'Lock', color: '#2e7d32',            weight: '700' };
-    if (p <= 0.005)  return { label: 'Out',  color: '#b3261e',            weight: '700' };
+    if (p >= 0.995)  return { label: 'Lock', color: 'var(--c-green)',            weight: '700' };
+    if (p <= 0.005)  return { label: 'Out',  color: 'var(--c-red)',            weight: '700' };
     const pct = Math.round(p * 100);
     return {
       label:  pct + '%',
-      color:  p >= 0.70 ? '#2e7d32' : p >= 0.30 ? 'var(--gold-light)' : '#b3261e',
+      color:  p >= 0.70 ? 'var(--c-green)' : p >= 0.30 ? 'var(--gold-light)' : 'var(--c-red)',
       weight: (p >= 0.70 || p < 0.30) ? '700' : '400',
     };
   }
@@ -397,12 +398,12 @@
   // Same shape as fmtOdds, but inverted — for last-place odds, LOW is good (green), HIGH is bad (red).
   function fmtLastOdds(p) {
     if (p == null)   return { label: '—',    color: 'var(--brown-light)', weight: '400' };
-    if (p >= 0.995)  return { label: 'Lock', color: '#b3261e',            weight: '700' };
-    if (p <= 0.005)  return { label: 'Safe', color: '#2e7d32',            weight: '700' };
+    if (p >= 0.995)  return { label: 'Lock', color: 'var(--c-red)',            weight: '700' };
+    if (p <= 0.005)  return { label: 'Safe', color: 'var(--c-green)',            weight: '700' };
     const pct = Math.round(p * 100);
     return {
       label:  pct + '%',
-      color:  p >= 0.40 ? '#b3261e' : p >= 0.15 ? 'var(--gold-light)' : '#2e7d32',
+      color:  p >= 0.40 ? 'var(--c-red)' : p >= 0.15 ? 'var(--gold-light)' : 'var(--c-green)',
       weight: (p >= 0.40 || p < 0.15) ? '700' : '400',
     };
   }

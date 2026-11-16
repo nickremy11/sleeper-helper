@@ -6,7 +6,8 @@
   <title>Auction Draft Tracker</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Graduate&family=Bitter:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared-styles.css?v=20261116">
+  <link rel="stylesheet" href="/shared-styles.css?v=20261117">
+<script>try{if(/(?:^|; )sh_theme=dark/.test(document.cookie)||localStorage.getItem("sh_theme")==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
   <style>
     .auc-wrap { max-width: 1300px; margin: 0 auto; padding: 20px 16px 60px; }
 
@@ -55,7 +56,7 @@
       font-family: var(--font-body), serif; font-size: 0.9rem;
       color: var(--green-light); margin-top: 10px;
     }
-    .auc-import-err { color: #b3261e; }
+    .auc-import-err { color: var(--c-red); }
     .auc-btn {
       font-family: var(--font-display), serif; font-size: 0.64rem; letter-spacing: 0.16em;
       text-transform: uppercase; padding: 11px 28px;
@@ -97,7 +98,7 @@
       font-size: 1.3rem; color: var(--gold);
     }
     .auc-stat-val.inflation-low  { color: var(--green-light); }
-    .auc-stat-val.inflation-high { color: #b3261e; }
+    .auc-stat-val.inflation-high { color: var(--c-red); }
     .auc-stat-label {
       font-family: var(--font-display), serif; font-size: 0.60rem; letter-spacing: 0.14em;
       text-transform: uppercase; color: var(--brown-light); margin-top: 2px;
@@ -176,7 +177,7 @@
     /* ── Pool table ── */
     .auc-pool-table { width: 100%; border-collapse: collapse; }
     .auc-pool-table thead tr {
-      background: #1f3d22;
+      background: var(--ink-bg);
     }
     .auc-pool-table th {
       font-family: var(--font-display), serif; font-size: 0.60rem; letter-spacing: 0.16em;
@@ -207,7 +208,7 @@
     .auc-pool-table td.val-myppg { color: var(--gold-light); }
     .auc-pool-table td.val-diff { font-weight: 600; }
     .auc-pool-table td.val-diff.diff-up { color: var(--green-light); }
-    .auc-pool-table td.val-diff.diff-down { color: var(--red); }
+    .auc-pool-table td.val-diff.diff-down { color: var(--c-red); }
     .auc-pool-table td.val-diff.diff-flat { color: var(--brown-light); font-weight: 400; }
     .auc-pool-table td.status-cell {
       font-size: 0.8rem; color: var(--brown-light); text-decoration: none !important;
@@ -226,7 +227,7 @@
       line-height: 1; vertical-align: middle;
       text-decoration: none !important;
     }
-    .auc-undo-btn:hover { color: #b3261e; }
+    .auc-undo-btn:hover { color: var(--c-red); }
 
     /* ── Position badges ── */
     .auc-pos {
@@ -234,12 +235,12 @@
       font-size: 0.76rem; letter-spacing: 0.06em; text-transform: uppercase;
       padding: 2px 6px; border-radius: 2px; min-width: 30px; text-align: center;
     }
-    .auc-pos-QB { background: rgba(224,82,82,0.18);  color: #b3261e; }
-    .auc-pos-RB { background: rgba(92,184,92,0.18);  color: #2e7d32; }
-    .auc-pos-WR { background: rgba(91,192,222,0.18); color: #0e6f8c; }
-    .auc-pos-TE { background: rgba(232,115,75,0.18); color: #b8461f; }
-    .auc-pos-K  { background: rgba(var(--tint),0.1); color: #5b6259; }
-    .auc-pos-DST { background: rgba(155,89,182,0.18); color: #7b3fa0; }
+    .auc-pos-QB { background: rgba(224,82,82,0.18);  color: var(--c-red); }
+    .auc-pos-RB { background: rgba(92,184,92,0.18);  color: var(--c-green); }
+    .auc-pos-WR { background: rgba(91,192,222,0.18); color: var(--c-teal); }
+    .auc-pos-TE { background: rgba(232,115,75,0.18); color: var(--c-orange); }
+    .auc-pos-K  { background: rgba(var(--tint),0.1); color: var(--c-grey); }
+    .auc-pos-DST { background: rgba(155,89,182,0.18); color: var(--c-purple); }
 
     /* ── Sort indicator ── */
     .sort-arrow { margin-left: 4px; }
@@ -250,7 +251,7 @@
       border-radius: 4px; overflow: hidden; display: flex; flex-direction: column;
     }
     .auc-teams-header {
-      padding: 10px 14px; background: #1f3d22;
+      padding: 10px 14px; background: var(--ink-bg);
       border-bottom: 1px solid var(--brown-mid);
       font-family: var(--font-display), serif; font-size: 0.64rem; letter-spacing: 0.18em;
       text-transform: uppercase; color: var(--gold);
@@ -322,7 +323,7 @@
       vertical-align: middle; margin-left: 5px; opacity: 0.65;
     }
     .auc-tier-badge-odd  { background: rgba(201,150,42,0.18); color: var(--gold); }
-    .auc-tier-badge-even { background: rgba(91,192,222,0.15); color: #0e6f8c; }
+    .auc-tier-badge-even { background: rgba(91,192,222,0.15); color: var(--c-teal); }
 
     /* ── Player notes (target / avoid / dart throw) ── */
     .auc-note-btns { display: flex; gap: 6px; margin-left: auto; }
@@ -374,7 +375,7 @@
 
     .auc-note-target, .auc-note-target-label { background: var(--gold); color: var(--brown-dark); }
     .auc-note-avoid,  .auc-note-avoid-label  { background: var(--red);  color: var(--cream); }
-    .auc-note-dart,   .auc-note-dart-label  { background: #0e6f8c; color: #0d3b4f; }
+    .auc-note-dart,   .auc-note-dart-label  { background: var(--c-teal); color: #0d3b4f; }
 
     /* ── Modal ── */
     .auc-modal-backdrop {
@@ -396,7 +397,7 @@
     .auc-modal-actions { display: flex; gap: 10px; margin-top: 20px; }
     .auc-modal-err {
       font-family: var(--font-body), serif; font-size: 0.84rem;
-      color: #b3261e; margin-top: 6px; min-height: 18px;
+      color: var(--c-red); margin-top: 6px; min-height: 18px;
     }
 
     /* ── Poll status ── */
@@ -451,10 +452,10 @@
     </div>
   </div>
 
-  <script src="/shared-nav.js?v=20261116"></script>
-  <script src="/shared-core.js?v=20261116"></script>
-  <script src="/shared-utils.js?v=20261116"></script>
-  <script src="/shared-auth.js?v=20261116"></script>
+  <script src="/shared-nav.js?v=20261117"></script>
+  <script src="/shared-core.js?v=20261117"></script>
+  <script src="/shared-utils.js?v=20261117"></script>
+  <script src="/shared-auth.js?v=20261117"></script>
   <script>
   'use strict';
 
@@ -852,9 +853,9 @@
   }
 
   function budgetColor(pct) {
-    if (pct < 50) return '#2e7d32';
+    if (pct < 50) return 'var(--c-green)';
     if (pct < 80) return 'var(--gold)';
-    return '#b3261e';
+    return 'var(--c-red)';
   }
 
   // ─── Modal ────────────────────────────────────────────────────────────────────
@@ -979,7 +980,7 @@
       : A._sleeperFetchState === 'error' ? `
       <div class="auc-field">
         <label class="auc-label">Sleeper League (optional — enables live sync)</label>
-        <div style="font-family:var(--font-body),serif;font-size:0.86rem;color:#b3261e;">
+        <div style="font-family:var(--font-body),serif;font-size:0.86rem;color:var(--c-red);">
           Could not look up Sleeper leagues for "${esc(A._sleeperUsername || '')}" — check the username in your <a href="/myprofile" style="color:var(--gold);">profile</a>.
         </div>
       </div>`
@@ -1415,7 +1416,7 @@
 
   function renderStatsBar(stats, inflation, inflPct, inflCls) {
     const tiles = posTiles();
-    const TILE_COLORS = { QB: '#b3261e', RB: '#2e7d32', WR: '#0e6f8c', TE: '#b8461f' };
+    const TILE_COLORS = { QB: 'var(--c-red)', RB: 'var(--c-green)', WR: 'var(--c-teal)', TE: 'var(--c-orange)' };
 
     return `
     <div class="auc-stats-bar">
@@ -1791,7 +1792,7 @@
           }).join('')}
         </div>`;
     } catch (err) {
-      if (el) el.innerHTML = `<div style="font-family:var(--font-body),serif;font-size:0.82rem;color:#b3261e;padding:8px 0;">Could not load ESPN teams: ${esc(err.message)}</div>`;
+      if (el) el.innerHTML = `<div style="font-family:var(--font-body),serif;font-size:0.82rem;color:var(--c-red);padding:8px 0;">Could not load ESPN teams: ${esc(err.message)}</div>`;
       window._espnTeams = null;
     }
   }
@@ -2052,7 +2053,7 @@
 
       const auctionDrafts = (drafts || []).filter(d => d.type === 'auction');
       if (!auctionDrafts.length) {
-        if (el) el.innerHTML = `<div style="font-family:var(--font-body),serif;font-size:0.82rem;color:#b3261e;padding:8px 0;">No auction draft found for this league. (Snake drafts aren't supported by this tool.)</div>`;
+        if (el) el.innerHTML = `<div style="font-family:var(--font-body),serif;font-size:0.82rem;color:var(--c-red);padding:8px 0;">No auction draft found for this league. (Snake drafts aren't supported by this tool.)</div>`;
         window._sleeperTeams = null; window._sleeperDraft = null;
         return;
       }
@@ -2102,7 +2103,7 @@
               </div>`).join('')}
         </div>`;
     } catch (err) {
-      if (el) el.innerHTML = `<div style="font-family:var(--font-body),serif;font-size:0.82rem;color:#b3261e;padding:8px 0;">Could not load Sleeper teams: ${esc(err.message)}</div>`;
+      if (el) el.innerHTML = `<div style="font-family:var(--font-body),serif;font-size:0.82rem;color:var(--c-red);padding:8px 0;">Could not load Sleeper teams: ${esc(err.message)}</div>`;
       window._sleeperTeams = null; window._sleeperDraft = null;
     }
   }

@@ -6,7 +6,8 @@
   <title>League Analyzer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Graduate&family=Bitter:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared-styles.css?v=20261116">
+  <link rel="stylesheet" href="/shared-styles.css?v=20261117">
+<script>try{if(/(?:^|; )sh_theme=dark/.test(document.cookie)||localStorage.getItem("sh_theme")==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
   <style>
     /* Viewport-relative so a wide screen actually gets used — the roster
        columns inside the cards are what needs the room (player names were
@@ -102,7 +103,7 @@
       font-family: var(--font-body), serif; font-size: 0.8rem; font-style: italic;
       white-space: nowrap;
     }
-    .az-chances-lock  { color: #2e7d32; font-weight: 700; font-style: normal; }
+    .az-chances-lock  { color: var(--c-green); font-weight: 700; font-style: normal; }
     .az-chances-good  { color: var(--gold-light); }
     .az-chances-nervy { color: var(--parchment); }
     .az-chances-long  { color: var(--brown-light); }
@@ -112,7 +113,7 @@
     .az-playoff-bar-wrap { width: 100%; height: 5px; background: rgba(var(--tint),0.08); border-radius: 3px; overflow: hidden; }
     .az-bye-line { font-family: var(--font-body), serif; font-size: 0.68rem; font-style: italic; color: var(--brown-light); white-space: nowrap; }
     .az-playoff-bar-fill { height: 100%; border-radius: 3px; opacity: 0.8; }
-    .az-lastplace-hi  { color: #b3261e; opacity: 0.95; }
+    .az-lastplace-hi  { color: var(--c-red); opacity: 0.95; }
     .az-lastplace-mid { color: var(--gold-light); opacity: 0.95; }
     .az-lastplace-lo  { color: var(--brown-light); }
 
@@ -144,14 +145,14 @@
 
     /* ── Player rows ── */
     .rs-pos { font-family: var(--font-body), serif; font-size: 0.82rem; font-weight: 700; letter-spacing: 0.06em; padding: 2px 7px; min-width: 32px; text-align: center; }
-    .rs-pos-QB   { background: rgba(224,82,82,0.18);   color: #b3261e; }
-    .rs-pos-RB   { background: rgba(92,184,92,0.18);   color: #2e7d32; }
-    .rs-pos-WR   { background: rgba(91,192,222,0.18);  color: #0e6f8c; }
-    .rs-pos-TE   { background: rgba(232,115,75,0.18);  color: #b8461f; }
-    .rs-pos-DL   { background: rgba(155,89,182,0.18);  color: #7b3fa0; }
-    .rs-pos-LB   { background: rgba(41,128,185,0.18);  color: #1f5f9a; }
+    .rs-pos-QB   { background: rgba(224,82,82,0.18);   color: var(--c-red); }
+    .rs-pos-RB   { background: rgba(92,184,92,0.18);   color: var(--c-green); }
+    .rs-pos-WR   { background: rgba(91,192,222,0.18);  color: var(--c-teal); }
+    .rs-pos-TE   { background: rgba(232,115,75,0.18);  color: var(--c-orange); }
+    .rs-pos-DL   { background: rgba(155,89,182,0.18);  color: var(--c-purple); }
+    .rs-pos-LB   { background: rgba(41,128,185,0.18);  color: var(--c-blue); }
     .rs-pos-DB   { background: rgba(26,188,156,0.18);  color: #0f7a66; }
-    .rs-pos-PICK { background: rgba(var(--tint),0.14); color: #5b6259; }
+    .rs-pos-PICK { background: rgba(var(--tint),0.14); color: var(--c-grey); }
 
     .pf-player-row { display: flex; align-items: center; gap: 6px; padding: 3px 4px; border-radius: 2px; margin-bottom: 2px; font-family: var(--font-body), serif; font-size: 0.86rem; color: var(--parchment); border-left: 2px solid transparent; }
     .pf-player-row.starter { background: rgba(var(--tint),0.055); border-left-color: var(--gold); }
@@ -263,9 +264,9 @@
       font-family: var(--font-body), serif; font-size: 0.75rem; font-weight: 700; padding: 2px 8px;
       border-radius: 2px; text-transform: uppercase; letter-spacing: 0.05em;
     }
-    .az-tgt-arch-c { background: rgba(92,184,92,0.18); color: #2e7d32; }
-    .az-tgt-arch-r { background: rgba(91,192,222,0.18); color: #0e6f8c; }
-    .az-tgt-arch-u { background: rgba(var(--tint),0.14); color: #5b6259; }
+    .az-tgt-arch-c { background: rgba(92,184,92,0.18); color: var(--c-green); }
+    .az-tgt-arch-r { background: rgba(91,192,222,0.18); color: var(--c-teal); }
+    .az-tgt-arch-u { background: rgba(var(--tint),0.14); color: var(--c-grey); }
     .az-tgt-needs {
       padding: 6px 13px 8px; border-bottom: 1px solid var(--brown-mid);
       display: flex; gap: 5px; flex-wrap: wrap; align-items: center;
@@ -278,8 +279,8 @@
       font-family: var(--font-body), serif; font-size: 0.76rem; font-weight: 700;
       padding: 2px 7px; border-radius: 2px;
     }
-    .az-tgt-need-full  { background: rgba(224,82,82,0.22); color: #b3261e; }
-    .az-tgt-need-light { background: rgba(232,195,100,0.18); color: #8a5a00; }
+    .az-tgt-need-full  { background: rgba(224,82,82,0.22); color: var(--c-red); }
+    .az-tgt-need-light { background: rgba(232,195,100,0.18); color: var(--c-amber); }
     .az-tgt-item {
       display: block; padding: 9px 13px; border-bottom: 1px dashed rgba(var(--tint),0.05);
       text-decoration: none; transition: background 0.1s; cursor: pointer;
@@ -386,11 +387,11 @@
     </div>
   </div>
 
-  <script src="/shared-nav.js?v=20261116"></script>
-  <script src="/shared-core.js?v=20261116"></script>
-  <script src="/shared-utils.js?v=20261116"></script>
-  <script src="/league-engine.js?v=20261116"></script>
-  <script src="/shared-auth.js?v=20261116"></script>
+  <script src="/shared-nav.js?v=20261117"></script>
+  <script src="/shared-core.js?v=20261117"></script>
+  <script src="/shared-utils.js?v=20261117"></script>
+  <script src="/league-engine.js?v=20261117"></script>
+  <script src="/shared-auth.js?v=20261117"></script>
   <script>
   'use strict';
 
@@ -1509,7 +1510,7 @@
             const ew  = team.expWins   ?? team.wins   ?? 0;
             const el  = team.expLosses ?? team.losses ?? 0;
             const pct = Math.round((team.bigPoolPct ?? 0) * 100);
-            const color = pct >= 70 ? '#2e7d32' : pct >= 30 ? 'var(--gold-light)' : '#b3261e';
+            const color = pct >= 70 ? 'var(--c-green)' : pct >= 30 ? 'var(--gold-light)' : 'var(--c-red)';
             return `<div class="az-rank-cell az-playoff-cell">
               <span class="az-chances-badge" style="color:${color};font-weight:700;">${ew.toFixed(1)}-${el.toFixed(1)}</span>
               <div class="az-playoff-bar-wrap"><div class="az-playoff-bar-fill" style="width:${pct}%;background:${color};"></div></div>
@@ -1519,12 +1520,12 @@
           if (team.playoffOdds != null) {
             const p = team.playoffOdds;
             let label, color, weight, barPct;
-            if (p >= 0.995)      { label = 'Lock'; color = '#2e7d32'; weight = '700'; barPct = 100; }
-            else if (p <= 0.005) { label = 'Out';  color = '#b3261e'; weight = '700'; barPct = 0; }
+            if (p >= 0.995)      { label = 'Lock'; color = 'var(--c-green)'; weight = '700'; barPct = 100; }
+            else if (p <= 0.005) { label = 'Out';  color = 'var(--c-red)'; weight = '700'; barPct = 0; }
             else {
               barPct = Math.round(p * 100);
               label  = barPct + '%';
-              color  = p >= 0.70 ? '#2e7d32' : p >= 0.30 ? 'var(--gold-light)' : '#b3261e';
+              color  = p >= 0.70 ? 'var(--c-green)' : p >= 0.30 ? 'var(--gold-light)' : 'var(--c-red)';
               weight = p >= 0.70 || p < 0.30 ? '700' : '400';
             }
             const byePct = Math.round((team.byeOdds ?? 0) * 100);

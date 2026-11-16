@@ -94,7 +94,24 @@ function shNavRender(tab) {
     ? `<div class="sub-bar" role="navigation" aria-label="${cur.label}"><div class="sub-bar-inner">${cur.items.map(it => shNavLink(it, 'sub-link', tab)).join('')}</div></div>`
     : '';
   el.classList.toggle('has-sub', !!cur);
-  el.innerHTML = `<div class="tab-bar-inner">${groups}</div>${sub}`;
+  const dark = shThemeIsDark();
+  const theme = `<button type="button" class="theme-btn" onclick="shThemeSet(!shThemeIsDark())" aria-pressed="${dark}" title="Switch to ${dark ? 'light' : 'dark'} mode">${dark ? '☀ Light' : '☾ Dark'}</button>`;
+  el.innerHTML = `<div class="tab-bar-inner">${groups}${theme}</div>${sub}`;
+}
+
+// Light / dark. The choice is a cookie on .ffhistorian.com (so every ffhistorian
+// site can read it) plus localStorage for hosts where that cookie can't be set.
+// Each page's <head> applies it before first paint; this is the switch.
+function shThemeIsDark() { return document.documentElement.getAttribute('data-theme') === 'dark'; }
+function shThemeSet(dark) {
+  if (dark) document.documentElement.setAttribute('data-theme', 'dark');
+  else document.documentElement.removeAttribute('data-theme');
+  const v = dark ? 'dark' : 'light';
+  try { localStorage.setItem('sh_theme', v); } catch (e) {}
+  const dom = /(^|\.)ffhistorian\.com$/.test(location.hostname) ? '; Domain=.ffhistorian.com' : '';
+  document.cookie = 'sh_theme=' + v + '; Path=/; Max-Age=31536000; SameSite=Lax' + dom;
+  const b = document.querySelector('#sh-nav .theme-btn');
+  if (b) { b.textContent = dark ? '☀ Light' : '☾ Dark'; b.setAttribute('aria-pressed', String(dark)); b.title = 'Switch to ' + (dark ? 'light' : 'dark') + ' mode'; }
 }
 
 function shNavCloseAll(except) {

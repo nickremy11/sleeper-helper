@@ -76,7 +76,7 @@ function rgApplyBarHtml(fix) {
       const m = src === 'ranks' ? 'ranks' : 'projections';
       return x.changed
         ? `<button class="ghost-btn" style="font-size:0.64rem;" onclick="rgSetMode('${m}')">⚡ Optimize with ${src === 'ranks' ? 'Ranks' : 'Projections'}</button>`
-        : `<span style="color:#2e7d32;">✓ optimal by ${label(src)}</span>`;
+        : `<span style="color:var(--c-green);">✓ optimal by ${label(src)}</span>`;
     };
     const parts = [part('ranks'), part('projections')].filter(Boolean);
     if (!parts.length && !msg) return '';
@@ -85,16 +85,16 @@ function rgApplyBarHtml(fix) {
 
   const src = RG.mode === 'ranks' ? 'ranks' : 'projections';
   if (!luCanOptimize(src)) {
-    return `<div class="rg-apply"><span style="color:#a8321f;">${src === 'ranks'
+    return `<div class="rg-apply"><span style="color:var(--c-red);">${src === 'ranks'
       ? 'No ranking sheet uploaded for week ' + LU.week + '.' : 'No projections for week ' + LU.week + ' yet.'}</span></div>`;
   }
   const x = diff(src);
   if (!x) return '';
-  if (!x.changed) return `<div class="rg-apply"><span style="color:#2e7d32;">✓ Already optimal by ${label(src)}</span>${msg}</div>`;
+  if (!x.changed) return `<div class="rg-apply"><span style="color:var(--c-green);">✓ Already optimal by ${label(src)}</span>${msg}</div>`;
   const names = list => list.map(p => esc(luPlayerName(p))).join(', ');
   // Same rule as the card: the delta is always in projections, so in ranks mode
   // a negative number is the sheet and the projections disagreeing, not a bug.
-  const dc = x.d >= 0.05 ? '#2e7d32' : x.d <= -0.05 ? '#8a5a00' : 'var(--brown-light)';
+  const dc = x.d >= 0.05 ? 'var(--c-green)' : x.d <= -0.05 ? 'var(--c-amber)' : 'var(--brown-light)';
   const swaps = x.ins.length || x.outs.length
     ? `<span class="rg-ap-grp"><b>In</b> ${names(x.ins) || '—'}</span><span class="rg-ap-grp"><b>Out</b> ${names(x.outs) || '—'}</span>`
     : `<span class="rg-ap-grp">same players, slots reshuffled</span>`;
@@ -117,12 +117,12 @@ async function rgApply() {
   rgDraw();
   try {
     const ok = await luPutStarters(fix, prop);
-    RG.msg = { leagueId: fix.leagueId, color: ok ? '#2e7d32' : '#8a5a00',
+    RG.msg = { leagueId: fix.leagueId, color: ok ? 'var(--c-green)' : 'var(--c-amber)',
                text: ok ? '✓ lineup set' : '⚠ saved but Sleeper returned a different lineup' };
     // Back to the live lineup, so the green you now see is what Sleeper has.
     RG.mode = 'current';
   } catch (e) {
-    RG.msg = { leagueId: fix.leagueId, color: '#a8321f', text: '✗ ' + (e.message || 'failed') };
+    RG.msg = { leagueId: fix.leagueId, color: 'var(--c-red)', text: '✗ ' + (e.message || 'failed') };
   }
   if (S.tab === 'ranksgrid') rgDraw();
 }
@@ -305,7 +305,7 @@ function rgDraw() {
       <span style="font-size:0.65rem;color:var(--brown-light);">Highlight:</span>${modePills}
       <span style="flex:1;"></span>
       <span style="font-size:0.6rem;color:var(--brown-light);display:flex;gap:12px;align-items:center;">
-        <span><span style="display:inline-block;width:9px;height:9px;background:rgba(95,174,95,0.6);border-left:3px solid #2e7d32;margin-right:4px;"></span>starting</span>
+        <span><span style="display:inline-block;width:9px;height:9px;background:rgba(95,174,95,0.6);border-left:3px solid var(--c-green);margin-right:4px;"></span>starting</span>
         <span><span style="display:inline-block;width:9px;height:9px;background:rgba(192,80,77,0.6);border-left:3px solid #a8321f;margin-right:4px;"></span>rostered, benched</span>
         <span><span style="display:inline-block;width:9px;height:9px;background:rgba(235,195,55,0.75);border-left:3px solid #d6a82a;margin-right:4px;"></span>free agent</span>
       </span>

@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Scoreboard — FF Historian</title>
 <link href="https://fonts.googleapis.com/css2?family=Graduate&family=Bitter:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/shared-styles.css?v=20261116" />
+<link rel="stylesheet" href="/shared-styles.css?v=20261117" />
+<script>try{if(/(?:^|; )sh_theme=dark/.test(document.cookie)||localStorage.getItem("sh_theme")==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
 <style>
 
 /* ── BANNER ── */
@@ -40,7 +41,7 @@
 
 .setup-status { font-family: var(--font-body), serif; margin-top: 5px; min-height: 16px; }
 
-.setup-status.err { color: #b3261e; }
+.setup-status.err { color: var(--c-red); }
 
 /* ── WEEK CONTROLS ── */
 .week-bar {
@@ -67,7 +68,7 @@
 
 /* ── STATES (rootforme override) ── */
 .err-state {
-  background: rgba(139,26,26,0.2); border: 1px solid var(--red); color: #b3261e;
+  background: rgba(139,26,26,0.2); border: 1px solid var(--red); color: var(--c-red);
 }
 
 /* ── SHARED CARD SHAPES (also Root For Me's Miracle) ── */
@@ -82,7 +83,7 @@
 .mnm-tile-s { font-family: var(--font-body), serif; font-size: 0.8rem; font-style: italic; color: var(--brown-light); }
 .mnm-note { font-family: var(--font-body), serif; font-size: 0.85rem; font-style: italic; color: var(--brown-light); margin-top: 10px; }
 .mnm-good { color: var(--green-light); }
-.mnm-bad  { color: #b3261e; }
+.mnm-bad  { color: var(--c-red); }
 .mnm-mu { padding: 10px 4px 12px; border-bottom: 1px dashed rgba(var(--tint),0.09); }
 .mnm-mu:last-child { border-bottom: none; }
 .mnm-mu-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
@@ -111,21 +112,21 @@
 .lm-strip-cell b { display: block; font-family: var(--font-head), serif; font-size: 1.15rem; color: var(--cream); line-height: 1.1; }
 .lm-strip-cell span { font-family: var(--font-display), serif; font-size: 0.61rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brown-light); }
 .lm-tier { border-left: 3px solid var(--lm-c); padding-left: 12px; margin-bottom: 16px; }
-.lm-t-lock { --lm-c: #2e7d32; } .lm-t-good { --lm-c: #2e7d32; } .lm-t-toss { --lm-c: var(--gold); } .lm-t-bad { --lm-c: #b8461f; } .lm-t-dead { --lm-c: #b3261e; }
+.lm-t-lock { --lm-c: var(--c-green); } .lm-t-good { --lm-c: var(--c-green); } .lm-t-toss { --lm-c: var(--gold); } .lm-t-bad { --lm-c: var(--c-orange); } .lm-t-dead { --lm-c: var(--c-red); }
 .lm-tier-head { font-family: var(--font-display), serif; font-size: 0.65rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lm-c); margin-bottom: 2px; }
 .lm-tier-head span { font-family: var(--font-body), serif; font-size: 0.85rem; letter-spacing: 0; color: var(--brown-light); margin-left: 4px; }
 .lm-row { padding: 8px 4px 9px; }
 .lm-row .mnm-bar > span { background: var(--lm-c, var(--green-light)); }
 .lm-favs { --lm-c: var(--gold); }
 .lm-favs .lm-pct { color: var(--lm-c); }
-.lm-row.lm-t-lock .lm-pct, .lm-row.lm-t-good .lm-pct { color: #2e7d32; }
+.lm-row.lm-t-lock .lm-pct, .lm-row.lm-t-good .lm-pct { color: var(--c-green); }
 .lm-row.lm-t-toss .lm-pct { color: var(--gold); }
-.lm-row.lm-t-bad .lm-pct { color: #b8461f; }
-.lm-row.lm-t-dead .lm-pct { color: #b3261e; }
-.lm-favs .lm-row.lm-t-lock .mnm-bar > span, .lm-favs .lm-row.lm-t-good .mnm-bar > span { background: #2e7d32; }
+.lm-row.lm-t-bad .lm-pct { color: var(--c-orange); }
+.lm-row.lm-t-dead .lm-pct { color: var(--c-red); }
+.lm-favs .lm-row.lm-t-lock .mnm-bar > span, .lm-favs .lm-row.lm-t-good .mnm-bar > span { background: var(--c-green); }
 .lm-favs .lm-row.lm-t-toss .mnm-bar > span { background: var(--gold); }
-.lm-favs .lm-row.lm-t-bad .mnm-bar > span { background: #b8461f; }
-.lm-favs .lm-row.lm-t-dead .mnm-bar > span { background: #b3261e; }
+.lm-favs .lm-row.lm-t-bad .mnm-bar > span { background: var(--c-orange); }
+.lm-favs .lm-row.lm-t-dead .mnm-bar > span { background: var(--c-red); }
 .lm-star { background: none; border: none; padding: 0 2px; margin-right: -4px; cursor: pointer; font-size: 1rem; line-height: 1; color: var(--brown-light); align-self: center; }
 .lm-star:hover { color: var(--gold); }
 .lm-star.on { color: var(--gold); }
@@ -159,15 +160,15 @@
 .lm-lu-r .lm-lu-name, .lm-lu-r .lm-lu-sub { text-align: right; }
 .lm-lu-now { font-family: var(--font-head), serif; font-size: 0.95rem; color: var(--cream); }
 .lm-lu-proj { font-size: 0.72rem; color: var(--brown-light); }
-.lm-lu-delta { font-size: 0.72rem; color: #2e7d32; font-weight: 600; }
+.lm-lu-delta { font-size: 0.72rem; color: var(--c-green); font-weight: 600; }
 /* Game state at a glance: playing = bold, yet to play = italic, done for the
    week = plain (muted). The clock in the sub line says the same thing in words. */
-.lm-lu-live .lm-lu-sub b { color: #2e7d32; font-weight: 600; }
+.lm-lu-live .lm-lu-sub b { color: var(--c-green); font-weight: 600; }
 .lm-lu-live .lm-lu-nm { font-weight: 700; }
 .lm-lu-soon .lm-lu-nm { font-style: italic; }
 .lm-lu-done .lm-lu-nm { color: var(--brown-light); }
 .lm-lu-bench { opacity: 0.45; }
-.lm-lu-inj { color: #b3261e; font-weight: 600; }
+.lm-lu-inj { color: var(--c-red); font-weight: 600; }
 .lm-lu-tot td { border-top: 1px solid var(--brown-mid); border-bottom: none; padding-top: 7px; }
 .lm-lu-tot .lm-lu-now { font-size: 1.05rem; font-weight: 700; }
 @keyframes lm-flash { from { background: rgba(127,208,127,0.28); } to { background: transparent; } }
@@ -276,11 +277,11 @@
 </main>
 </div>
 
-<script src="/shared-nav.js?v=20261116"></script>
-<script src="/shared-auth.js?v=20261116"></script>
-<script src="/shared-core.js?v=20261116"></script>
-<script src="/shared-utils.js?v=20261116"></script>
-<script src="/miracle.js?v=20261116"></script>
+<script src="/shared-nav.js?v=20261117"></script>
+<script src="/shared-auth.js?v=20261117"></script>
+<script src="/shared-core.js?v=20261117"></script>
+<script src="/shared-utils.js?v=20261117"></script>
+<script src="/miracle.js?v=20261117"></script>
 <script src="/matchup-tracker.js?v=20261117"></script>
 <script src="/league-matchups.js?v=20261118"></script>
 <script>

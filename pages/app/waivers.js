@@ -384,7 +384,7 @@ function wvGridHtml() {
     </select>`;
 
   const note = !owned
-    ? `<span style="font-size:0.6rem;color:#b3261e;">rosters didn't load for this league — nothing highlighted</span>` : '';
+    ? `<span style="font-size:0.6rem;color:var(--c-red);">rosters didn't load for this league — nothing highlighted</span>` : '';
 
   const controls = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
       <span style="font-size:0.65rem;color:var(--brown-light);">League:</span>${leagueSel}
@@ -393,7 +393,7 @@ function wvGridHtml() {
       ${note}
       <span style="flex:1;"></span>
       <span style="font-size:0.6rem;color:var(--brown-light);display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
-        <span><span style="display:inline-block;width:9px;height:9px;background:rgba(95,174,95,0.6);border-left:3px solid #2e7d32;margin-right:4px;"></span>my roster</span>
+        <span><span style="display:inline-block;width:9px;height:9px;background:rgba(95,174,95,0.6);border-left:3px solid var(--c-green);margin-right:4px;"></span>my roster</span>
         <span><span style="display:inline-block;width:9px;height:9px;background:rgba(235,195,55,0.75);border-left:3px solid #d6a82a;margin-right:4px;"></span>free agent</span>
         <span><span style="display:inline-block;width:9px;height:9px;background:var(--brown-dark);border:1px solid var(--brown-mid);margin-right:4px;opacity:0.45;"></span>rostered elsewhere</span>
       </span>

@@ -712,7 +712,7 @@ function roiImportHtml() {
     <div class="roi-row" style="margin-top:8px;">
       <button class="ghost-btn" onclick="roiImpPreview()">Preview</button>
       <button class="ghost-btn" onclick="roiCloseImport()">Cancel</button>
-      ${p.err ? `<span style="color:var(--red);">${esc(p.err)}</span>` : ''}
+      ${p.err ? `<span style="color:var(--c-red);">${esc(p.err)}</span>` : ''}
     </div>
   </div>`;
 

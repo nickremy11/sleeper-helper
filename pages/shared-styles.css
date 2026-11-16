@@ -35,10 +35,64 @@
   /* rgb triplet for faint lines and hover washes: rgba(var(--tint), 0.08). Dark on
      cream, white inside the ink surfaces. */
   --tint:         31,61,34;
+  /* Surfaces and fixed colours. Dark mode (the block after this one) redefines
+     these and the tokens above; nothing else in the site names a light colour. */
+  --page:         #f3e9d2;   /* page background */
+  --card:         var(--card);   /* panel background */
+  --card-hover:   var(--card-hover);   /* hovered row / button on a panel */
+  --edge:         #1f3d22;   /* a panel's or outline button's border */
+  --rule:         var(--rule);   /* row rules inside a panel */
+  --rule-in:      var(--rule-in);   /* dividers inside a panel */
+  --card-text:    #1f3d22;
+  --card-text2:   #2f4530;
+  --card-muted:   #4c5a48;
+  --card-gold:    #2c6a2e;   /* labels and links on a panel */
+  --ink-bg:       #1f3d22;   /* banner, menu, title bands, solid buttons */
+  --ink-fg:       #f3e9d2;
+  --accent:       #f0b93a;   /* bright gold */
+  --on-accent:    #1f3d22;   /* text on bright gold */
+  --sel-bg:       #1f3d22;   /* a selected pill */
+  --sel-fg:       #f0b93a;
+  --c-green: var(--c-green); --c-red: var(--c-red); --c-amber: var(--c-amber); --c-teal: var(--c-teal);
+  --c-orange: var(--c-orange); --c-purple: var(--c-purple); --c-grey: var(--c-grey); --c-blue: var(--c-blue);
+}
+/* ── DARK MODE ──
+   <html data-theme="dark">, set by the menu's switch (shThemeSet in shared-nav.js)
+   and by the one-line script in each page's <head>. Same layout and shapes; only
+   these values change. The CARD and INK blocks below read them, so they follow. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --cream:        #f3e9d2;
+  --parchment:    #ddd3b8;
+  --brown-dark:   #f3e9d2;
+  --brown-mid:    #7a9c7e;   /* page-level secondary text as well as borders */
+  --brown-light:  #a3b399;
+  --green:        #1f3d22;
+  --green-light:  #7cc47f;
+  --gold:         #dba630;
+  --gold-light:   #f0b93a;
+  --ink:          #f3e9d2;
+  --gold-ink:     #dba630;
+  --tint:         255,255,255;
+  --page:         #0e1510;
+  --card:         #18241b;
+  --card-hover:   #223527;
+  --edge:         #4a6e4f;
+  --rule:         #2c3f30;
+  --rule-in:      #2c3f30;
+  --card-text:    #f3e9d2;
+  --card-text2:   #ddd3b8;
+  --card-muted:   #a3b399;
+  --card-gold:    #f0b93a;
+  --ink-bg:       #234a28;
+  --sel-bg:       #f0b93a;
+  --sel-fg:       #1f3d22;
+  --c-green: #74c878; --c-red: #ff8273; --c-amber: #e9b44c; --c-teal: #5cc6e0;
+  --c-orange: #f2936a; --c-purple: #c594e6; --c-grey: #a7b0a4; --c-blue: #74b4ea;
 }
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 body {
-  background-color: var(--cream);
+  background-color: var(--page);
   color: var(--ink);
   font-family: var(--font-body), Georgia, serif;
   min-height: 100vh;
@@ -64,16 +118,16 @@ body {
 /* Second row: the tools inside the menu group you are in (shNavRender). Cream,
    so it reads as part of the page; the red rule sits between the two rows. */
 .tab-bar.has-sub { border-bottom: none; }
-.sub-bar { background: #fbf5e6; border-top: 6px solid var(--red); border-bottom: 2px solid var(--brown-dark); }
+.sub-bar { background: var(--card); border-top: 6px solid var(--red); border-bottom: 2px solid var(--edge); }
 .sub-bar-inner { max-width: var(--page-max); margin: 0 auto; display: flex; flex-wrap: wrap; padding: 0 16px; }
 .sub-bar a {
   font-family: var(--font-display), serif; font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase;
-  color: var(--brown-dark); text-decoration: none; padding: 0 16px; min-height: 42px;
-  display: inline-flex; align-items: center; gap: 6px; border-right: 1px solid #cfd0ae; white-space: nowrap;
+  color: var(--card-text); text-decoration: none; padding: 0 16px; min-height: 42px;
+  display: inline-flex; align-items: center; gap: 6px; border-right: 1px solid var(--rule-in); white-space: nowrap;
 }
 .sub-bar a:last-child { border-right: none; }
-.sub-bar a:hover { background: #ece3c8; }
-.sub-bar a.active { background: #f0b93a; }
+.sub-bar a:hover { background: var(--card-hover); }
+.sub-bar a.active { background: var(--accent); color: var(--on-accent); }
 @media (max-width: 700px) { .sub-bar-inner { padding: 0; } .sub-bar a { flex: 1 0 auto; justify-content: center; padding: 0 12px; } }
 .tab-bar-inner { max-width: var(--page-max); margin: 0 auto; display: flex; padding: 0 16px; position: relative; }
 .tab-group { position: relative; border-right: 1px solid rgba(255,255,255,0.18); }
@@ -152,7 +206,7 @@ body {
 .ta-team-card, .ta-propose, .ta-addteam-panel, .ta-summary-box, .ta-panel, .ta-odds-card, .ta-lineup-card,
 .week-bar, .leagues-card, .game-card, .mnm-card, .auc-setup, .auc-stats-bar, .auc-pool,
 .auc-teams, .auc-modal, .room-header, .asset-table-wrap, .draft-grid-scroll, .roster-card, .search-input,
-.tracker-select, .scout-select, .mrg-select, .mrb-select, .codes-overlay-inner) > * { --brown-mid: #c9cba9; }
+.tracker-select, .scout-select, .mrg-select, .mrb-select, .codes-overlay-inner) > * { --brown-mid: var(--rule-in); }
 .card, .setup-card, .mrg-col, .empty-state.dark, .dash-card, .home-tile, .lineup-card,
 .lsw-panel, .gd-legend, .rg-col, .rs-lg-panel, .rs-filter-panel, .rs-table, .ls-table,
 .tl-table, .tracker-player, .mo-chosen, .mo-lg, .mo-offer, .mo-bar, .pf-trade-card,
@@ -161,26 +215,25 @@ body {
 .week-bar, .leagues-card, .game-card, .mnm-card, .auc-setup, .auc-stats-bar, .auc-pool,
 .auc-teams, .auc-modal, .room-header, .asset-table-wrap, .draft-grid-scroll, .roster-card, .search-input,
 .tracker-select, .scout-select, .mrg-select, .mrb-select, .codes-overlay-inner {
-  --brown-dark: #fbf5e6;
-  --brown-mid: #1f3d22;
-  --brown-light: #4c5a48;
-  --cream: #1f3d22;
-  --parchment: #2f4530;
-  --gold: #2c6a2e;
-  --gold-light: #2c6a2e;
-  --label: #2c6a2e;
-  --tint: 31,61,34;
+  --brown-dark: var(--card);
+  --brown-mid: var(--edge);
+  --brown-light: var(--card-muted);
+  --cream: var(--card-text);
+  --parchment: var(--card-text2);
+  --gold: var(--card-gold);
+  --gold-light: var(--card-gold);
+  --label: var(--card-gold);
 }
 
 /* ── INK SURFACES ──
    Elements that keep their own dark green / red background wherever they sit,
    cards included: the banner and menu, table header bands, buttons, badges,
    selected pills. Inside them the tokens go back to their on-dark meaning. */
-.banner, .tab-bar, .dash-head, .lsw-bar, .rg-head, .mrg-head, .err-state, .badge-green, .badge-red, .badge.ok, .guest-signin-btn,
+.banner, .tab-bar, .sh-modal-card, .dash-head, .lsw-bar, .rg-head, .mrg-head, .err-state, .badge-green, .badge-red, .badge.ok, .guest-signin-btn,
 .setup-btn, .setup-btn-danger, .pick-btn, .tab-pill.on, .step-dot.active, .gd-tag-write,
 .auc-note-avoid, .auc-note-avoid-label, .pos-pill.active, .tracker-view-toggle button.active, .roi-pill.on,
 .tl-table th, .rs-table th, .ls-table th, .roi-table thead th, .roi-table tfoot td, .ta-rank-table th.ta-th-metric, .asset-table th {
-  --brown-dark: #1f3d22;
+  --brown-dark: var(--ink-bg);
   --brown-mid: #3f6143;
   --brown-light: #b5c7a6;
   --cream: #f3e9d2;
@@ -189,6 +242,7 @@ body {
   --gold-light: #f0b93a;
   --label: var(--gold);
   --tint: 255,255,255;
+  --green-light: #3d7a35;
 }
 .search-input::placeholder { color: rgba(var(--tint),0.5); }
 
@@ -212,11 +266,11 @@ body {
 .mrg-pill.on { border-color: var(--gold); color: var(--gold-light); }
 .mrg-noterow { margin-bottom: 10px; }
 .mrg-note { font-family: var(--font-body), serif; font-size: 0.8rem; font-style: italic; color: var(--brown-light); }
-.mrg-note.err { color: #a8321f; }
+.mrg-note.err { color: var(--c-red); }
 .mrg-legend { display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
               font-family: var(--font-body), serif; font-size: 0.8rem; color: var(--brown-light); }
 .mrg-legend i { display: inline-block; width: 9px; height: 9px; margin-right: 4px; }
-.mrg-sw-on { background: rgba(95,174,95,0.6);  border-left: 3px solid #2e7d32; }
+.mrg-sw-on { background: rgba(95,174,95,0.6);  border-left: 3px solid var(--c-green); }
 .mrg-sw-fa { background: rgba(235,195,55,0.75); border-left: 3px solid #d6a82a; }
 
 .mrg-wrap { display: grid; grid-template-columns: repeat(var(--mrg-tracks, 4), minmax(0, 1fr));
@@ -247,8 +301,8 @@ body {
    two readings, so keep the glyph. */
 .mrg-delta { flex-shrink: 0; min-width: 26px; text-align: right; font-size: 0.66rem;
              font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
-.mrg-d-up   { color: #2e7d32; }
-.mrg-d-down { color: #b3261e; }
+.mrg-d-up   { color: var(--c-green); }
+.mrg-d-down { color: var(--c-red); }
 .mrg-d-even { color: var(--brown-light); opacity: 0.55; font-weight: 400; }
 .mrg-d-none { color: var(--brown-light); opacity: 0.3;  font-weight: 400; }
 /* Season-to-date PPG in the selected league. Shown only while the track is wide
@@ -261,10 +315,10 @@ body {
            min-width: 24px; text-align: right; font-variant-numeric: tabular-nums; }
 @container (max-width: 170px) { .mrg-ppg { display: none; } }
 @container (max-width: 195px) { .mrg-cons-on .mrg-ppg { display: none; } }
-.mrg-on { background: rgba(95,174,95,0.18);  box-shadow: inset 3px 0 0 #2e7d32; }
-.mrg-on .mrg-name { color: #2e7d32; font-weight: 700; }
+.mrg-on { background: rgba(95,174,95,0.18);  box-shadow: inset 3px 0 0 var(--c-green); }
+.mrg-on .mrg-name { color: var(--c-green); font-weight: 700; }
 .mrg-fa { background: rgba(235,195,55,0.28); box-shadow: inset 3px 0 0 #f0c93c; }
-.mrg-fa .mrg-name { color: #8a5a00; }
+.mrg-fa .mrg-name { color: var(--c-amber); }
 .mrg-unk .mrg-name { font-style: italic; color: var(--brown-light); }
 
 @media (max-width: 1200px) {
@@ -352,19 +406,19 @@ footer a { color: var(--brown-light); text-decoration: none; }
 footer a:hover { color: var(--gold-light); }
 
 /* ── Devy placeholders (devy* in shared-utils.js) — analyzer + trade analyzer ── */
-.rs-pos-DEVY { background: rgba(214,170,60,0.18); color: #8a5a00; border: 1px solid rgba(214,170,60,0.35); }
+.rs-pos-DEVY { background: rgba(214,170,60,0.18); color: var(--c-amber); border: 1px solid rgba(214,170,60,0.35); }
 .devy-sub  { font-size: 0.7rem; color: var(--brown-light); font-style: italic; margin-left: 4px; }
-.devy-warn { color: #8a5a00; font-size: 0.72rem; flex-shrink: 0; cursor: help; }
+.devy-warn { color: var(--c-amber); font-size: 0.72rem; flex-shrink: 0; cursor: help; }
 .devy-ph   { font-size: 0.66rem; color: var(--brown-light); opacity: 0.8; flex-shrink: 0; }
 .devy-missing { opacity: 0.6; font-style: italic; }
 .devy-missing-hdr { font-size: 0.66rem; color: var(--brown-light); margin: 6px 0 2px 4px; letter-spacing: 0.04em; }
 .devy-row { flex-wrap: wrap; }
 .devy-stats { flex-basis: 100%; padding-left: 18px; font-size: 0.66rem; color: var(--brown-light); white-space: normal; }
-.devy-moved { color: #8a5a00; font-style: normal; }   /* a different school from the sheet's: transferred, or worth checking the match */
+.devy-moved { color: var(--c-amber); font-style: normal; }   /* a different school from the sheet's: transferred, or worth checking the match */
 .devy-link { color: inherit; text-decoration: none; border-bottom: 1px dotted rgba(230,193,90,0.5); }
 .devy-link:hover { color: var(--gold-light); }
 /* Earliest NFL draft year ('27). Outline = eligible, may return; solid = out of eligibility. */
-.devy-yr { font-size: 0.66rem; font-weight: 600; color: #8a5a00; border: 1px solid rgba(230,193,90,0.55); border-radius: 2px; padding: 0 4px; flex-shrink: 0; margin-right: 4px; }
+.devy-yr { font-size: 0.66rem; font-weight: 600; color: var(--c-amber); border: 1px solid rgba(230,193,90,0.55); border-radius: 2px; padding: 0 4px; flex-shrink: 0; margin-right: 4px; }
 .devy-yr-final { background: rgba(230,193,90,0.85); color: #2a1d0e; border-color: transparent; }
 /* Analyzer: devy as a full-width row of the team card, one grid line per player. */
 .devy-section { grid-column: 1 / -1; border-top: 1px solid rgba(var(--tint),0.06); padding-top: 10px; }
@@ -387,7 +441,7 @@ footer a:hover { color: var(--gold-light); }
 .ta-devy-row { flex-wrap: wrap; row-gap: 1px; }
 .ta-devy-name { flex: 1 1 auto; min-width: 0; font-family: var(--font-body), serif; font-size: 0.88rem; color: var(--parchment); overflow-wrap: anywhere; }
 .ta-devy-sub { flex-basis: 100%; padding-left: 24px; font-size: 0.7rem; color: var(--brown-light); font-style: italic; }
-.ta-devy-sub.devy-moved { color: #8a5a00; font-style: normal; }
+.ta-devy-sub.devy-moved { color: var(--c-amber); font-style: normal; }
 
 /* ── SELECTED PILLS ──
    A selected pill is filled dark green with gold lettering, on the page and in a
@@ -396,7 +450,7 @@ footer a:hover { color: var(--gold-light); }
    page's own pill rule comes after this file. */
 .ghost-btn.active, [style*="border-color:var(--gold);color:var(--gold)"],
 .rg-pill.on, .mrg-pill.on, .ls-mode-pill.active, .lm-pill.active, .ta-dest-pill.active {
-  background: #1f3d22 !important; border-color: #1f3d22 !important; color: #f0b93a !important;
+  background: var(--sel-bg) !important; border-color: var(--sel-bg) !important; color: var(--sel-fg) !important;
 }
 
 /* ── PROGRAMME COMPONENTS ──
@@ -412,11 +466,11 @@ footer a:hover { color: var(--gold-light); }
 }
 :root .banner h1 { text-transform: uppercase; letter-spacing: 0.04em; text-shadow: none; }
 :root .section-head h2 { font-size: 1.45rem; letter-spacing: 0.06em; text-transform: uppercase; }
-button.ghost-btn, a.ghost-btn, label.ghost-btn { background: #fbf5e6; border: 2px solid #1f3d22; color: #1f3d22; border-radius: 6px; }
-button.ghost-btn:hover, a.ghost-btn:hover, label.ghost-btn:hover { background: #ece3c8; border-color: #1f3d22; color: #1f3d22; }
-button.setup-btn, a.setup-btn { background: #1f3d22; border: 2px solid #1f3d22; color: #f3e9d2; border-radius: 6px; }
-button.setup-btn:hover:not(:disabled), a.setup-btn:hover { background: #f0b93a; border-color: #1f3d22; color: #1f3d22; }
-button.setup-btn.go { background: #f0b93a; color: #1f3d22; }
+button.ghost-btn, a.ghost-btn, label.ghost-btn { background: var(--card); border: 2px solid var(--edge); color: var(--card-text); border-radius: 6px; }
+button.ghost-btn:hover, a.ghost-btn:hover, label.ghost-btn:hover { background: var(--card-hover); border-color: var(--edge); color: var(--card-text); }
+button.setup-btn, a.setup-btn { background: var(--ink-bg); border: 2px solid var(--ink-bg); color: var(--ink-fg); border-radius: 6px; }
+button.setup-btn:hover:not(:disabled), a.setup-btn:hover { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+button.setup-btn.go { background: var(--accent); color: var(--on-accent); }
 :root :is(.card, .setup-card, .home-tile, .mo-offer, .pf-trade-card, .ta-team-card, .ta-panel, .ta-odds-card, .ta-lineup-card,
           .game-card, .leagues-card, .roster-card, .lsw-panel, .rs-lg-panel, .rs-filter-panel, .gd-legend,
           .auc-setup, .auc-stats-bar, .auc-pool, .auc-teams, .auc-modal, .week-bar, .mnm-card, .rc-empty, .empty-state) { border-radius: 10px; border-width: 2px; }
@@ -425,19 +479,26 @@ button.setup-btn.go { background: #f0b93a; color: #1f3d22; }
 :root :is(.pos-pill, .rg-pill, .mrg-pill, .lm-pill, .roi-pill, .tracker-view-toggle button, .az-switcher-btn, .az-targets-btn,
           .az-trade-btn, .ta-btn-secondary, .lm-refresh-btn, .auc-btn-ghost, .auc-pill, .setup-btn-ghost, .copy-btn, .field-btn,
           .ta-dest-pill, .year-chip, .panel-tab) {
-  background: #fbf5e6; border: 2px solid #1f3d22; color: #1f3d22; border-radius: 6px;
+  background: var(--card); border: 2px solid var(--edge); color: var(--card-text); border-radius: 6px;
 }
 :root :is(.pos-pill, .rg-pill, .mrg-pill, .lm-pill, .roi-pill, .tracker-view-toggle button, .az-switcher-btn, .az-targets-btn,
           .az-trade-btn, .ta-btn-secondary, .lm-refresh-btn, .auc-btn-ghost, .auc-pill, .setup-btn-ghost, .copy-btn, .field-btn,
-          .ta-dest-pill, .year-chip, .panel-tab):hover { background: #ece3c8; }
-:root :is(.ta-btn, .auc-btn, .load-btn, .pick-btn, .setup-btn) { background: #1f3d22; border: 2px solid #1f3d22; color: #f3e9d2; border-radius: 6px; }
-:root :is(.ta-btn, .auc-btn, .load-btn, .pick-btn, .setup-btn):hover:not(:disabled) { background: #f0b93a; color: #1f3d22; }
-:root .setup-btn.go { background: #f0b93a; color: #1f3d22; }
+          .ta-dest-pill, .year-chip, .panel-tab):hover { background: var(--card-hover); }
+:root :is(.ta-btn, .auc-btn, .load-btn, .pick-btn, .setup-btn) { background: var(--ink-bg); border: 2px solid var(--ink-bg); color: var(--ink-fg); border-radius: 6px; }
+:root :is(.ta-btn, .auc-btn, .load-btn, .pick-btn, .setup-btn):hover:not(:disabled) { background: var(--accent); color: var(--on-accent); }
+:root .setup-btn.go { background: var(--accent); color: var(--on-accent); }
 :root :is(.setup-btn-danger, .danger-btn, .admin-del-btn) { background: #a8321f; border: 2px solid #a8321f; color: #fff; border-radius: 6px; }
 :root :is(.pos-pill.active, .tracker-view-toggle button.active, .roi-pill.on, .auc-pill.active, .auc-pill.on, .panel-tab.active, .year-chip.selected, .pos-pill.on) {
-  background: #1f3d22; border-color: #1f3d22; color: #f0b93a;
+  background: var(--sel-bg); border-color: var(--sel-bg); color: var(--sel-fg);
 }
 /* Tables as scoreboards: framed, solid row rules. */
-:root :is(.rs-table, .tl-table, .roi-table, .league-table, .auc-pool-table, .asset-table, .codes-table, .ta-rank-table) { border: 2px solid #1f3d22; }
-:root :is(.rs-table, .tl-table, .league-table, .auc-pool-table, .asset-table, .codes-table, .ta-rank-table) td { border-bottom: 1px solid #d6d6b6; }
+:root :is(.rs-table, .tl-table, .roi-table, .league-table, .auc-pool-table, .asset-table, .codes-table, .ta-rank-table) { border: 2px solid var(--edge); }
+:root :is(.rs-table, .tl-table, .league-table, .auc-pool-table, .asset-table, .codes-table, .ta-rank-table) td { border-bottom: 1px solid var(--rule); }
 :root :is(.search-input, .setup-input, .tracker-select, .scout-select, .mrg-select, .mrb-select) { border-radius: 6px; }
+
+/* ── THEME SWITCH (in the menu, shared-nav.js) ── */
+.theme-btn { margin-left: auto; background: none; border: none; cursor: pointer; color: var(--parchment); opacity: 0.82;
+  font-family: var(--font-display), serif; font-size: 0.66rem; letter-spacing: 0.12em; text-transform: uppercase;
+  padding: 0 14px; min-height: 44px; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.theme-btn:hover { opacity: 1; background: rgba(255,255,255,0.06); }
+@media (max-width: 700px) { .theme-btn { margin-left: 0; flex: 1 0 auto; justify-content: center; } }

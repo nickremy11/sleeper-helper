@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Dispersal Draft — FF Historian</title>
 <link href="https://fonts.googleapis.com/css2?family=Graduate&family=Bitter:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/shared-styles.css?v=20261116" />
+<link rel="stylesheet" href="/shared-styles.css?v=20261117" />
+<script>try{if(/(?:^|; )sh_theme=dark/.test(document.cookie)||localStorage.getItem("sh_theme")==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
 <style>
 
 /* ── BANNER ── */
@@ -39,7 +40,7 @@
 .setup-btn-danger:hover { background:#a02020; color:var(--cream); }
 .setup-status { font-family: var(--font-body),serif; margin-top: 6px; min-height: 18px; }
 
-.setup-status.err { color:var(--red); }
+.setup-status.err { color:var(--c-red); }
 
 /* ── LEAGUE SELECT ── */
 .league-list { display:grid; gap:8px; }
@@ -110,13 +111,13 @@
 .asset-row td.val { text-align:right; font-family:var(--font-head),serif; font-size:0.82rem; color:var(--gold); }
 .asset-name { color:var(--cream); }
 .pos-tag { display:inline-block; font-family:var(--font-display),serif; font-size:0.60rem; letter-spacing:0.1em; padding:2px 5px; border-radius:2px; margin-right:4px; }
-.pos-QB { background:#f6dcd3; color:#b3261e; }
-.pos-RB { background:#dfe8cf; color:#2e7d32; }
-.pos-WR { background:#d6e8ee; color:#0e6f8c; }
-.pos-TE { background:#f5e0d0; color:#b8461f; }
-.pos-K  { background:#e8dcf0; color:#7b3fa0; }
-.pos-PICK { background:#e4e4dc; color:#5b6259; }
-.pos-DEF { background:#e4e4dc; color:#5b6259; }
+.pos-QB { background:rgba(179,38,30,0.14); color:var(--c-red); }
+.pos-RB { background:rgba(46,125,50,0.16); color:var(--c-green); }
+.pos-WR { background:rgba(14,111,140,0.16); color:var(--c-teal); }
+.pos-TE { background:rgba(184,70,31,0.16); color:var(--c-orange); }
+.pos-K  { background:rgba(123,63,160,0.16); color:var(--c-purple); }
+.pos-PICK { background:rgba(var(--tint),0.1); color:var(--c-grey); }
+.pos-DEF { background:rgba(var(--tint),0.1); color:var(--c-grey); }
 .pick-btn { background:var(--green); border:1px solid var(--gold); color:var(--gold-light); font-family:var(--font-display),serif; font-size:0.61rem; letter-spacing:0.12em; text-transform:uppercase; padding:4px 10px; cursor:pointer; border-radius:2px; transition:background 0.15s; white-space:nowrap; }
 .pick-btn:hover { background:var(--gold); color:var(--brown-dark); }
 .pick-btn:disabled { opacity:0.35; cursor:not-allowed; background:var(--green); color:var(--gold-light); }
@@ -155,9 +156,9 @@
 .roster-slot { display:flex; align-items:center; gap:10px; padding:6px 14px; border-bottom:1px dashed rgba(var(--tint),0.05); }
 .roster-slot:last-child { border-bottom:none; }
 .slot-pos { font-family:var(--font-display),serif; font-size:0.61rem; letter-spacing:0.1em; width:32px; flex-shrink:0; }
-.slot-pos.QB { color:#b3261e; } .slot-pos.RB { color:#2e7d32; }
-.slot-pos.WR { color:#0e6f8c; } .slot-pos.TE { color:#b8461f; }
-.slot-pos.K  { color:#7b3fa0; } .slot-pos.FLEX,.slot-pos.SF { color:var(--gold-light); }
+.slot-pos.QB { color:var(--c-red); } .slot-pos.RB { color:var(--c-green); }
+.slot-pos.WR { color:var(--c-teal); } .slot-pos.TE { color:var(--c-orange); }
+.slot-pos.K  { color:var(--c-purple); } .slot-pos.FLEX,.slot-pos.SF { color:var(--gold-light); }
 .slot-pos.BN { color:var(--brown-light); }
 .slot-player { font-family:var(--font-body),serif; font-size:0.88rem; color:var(--parchment); flex:1; }
 .slot-player.empty { color:var(--brown-light); font-style:italic; }
@@ -218,9 +219,9 @@
 </main>
 
 </div>
-<script src="/shared-nav.js?v=20261116"></script>
-  <script src="/shared-core.js?v=20261116"></script>
-<script src="/shared-utils.js?v=20261116"></script>
+<script src="/shared-nav.js?v=20261117"></script>
+  <script src="/shared-core.js?v=20261117"></script>
+<script src="/shared-utils.js?v=20261117"></script>
 <script>
 'use strict';
 
@@ -282,11 +283,11 @@ async function fcApi() {
 
 // ── Position helpers ──────────────────────────────────────────────────────────
 
-const POS_COLORS = { QB:'#b3261e', RB:'#2e7d32', WR:'#0e6f8c', TE:'#b8461f', K:'#7b3fa0', PICK:'#5b6259', DEF:'#5b6259' };
+const POS_COLORS = { QB:'var(--c-red)', RB:'var(--c-green)', WR:'var(--c-teal)', TE:'var(--c-orange)', K:'var(--c-purple)', PICK:'var(--c-grey)', DEF:'var(--c-grey)' };
 
 function posTag(pos) {
   const p = String(pos || '').toUpperCase();
-  return `<span class="pos-tag pos-${p}" style="color:${POS_COLORS[p]||'#5b6259'}">${esc(p)}</span>`;
+  return `<span class="pos-tag pos-${p}" style="color:${POS_COLORS[p]||'var(--c-grey)'}">${esc(p)}</span>`;
 }
 
 function canFillSlot(slotPos, playerPos) {
@@ -521,7 +522,7 @@ function renderStep4() {
   const extraList = D.extraPicks.length
     ? `<div style="display:grid;gap:6px;margin-bottom:12px">${D.extraPicks.map((p, i) => `
         <div style="display:flex;align-items:center;gap:8px;background:rgba(var(--tint),0.04);border:1px solid var(--brown-mid);border-radius:2px;padding:7px 12px">
-          <span class="pos-tag pos-PICK" style="color:#0e6f8c">PICK</span>
+          <span class="pos-tag pos-PICK" style="color:var(--c-teal)">PICK</span>
           <span style="flex:1;font-family:var(--font-body),serif;font-size:0.9rem;color:var(--cream)">${esc(p.name)}</span>
           <button class="setup-btn setup-btn-sm setup-btn-ghost" onclick="removeExtraPick(${i})" style="padding:3px 10px;min-height:auto">Remove</button>
         </div>`).join('')}</div>`
@@ -1225,7 +1226,7 @@ function snakeSlot(overallPick, numTeams, draftOrder) {
   return draftOrder[idx];
 }
 </script>
-<script src="/shared-auth.js?v=20261116"></script>
+<script src="/shared-auth.js?v=20261117"></script>
 <script>
 SharedAuth.init({ chipContainerId: 'auth-chip' });
 </script>
