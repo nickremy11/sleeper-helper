@@ -396,6 +396,18 @@ body {
 .az-flag { font-family: var(--font-display), serif; font-size: 0.65rem; letter-spacing: 0.12em; text-transform: uppercase; padding: 6px 14px; border: 1.5px solid var(--brown-mid); border-radius: 2px; color: var(--brown-light); background: rgba(0,0,0,0.22); }
 .az-flag-hi { border-color: var(--gold); color: var(--gold); background: rgba(201,150,42,0.08); }
 .rs-pos { display: inline-block; text-transform: uppercase; border-radius: 2px; }
+/* Position chips — ONE palette for every page, the same in light and dark:
+   a solid fill in Sleeper's position colour with dark text on it. */
+.rs-pos { color: #14231a; background: #cdc9b8; border: 1px solid rgba(0,0,0,0.28); }
+.rs-pos-QB   { background: #f06a78; }
+.rs-pos-RB   { background: #4fc98f; }
+.rs-pos-WR   { background: #62aef2; }
+.rs-pos-TE   { background: #f5a550; }
+.rs-pos-DL   { background: #d9a37a; }
+.rs-pos-LB   { background: #b79be8; }
+.rs-pos-DB   { background: #ef9ccb; }
+.rs-pos-IDP  { background: #b79be8; }
+.rs-pos-DEVY { background: #e8c552; }
 .az-badge { font-family: var(--font-display), serif; letter-spacing: 0.12em; text-transform: uppercase; border-radius: 2px; }
 .setup-label { letter-spacing: 0.22em; text-transform: uppercase; color: var(--gold); display: block; }
 .section-head:first-child { margin-top: 0; }
@@ -406,7 +418,6 @@ footer a { color: var(--brown-light); text-decoration: none; }
 footer a:hover { color: var(--gold-light); }
 
 /* ── Devy placeholders (devy* in shared-utils.js) — analyzer + trade analyzer ── */
-.rs-pos-DEVY { background: rgba(214,170,60,0.18); color: var(--c-amber); border: 1px solid rgba(214,170,60,0.35); }
 .devy-sub  { font-size: 0.7rem; color: var(--brown-light); font-style: italic; margin-left: 4px; }
 .devy-warn { color: var(--c-amber); font-size: 0.72rem; flex-shrink: 0; cursor: help; }
 .devy-ph   { font-size: 0.66rem; color: var(--brown-light); opacity: 0.8; flex-shrink: 0; }
