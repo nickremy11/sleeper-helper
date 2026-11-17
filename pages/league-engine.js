@@ -344,6 +344,37 @@ function buildFcMap(fcRes, opts = {}) {
   return map;
 }
 
+// ── TE premium on FantasyCalc values ────────────────────────────────────────
+// FantasyCalc's own `tep` setting is a flat multiplier on tight ends and moves
+// nobody else (measured against the live API: te+ = ×1.149, te++ = ×1.29 on all
+// 66 TEs). So it is applied here instead of asked for — the parameterised
+// request was the one that intermittently came back empty.
+//   bonus_rec_te 0.5 → te+, 1.0 and up → te++, anything between scaled linearly.
+//   A league starting 2+ TEs takes a further ×1.2 on top.
+const FC_TEP_PLUS = 1.149, FC_TEP_PLUS_PLUS = 1.29, FC_TWO_TE_MULT = 1.2;
+
+function fcTeMult(bonusRecTe, teSlots) {
+  const b = Math.max(0, Number(bonusRecTe) || 0);
+  const tep = b <= 0.5 ? 1 + (FC_TEP_PLUS - 1) * (b / 0.5)
+            : b <  1   ? FC_TEP_PLUS + (FC_TEP_PLUS_PLUS - FC_TEP_PLUS) * ((b - 0.5) / 0.5)
+            :            FC_TEP_PLUS_PLUS;
+  return tep * ((teSlots || 0) >= 2 ? FC_TWO_TE_MULT : 1);
+}
+
+// A copy of an FC value map with every tight end scaled for this league. Done
+// once, to the map, so every reader on the page (roster values, My Ranks
+// badges, the ranks grid) sees the same number.
+function fcApplyTeMult(fcMap, players, mult) {
+  if (!(mult > 0) || mult === 1) return fcMap;
+  const out = {};
+  for (const [pid, v] of Object.entries(fcMap || {})) {
+    out[pid] = players?.[pid]?.position === 'TE' && typeof v === 'number' ? Math.round(v * mult) : v;
+  }
+  return out;
+}
+
+const teSlotCount = rp => (rp || []).filter(p => p === 'TE').length;
+
 function buildPlayerMap(playersRes) {
   const KEEP = new Set(['QB','RB','WR','TE','DEF','DL','LB','DB','S','CB','DE','DT','FS','SS','IDL','OLB','ILB','MLB','SAF','NT']);
   const players = {}, byName = {};

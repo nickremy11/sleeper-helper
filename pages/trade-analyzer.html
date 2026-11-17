@@ -318,7 +318,7 @@
   <script src="/shared-nav.js?v=20261120"></script>
   <script src="/shared-core.js?v=20261117"></script>
   <script src="/shared-utils.js?v=20261117"></script>
-  <script src="/league-engine.js?v=20261118"></script>
+  <script src="/league-engine.js?v=20261119"></script>
   <script src="/shared-auth.js?v=20261118"></script>
   <script>
   'use strict';
@@ -458,9 +458,11 @@
     ]);
 
     const nflSeason  = nflRes?.season || String(new Date().getFullYear());
-    const fcMap      = buildFcMap(fcRes, { redraft: !isDynasty });
     const fcPickMap  = buildPickValueMap(fcRes);
     const { players, byName } = buildPlayerMap(playersRes);   // byName feeds the My Ranks badge index
+    // Tight ends priced the way FantasyCalc prices a TE-premium league (fcTeMult).
+    const fcMap      = fcApplyTeMult(buildFcMap(fcRes, { redraft: !isDynasty }), players,
+                                     fcTeMult(leagueRes?.scoring_settings?.bonus_rec_te, teSlotCount(rpEarly)));
     // Devy league: every K/IDP is a college-player placeholder. It becomes a
     // tradeable DEVY asset under the devy name — its pid is still the
     // placeholder's, which is exactly what a Sleeper proposal must send.
@@ -500,7 +502,6 @@
     const allRosters   = rostersRes || [];
     const numTeams     = allRosters.length;
     const rp           = leagueRes?.roster_positions || [];
-    const te2Mult      = rp.filter(p => p === 'TE').length >= 2 ? 1.4 : 1.0;
     const IDP_SLOTS    = new Set(['DL','LB','DB','DE','DT','IDP_FLEX','CB','S']);
     const hasIDP       = !devy && rp.some(p => IDP_SLOTS.has(p));
     const isBB       = leagueRes?.settings?.best_ball === 1;
@@ -544,7 +545,7 @@
         }
         const p = players[pid]; if (!p) continue;
         const pos = crNormPos(p.position); if (!pos) continue;
-        const val = (fcMap[pid] ?? 0) * (pos === 'TE' ? te2Mult : 1.0);
+        const val = fcMap[pid] ?? 0;   // TE premium is already in fcMap
         overall += val;
         const bucket = DEF_P.has(pos) ? 'DL' : pos;
         if (bucket in posValues) posValues[bucket] += val;
@@ -701,7 +702,6 @@
     // to this league's real QB format + PPR, parsed from its actual scoring settings.
     const { scoring: espnScoring, numQbs: espnNumQbs, ppr: espnPpr, bonusRecTe: espnBonusRecTe } =
       crParseEspnScoring(espnRes?.settings);
-    const espnTeValueMult = 1 + espnBonusRecTe * 0.4; // same calibration as loadLeagueData()'s te2Mult
     const rp = espnRosterPositionsFromSlotCounts(espnRes?.settings?.rosterSettings?.lineupSlotCounts);
     const scoringSettings = espnScoring;
 
@@ -712,8 +712,8 @@
     ]);
 
     const nflSeason    = nflRes?.season || String(new Date().getFullYear());
-    const fcMap        = buildFcMap(fcRes, { redraft: true });
     const { players, byName } = buildPlayerMap(playersRes);
+    const fcMap        = fcApplyTeMult(buildFcMap(fcRes, { redraft: true }), players, fcTeMult(espnBonusRecTe, teSlotCount(rp)));
     const lgName       = espnRes?.settings?.name || `ESPN ${espnNumId}`;
     const numTeams      = (espnRes?.teams || []).length;
     const playoffTeams  = Math.floor(numTeams / 2);
@@ -737,8 +737,7 @@
         const pos       = sleeperP ? crNormPos(sleeperP.position) : (espnPos ? crNormPos(espnPos) : null);
         if (!pos) continue;
         if (pid) sleeperPids.push(pid);
-        const rawVal    = pid ? (fcMap[pid] ?? 0) : 0;
-        const val       = rawVal * (pos === 'TE' ? espnTeValueMult : 1.0);
+        const val       = pid ? (fcMap[pid] ?? 0) : 0;   // TE premium is already in fcMap
         const isStarter = entry.lineupSlotId !== 20 && entry.lineupSlotId !== 21; // 20=Bench, 21=IR
         playerList.push({ pid: pid || pl.fullName, name: sleeperP?.full_name || pl.fullName || '', pos, val, yearsExp: sleeperP?.years_exp ?? 0, isStarter });
       }

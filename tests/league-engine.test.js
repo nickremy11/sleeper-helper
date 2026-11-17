@@ -11,7 +11,7 @@ const pages = path.join(__dirname, '..', 'pages');
 const src = ['shared-core.js', 'shared-utils.js', 'league-engine.js'].map(f => fs.readFileSync(path.join(pages, f), 'utf8')).join('\n');
 const ctx = { console, URLSearchParams, location: { hostname: 'helper.ffhistorian.com' }, window: { addEventListener() {} } };
 vm.createContext(ctx);
-const E = vm.runInContext(`${src}\n;({ SLOT_ELIG, optimalLineupAndSigma, pickOptimalLineup, bracketByeSlots, runSimulation, finalStandingOdds, sleeperMaxPf, ownedPicks, rosterOwnerNames, getPickValue, buildPickValueMap, ESPN_POS_MAP, crNormPos, normName, csvTable, espnMyTeam, espnSlotList })`, ctx);
+const E = vm.runInContext(`${src}\n;({ SLOT_ELIG, optimalLineupAndSigma, pickOptimalLineup, bracketByeSlots, runSimulation, finalStandingOdds, sleeperMaxPf, ownedPicks, rosterOwnerNames, getPickValue, buildPickValueMap, fcTeMult, fcApplyTeMult, teSlotCount, ESPN_POS_MAP, crNormPos, normName, csvTable, espnMyTeam, espnSlotList })`, ctx);
 
 const plain = v => JSON.parse(JSON.stringify(v));
 
@@ -140,4 +140,29 @@ test('ESPN "my team" matches co-owners and ignores case, but never an empty SWID
 test('one ESPN slot table folds per tool', () => {
   const counts = { 0: 1, 3: 1, 16: 1, 20: 2 };
   assert.deepStrictEqual(plain(E.espnSlotList(counts)), ['QB', 'WRRB_FLEX', 'DEF', 'BN', 'BN']);
+});
+
+test('TE premium follows FantasyCalc: te+ at 0.5, te++ at 1.0, scaled between', () => {
+  const r = v => Math.round(v * 10000) / 10000;
+  assert.strictEqual(E.fcTeMult(0, 1), 1);
+  assert.strictEqual(E.fcTeMult(undefined, 1), 1);
+  assert.strictEqual(r(E.fcTeMult(0.5, 1)), 1.149);
+  assert.strictEqual(r(E.fcTeMult(1, 1)), 1.29);
+  assert.strictEqual(r(E.fcTeMult(1.5, 1)), 1.29);          // capped at te++
+  assert.strictEqual(r(E.fcTeMult(0.75, 1)), 1.2195);       // halfway between the two
+  assert.strictEqual(r(E.fcTeMult(0.25, 1)), 1.0745);       // halfway to te+
+});
+
+test('a 2-TE league takes a further 1.2 on top of the premium', () => {
+  const r = v => Math.round(v * 10000) / 10000;
+  assert.strictEqual(r(E.fcTeMult(0, 2)), 1.2);
+  assert.strictEqual(r(E.fcTeMult(1, 2)), 1.548);           // 1.29 x 1.2
+  assert.strictEqual(E.teSlotCount(['QB', 'TE', 'FLEX', 'TE', 'BN']), 2);
+});
+
+test('the TE multiplier moves tight ends only', () => {
+  const players = { t: { position: 'TE' }, w: { position: 'WR' } };
+  const fc = { t: 7782, w: 10437, x: 500 };
+  assert.deepStrictEqual(plain(E.fcApplyTeMult(fc, players, E.fcTeMult(1, 2))), { t: 12047, w: 10437, x: 500 });
+  assert.strictEqual(E.fcApplyTeMult(fc, players, 1), fc);   // no premium: the same map back
 });
