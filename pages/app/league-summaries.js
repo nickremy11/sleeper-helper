@@ -295,7 +295,7 @@ function lsApplyOdds(d, res) {
 // instead of serving last week's odds for up to 24h.
 function lsOddsCacheKey(lg, d, detail) {
   const season = S.nflState?.season || String(new Date().getFullYear());
-  return `ls_odds_v2_${lg.league_id}_${season}_b${d.banked ?? 0}_w${lsRegularSeasonWeeks(lg, d, detail)}`;
+  return `ls_odds_v3_${lg.league_id}_${season}_b${d.banked ?? 0}_w${lsRegularSeasonWeeks(lg, d, detail)}`;
 }
 
 // Regular-season-length lookup shared by lsRestoreOddsCache/lsSimulateAllLeagues —

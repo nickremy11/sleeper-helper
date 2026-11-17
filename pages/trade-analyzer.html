@@ -322,10 +322,10 @@
     </div>
   </div>
 
-  <script src="/shared-nav.js?v=20261117"></script>
+  <script src="/shared-nav.js?v=20261120"></script>
   <script src="/shared-core.js?v=20261117"></script>
   <script src="/shared-utils.js?v=20261117"></script>
-  <script src="/league-engine.js?v=20261117"></script>
+  <script src="/league-engine.js?v=20261118"></script>
   <script src="/shared-auth.js?v=20261118"></script>
   <script>
   'use strict';
@@ -661,7 +661,7 @@
           const clampedMu = Math.max(60, Math.min(160, meanOverall > 0 ? 110 * (t.overall / meanOverall) : 110));
           for (const week of futureWeeks) {
             muMap[roster.roster_id][week]    = clampedMu;
-            sigmaMap[roster.roster_id][week] = Math.max(12, clampedMu * 0.20);
+            sigmaMap[roster.roster_id][week] = fallbackSigma(clampedMu);
           }
         }
       }
@@ -823,7 +823,7 @@
             const clampedMu = Math.max(60, Math.min(160, meanOverall > 0 ? 110 * (t.overall / meanOverall) : 110));
             for (const week of futureWeeks) {
               muMap[t.rosterId][week]    = clampedMu;
-              sigmaMap[t.rosterId][week] = Math.max(12, clampedMu * 0.20);
+              sigmaMap[t.rosterId][week] = fallbackSigma(clampedMu);
             }
           }
         }
@@ -914,7 +914,7 @@
           const clampedMu = Math.max(60, Math.min(160, meanOverall > 0 ? 110 * (cTeam.overall / meanOverall) : 110));
           for (const week of futureWeeks) {
             newMu[cTeam.rosterId][week]    = clampedMu;
-            newSigma[cTeam.rosterId][week] = Math.max(12, clampedMu * 0.20);
+            newSigma[cTeam.rosterId][week] = fallbackSigma(clampedMu);
           }
         }
       }

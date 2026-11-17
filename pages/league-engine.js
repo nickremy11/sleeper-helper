@@ -13,7 +13,15 @@ const POINTS_ONLY_TOP_COUNT = 3;
 
 // ── Lineups ─────────────────────────────────────────────────────────────────
 
-const POS_CV = { QB: 0.43, RB: 0.50, WR: 0.52, TE: 0.58, DL: 0.55, LB: 0.55, DB: 0.55 };
+// Per-starter weekly spread as a fraction of projected points. Players are drawn
+// independently, so a lineup's sigma is these combined in quadrature — which came
+// out ~18-24 pts a team, tighter than real fantasy scoring (~25-30). Hence the
+// 1.3x over the old 0.43/0.50/0.52/0.58/0.55 values; odds were skewing too extreme.
+const POS_CV = { QB: 0.56, RB: 0.65, WR: 0.68, TE: 0.75, DL: 0.72, LB: 0.72, DB: 0.72 };
+const DEFAULT_CV = 0.65;
+const SIGMA_FLOOR = 15;
+// Sigma when a team's mu comes from the FantasyCalc fallback instead of projections.
+const fallbackSigma = mu => Math.max(SIGMA_FLOOR, mu * 0.25);
 
 // Generic dot product: multiplies every stat the league scores. Safe on a stat
 // line's non-scoring fields because no league scores those keys.
@@ -56,9 +64,9 @@ function optimalLineupAndSigma(playerIds, projMap, scoring, rosterPositions, pla
   let mu = 0, sigSq = 0;
   for (const pl of pickOptimalLineup(pool, rosterPositions).starters) {
     mu += pl.pts;
-    sigSq += ((POS_CV[pl.pos] ?? 0.50) * pl.pts) ** 2;
+    sigSq += ((POS_CV[pl.pos] ?? DEFAULT_CV) * pl.pts) ** 2;
   }
-  return { mu, sigma: Math.max(10, Math.sqrt(sigSq)) };
+  return { mu, sigma: Math.max(SIGMA_FLOOR, Math.sqrt(sigSq)) };
 }
 
 // ── Playoff odds ────────────────────────────────────────────────────────────

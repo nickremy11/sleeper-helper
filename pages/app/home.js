@@ -121,7 +121,7 @@ async function dashTrades(regular) {
 
     const warnHtml = warns.slice(0, 5).map(w => dashLine(
       `<span class="dash-badge bad">⚠ Expires after kickoff</span><span class="dash-lg">${esc(w.t._lgName)}</span>
-       <span class="dash-sub">expires ${dashWhen(w.exp)} — ${esc(w.name)} (${esc(w.team)}) ${w.state === 'post' ? 'already played' : w.kickoff <= Date.now() ? 'already started' : 'kicks off ' + dashWhen(w.kickoff)}</span>`)).join('');
+       <span class="dash-sub">expires ${dashWhen(w.exp)} — ${esc(w.name)} (${esc(w.team)}) ${w.kickoff <= Date.now() ? 'already started' : 'kicks off ' + dashWhen(w.kickoff)}</span>`)).join('');
     const warnMore = warns.length > 5 ? dashLine(`+ ${warns.length - 5} more`, 'dim') : '';
 
     fill(stat + (incHtml ? incHtml + incMore : dashLine('Nothing waiting on you.', 'dim')) + warnHtml + warnMore);
@@ -142,6 +142,8 @@ function dashTradeWarnings(out, games) {
       const p = S.players[pid], team = p?.team || pid, g = kick[team];
       const ko = g?.kickoff ? new Date(g.kickoff).getTime() : NaN;
       if (!(ko < exp)) continue;
+      // Game over: his points are banked and the offer can't change that.
+      if (g.state === 'post') continue;
       if (!worst || ko < worst.kickoff) {
         worst = { t, exp, kickoff: ko, state: g.state, team, name: p?.full_name || (p ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : 'Player ' + pid) };
       }

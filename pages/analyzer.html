@@ -387,10 +387,10 @@
     </div>
   </div>
 
-  <script src="/shared-nav.js?v=20261117"></script>
+  <script src="/shared-nav.js?v=20261120"></script>
   <script src="/shared-core.js?v=20261117"></script>
   <script src="/shared-utils.js?v=20261117"></script>
-  <script src="/league-engine.js?v=20261117"></script>
+  <script src="/league-engine.js?v=20261118"></script>
   <script src="/shared-auth.js?v=20261118"></script>
   <script>
   'use strict';
@@ -688,7 +688,7 @@
         for (const t of teams) {
           const mu = meanOverall > 0 ? 110 * (t.overall / meanOverall) : 110;
           const clampedMu = Math.max(60, Math.min(160, mu));
-          const sigma = Math.max(12, clampedMu * 0.20);
+          const sigma = fallbackSigma(clampedMu);
           for (const week of futureWeeks) { muMap[t.rosterId][week] = clampedMu; sigmaMap[t.rosterId][week] = sigma; }
         }
       }
@@ -971,7 +971,7 @@
                                  scoringSettings, rp, players, lgId, nflSeason);
     } else {
       // Check session cache — keyed by league + season + regular-season length
-      const _simCacheKey = `az_odds_v3_${lgId}_${nflSeason}_w${regularSeasonWeeks}_b${regularSeasonWeeks - futureWeeks.length}${isPointsOnly ? '_po' : ''}`;
+      const _simCacheKey = `az_odds_v4_${lgId}_${nflSeason}_w${regularSeasonWeeks}_b${regularSeasonWeeks - futureWeeks.length}${isPointsOnly ? '_po' : ''}`;
       let _cachedOdds = null, _cachedBye = null, _cachedLastPf = null;
       try {
         const _c = JSON.parse(sessionStorage.getItem(_simCacheKey) || 'null');
@@ -1038,7 +1038,7 @@
             if (!t) continue;
             const mu = meanOverall > 0 ? 110 * (t.overall / meanOverall) : 110;
             const clampedMu = Math.max(60, Math.min(160, mu));
-            const sigma = Math.max(12, clampedMu * 0.20);
+            const sigma = fallbackSigma(clampedMu);
             for (const week of futureWeeks) {
               muMap[roster.roster_id][week]    = clampedMu;
               sigmaMap[roster.roster_id][week] = sigma;
@@ -1212,7 +1212,7 @@
         applyAllPlay(teams, weekRows);
       }
 
-      const _simCacheKey = `az_odds_v3_${lgId}_${nflSeason}_w${espnRegularSeasonWeeks}_b${espnRegularSeasonWeeks - futureWeeks.length}`;
+      const _simCacheKey = `az_odds_v4_${lgId}_${nflSeason}_w${espnRegularSeasonWeeks}_b${espnRegularSeasonWeeks - futureWeeks.length}`;
       let _cachedOdds = null, _cachedBye = null, _cachedLastPf = null;
       try {
         const _c = JSON.parse(sessionStorage.getItem(_simCacheKey) || 'null');
@@ -1262,7 +1262,7 @@
           for (const t of teams) {
             const mu = meanOverall > 0 ? 110 * (t.overall / meanOverall) : 110;
             const clampedMu = Math.max(60, Math.min(160, mu));
-            const sigma = Math.max(12, clampedMu * 0.20);
+            const sigma = fallbackSigma(clampedMu);
             for (const week of futureWeeks) {
               muMap[t.rosterId][week] = clampedMu;
               sigmaMap[t.rosterId][week] = sigma;

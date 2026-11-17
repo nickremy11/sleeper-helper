@@ -34,6 +34,7 @@ const SH_NAV = [
   { id: 'tools', label: 'Other Tools', items: [
     { label: 'ROI Tracker', tab: 'roi' },
     { label: 'Root For Me', href: '/rootforme' },
+    { label: 'Monday Night Miracle', href: '/miracle' },
     { label: 'My Ranks',    href: 'https://myranks.ffhistorian.com' },
   ] },
 ];
