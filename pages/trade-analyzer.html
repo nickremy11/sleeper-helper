@@ -272,11 +272,15 @@
     .ta-rank-table td:first-child {
       position: sticky; left: 0; z-index: 2;
     }
-    .ta-rank-table th.ta-th-metric { background: var(--ink-bg); }
-    .ta-rank-table td:first-child {
-      background: var(--brown-dark);
-      box-shadow: 1px 0 0 var(--brown-mid);
-    }
+    /* Header is a light band, not ink: the team names keep their side colours
+       (green / blue / amber), which only read on a light surface. */
+    :root .ta-rank-table th,
+    :root .ta-rank-table th.ta-th-metric { background: var(--card-hover); border-bottom: 2px solid var(--edge); }
+    :root .ta-rank-table th.ta-th-metric { color: var(--card-text2); }
+    .ta-rank-table td { background: var(--card); }
+    .ta-rank-table td:first-child { box-shadow: 1px 0 0 var(--rule-in); }
+    .ta-rank-table .ta-metric-lbl { color: var(--card-text2); }
+    .ta-rank-table tr:hover td { background: var(--card-hover); }
     .ta-rank-table tr:hover td:first-child { background: var(--card-hover); }
 
     /* ── MOBILE ── */
