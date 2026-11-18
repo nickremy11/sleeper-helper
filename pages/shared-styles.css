@@ -206,7 +206,7 @@ body {
 .ta-team-card, .ta-propose, .ta-addteam-panel, .ta-summary-box, .ta-panel, .ta-odds-card, .ta-lineup-card,
 .week-bar, .leagues-card, .game-card, .mnm-card, .auc-setup, .auc-stats-bar, .auc-pool,
 .auc-teams, .auc-modal, .room-header, .asset-table-wrap, .draft-grid-scroll, .roster-card, .search-input,
-.tracker-select, .scout-select, .mrg-select, .mrb-select, .codes-overlay-inner) > * { --brown-mid: var(--rule-in); }
+.tracker-select, .scout-select, .mrg-select, .mrb-select, .codes-overlay-inner, .lu-modal) > * { --brown-mid: var(--rule-in); }
 .card, .setup-card, .mrg-col, .empty-state.dark, .dash-card, .home-tile, .lineup-card,
 .lsw-panel, .gd-legend, .gd-start, .rg-col, .rs-lg-panel, .rs-filter-panel, .rs-table, .ls-table,
 .tl-table, .tracker-player, .mo-chosen, .mo-lg, .mo-offer, .mo-bar, .pf-trade-card,
@@ -214,7 +214,7 @@ body {
 .ta-team-card, .ta-propose, .ta-addteam-panel, .ta-summary-box, .ta-panel, .ta-odds-card, .ta-lineup-card,
 .week-bar, .leagues-card, .game-card, .mnm-card, .auc-setup, .auc-stats-bar, .auc-pool,
 .auc-teams, .auc-modal, .room-header, .asset-table-wrap, .draft-grid-scroll, .roster-card, .search-input,
-.tracker-select, .scout-select, .mrg-select, .mrb-select, .codes-overlay-inner {
+.tracker-select, .scout-select, .mrg-select, .mrb-select, .codes-overlay-inner, .lu-modal {
   --brown-dark: var(--card);
   --brown-mid: var(--edge);
   --brown-light: var(--card-muted);

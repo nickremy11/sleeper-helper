@@ -2093,22 +2093,22 @@ function openRankingsUpload() {
   ov.id = 'lu-rk-modal';
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
   ov.innerHTML = `
-    <div style="background:var(--brown-dark);border:1px solid var(--gold);border-radius:4px;max-width:560px;width:100%;padding:20px;max-height:88vh;overflow:auto;">
-      <div style="font-family:var(--font-head),serif;font-size:1.1rem;color:var(--cream);margin-bottom:8px;">Upload Weekly Rankings — Week ${LU.week}</div>
-      <div style="font-size:0.7rem;color:var(--brown-light);margin-bottom:10px;line-height:1.5;">
+    <div class="lu-modal">
+      <div class="lu-modal-title">Upload Weekly Rankings — Week ${LU.week}</div>
+      <div style="font-size:0.78rem;color:var(--parchment);margin-bottom:12px;line-height:1.5;">
         Pick a ranking-sheet CSV — the wide kind with side-by-side QB / RB / WR / TE / DEF / FLEX / K blocks — or paste a plain list, one player per line, best first. Names are matched to your league players and the team column breaks ties.
       </div>
-      <input type="file" id="lu-rk-file" accept=".csv,.txt" style="color:var(--cream);font-family:var(--font-body),serif;font-size:0.8rem;margin-bottom:10px;display:block;width:100%;" onchange="luRankFilePicked(this)" />
-      <div style="border:1px dashed var(--brown-light);border-radius:3px;padding:10px;margin-bottom:10px;">
-        <div style="font-size:0.75rem;color:var(--cream);margin-bottom:4px;">🖼 From a screenshot <span style="font-size:0.65rem;color:var(--gold-light);border:1px solid var(--gold);border-radius:2px;padding:0 4px;margin-left:4px;">BETA</span></div>
-        <div style="font-size:0.65rem;color:var(--brown-light);margin-bottom:6px;line-height:1.5;">
+      <input type="file" id="lu-rk-file" accept=".csv,.txt" class="lu-modal-file" style="margin-bottom:12px;" onchange="luRankFilePicked(this)" />
+      <div class="lu-modal-box">
+        <div style="font-size:0.85rem;font-weight:600;color:var(--cream);margin-bottom:4px;">From a screenshot <span class="lu-modal-beta">Beta</span></div>
+        <div style="font-size:0.72rem;color:var(--parchment);margin-bottom:8px;line-height:1.5;">
           An image of the side-by-side sheet (QB / RB / WR / TE / FLEX / TEP FLEX / Defense / Kicker). It's read by an AI model, about 30 seconds, so check the unmatched list afterwards. If the sheet has a <b>TEP FLEX</b> list, leagues with a TE premium use it as their flex ranks.
         </div>
         ${S.auth
-          ? `<input type="file" id="lu-rk-img" accept="image/png,image/jpeg,image/webp" style="color:var(--cream);font-family:var(--font-body),serif;font-size:0.8rem;display:block;width:100%;" onchange="luRankImagePicked(this)" />`
+          ? `<input type="file" id="lu-rk-img" accept="image/png,image/jpeg,image/webp" class="lu-modal-file" onchange="luRankImagePicked(this)" />`
           : `<div style="font-size:0.65rem;color:var(--c-amber);">Sign in to use this.</div>`}
       </div>
-      <textarea id="lu-rk-text" style="width:100%;height:160px;background:var(--brown-mid);color:var(--parchment);border:1px solid var(--brown-light);border-radius:2px;padding:8px;font-family:monospace;font-size:0.8rem;box-sizing:border-box;" placeholder="…or paste here:&#10;Josh Allen&#10;Lamar Jackson&#10;Ja'Marr Chase"></textarea>
+      <textarea id="lu-rk-text" class="lu-modal-text" placeholder="…or paste here:&#10;Josh Allen&#10;Lamar Jackson&#10;Ja'Marr Chase"></textarea>
       <div id="lu-rk-status" style="font-size:0.7rem;margin:8px 0;color:var(--brown-light);min-height:1em;"></div>
       <div style="display:flex;gap:8px;justify-content:flex-end;">
         ${luHaveRankings() ? `<button class="ghost-btn" style="font-size:0.64rem;margin-right:auto;" onclick="clearRankings()">Clear saved</button>` : ''}
@@ -2291,12 +2291,12 @@ function luCommitRanks(parsed, srcName) {
   const miss = parsed.unmatched || [];
   const blocks = Object.entries(parsed.cols).map(([k, v]) => `${luBlockLabel(k)} ${v.length}`).join(' · ');
   document.getElementById('lu-rk-modal').innerHTML = `
-    <div style="background:var(--brown-dark);border:1px solid var(--gold);border-radius:4px;max-width:560px;width:100%;padding:20px;max-height:88vh;overflow:auto;">
-      <div style="font-family:var(--font-head),serif;font-size:1.1rem;color:var(--cream);margin-bottom:10px;">Rankings loaded — Week ${LU.week}</div>
+    <div class="lu-modal">
+      <div class="lu-modal-title">Rankings loaded — Week ${LU.week}</div>
       <div style="font-size:0.8rem;color:var(--c-green);margin-bottom:6px;">✓ matched ${parsed.matched} of ${parsed.total} rows</div>
       ${blocks ? `<div style="font-size:0.7rem;color:var(--brown-light);margin-bottom:10px;">${esc(blocks)}</div>` : ''}
       ${miss.length ? `<div style="font-size:0.7rem;color:var(--c-amber);margin-bottom:6px;">${miss.length} unmatched — these are ignored:</div>
-        <div style="font-size:0.7rem;color:var(--brown-light);font-family:monospace;max-height:150px;overflow:auto;background:var(--brown-mid);padding:8px;border-radius:2px;">${miss.map(esc).join('<br>')}</div>` : ''}
+        <div style="font-size:0.7rem;color:var(--brown-light);font-family:monospace;max-height:150px;overflow:auto;background:var(--page);border:1px solid var(--rule-in);padding:8px;border-radius:6px;">${miss.map(esc).join('<br>')}</div>` : ''}
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
         <button class="setup-btn" onclick="document.getElementById('lu-rk-modal').remove()">Done</button>
       </div>
