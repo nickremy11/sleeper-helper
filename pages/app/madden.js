@@ -10,7 +10,7 @@
 // caps the rounds. Signed-in users only; signed out, the panel asks you to sign in.
 
 const MADDEN_MAX_STEPS   = 6;
-const MADDEN_RESULT_MAX  = 9000;     // chars of JSON per tool result sent back
+const MADDEN_RESULT_MAX  = 20000;    // chars of JSON per tool result sent back — 80+ leagues must fit untruncated
 const MADDEN_CACHE_MS    = 5 * 60 * 1000;
 const MADDEN_STORE       = 'madden_chat_v1';
 
@@ -224,14 +224,14 @@ async function maddenOwnership(lg) {
 const MADDEN_SCORING_LABELS = {
   pass_yd: 'passing yards', pass_td: 'passing touchdown', pass_int: 'interception thrown', pass_2pt: 'passing two point conversion',
   pass_fd: 'passing first down', pass_cmp: 'pass completion', pass_att: 'pass attempt', pass_inc: 'incomplete pass', pass_sack: 'quarterback sacked',
-  pass_int_td: 'pick six thrown interception returned for touchdown',
-  rush_yd: 'rushing yards', rush_td: 'rushing touchdown', rush_fd: 'rushing first down', rush_att: 'rushing attempt carry', rush_2pt: 'rushing two point conversion',
-  rec: 'reception ppr', rec_yd: 'receiving yards', rec_td: 'receiving touchdown', rec_fd: 'receiving first down', rec_2pt: 'receiving two point conversion',
-  bonus_rec_te: 'tight end reception bonus te premium tep', bonus_rec_rb: 'running back reception bonus', bonus_rec_wr: 'wide receiver reception bonus',
+  pass_int_td: 'pick six thrown — interception returned for touchdown',
+  rush_yd: 'rushing yards', rush_td: 'rushing touchdown', rush_fd: 'rushing first down', rush_att: 'rushing attempt — carry', rush_2pt: 'rushing two point conversion',
+  rec: 'reception — ppr', rec_yd: 'receiving yards', rec_td: 'receiving touchdown', rec_fd: 'receiving first down', rec_2pt: 'receiving two point conversion',
+  bonus_rec_te: 'tight end reception bonus — te premium tep', bonus_rec_rb: 'running back reception bonus', bonus_rec_wr: 'wide receiver reception bonus',
   bonus_fd_qb: 'quarterback first down bonus', bonus_fd_rb: 'running back first down bonus', bonus_fd_wr: 'wide receiver first down bonus', bonus_fd_te: 'tight end first down bonus',
   fum: 'fumble', fum_lost: 'fumble lost', fum_rec_td: 'fumble recovery touchdown',
-  kr_yd: 'kick return yards kickoff return yards', pr_yd: 'punt return yards', kr_td: 'kick return touchdown', pr_td: 'punt return touchdown',
-  st_td: 'special teams touchdown return touchdown', st_ff: 'special teams forced fumble', st_fum_rec: 'special teams fumble recovery',
+  kr_yd: 'kick return yards — kickoff return yards', pr_yd: 'punt return yards', kr_td: 'kick return touchdown', pr_td: 'punt return touchdown',
+  st_td: 'special teams touchdown — return touchdown', st_ff: 'special teams forced fumble', st_fum_rec: 'special teams fumble recovery',
   def_st_td: 'defense special teams touchdown', def_st_ff: 'defense special teams forced fumble', def_st_fum_rec: 'defense special teams fumble recovery',
   def_kr_td: 'defense kick return touchdown', def_pr_td: 'defense punt return touchdown',
   sack: 'team defense sack', int: 'team defense interception', ff: 'team defense forced fumble', fum_rec: 'team defense fumble recovery',
@@ -246,6 +246,8 @@ const MADDEN_ABBR = { yd: 'yards', yds: 'yards', td: 'touchdown', rec: 'receptio
   allow: 'allowed', fgm: 'field goal made', fga: 'field goal attempt', xpm: 'extra point made', bonus: 'bonus', att: 'attempt', cmp: 'completion',
   '2pt': 'two point conversion', safe: 'safety', blk: 'blocked', qb: 'quarterback', rb: 'running back', wr: 'wide receiver', te: 'tight end',
   fum: 'fumble', p: 'plus', '40p': '40 plus', '50p': '50 plus' };
+// The name alone, without the search synonyms after " — ".
+function maddenScoringName(key) { return maddenScoringLabel(key).split(' — ')[0]; }
 function maddenScoringLabel(key) {
   if (MADDEN_SCORING_LABELS[key]) return MADDEN_SCORING_LABELS[key];
   return key.split('_').map(t => MADDEN_ABBR[t] || t).join(' ');
@@ -301,18 +303,51 @@ const MADDEN_PAGES = {
   mass_offers:      { label: 'Mass Offers',      path: () => '/?tab=offers' },
 };
 
+// ── League filters shared by the tools ────────────────────────────────────────
+// "Of these leagues, where is X available?" is answered by calling a tool again
+// with filters, not by the model comparing two lists — Llama 4 Scout got that
+// cross-reference wrong. Returns {leagues, applied} or throws on an unknown stat.
+function maddenFilterLeagues(leagues, a) {
+  const applied = [];
+  if (a.format && a.format !== 'any') {
+    leagues = leagues.filter(lg => (rsLeagueCategory(lg.league_id) === 'dynasty') === (a.format === 'dynasty'));
+    applied.push(a.format);
+  }
+  if (a.role && a.role !== 'any') {
+    leagues = leagues.filter(lg => { const p = RS.prefs?.[lg.league_id]; return p && (p.contender ? 'contender' : 'rebuilder') === a.role; });
+    applied.push(a.role);
+  }
+  if (a.platform && a.platform !== 'any') {
+    leagues = leagues.filter(lg => (maddenIsEspn(lg) ? 'espn' : 'sleeper') === a.platform);
+    applied.push(a.platform);
+  }
+  if (a.best_ball && a.best_ball !== 'any') {
+    leagues = leagues.filter(lg => !maddenIsEspn(lg) && (S.leagueDetails[lg.league_id]?.settings?.best_ball === 1) === (a.best_ball === 'yes'));
+    applied.push(a.best_ball === 'yes' ? 'best ball' : 'not best ball');
+  }
+  if (a.scores_stat) {
+    const keys = maddenStatKeys(a.scores_stat);
+    if (!keys.length) throw new Error(`No scoring rule matches "${a.scores_stat}".`);
+    leagues = leagues.filter(lg => { const ss = maddenLeagueScoring(lg); return keys.some(k => ss[k]); });
+    applied.push('scores ' + keys.map(maddenScoringName).join(' or '));
+  }
+  return { leagues, applied };
+}
+function maddenStatKeys(stat) {
+  const allKeys = new Set(Object.keys(MADDEN_SCORING_LABELS));
+  for (const lg of S.leagues) Object.keys(maddenLeagueScoring(lg)).forEach(k => allKeys.add(k));
+  return maddenMatchScoringKeys(stat, [...allKeys]);
+}
+
 // ── Tool implementations (names match MADDEN_TOOLS in worker/src/madden.js) ───
 const MADDEN_TOOL_FNS = {
   async list_leagues(a) {
     await maddenNeedLeagues();
-    let rows = S.leagues.map(maddenLeagueFacts);
-    if (a.format && a.format !== 'any') rows = rows.filter(r => a.format === 'dynasty' ? r.format === 'dynasty' : r.format !== 'dynasty');
-    if (a.role && a.role !== 'any') rows = rows.filter(r => r.role === a.role);
-    if (a.platform && a.platform !== 'any') rows = rows.filter(r => r.platform === a.platform);
-    if (a.best_ball && a.best_ball !== 'any') rows = rows.filter(r => r.best_ball === (a.best_ball === 'yes'));
+    const { leagues, applied } = maddenFilterLeagues(S.leagues, a);
     return {
-      count: rows.length,
-      leagues: rows,
+      filters: applied.length ? applied : undefined,
+      count: leagues.length,
+      leagues: leagues.map(maddenLeagueFacts),
       notes: [
         LS.loaded ? null : 'Records and playoff odds appear once League Summaries has loaded.',
         Object.values(RS.prefs || {}).some(Boolean) ? null : 'No contender/rebuilder tags are set (they come from Root For Me).',
@@ -322,24 +357,23 @@ const MADDEN_TOOL_FNS = {
 
   async find_leagues_by_scoring(a) {
     await maddenNeedLeagues();
-    const allKeys = new Set(Object.keys(MADDEN_SCORING_LABELS));
-    for (const lg of S.leagues) Object.keys(maddenLeagueScoring(lg)).forEach(k => allKeys.add(k));
-    const keys = maddenMatchScoringKeys(a.stat, [...allKeys]);
+    const keys = maddenStatKeys(a.stat);
     if (!keys.length) return { error: `No scoring rule matches "${a.stat}". Try different words (e.g. "punt return yards", "first down", "TE premium").` };
-    const scored = [], notScored = [], espnUnsure = [];
+    const scored = [], espnUnsure = [];
+    let notScored = 0;
     for (const lg of S.leagues) {
       const ss = maddenLeagueScoring(lg);
-      const pts = {};
-      for (const k of keys) if (ss[k]) pts[maddenScoringLabel(k).split(' ').slice(0, 4).join(' ')] = ss[k];
-      if (Object.keys(pts).length) scored.push({ league: lg.name, points: pts });
-      else if (maddenIsEspn(lg) && !S.leagueDetails[lg.league_id]?._espnScoringItems) espnUnsure.push(lg.name);
-      else notScored.push(lg.name);
+      const pts = keys.filter(k => ss[k]).map(k => `${maddenScoringName(k)} ${ss[k]}`);
+      if (pts.length) scored.push(`${lg.name.trim()} (${pts.join(', ')})`);
+      else if (maddenIsEspn(lg) && !S.leagueDetails[lg.league_id]?._espnScoringItems) espnUnsure.push(lg.name.trim());
+      else notScored++;
     }
     return {
-      matched_rules: keys.map(k => ({ key: k, label: maddenScoringLabel(k) })),
-      leagues_that_score_it: scored,
-      leagues_that_do_not_count: notScored.length,
-      espn_leagues_not_readable: espnUnsure,
+      rules: keys.map(maddenScoringName),
+      count: scored.length,
+      leagues: scored,
+      leagues_that_do_not_score_it: notScored,
+      espn_leagues_not_readable: espnUnsure.length ? espnUnsure : undefined,
     };
   },
 
@@ -368,21 +402,23 @@ const MADDEN_TOOL_FNS = {
     await loadPlayers();
     const { pid, alternatives } = maddenResolvePlayer(a.player);
     const card = maddenPlayerCard(pid);
-    let leagues = S.leagues.filter(lg => !(typeof lsIsGuillotine === 'function' && lsIsGuillotine(lg.league_id)));
-    if (a.format && a.format !== 'any') leagues = leagues.filter(lg => (rsLeagueCategory(lg.league_id) === 'dynasty') === (a.format === 'dynasty'));
+    const base = S.leagues.filter(lg => !(typeof lsIsGuillotine === 'function' && lsIsGuillotine(lg.league_id)));
+    const { leagues, applied } = maddenFilterLeagues(base, a);
     const res = await Promise.all(leagues.map(async lg => ({ lg, own: await maddenOwnership(lg) })));
     const mine = [], others = [], free = [], unknown = [];
     const nameKey = 'espn:' + card.name;
     for (const { lg, own } of res) {
       if (!own) { unknown.push(lg.name); continue; }
       const o = own.owner[pid] || own.owner[nameKey];
-      if (o?.mine) mine.push(lg.name);
-      else if (o) others.push({ league: lg.name, owner: o.name });
+      if (o?.mine) mine.push(lg.name.trim());
+      else if (o) others.push(`${lg.name.trim()} (${o.name})`);
       else if (!own.drafted) unknown.push(lg.name + ' (not drafted yet)');
-      else free.push(lg.name);
+      else free.push(lg.name.trim());
     }
     return {
       player: card,
+      filters: applied.length ? applied : undefined,
+      leagues_checked: leagues.length,
       did_you_mean: alternatives.length ? alternatives.map(p => `${p.name} (${p.pos}, ${p.team})`) : undefined,
       free_agent_in: free, on_your_roster_in: mine, owned_by_others_in: others,
       could_not_read: unknown.length ? unknown : undefined,

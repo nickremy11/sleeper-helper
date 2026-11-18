@@ -22,8 +22,8 @@ import { getAuthUser } from './auth.js';
 export const MADDEN_MODEL   = '@cf/meta/llama-4-scout-17b-16e-instruct';
 export const MADDEN_GATEWAY = 'sleeper-helper';
 const MAX_MESSAGES   = 40;
-const MAX_TOTAL_CHARS = 60_000;
-const MAX_MSG_CHARS  = 12_000;   // one tool result
+const MAX_TOTAL_CHARS = 150_000;
+const MAX_MSG_CHARS  = 24_000;   // one tool result — a list of 80+ leagues must fit
 const MAX_USER_CHARS = 1_000;    // one typed question
 
 // Answer for anything the gate turns away. Fixed text — never model output.
@@ -92,6 +92,8 @@ const SYSTEM_PROMPT = `You are Madden, a fantasy football helper on helper.ffhis
 How to answer:
 - The tools are functions you call to read the user's data. For any question about their leagues, teams, players, scoring or standings, call the matching tool first, then answer from what it returns. A tool name is a function to call, not a web page, so it never appears in a link.
 - Use only leagues, players, owners, scores, records and links that a tool returned. If a tool says data is unavailable, say so.
+- Follow-up questions often narrow an earlier answer, such as "of these leagues" or "cross reference with". list_leagues and player_availability accept filters (scores_stat, format, role, platform, best_ball), so a follow-up is one more tool call with the earlier question's filter added. Example: "which of these is Dohnte Meyers available in" or "cross reference where he's available with the leagues that score return yards" are both player_availability with player "Dohnte Meyers" and scores_stat "return yards".
+- Answers list every item the tool returned.
 - League arguments take a league name (partial is fine) or league id. Player arguments take a name; if a name looks misspelled, call find_player first and say which player you used.
 - Answer in plain text with the actual list or facts. No links, except: for a Scout query, call scout_query and give its link; when the user asks to open a page, call link_to.
 - Be brief and lead with the answer. Use short bullet lists for several leagues or players. No tables.
@@ -108,16 +110,19 @@ const fn = (name, description, properties = {}, required = []) => ({
 const LEAGUE = { type: 'string', description: 'League name (partial ok) or league id' };
 const FORMAT = { type: 'string', enum: ['dynasty', 'redraft', 'any'], description: 'League format filter' };
 const ROLE   = { type: 'string', enum: ['contender', 'rebuilder', 'any'], description: "The user's contender/rebuilder tag for the league" };
+const SCORES = { type: 'string', description: 'Only leagues that score this stat, in plain words (e.g. "kick or punt return yards", "TE premium")' };
+const PLATFORM = { type: 'string', enum: ['sleeper', 'espn', 'any'] };
+const BEST_BALL = { type: 'string', enum: ['yes', 'no', 'any'] };
 export const MADDEN_TOOLS = [
   fn('list_leagues', "List the user's leagues with format, platform, size, superflex, PPR, TE premium, best ball, the user's contender/rebuilder tag, record and playoff odds when known.",
-    { format: FORMAT, role: ROLE, platform: { type: 'string', enum: ['sleeper', 'espn', 'any'] }, best_ball: { type: 'string', enum: ['yes', 'no', 'any'] } }),
+    { format: FORMAT, role: ROLE, platform: PLATFORM, best_ball: BEST_BALL, scores_stat: SCORES }),
   fn('find_leagues_by_scoring', 'Find which of the user\'s leagues score a stat (e.g. "kick return yards", "punt return yards", "first downs", "TE premium", "pick six", "sacks"), with the points each league gives.',
     { stat: { type: 'string', description: 'The stat in plain words' } }, ['stat']),
   fn('league_settings', "One league's roster slots and every non-zero scoring rule.", { league: LEAGUE }, ['league']),
   fn('find_player', 'Look up NFL players by (possibly misspelled) name. Returns the best matches with position, NFL team, age and injury status.',
     { name: { type: 'string' } }, ['name']),
   fn('player_availability', "For one player, every league of the user's: on the user's roster, owned by another manager (named), or a free agent.",
-    { player: { type: 'string', description: 'Player name or Sleeper player id' }, format: FORMAT }, ['player']),
+    { player: { type: 'string', description: 'Player name or Sleeper player id' }, format: FORMAT, role: ROLE, platform: PLATFORM, best_ball: BEST_BALL, scores_stat: SCORES }, ['player']),
   fn('my_roster', "The user's roster in one league: players by position with NFL team and injury status, and whether each is starting.", { league: LEAGUE }, ['league']),
   fn('league_standings', 'Standings for one league: every team\'s record, points for and playoff odds when known, with the user\'s team marked.', { league: LEAGUE }, ['league']),
   fn('scout_query', "Build a Scout query (cross-league trade finder) and return a link that runs it. Dynasty: finds teams holding top-N players at a position of an age bucket. Redraft: finds teams stacked at a position.",

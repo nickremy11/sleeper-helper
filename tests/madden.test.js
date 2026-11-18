@@ -51,7 +51,7 @@ test('history: empty or oversized is rejected', async () => {
   const { maddenCleanMessages } = await load();
   assert.strictEqual(maddenCleanMessages([]), null);
   assert.strictEqual(maddenCleanMessages('x'), null);
-  const big = Array.from({ length: 10 }, () => ({ role: 'tool', tool_call_id: 'x', name: 'x', content: 'y'.repeat(12000) }));
+  const big = Array.from({ length: 10 }, () => ({ role: 'tool', tool_call_id: 'x', name: 'x', content: 'y'.repeat(24000) }));
   assert.strictEqual(maddenCleanMessages([{ role: 'user', content: 'q' }, ...big]), null);
 });
 
