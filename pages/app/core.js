@@ -327,9 +327,15 @@ async function loadOneEspnLeague(leagueId, season) {
     S.leagues.push(lg);
     // mSettings is already in hand, so keep the league's parsed scoring — the
     // waiver grid's per-league PPG needs it and would otherwise refetch.
-    let espnScoring = null;
-    try { espnScoring = crParseEspnScoring(d.settings).scoring; } catch {}
-    S.leagueDetails[lgId] = { ...lg, settings: { type: 0, best_ball: 0 }, _espnId: leagueId, _espnScoring: espnScoring };
+    let espnScoring = null, espnSf = null;
+    try { const p = crParseEspnScoring(d.settings); espnScoring = p.scoring; espnSf = p.numQbs === 2; } catch {}
+    // Raw scoring items + lineup slots ride along for Ask Madden, which answers
+    // "which leagues score return yards?" from categories crParseEspnScoring skips.
+    const slotName = { 0: 'QB', 2: 'RB', 4: 'WR', 6: 'TE', 23: 'FLEX', 7: 'OP', 16: 'D/ST', 17: 'K', 20: 'BN', 21: 'IR' };
+    const espnSlots = Object.entries(d.settings?.rosterSettings?.lineupSlotCounts || {})
+      .filter(([, n]) => n > 0).map(([id, n]) => `${slotName[id] || 'slot ' + id} x${n}`);
+    S.leagueDetails[lgId] = { ...lg, settings: { type: 0, best_ball: 0 }, _espnId: leagueId, _espnScoring: espnScoring,
+                              _espnScoringItems: d.settings?.scoringSettings?.scoringItems || null, _espnSlots: espnSlots, _espnSuperflex: espnSf };
     RS.prefs[lgId] = RS._storedPrefs?.[lgId] ?? null;  // Root For Me tags ESPN leagues too (espn_{id})
   } catch {}
 }

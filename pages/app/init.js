@@ -80,6 +80,7 @@ async function saveTokenToAccount() {
     S.auth = user;
     updateTokenRow(user);
     updateSetupCard(user);
+    if (typeof maddenDraw === 'function') maddenDraw();
     if (user.sleeper_username && !S.userId) {
       document.getElementById('u-input').value = user.sleeper_username;
       loadUser();
@@ -89,7 +90,7 @@ async function saveTokenToAccount() {
   const initUser = await SharedAuth.init({
     chipContainerId: 'auth-chip',
     onLogin:  (user) => { _applyAuth(user); },
-    onLogout: ()     => { S.auth = null; updateTokenRow(null); updateSetupCard(null); if (S.tab === 'home') render('home'); },
+    onLogout: ()     => { S.auth = null; updateTokenRow(null); updateSetupCard(null); if (typeof maddenDraw === 'function') maddenDraw(); if (S.tab === 'home') render('home'); },
   });
 
   // onLogin only fires when signing in via the modal — handle the

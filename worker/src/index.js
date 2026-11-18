@@ -26,6 +26,7 @@
  *   GET  /api/espn/settings       → get ESPN league IDs + credential status (auth required)
  *   POST /api/espn/settings       → save ESPN league IDs + credentials (auth required)
  *   GET  /api/espn/fantasy/:id    → proxy ESPN fantasy API using stored credentials (auth required)
+ *   POST /api/madden              → Ask Madden chatbot, one model step (auth required) — madden.js
  *   GET  /api/rootforme/prefs     → get league preferences for logged-in user
  *   POST /api/rootforme/prefs     → save league preferences for logged-in user
  *   GET  /api/scoreboard/favorites → {favs: [leagueId]} — Scoreboard's pinned leagues (auth required)
@@ -59,6 +60,7 @@ import { handleDataSite } from './data.js';
 import { handleEliteFFL, syncEliteFFL } from './eliteffl.js';
 import { handleProjections } from './projections.js';
 import { handleDevy } from './devy.js';
+import { handleMadden } from './madden.js';
 import { getCors, CORS, cacheFor, jsonBody, kvCachedJson } from './http.js';
 
 const SLEEPER_BASE  = 'https://api.sleeper.app/v1';
@@ -186,6 +188,10 @@ export default {
 
     if (url.pathname === '/api/ranks/image') {
       return handleRanksImage(request, env);
+    }
+
+    if (url.pathname === '/api/madden') {
+      return handleMadden(request, env);
     }
 
     if (url.pathname.startsWith('/api/eliteffl/')) {

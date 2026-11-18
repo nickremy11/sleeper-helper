@@ -69,6 +69,42 @@ function scoutSaveSettings() {
   try { localStorage.setItem('scout_settings', JSON.stringify(SC.settings)); } catch (_) {}
 }
 
+// ── Scout query in the URL ────────────────────────────────────────────────────
+// /?tab=scout&sc_fmt=dynasty&sc_mode=buy&sc_pos=RB&sc_top=24&sc_age=vet&sc_opp=rebuilder&sc_my=contending&sc_run=1
+// Only whitelisted values are read; anything else keeps the current setting.
+const SCOUT_URL_KEYS = {
+  sc_fmt:  ['format',   ['dynasty', 'redraft']],
+  sc_mode: ['mode',     ['buy', 'sell']],
+  sc_pos:  ['pos',      ['QB', 'RB', 'WR', 'TE']],
+  sc_top:  ['topN',     [12, 24, 36, 48]],
+  sc_age:  ['age',      ['young', 'vet']],
+  sc_opp:  ['opp',      ['rebuilder', 'contender', 'either']],
+  sc_my:   ['myStatus', ['contending', 'rebuilding']],
+};
+function scoutQueryUrl(q, run) {
+  const u = new URLSearchParams({ tab: 'scout' });
+  for (const [param, [field]] of Object.entries(SCOUT_URL_KEYS)) if (q[field] != null) u.set(param, q[field]);
+  if (run) u.set('sc_run', '1');
+  return '/?' + u.toString();
+}
+// → true when the URL asked for the query to run now.
+function scoutConsumeUrl() {
+  const u = new URL(location.href);
+  const keys = [...Object.keys(SCOUT_URL_KEYS), 'sc_run'];
+  if (!keys.some(k => u.searchParams.has(k))) return false;
+  for (const [param, [field, allowed]] of Object.entries(SCOUT_URL_KEYS)) {
+    const raw = u.searchParams.get(param);
+    if (raw == null) continue;
+    const v = typeof allowed[0] === 'number' ? Number(raw) : raw;
+    if (allowed.includes(v)) SC[field] = v;
+  }
+  const run = u.searchParams.get('sc_run') === '1';
+  keys.forEach(k => u.searchParams.delete(k));
+  history.replaceState(history.state, '', u);
+  SC.results = null;
+  return run && !SC.running;
+}
+
 function scoutSet(key, val) { SC[key] = val; renderScout(); }
 function scoutToggleSettings() { SC.showSettings = !SC.showSettings; renderScout(); }
 
@@ -289,6 +325,9 @@ function scoutPosRanks(scoring, opts) {
 
 async function renderScout() {
   if (!S.leagues.length) { setC(viewBarHtml('findtrade', 'scout') + '<div class="empty-state"><p>No leagues found for this user</p></div>'); return; }
+  // A query handed over in the URL (Ask Madden's links, or a bookmark): applied
+  // once, stripped from the address bar, and run if it asked to be.
+  if (scoutConsumeUrl()) return scoutRun();
 
   const modeLbl = SC.mode === 'buy' ? 'looking to buy' : 'trying to sell';
   const pill = (cur, val, txt, onclick) =>

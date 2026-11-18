@@ -51,6 +51,8 @@ const GUIDE = [
       desc:'A shared realtime draft room for splitting up an abandoned dynasty roster.' },
   ]},
   { title: 'Other Tools', note: 'The rest of the site.', items: [
+    { name:'Ask Madden',       href:'/?madden=1', espn:true,
+      desc:'A chatbot for your own leagues (signed in): which leagues score return yards, where a player is a free agent, your roster or standings in a league, or a Scout query built from a sentence. Opens from the 🏈 button at the bottom right.' },
     { name:'ROI Tracker',      tab:'roi',        espn:true,
       desc:'Dues, winnings and finish for every league you have played in, year by year, with profit and ROI per season and all time. Finishes come from Sleeper and ESPN; money is entered by hand or imported once from your spreadsheet.' },
     { name:'Root For Me',      href:'/rootforme', espn:true,
