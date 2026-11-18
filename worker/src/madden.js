@@ -100,6 +100,7 @@ How to answer:
 - Terms: "contender"/"rebuilder" are the user's own tags (or playoff odds). "Dynasty" vs "redraft" is the league format. "Veteran" means at or above the user's age cutoff for the position.`;
 // Temperature 0: the same question should take the same path every time.
 export const MADDEN_TEMPERATURE = 0;
+const MADDEN_STEP_TIMEOUT_MS = 45_000;
 
 // Tool definitions. Implementations: pages/app/madden.js (MADDEN_TOOLS there must
 // carry the same names). OpenAI function shape — the Workers AI binding accepts it.
@@ -214,20 +215,6 @@ export function maddenCleanMessages(raw) {
   return msgs;
 }
 
-// Fallback for a model build that rejects tool-call round trips: the same
-// history with tool traffic folded into plain user/assistant text.
-function flattenToolTraffic(msgs) {
-  const out = [];
-  for (const m of msgs) {
-    if (m.role === 'assistant' && m.tool_calls) {
-      out.push({ role: 'assistant', content: (m.content ? m.content + '\n' : '') + m.tool_calls.map(c => `[called ${c.function.name}(${c.function.arguments})]`).join('\n') });
-    } else if (m.role === 'tool') {
-      out.push({ role: 'user', content: `Result of ${m.name}: ${m.content}` });
-    } else out.push(m);
-  }
-  return out;
-}
-
 // → {allow, onTopic}. Throws MaddenGuardrailError when the gateway's guardrails
 // block the call — that is a block, not an outage, so it must not fail open.
 async function gate(env, msgs, metadata) {
@@ -292,19 +279,25 @@ export async function handleMadden(request, env) {
       temperature: MADDEN_TEMPERATURE,
     });
     const opts = { gateway: { id: MADDEN_GATEWAY, skipCache: true, metadata: { ...metadata, step: String(step) } } };
-    const run = async (history) => {
-      try { return await env.AI.run(MADDEN_MODEL, input(history), opts); }
+    // One call took 121s and came back 408 with no tokens processed. So: fail
+    // fast when the model is busy (rejectIfBusy), give each attempt
+    // MADDEN_STEP_TIMEOUT_MS, and retry the SAME request once. (An earlier
+    // fallback resent the history as plain text, and the model copied that
+    // "[called tool(...)]" text back as its answer.)
+    const once = () => Promise.race([
+      env.AI.run(MADDEN_MODEL, input(msgs), { ...opts, rejectIfBusy: true }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timed out')), MADDEN_STEP_TIMEOUT_MS)),
+    ]);
+    let out;
+    for (let attempt = 1; ; attempt++) {
+      try { out = await once(); break; }
       catch (e) {
         const where = maddenGuardrailBlock(e);
         if (where) throw new MaddenGuardrailError(where, step);
-        throw e;
+        console.error('[madden] model attempt', attempt, 'failed:', e?.message || e);
+        if (attempt >= 2) throw new Error('the model is slow or busy right now — try again in a minute');
+        await new Promise(r => setTimeout(r, 1500));
       }
-    };
-    let out;
-    try { out = await run(msgs); }
-    catch (e) {
-      if (e instanceof MaddenGuardrailError || !msgs.some(m => m.role === 'tool')) throw e;
-      out = await run(flattenToolTraffic(msgs));
     }
     const { text, calls } = maddenParseOutput(out);
     if (calls.length) return res({ tool_calls: calls.slice(0, 4), content: text });
