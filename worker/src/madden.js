@@ -90,12 +90,14 @@ export function maddenGateDecision(out) {
 const SYSTEM_PROMPT = `You are Madden, a fantasy football helper on helper.ffhistorian.com. You help the signed-in user with their own fantasy football leagues, teams, players, trades and lineups. For other subjects, say you can only help with their fantasy football.
 
 How to answer:
-- Get facts from the tools. Use only leagues, players, owners, scores, records and links that a tool returned; if a tool says data is unavailable, say so.
+- The tools are functions you call to read the user's data. For any question about their leagues, teams, players, scoring or standings, call the matching tool first, then answer from what it returns. A tool name is a function to call, not a web page, so it never appears in a link.
+- Use only leagues, players, owners, scores, records and links that a tool returned. If a tool says data is unavailable, say so.
 - League arguments take a league name (partial is fine) or league id. Player arguments take a name; if a name looks misspelled, call find_player first and say which player you used.
-- For a Scout query, call scout_query. It returns a link the user clicks to run the query.
-- Write links as markdown [text](/path), using links from tool results.
+- Answer in plain text with the actual list or facts. No links, except: for a Scout query, call scout_query and give its link; when the user asks to open a page, call link_to.
 - Be brief and lead with the answer. Use short bullet lists for several leagues or players. No tables.
 - Terms: "contender"/"rebuilder" are the user's own tags (or playoff odds). "Dynasty" vs "redraft" is the league format. "Veteran" means at or above the user's age cutoff for the position.`;
+// Temperature 0: the same question should take the same path every time.
+export const MADDEN_TEMPERATURE = 0;
 
 // Tool definitions. Implementations: pages/app/madden.js (MADDEN_TOOLS there must
 // carry the same names). OpenAI function shape — the Workers AI binding accepts it.
@@ -126,7 +128,6 @@ export const MADDEN_TOOLS = [
       top_n:     { type: 'integer', enum: [12, 24, 36, 48], description: 'Dynasty: positional rank cutoff' },
       age:       { type: 'string', enum: ['young', 'vet'], description: 'Dynasty: young or veteran players' },
       opponent:  { type: 'string', enum: ['rebuilder', 'contender', 'either'], description: 'Dynasty: which kind of opponent to search' },
-      my_status: { type: 'string', enum: ['contending', 'rebuilding'], description: "Dynasty: the user's own situation in the league" },
     }, ['position']),
   fn('link_to', "A link to one of the site's tools, optionally for one league.",
     { page: { type: 'string', enum: ['league_analyzer', 'trade_analyzer', 'league_summaries', 'lineups', 'waivers', 'players', 'open_trades', 'scoreboard', 'root_for_me', 'mass_offers'] }, league: LEAGUE }, ['page']),
@@ -150,6 +151,13 @@ export function maddenParseOutput(out) {
   }
   let text = msg?.content ?? out?.response ?? '';
   if (typeof text !== 'string') text = text == null ? '' : JSON.stringify(text);
+  // Llama 4 Scout has written a tool call as a fake link instead —
+  // "[Find leagues by scoring](/find_leagues_by_scoring?stat=return+yardage)".
+  // The path and query say exactly which call it meant, so make that call.
+  if (!calls.length) {
+    const fake = maddenFakeToolLink(text);
+    if (fake) { calls.push(fake); text = ''; }
+  }
   // Some Llama builds print a tool call as JSON text instead of using tool_calls.
   if (!calls.length) {
     const t = text.trim().replace(/^```(?:json)?\s*|\s*```$/g, '');
@@ -165,6 +173,15 @@ export function maddenParseOutput(out) {
     }
   }
   return { text: text.trim(), calls };
+}
+
+// "[label](/tool_name?arg=value&…)" anywhere in the text → that tool call, or null.
+export function maddenFakeToolLink(text) {
+  const m = String(text || '').match(/\]\(\/([a-z_]+)(?:\?([^)\s]*))?\)/);
+  if (!m || !TOOL_NAMES.has(m[1])) return null;
+  const args = {};
+  for (const [k, v] of new URLSearchParams(m[2] || '')) args[k] = /^\d+$/.test(v) ? Number(v) : v;
+  return { id: `call_${Date.now().toString(36)}_link`, name: m[1], arguments: args };
 }
 
 // Only the shapes the client legitimately sends; anything else is dropped.
@@ -267,7 +284,7 @@ export async function handleMadden(request, env) {
       messages: [{ role: 'system', content: SYSTEM_PROMPT + `\nToday is ${today}.` + (body.context ? `\nApp context: ${str(body.context, 400)}` : '') }, ...history],
       tools: MADDEN_TOOLS,
       max_tokens: 900,
-      temperature: 0.2,
+      temperature: MADDEN_TEMPERATURE,
     });
     const opts = { gateway: { id: MADDEN_GATEWAY, skipCache: true, metadata: { ...metadata, step: String(step) } } };
     const run = async (history) => {

@@ -331,7 +331,7 @@ const MADDEN_TOOL_FNS = {
       const ss = maddenLeagueScoring(lg);
       const pts = {};
       for (const k of keys) if (ss[k]) pts[maddenScoringLabel(k).split(' ').slice(0, 4).join(' ')] = ss[k];
-      if (Object.keys(pts).length) scored.push({ league: lg.name, points: pts, link: MADDEN_PAGES.league_analyzer.path(lg) });
+      if (Object.keys(pts).length) scored.push({ league: lg.name, points: pts });
       else if (maddenIsEspn(lg) && !S.leagueDetails[lg.league_id]?._espnScoringItems) espnUnsure.push(lg.name);
       else notScored.push(lg.name);
     }
@@ -353,8 +353,7 @@ const MADDEN_TOOL_FNS = {
       ...maddenLeagueFacts(lg),
       roster_slots: maddenIsEspn(lg) ? (d._espnSlots || null) : (d.roster_positions || []),
       scoring,
-      note: maddenIsEspn(lg) ? 'ESPN scoring here covers offense and return yards only; kicker/defense/IDP rules are not read.' : undefined,
-      link: MADDEN_PAGES.league_analyzer.path(lg),
+      note: maddenIsEspn(lg) ? 'ESPN scoring here covers offense and return yards only; kicker/defense/IDP rules are not read.' : undefined
     };
   },
 
@@ -380,7 +379,7 @@ const MADDEN_TOOL_FNS = {
       if (o?.mine) mine.push(lg.name);
       else if (o) others.push({ league: lg.name, owner: o.name });
       else if (!own.drafted) unknown.push(lg.name + ' (not drafted yet)');
-      else free.push({ league: lg.name, link: '/?tab=waivers' });
+      else free.push(lg.name);
     }
     return {
       player: card,
@@ -403,7 +402,7 @@ const MADDEN_TOOL_FNS = {
       return c ? { name: c.name, pos: c.pos, team: c.team, injury: c.injury || undefined, starting: x.starter }
                : { name: x.name || x.pid, starting: x.starter };
     }).sort((p, q) => (q.starting - p.starting) || String(p.pos).localeCompare(String(q.pos)));
-    return { league: lg.name, team: mine.name, players, link: MADDEN_PAGES.league_analyzer.path(lg) };
+    return { league: lg.name, team: mine.name, players };
   },
 
   async league_standings(a) {
@@ -428,8 +427,7 @@ const MADDEN_TOOL_FNS = {
       standings: teams.map((t, i) => ({ rank: i + 1, team: t.team + (t.mine ? ' (you)' : ''),
         record: t.losses != null ? `${t.wins}-${t.losses}${t.ties ? '-' + t.ties : ''}` : `${t.wins} wins`, points_for: t.pf,
         playoff_odds: odds?.[t.rid] != null ? Math.round(odds[t.rid] * 100) + '%' : undefined })),
-      note: odds ? undefined : 'Playoff odds not simulated yet — League Summaries runs them.',
-      link: MADDEN_PAGES.league_analyzer.path(lg),
+      note: odds ? undefined : 'Playoff odds not simulated yet — League Summaries runs them.'
     };
   },
 
@@ -441,7 +439,7 @@ const MADDEN_TOOL_FNS = {
       topN:     [12, 24, 36, 48].includes(Number(a.top_n)) ? Number(a.top_n) : (Number(a.top_n) > 0 ? [12, 24, 36, 48].find(n => n >= Number(a.top_n)) || 48 : 36),
       age:      a.age === 'young' ? 'young' : 'vet',
       opp:      ['rebuilder', 'contender', 'either'].includes(a.opponent) ? a.opponent : 'either',
-      myStatus: a.my_status === 'rebuilding' ? 'rebuilding' : 'contending',
+      myStatus: 'contending',
     };
     const href = scoutQueryUrl(q, true);
     const what = q.format === 'dynasty'
@@ -463,9 +461,18 @@ const MADDEN_TOOL_FNS = {
 
 // Links a tool returned — shown as buttons under the answer, so a link exists
 // even when the model forgets to write it.
+// The only paths that exist on this site. A link the model writes to anything
+// else (it once linked a tool name, /find_leagues_by_scoring?…) renders as text.
+const MADDEN_LINK_PATHS = ['/', '/analyzer', '/trade-analyzer', '/scoreboard', '/rootforme', '/miracle', '/auction', '/dispersal', '/myprofile', '/espn-setup'];
+function maddenSiteLink(href) {
+  if (typeof href !== 'string' || !href.startsWith('/') || href.startsWith('//')) return false;
+  const path = href.split(/[?#]/)[0].replace(/\.html$/, '');
+  return MADDEN_LINK_PATHS.includes(path);
+}
+
 function maddenCollectLinks(name, result, into) {
   const add = (label, href) => {
-    if (!href || typeof href !== 'string' || !href.startsWith('/') || href.startsWith('//')) return;
+    if (!maddenSiteLink(href)) return;
     if (into.some(l => l.href === href)) return;
     into.push({ label, href });
   };
@@ -561,7 +568,8 @@ function maddenMd(src) {
   const inline = s => esc(s)
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
     .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\[([^\]]+)\]\((\/(?!\/)[^)\s]*)\)/g, (_, t, h) => `<a href="${h}" onclick="return maddenGo(event, this.getAttribute('href'))">${t}</a>`);
+    .replace(/\[([^\]]+)\]\((\/(?!\/)[^)\s]*)\)/g, (all, t, h) => maddenSiteLink(h.replace(/&amp;/g, '&'))
+      ? `<a href="${h}" onclick="return maddenGo(event, this.getAttribute('href'))">${t}</a>` : t);
   const lines = String(src || '').split('\n');
   let html = '', inList = false;
   for (const raw of lines) {

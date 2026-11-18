@@ -84,3 +84,18 @@ test('prompts avoid the injection-style phrasing that tripped P1', async () => {
     assert.ok(!bad.test(sent.replace(/^\s*\/\/.*$/gm, '')), 'found ' + bad);
   }
 });
+
+// Llama 4 Scout once answered "Which of my leagues score return yardage?" with a
+// link to the tool instead of calling it (8 of 8 replays, before the prompt fix).
+test('a tool written as a fake link becomes that tool call; real page links stay text', async () => {
+  const { maddenParseOutput } = await load();
+  const r = maddenParseOutput({ choices: [{ message: { content: '[Find leagues by scoring](/find_leagues_by_scoring?stat=return+yardage)' } }] });
+  assert.deepStrictEqual(r.calls.map(c => [c.name, c.arguments]), [['find_leagues_by_scoring', { stat: 'return yardage' }]]);
+  assert.strictEqual(r.text, '');
+  const s = maddenParseOutput({ choices: [{ message: { content: 'Here: [Scout](/scout_query?position=RB&top_n=24)' } }] });
+  assert.deepStrictEqual(s.calls[0].arguments, { position: 'RB', top_n: 24 });
+  const page = maddenParseOutput({ choices: [{ message: { content: 'See [Waivers](/?tab=waivers) or [it](/analyzer?league=1)' } }] });
+  assert.strictEqual(page.calls.length, 0);
+  const unknown = maddenParseOutput({ choices: [{ message: { content: '[x](/delete_everything?all=1)' } }] });
+  assert.strictEqual(unknown.calls.length, 0);
+});
