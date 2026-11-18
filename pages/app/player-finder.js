@@ -208,7 +208,7 @@ function pfRenderResults() {
   const r = document.getElementById('ps-r');
   if (!r) return;
   r.innerHTML = `<div style="margin-bottom:16px;">
-    <div style="background:var(--brown-dark);border:1px solid var(--brown-mid);border-radius:2px;padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <div class="cs-panel" style="padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
       <span class="card-title">${esc(player.full_name)}</span>
       <span class="card-meta">${esc(player.position||'')} · ${esc(player.team||'FA')}</span>
       ${pfPpg === null ? '' : `<span class="pf-ppg" title="Season-to-date PPG, full PPR — ${pfPpg.toFixed(1)} over ${pfGp} game${pfGp === 1 ? '' : 's'} played">${pfPpg.toFixed(1)} <em>ppg · ppr</em></span>`}

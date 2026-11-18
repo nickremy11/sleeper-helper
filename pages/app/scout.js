@@ -363,7 +363,7 @@ async function renderScout() {
         ${['QB', 'RB', 'WR', 'TE'].map(p => `<label style="font-family:var(--font-body),serif;color:var(--parchment);font-size:0.9rem;">${p}: ≥ ${numInput(s.redraft[p].count, `scoutSetRedraft('${p}','count',this.value)`, 44)} in top ${numInput(s.redraft[p].rank, `scoutSetRedraft('${p}','rank',this.value)`, 48)}</label>`).join('')}
       </div>`;
   const settingsPanel = SC.showSettings ? `
-    <div style="background:var(--brown-dark);border:1px solid var(--brown-mid);border-radius:2px;padding:14px 18px;margin-bottom:18px;">
+    <div class="cs-panel" style="padding:14px 18px;margin-bottom:18px;">
       ${dynSettings}${rdSettings}
       <div class="setup-label-rye" style="margin-bottom:10px;">Playoff-odds thresholds</div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;">
@@ -674,7 +674,7 @@ function scoutDrawResults() {
         </div>`).join('');
     }
 
-    return `<div style="background:var(--brown-dark);border:1px solid var(--brown-mid);border-radius:2px;padding:14px 18px;margin-bottom:10px;">${head}${body}</div>`;
+    return `<div class="cs-panel" style="padding:14px 18px;margin-bottom:10px;">${head}${body}</div>`;
   }).join('');
 
   el.innerHTML = skip + `<div style="font-family:var(--font-body),serif;color:var(--brown-light);font-style:italic;font-size:0.85rem;margin-bottom:10px;">${SC.results.length} league${SC.results.length !== 1 ? 's' : ''} matched</div>${cards}`;

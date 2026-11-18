@@ -173,7 +173,7 @@ async function tpSelectPlayer(pid) {
 
     const colStyle = 'min-width:0;';
     const mkRows = arr => arr.map(l => `<div class="data-row"><a href="/analyzer?league=${encodeURIComponent(l.id)}" target="_blank" rel="noopener" class="row-link">${esc(l.name)}</a></div>`).join('');
-    r.innerHTML = `<div style="margin-bottom:14px;background:var(--brown-dark);border:1px solid var(--brown-mid);border-radius:2px;padding:12px 16px;">
+    r.innerHTML = `<div class="cs-panel" style="margin-bottom:14px;padding:12px 16px;">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
         <span class="card-title">${esc(player.full_name)}</span>
         <span class="card-meta">${esc(player.position||'')} · ${esc(player.team||'FA')}</span>

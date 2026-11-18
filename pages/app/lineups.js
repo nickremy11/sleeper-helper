@@ -2792,7 +2792,7 @@ function luSwapBarHtml() {
                value="${esc(LSW.q)}" oninput="lswSearch(this.value)"
                onblur="setTimeout(() => { const b = document.getElementById('lu-swap-sug'); if (b) b.style.display = 'none'; }, 180)"
                style="width:100%;box-sizing:border-box;background:var(--brown-mid);color:var(--parchment);border:1px solid var(--brown-light);border-radius:2px;padding:5px 8px;font-family:var(--font-body),serif;font-size:0.8rem;" />
-        <div id="lu-swap-sug" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:50;background:var(--brown-dark);border:1px solid var(--gold);border-radius:2px;max-height:260px;overflow:auto;"></div>
+        <div id="lu-swap-sug" class="cs-panel" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:50;border-radius:6px;max-height:260px;overflow:auto;"></div>
       </div>
       <span style="font-size:0.65rem;color:var(--brown-light);">finds every league where he's in your starting lineup</span>
     </div>
