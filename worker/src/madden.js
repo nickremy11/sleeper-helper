@@ -19,7 +19,11 @@
 import { getCors } from './http.js';
 import { getAuthUser } from './auth.js';
 
-export const MADDEN_MODEL   = '@cf/meta/llama-4-scout-17b-16e-instruct';
+// GLM-4.7-Flash ($0.06/M in, $0.40/M out), tuned for multi-turn tool calling.
+// Replaced Llama 4 Scout, which ignored "of these leagues" filters, compared
+// lists wrongly and once wrote a tool call as a link. On the same 9 replayed
+// questions GLM got every tool choice, filter and list right, mostly in 3-6s.
+export const MADDEN_MODEL   = '@cf/zai-org/glm-4.7-flash';
 export const MADDEN_GATEWAY = 'sleeper-helper';
 const MAX_MESSAGES   = 40;
 const MAX_TOTAL_CHARS = 150_000;
