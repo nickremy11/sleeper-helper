@@ -55,12 +55,32 @@ test('history: empty or oversized is rejected', async () => {
   assert.strictEqual(maddenCleanMessages([{ role: 'user', content: 'q' }, ...big]), null);
 });
 
-test('Clef gate: blocks off-topic and manipulation, fails open on a missing answer', async () => {
+test('Clef gate: topic only, blocks below 0.5, fails open on a missing answer', async () => {
   const { maddenGateDecision, MADDEN_GATE_QUESTIONS } = await load();
-  assert.deepStrictEqual(Object.keys(MADDEN_GATE_QUESTIONS), ['on_topic', 'manipulation']);
-  assert.strictEqual(maddenGateDecision({ answers: { on_topic: { noul: 0.97 }, manipulation: { noul: 0.02 } } }).allow, true);
-  assert.strictEqual(maddenGateDecision({ answers: { on_topic: { noul: 0.04 }, manipulation: { noul: 0.01 } } }).allow, false);
-  assert.strictEqual(maddenGateDecision({ answers: { on_topic: 0.9, manipulation: 0.88 } }).allow, false);
+  assert.deepStrictEqual(Object.keys(MADDEN_GATE_QUESTIONS), ['on_topic']);
+  // The shape Clef really returns through the gateway
+  assert.strictEqual(maddenGateDecision({ answers: { on_topic: { type: 'noul', noul: 0.9802 } } }).allow, true);
+  assert.strictEqual(maddenGateDecision({ answers: { on_topic: { type: 'noul', noul: 0.0084 } } }).allow, false);
+  assert.strictEqual(maddenGateDecision({ answers: { on_topic: 0.9 } }).allow, true);
   assert.strictEqual(maddenGateDecision({}).allow, true);
   assert.strictEqual(maddenGateDecision({ answers: { on_topic: { weird: 'x' } } }).allow, true);
+});
+
+test('guardrail blocks are recognised from the gateway error, other errors are not', async () => {
+  const { maddenGuardrailBlock } = await load();
+  assert.strictEqual(maddenGuardrailBlock(new Error('2016: Prompt blocked due to security configurations')), 'prompt');
+  assert.strictEqual(maddenGuardrailBlock(new Error('Prompt blocked due to security configurations')), 'prompt');
+  assert.strictEqual(maddenGuardrailBlock(new Error('AiGatewayError 2017 Response blocked due to security configurations')), 'response');
+  assert.strictEqual(maddenGuardrailBlock(new Error('5007: No such model')), null);
+  assert.strictEqual(maddenGuardrailBlock(new Error('network connection lost')), null);
+});
+
+// The P1 guardrail scans our own text too: the first wording got every question
+// blocked. Keep the phrases that tripped it out of what we send.
+test('prompts avoid the injection-style phrasing that tripped P1', async () => {
+  const src = require('fs').readFileSync(path.join(__dirname, '../worker/src/madden.js'), 'utf8');
+  const sent = src.slice(src.indexOf('export const MADDEN_GATE_QUESTIONS'), src.indexOf('// Tool definitions.'));
+  for (const bad of [/ignore (its|all|previous)/i, /reveal (its|these|the) (system prompt|instructions)/i, /never reveal/i, /system prompt\?/i]) {
+    assert.ok(!bad.test(sent.replace(/^\s*\/\/.*$/gm, '')), 'found ' + bad);
+  }
 });

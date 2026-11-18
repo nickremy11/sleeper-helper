@@ -490,6 +490,11 @@ async function maddenAsk(text) {
   if (!MADDEN.conv) maddenNewConv();
   MADDEN.busy = true;
   MADDEN.view.push({ who: 'me', text });
+  // Everything this question adds to the history (the question, tool calls, tool
+  // results) comes off again if it ends blocked, failed or unfinished, so a
+  // question that never got an answer can't ride along as context for the next.
+  const mark = MADDEN.msgs.length;
+  const undo = () => { MADDEN.msgs.length = mark; };
   MADDEN.msgs.push({ role: 'user', content: text });
   MADDEN.status = 'Thinking…';
   maddenDraw();
@@ -498,9 +503,10 @@ async function maddenAsk(text) {
     for (let step = 1; step <= MADDEN_MAX_STEPS; step++) {
       const out = await maddenPost(step);
       if (out.blocked) {
-        // A turned-away question stays out of the history so it can't steer the next one.
-        MADDEN.msgs.pop();
-        MADDEN.view.push({ who: 'bot', text: out.reply, blocked: true });
+        undo();
+        // off_topic = Clef said it isn't fantasy football; guardrail = the AI
+        // Gateway's safety filter stopped the call (its log has the category).
+        MADDEN.view.push({ who: 'bot', text: out.reply, blocked: out.reason || true });
         break;
       }
       if (out.tool_calls?.length) {
@@ -527,9 +533,11 @@ async function maddenAsk(text) {
       break;
     }
     if (MADDEN.view[MADDEN.view.length - 1]?.who === 'me') {
+      undo();
       MADDEN.view.push({ who: 'bot', text: "That took more steps than I'm allowed. Try asking a narrower question.", links });
     }
   } catch (e) {
+    undo();
     MADDEN.view.push({ who: 'note', text: 'Madden hit a problem: ' + (e.message || e) });
   }
   MADDEN.busy = false;
@@ -605,7 +613,8 @@ function maddenDraw() {
     if (m.who === 'me') return `<div class="madden-msg me">${esc(m.text)}</div>`;
     if (m.who === 'note') return `<div class="madden-msg note">${esc(m.text)}</div>`;
     const links = (m.links || []).map(l => `<a class="madden-link" href="${esc(l.href)}" onclick="return maddenGo(event, this.getAttribute('href'))">${esc(l.label)} →</a>`).join('');
-    return `<div class="madden-msg bot${m.blocked ? ' blocked' : ''}">${maddenMd(m.text)}${links ? `<div class="madden-links">${links}</div>` : ''}</div>`;
+    const tag = m.blocked === 'guardrail' ? '<div class="madden-tag">Blocked by the safety filter</div>' : '';
+    return `<div class="madden-msg bot${m.blocked ? ' blocked' : ''}">${tag}${maddenMd(m.text)}${links ? `<div class="madden-links">${links}</div>` : ''}</div>`;
   }).join('') : `<div class="madden-empty"><p>Ask about your leagues, teams and players. For example:</p>
       ${examples.map(x => `<button class="madden-ex" onclick="maddenAsk(${jsArg(x)})">${esc(x)}</button>`).join('')}</div>`;
   log.innerHTML = body + (MADDEN.busy ? `<div class="madden-msg status"><span class="spinner madden-spin"></span>${esc(MADDEN.status || 'Thinking…')}</div>` : '');
