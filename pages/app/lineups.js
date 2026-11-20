@@ -12,6 +12,7 @@ const LU = {
   faOn: true,               // free-agent watch (redraft only) — see luFaUpgrades
   weekOverride: null,       // {from, to} — self-expiring manual week, see luWeekFor
   openSlot: null,           // {leagueId, slotIdx} — the one row showing its replacement options
+  allSrc: null,             // 'projections' | 'ranks' — last "Optimize all", what "Apply all" writes
   _cache: null,             // { at, week, lineups, proj, kick } — see LU_CACHE_TTL
 };
 try { LU.faOn = localStorage.getItem('lu_fa_watch') !== '0'; } catch(_) {}
@@ -1276,8 +1277,67 @@ function luToggleSlot(idx, slotIdx) {
   if (body) body.innerHTML = luBodyRows(fix, fix._shown ? 'diff' : 'current');
 }
 
+// One option row — Pos/Team · sheet Rank · season PPG · projection — shared by
+// the slot-options panel, the Injury Swap's bench section and the ranks grid's
+// swap chooser, so a player reads identically wherever he is offered.
+// opts: {landSlot, mixed, cls, tag, via, action, attrs}
+function luOptRow(fix, pid, opts = {}) {
+  const pc   = luPtsCtx(fix);
+  const p    = S.players[pid] || {};
+  const ppg  = playerSeasonPpg(pid, pc.scoring);
+  const gp   = ppg === null ? 0 : playerSeasonGp(pid);
+  const inj  = injuryBadge(p.injury_status);
+  const lbl  = lswRankLabel(pid, opts.landSlot, !!opts.mixed, pc);
+  return `<div class="lc-opt${opts.cls || ''}"${opts.attrs || ''}>
+      <span class="lc-opt-name">${opts.tag || ''}${esc(luPlayerName(pid))}${inj ? ' ' + inj : ''}${opts.via || ''}</span>
+      <span class="lc-opt-pos">${esc(luNormPos(p.position) || '')}${p.team ? ' ' + esc(p.team) : ''}</span>
+      <span class="lc-opt-rank" style="${lbl ? '' : 'color:var(--brown-mid);'}">${lbl ? esc(lbl) : '—'}</span>
+      <span class="lc-opt-num" style="color:var(--parchment);"${ppg === null ? '' : ` title="${ppg.toFixed(1)} over ${gp} game${gp === 1 ? '' : 's'} played"`}>${ppg === null ? '–' : ppg.toFixed(1)}</span>
+      <span class="lc-opt-num" style="color:var(--gold-light);">${luHaveProj() ? luPlayerPts(pid, pc).toFixed(1) : '–'}</span>
+      <span class="lc-opt-act">${opts.action || ''}</span>
+    </div>`;
+}
+
+function luOptHead(titleHtml) {
+  return `<div class="lc-opt hdr">
+      <span class="lc-opt-name">${titleHtml}</span>
+      <span class="lc-opt-pos">Pos</span>
+      <span class="lc-opt-rank">Rank</span>
+      <span class="lc-opt-num" title="Season-to-date PPG in this league's scoring">PPG</span>
+      <span class="lc-opt-num">Proj</span>
+      <span class="lc-opt-act"></span>
+    </div>`;
+}
+
+// The reverse of lswCandidates: every starter this BENCH player could replace.
+// Built by asking lswCandidates about each starting slot and keeping the slots
+// that list him — so "could he start over X?" and "who could replace X?" can
+// never disagree, promotions included. One entry per replaced starter.
+// Returns [{slotIdx, out, slot, plan}] — `slotIdx` holds `out`, the starter who
+// goes to the bench; `plan.moves` is what gets written.
+function luBenchOptions(fix, pid) {
+  pid = String(pid);
+  if ((fix.starters || []).map(String).includes(pid)) return [];
+  const out = [];
+  fix.rosterPositions.forEach((slot, j) => {
+    const cur = String(fix.starters[j] || '0');
+    const plan = lswCandidates(fix, j).find(c => c.pid === pid);
+    if (plan) out.push({ slotIdx: j, out: cur, slot, plan });
+  });
+  return out;
+}
+
+// Why a rostered bench player has nothing to offer — said once per league so an
+// empty list never reads as a bug.
+function luBenchWhyNot(fix, pid) {
+  const p = S.players[pid];
+  if ((fix.excluded || new Set()).has(String(pid))) return 'on IR / taxi';
+  if (p && luBadInj(p.injury_status)) return 'listed ' + p.injury_status;
+  if (luLocked(pid)) return 'his game has started';
+  return 'no unlocked slot he is eligible for';
+}
+
 function luSlotOptionsHtml(fix, idx, slotIdx) {
-  const pc    = luPtsCtx(fix);
   const slot  = fix.rosterPositions[slotIdx];
   const cur   = String(fix.starters[slotIdx] || '0');
   const cands = lswCandidates(fix, slotIdx);
@@ -1290,40 +1350,9 @@ function luSlotOptionsHtml(fix, idx, slotIdx) {
       : `Nobody on the bench is eligible for a ${esc(slot)} slot.`}</div>`);
   }
 
-  const haveProj = luHaveProj();
   const canSwap  = luCanWrite() && !fix._espn;
-  const num = v => v === null ? '–' : v.toFixed(1);
-  const ppgOf = pid => {
-    const v = playerSeasonPpg(pid, pc.scoring);
-    return { v, gp: v === null ? 0 : playerSeasonGp(pid) };
-  };
-
-  // One row shape for the incumbent and the candidates alike, so the columns line
-  // up and the comparison is the only thing the eye has to do.
-  const row = (pid, opts) => {
-    const p    = S.players[pid] || {};
-    const pg   = ppgOf(pid);
-    const pts  = luPlayerPts(pid, pc);
-    const inj  = injuryBadge(p.injury_status);
-    const lbl  = lswRankLabel(pid, opts.landSlot || slot, !!opts.mixed, pc);
-    return `<div class="lc-opt${opts.cls || ''}">
-      <span class="lc-opt-name">${opts.tag || ''}${esc(luPlayerName(pid))}${inj ? ' ' + inj : ''}${opts.via || ''}</span>
-      <span class="lc-opt-pos">${esc(luNormPos(p.position) || '')}${p.team ? ' ' + esc(p.team) : ''}</span>
-      <span class="lc-opt-rank" style="${lbl ? '' : 'color:var(--brown-mid);'}">${lbl ? esc(lbl) : '—'}</span>
-      <span class="lc-opt-num" style="color:var(--parchment);"${pg.v === null ? '' : ` title="${pg.v.toFixed(1)} over ${pg.gp} game${pg.gp === 1 ? '' : 's'} played"`}>${num(pg.v)}</span>
-      <span class="lc-opt-num" style="color:var(--gold-light);">${haveProj ? pts.toFixed(1) : '–'}</span>
-      <span class="lc-opt-act">${opts.action || ''}</span>
-    </div>`;
-  };
-
-  const head = `<div class="lc-opt hdr">
-      <span class="lc-opt-name">${esc(slot)} — options</span>
-      <span class="lc-opt-pos">Pos</span>
-      <span class="lc-opt-rank">Rank</span>
-      <span class="lc-opt-num" title="Season-to-date PPG in this league's scoring">PPG</span>
-      <span class="lc-opt-num">Proj</span>
-      <span class="lc-opt-act"></span>
-    </div>`;
+  const row  = (pid, opts) => luOptRow(fix, pid, { landSlot: slot, ...opts });
+  const head = luOptHead(esc(slot) + ' — options');
 
   const curRow = cur === '0' ? '' : row(cur, { cls: ' cur', tag: '<span style="color:var(--c-green);">▸ </span>' });
 
@@ -1479,33 +1508,50 @@ async function applyLineup(idx) {
   }
 }
 
-// The two "all" buttons stay on projections deliberately — a bulk write across
-// every league is not the place to act on a sheet you just pasted in. Use the
-// per-card ⚡ Optimize with Ranks to review those one at a time.
-function optimizeAll() {
+// "Optimize all" runs either source across every card; "Apply all" then writes
+// whichever source was optimized last (LU.allSrc), so what gets written is what
+// you just reviewed on the cards.
+function optimizeAll(src) {
+  src = src === 'ranks' ? 'ranks' : 'projections';
+  if (!luCanOptimize(src)) return;
+  LU.allSrc = src;
   LU.lineups.forEach((_, idx) => {
     const d = document.getElementById('lc-' + idx); if (d) d.open = true;
-    optimizeLineup(idx, 'projections');
+    optimizeLineup(idx, src);
   });
+  luAllBtnsSync();
+}
+
+function luAllBtnsSync() {
+  const src = LU.allSrc || 'projections';
+  const btn = document.getElementById('lu-applyall-btn');
+  if (btn) {
+    btn.textContent = `✓ Apply all (${src === 'ranks' ? 'ranks' : 'projections'})`;
+    btn.disabled = !luCanOptimize(src);
+  }
+  document.querySelectorAll('.lu-optall').forEach(b => b.classList.toggle('on', b.dataset.src === LU.allSrc));
 }
 
 async function applyAll() {
+  const src = LU.allSrc || 'projections';
+  if (!luCanOptimize(src)) return;
   const status = document.getElementById('lu-allstatus');
   const setS = (c, t) => { if (status) { status.style.color = c; status.textContent = t; } };
   const targets = LU.lineups.map((fix, idx) => ({ fix, idx })).filter(({ fix }) => {
     if (fix._espn) return false;         // not writable — see luLoadEspnLineup
-    const prop = luProposal(fix, 'projections');
+    const prop = luProposal(fix, src);
     return prop && prop.some((p, i) => String(p) !== String(fix.starters[i]));
   });
-  if (!targets.length) { setS('var(--c-green)', 'All lineups already optimal'); return; }
+  const label = src === 'ranks' ? 'ranking sheet' : 'projections';
+  if (!targets.length) { setS('var(--c-green)', `All lineups already optimal by ${label}`); return; }
   let done = 0, fail = 0;
   for (const { fix, idx } of targets) {
-    fix._shown = 'projections';
-    setS('var(--brown-light)', `Applying ${done + fail + 1}/${targets.length}…`);
+    fix._shown = src;
+    setS('var(--brown-light)', `Applying ${done + fail + 1}/${targets.length} (${label})…`);
     const ok = await applyLineup(idx);
     if (ok) done++; else fail++;
   }
-  setS(fail ? 'var(--c-amber)' : 'var(--c-green)', `Applied ${done} lineup${done !== 1 ? 's' : ''}${fail ? `, ${fail} failed` : ''}`);
+  setS(fail ? 'var(--c-amber)' : 'var(--c-green)', `Applied ${done} lineup${done !== 1 ? 's' : ''} by ${label}${fail ? `, ${fail} failed` : ''}`);
 }
 
 function toggleCollapseAll() {
@@ -1543,6 +1589,15 @@ const LSW = {
                     // pre-write because the write overwrites fix.starters
   msg: '',          // status line under the mode buttons
   msgColor: 'var(--brown-light)',
+  // The other half of the search: leagues where he is on the BENCH, and who he
+  // would start over. Its own state, because it is the opposite action — the
+  // starter section benches him, this one starts him.
+  bench: [],        // [{leagueId, idx}] — snapshotted at pick time, same reason as targets
+  bMode: null,      // null | 'ranks' | 'proj' | 'manual'
+  bPicks: {},       // {leagueId: pid of the starter he replaces}
+  bDone: {},        // {leagueId: 'ok' | 'fail'}
+  bApplied: {},     // {leagueId: [{slot, from, to}]}
+  bMsg: '', bMsgColor: 'var(--brown-light)',
 };
 
 // pid → [{idx, slotIdx}] for every player currently in a starting lineup.
@@ -1721,31 +1776,49 @@ function lswSearch(v) {
   const key = normName(v || '');
   if (key.length < 2) { box.innerHTML = ''; box.style.display = 'none'; return; }
 
+  // Starters AND bench players: a starter is someone to replace, a bench player
+  // someone to start — the panel shows both halves once he's picked.
   const map = lswStarterMap();
-  const hits = Object.keys(map)
-    .map(pid => ({ pid, name: luPlayerName(pid), n: map[pid].length }))
+  const bench = lswBenchMap();
+  const hits = [...new Set([...Object.keys(map), ...Object.keys(bench)])]
+    .map(pid => ({ pid, name: luPlayerName(pid), n: (map[pid] || []).length, b: (bench[pid] || []).length }))
     .filter(h => normName(h.name).includes(key))
-    .sort((a, b) => b.n - a.n || a.name.localeCompare(b.name))
+    .sort((a, b) => (b.n + b.b) - (a.n + a.b) || a.name.localeCompare(b.name))
     .slice(0, 8);
 
   if (!hits.length) {
-    box.innerHTML = `<div style="padding:6px 10px;font-size:0.65rem;color:var(--brown-light);">No starter matches “${esc(v)}”</div>`;
+    box.innerHTML = `<div style="padding:6px 10px;font-size:0.65rem;color:var(--brown-light);">None of your players match “${esc(v)}”</div>`;
     box.style.display = 'block';
     return;
   }
   box.innerHTML = hits.map(h => {
     const p = S.players[h.pid] || {};
     const inj = injuryBadge(p.injury_status);
+    const where = [h.n ? `${h.n} starting` : '', h.b ? `${h.b} bench` : ''].filter(Boolean).join(' · ');
     return `<div class="lsw-sug" onclick="lswPick('${h.pid}')">
       <span style="color:var(--parchment);">${esc(h.name)}</span>
       <span style="color:var(--brown-light);font-size:0.65rem;">${esc(luNormPos(p.position) || '')}${p.team ? ' · ' + esc(p.team) : ''}</span>
       ${inj}
-      <span style="margin-left:auto;color:var(--gold-light);font-size:0.65rem;white-space:nowrap;">${h.n} lineup${h.n === 1 ? '' : 's'}</span>
+      <span style="margin-left:auto;color:var(--gold-light);font-size:0.65rem;white-space:nowrap;">${where}</span>
     </div>`;
   }).join('');
   box.style.display = 'block';
 }
 
+// pid → [idx] for every player on one of my rosters but NOT in its starting
+// lineup. IR/taxi players are included so the panel can say why he can't start.
+function lswBenchMap() {
+  const m = {};
+  LU.lineups.forEach((fix, idx) => {
+    const starting = new Set((fix.starters || []).map(String));
+    (fix.players || []).forEach(p => {
+      const pid = String(p || '0');
+      if (pid === '0' || starting.has(pid)) return;
+      (m[pid] || (m[pid] = [])).push(idx);
+    });
+  });
+  return m;
+}
 function lswPick(pid) {
   LSW.pid     = String(pid);
   LSW.mode    = null;
@@ -1754,6 +1827,8 @@ function lswPick(pid) {
   LSW.done    = {};
   LSW.applied = {};
   LSW.msg     = '';
+  LSW.bench   = (lswBenchMap()[String(pid)] || []).map(idx => ({ leagueId: LU.lineups[idx].leagueId, idx }));
+  LSW.bMode = null; LSW.bPicks = {}; LSW.bDone = {}; LSW.bApplied = {}; LSW.bMsg = '';
   LSW.q       = luPlayerName(pid);
   const box = document.getElementById('lu-swap-sug');
   if (box) { box.innerHTML = ''; box.style.display = 'none'; }
@@ -1761,14 +1836,13 @@ function lswPick(pid) {
   if (inp) inp.value = LSW.q;
   lswDraw();
 }
-
 function lswClear() {
   LSW.pid = null; LSW.mode = null; LSW.targets = []; LSW.picks = {}; LSW.done = {}; LSW.applied = {}; LSW.msg = ''; LSW.q = '';
+  LSW.bench = []; LSW.bMode = null; LSW.bPicks = {}; LSW.bDone = {}; LSW.bApplied = {}; LSW.bMsg = '';
   const inp = document.getElementById('lu-swap-q'); if (inp) inp.value = '';
   const box = document.getElementById('lu-swap-sug'); if (box) { box.innerHTML = ''; box.style.display = 'none'; }
   lswDraw();
 }
-
 // ── mode selection ──
 // 'ranks' and 'proj' fill every league's pick in one shot; 'manual' clears them
 // and opens the per-league choosers instead.
@@ -2005,42 +2079,47 @@ function lswDraw() {
   }
   if (cards) cards.style.display = 'none';   // the panel IS the filtered league list
 
-  const p    = S.players[LSW.pid] || {};
-  const rows = lswTargets();
-  const pickCount = rows.filter(lswPending).length;
-  const writable  = rows.filter(t => !t.fix._espn).length;
-  const canRank   = luHaveRankings();
-  const canProj   = luHaveProj();
-  const canWrite  = luCanWrite();
+  const p     = S.players[LSW.pid] || {};
+  const rows  = lswTargets();
+  const bRows = lswBenchTargets();
   const doneCount = Object.values(LSW.done).filter(v => v === 'ok').length;
-
-  // .setup-btn already carries a gold border, so the active mode has to be marked
-  // by fill (the page's own :hover look), not by border colour.
-  const modeBtn = (m, label, on, why) =>
-    `<button class="setup-btn lsw-mode${LSW.mode === m ? ' on' : ''}" ${on ? '' : `disabled title="${esc(why)}"`} onclick="lswSetMode('${m}')">${label}</button>`;
-
-  if (!rows.length) {   // he isn't starting anywhere — nothing to snapshot
-    panel.innerHTML = `<div class="lsw-panel">
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 12px;">
-        <span style="font-family:var(--font-head),serif;font-size:1rem;color:var(--cream);">${esc(luPlayerName(LSW.pid))}</span>
-        <span style="font-size:0.7rem;color:var(--c-green);">${doneCount ? `✓ swapped out of ${doneCount} lineup${doneCount === 1 ? '' : 's'} — he is no longer starting anywhere` : 'Not in any starting lineup'}</span>
-        <button class="ghost-btn" style="font-size:0.64rem;margin-left:auto;" onclick="lswClear()">✕ Done</button>
-      </div>
-    </div>`;
-    return;
-  }
+  const where = [rows.length ? `starting in ${rows.length} league${rows.length === 1 ? '' : 's'}` : '',
+                 bRows.length ? `on the bench in ${bRows.length}` : ''].filter(Boolean).join(' · ')
+              || (doneCount ? `✓ swapped out of ${doneCount} lineup${doneCount === 1 ? '' : 's'}` : 'Not on any of your rosters');
 
   panel.innerHTML = `<div class="lsw-panel">
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 12px;border-bottom:1px solid var(--brown-mid);">
       <span style="font-family:var(--font-head),serif;font-size:1rem;color:var(--cream);">${esc(luPlayerName(LSW.pid))}</span>
       <span style="font-size:0.68rem;color:var(--brown-light);">${esc(luNormPos(p.position) || '')}${p.team ? ' · ' + esc(p.team) : ''}</span>
       ${injuryBadge(p.injury_status)}
-      <span style="font-size:0.7rem;color:var(--gold-light);">starting in ${rows.length} league${rows.length === 1 ? '' : 's'}${writable !== rows.length ? ` (${rows.length - writable} ESPN, read-only)` : ''}</span>
-      <button class="ghost-btn" style="font-size:0.64rem;margin-left:auto;" onclick="lswClear()">✕ Clear</button>
+      <span style="font-size:0.7rem;color:var(--gold-light);">${where}</span>
+      <button class="ghost-btn" style="font-size:0.64rem;margin-left:auto;" onclick="lswClear()">✕ ${rows.length || bRows.length ? 'Clear' : 'Done'}</button>
     </div>
+    ${rows.length ? lswStarterSectionHtml(rows) : ''}
+    ${bRows.length ? lswBenchSectionHtml(bRows) : ''}
+  </div>`;
+}
+
+// Section title strip shared by the two halves of the panel.
+function lswSectionHead(title, sub) {
+  return `<div style="padding:8px 12px 0;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;border-top:1px solid var(--brown-mid);">
+    <span style="font-family:var(--font-display),serif;font-size:0.68rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--gold);">${title}</span>
+    <span style="font-size:0.62rem;color:var(--brown-light);">${sub}</span>
+  </div>`;
+}
+
+function lswStarterSectionHtml(rows) {
+  const pickCount = rows.filter(lswPending).length;
+  const writable  = rows.filter(t => !t.fix._espn).length;
+  const canWrite  = luCanWrite();
+  // .setup-btn already carries a gold border, so the active mode has to be marked
+  // by fill (the page's own :hover look), not by border colour.
+  const modeBtn = (m, label, on, why) =>
+    `<button class="setup-btn lsw-mode${LSW.mode === m ? ' on' : ''}" ${on ? '' : `disabled title="${esc(why)}"`} onclick="lswSetMode('${m}')">${label}</button>`;
+  return `${lswSectionHead(`Starting — replace him`, `${rows.length} league${rows.length === 1 ? '' : 's'}${writable !== rows.length ? ` (${rows.length - writable} ESPN, read-only)` : ''}`)}
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 12px;">
-      ${modeBtn('ranks',  '⚡ Best ranked in all',     canRank, 'Upload a ranking sheet first')}
-      ${modeBtn('proj',   '⚡ Best projected in all',  canProj, 'No projections for this week')}
+      ${modeBtn('ranks',  '⚡ Best ranked in all',     luHaveRankings(), 'Upload a ranking sheet first')}
+      ${modeBtn('proj',   '⚡ Best projected in all',  luHaveProj(),     'No projections for this week')}
       ${modeBtn('manual', '☰ Choose in each league',   true,    '')}
       ${canWrite && pickCount
         ? `<button class="setup-btn" onclick="lswApplyAll()">✓ Apply ${pickCount} lineup${pickCount === 1 ? '' : 's'}</button>`
@@ -2048,10 +2127,242 @@ function lswDraw() {
       ${!canWrite ? `<span style="font-size:0.6rem;color:var(--brown-light);">add a Sleeper token to write lineups</span>` : ''}
     </div>
     ${LSW.msg ? `<div style="padding:0 12px 8px;font-size:0.68rem;color:${LSW.msgColor};">${esc(LSW.msg)}</div>` : ''}
-    <div>${rows.map(lswLeagueBlock).join('')}</div>
-  </div>`;
+    <div>${rows.map(lswLeagueBlock).join('')}</div>`;
 }
 
+// ── bench half: leagues where he's NOT starting, and who he'd start over ──
+function lswBenchTargets() {
+  return LSW.bench.map(t => {
+    let fix = LU.lineups[t.idx];
+    if (!fix || fix.leagueId !== t.leagueId) {
+      const i = LU.lineups.findIndex(f => f.leagueId === t.leagueId);
+      if (i < 0) return null;
+      t.idx = i; fix = LU.lineups[i];
+    }
+    return { ...t, fix };
+  }).filter(Boolean);
+}
+
+function lswBenchPending(t) {
+  return luCanWrite() && !t.fix._espn && !!LSW.bPicks[t.leagueId] && LSW.bDone[t.leagueId] !== 'ok';
+}
+
+// How much better `pid` is than the starter `out` he'd replace — positive means
+// an upgrade. Ranks compare like-for-like: the same position's rank when both
+// play it, else the sheet's FLEX list (one cross-position scale); anything the
+// sheet doesn't cover falls back to projections, as the optimizer does.
+function lswGain(fix, pid, out, src) {
+  const pc = luPtsCtx(fix);
+  const pts = luPlayerPts(pid, pc) - luPlayerPts(out, pc);
+  if (src !== 'ranks') return pts;
+  const a = luRankInfo(pid, pc), b = luRankInfo(out, pc);
+  const pa = luNormPos(S.players[pid]?.position), pb = luNormPos(S.players[out]?.position);
+  if (a && b && pa === pb && a.posRank != null && b.posRank != null) return b.posRank - a.posRank;
+  if (a && b && a.flexRank != null && b.flexRank != null) return b.flexRank - a.flexRank;
+  if (a && !b) return 1000;       // ranked beats unranked, as in luSortKey
+  if (b && !a) return -1000;
+  return pts;
+}
+
+function lswBenchSetMode(mode) {
+  LSW.bMode = mode;
+  LSW.bMsg = '';
+  if (mode === 'manual') { lswDraw(); return; }
+  if (mode === 'ranks' && !luHaveRankings()) {
+    LSW.bMode = null;
+    LSW.bMsg = 'No ranking sheet uploaded for week ' + LU.week + '.';
+    LSW.bMsgColor = 'var(--c-red)';
+    lswDraw();
+    return;
+  }
+  LSW.bPicks = {};
+  let none = 0;
+  for (const t of lswBenchTargets()) {
+    if (LSW.bDone[t.leagueId] === 'ok') continue;
+    // Over the WEAKEST starter he's eligible to replace — and only when he is
+    // actually better than that starter; otherwise this league is left alone.
+    let best = null;
+    for (const o of luBenchOptions(t.fix, LSW.pid)) {
+      if (o.out === '0') { best = { o, g: Infinity }; break; }        // an empty slot: always fill it
+      const g = lswGain(t.fix, LSW.pid, o.out, mode === 'ranks' ? 'ranks' : 'projections');
+      if (g > 0 && (!best || g > best.g)) best = { o, g };
+    }
+    if (best) LSW.bPicks[t.leagueId] = best.o.out;
+    else none++;
+  }
+  const n = Object.keys(LSW.bPicks).length;
+  LSW.bMsg = `Starting him in ${n} league${n === 1 ? '' : 's'}` +
+             (none ? ` · ${none} where he doesn't beat any starter he could replace` : '') + ' — review, then Apply.';
+  LSW.bMsgColor = 'var(--gold-light)';
+  lswDraw();
+}
+
+function lswBenchChoose(leagueId, out) {
+  if (String(LSW.bPicks[leagueId]) === String(out)) delete LSW.bPicks[leagueId];   // click again to unpick
+  else LSW.bPicks[leagueId] = String(out);
+  delete LSW.bDone[leagueId];
+  lswDraw();
+}
+
+async function lswBenchApplyOne(idx) {
+  const fix = LU.lineups[idx];
+  if (!fix || fix._espn) return false;
+  const out = LSW.bPicks[fix.leagueId];
+  if (!out) return false;
+  const next = fix.starters.map(String);
+  if (next.includes(String(LSW.pid))) { LSW.bDone[fix.leagueId] = 'ok'; return true; }   // already starting
+  // The starter he replaces is re-located in the LIVE lineup; an empty slot ('0')
+  // is matched by the first empty slot that still lists him.
+  const opt = luBenchOptions(fix, LSW.pid).find(o => o.out === String(out));
+  if (!opt) {
+    LSW.bDone[fix.leagueId] = 'fail';
+    LSW.bMsg = '✗ ' + fix.leagueName + ': that swap is no longer possible';
+    LSW.bMsgColor = 'var(--c-red)';
+    return false;
+  }
+  LSW.bApplied[fix.leagueId] = opt.plan.moves.map(([k, pid]) => ({
+    slot: fix.rosterPositions[k], from: luPlayerName(fix.starters[k]), to: luPlayerName(pid),
+  }));
+  opt.plan.moves.forEach(([k, pid]) => { next[k] = String(pid); });
+  try {
+    const ok = await luPutStarters(fix, next);
+    LSW.bDone[fix.leagueId] = ok ? 'ok' : 'fail';
+    return ok;
+  } catch (e) {
+    LSW.bDone[fix.leagueId] = 'fail';
+    LSW.bMsg = '✗ ' + fix.leagueName + ': ' + (e.message || 'failed');
+    LSW.bMsgColor = 'var(--c-red)';
+    return false;
+  }
+}
+
+async function lswBenchApplyAll() {
+  const targets = lswBenchTargets().filter(lswBenchPending);
+  if (!targets.length) return;
+  let done = 0, fail = 0;
+  for (const t of targets) {
+    LSW.bMsg = `Applying ${done + fail + 1}/${targets.length}…`;
+    LSW.bMsgColor = 'var(--brown-light)';
+    lswDraw();
+    if (await lswBenchApplyOne(t.idx)) done++; else fail++;
+  }
+  LSW.bMsg = `Started him in ${done} lineup${done === 1 ? '' : 's'}${fail ? `, ${fail} failed` : ''}`;
+  LSW.bMsgColor = fail ? 'var(--c-amber)' : 'var(--c-green)';
+  lswDraw();
+  luRefreshCardsInPlace();
+}
+
+async function lswBenchApplySingle(idx) {
+  LSW.bMsg = 'applying…';
+  LSW.bMsgColor = 'var(--brown-light)';
+  lswDraw();
+  const ok = await lswBenchApplyOne(idx);
+  if (!LSW.bMsg.startsWith('✗')) {
+    LSW.bMsg = ok ? '✓ lineup set' : '⚠ saved but Sleeper returned a different lineup';
+    LSW.bMsgColor = ok ? 'var(--c-green)' : 'var(--c-amber)';
+  }
+  lswDraw();
+  luRefreshCardsInPlace();
+}
+
+function lswBenchSectionHtml(bRows) {
+  const canWrite = luCanWrite();
+  const withOpts = [], blocked = [];
+  for (const t of bRows) {
+    const opts = LSW.bDone[t.leagueId] === 'ok' ? null : luBenchOptions(t.fix, LSW.pid);
+    if (opts && !opts.length) blocked.push(t); else withOpts.push({ ...t, opts });
+  }
+  const pickCount = withOpts.filter(lswBenchPending).length;
+  const modeBtn = (m, label, on, why) =>
+    `<button class="setup-btn lsw-mode${LSW.bMode === m ? ' on' : ''}" ${on ? '' : `disabled title="${esc(why)}"`} onclick="lswBenchSetMode('${m}')">${label}</button>`;
+  const blockedHtml = blocked.length
+    ? `<div style="padding:6px 12px 10px;font-size:0.64rem;color:var(--brown-light);border-top:1px solid var(--brown-mid);"><b style="color:var(--c-amber);">Can't start him in ${blocked.length}:</b> ${blocked.map(t =>
+        `${esc(t.fix.leagueName)} <span style="opacity:0.75;">(${esc(luBenchWhyNot(t.fix, LSW.pid))})</span>`).join(' · ')}</div>`
+    : '';
+  return `${lswSectionHead('On your bench — start him', `${bRows.length} league${bRows.length === 1 ? '' : 's'} · pick who he starts over`)}
+    ${withOpts.length ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 12px;">
+      ${modeBtn('ranks',  '⚡ Over weakest by ranks',      luHaveRankings(), 'Upload a ranking sheet first')}
+      ${modeBtn('proj',   '⚡ Over weakest by projections', luHaveProj(),     'No projections for this week')}
+      ${modeBtn('manual', '☰ Choose in each league',       true, '')}
+      ${canWrite && pickCount ? `<button class="setup-btn" onclick="lswBenchApplyAll()">✓ Apply ${pickCount} lineup${pickCount === 1 ? '' : 's'}</button>` : ''}
+      ${!canWrite ? `<span style="font-size:0.6rem;color:var(--brown-light);">add a Sleeper token to write lineups</span>` : ''}
+    </div>` : ''}
+    ${LSW.bMsg ? `<div style="padding:0 12px 8px;font-size:0.68rem;color:${LSW.bMsgColor};">${esc(LSW.bMsg)}</div>` : ''}
+    <div>${withOpts.map(lswBenchLeagueBlock).join('')}</div>
+    ${blockedHtml}`;
+}
+
+function lswBenchLeagueBlock(t) {
+  const fix   = t.fix;
+  const pc    = luPtsCtx(fix);
+  const state = LSW.bDone[t.leagueId];
+  const pick  = LSW.bPicks[t.leagueId];
+  const head = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 12px;background:var(--brown-mid);">
+      <span style="font-family:var(--font-head),serif;font-weight:700;font-size:0.9rem;color:var(--cream);">${esc(fix.leagueName)}</span>
+      ${fix._espn ? `<span style="font-family:var(--font-display),serif;font-size:0.62rem;letter-spacing:0.1em;color:var(--gold-light);">ESPN</span>` : ''}
+      <span class="diff-slot" style="flex:0 0 auto;">BN</span>
+      ${state === 'ok'   ? `<span style="font-size:0.65rem;color:var(--c-green);">✓ applied</span>` : ''}
+      ${state === 'fail' ? `<span style="font-size:0.65rem;color:var(--c-red);">✗ failed</span>` : ''}
+      <span style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+        ${fix._espn ? `<span style="font-size:0.65rem;color:var(--parchment);">set it in ESPN</span>`
+          : lswBenchPending(t) ? `<button class="setup-btn" onclick="lswBenchApplySingle(${t.idx})">Apply</button>` : ''}
+      </span>
+    </div>`;
+
+  if (state === 'ok') {
+    return `<div class="lsw-league">${head}
+      ${(LSW.bApplied[t.leagueId] || []).map(m => `<div class="diff-row"><span class="diff-slot">${esc(m.slot)}</span>
+        <span style="color:var(--parchment);flex:1;"><span style="color:var(--c-red);text-decoration:line-through;">${esc(m.from)}</span>
+        <span style="color:var(--brown-light);"> → </span><span style="color:var(--c-green);">${esc(m.to)}</span></span>
+      </div>`).join('')}
+    </div>`;
+  }
+
+  const opts = t.opts;
+  const chosen = pick ? opts.find(o => o.out === String(pick)) : null;
+  const chosenRow = chosen
+    ? chosen.plan.moves.map(([k, into]) => `<div class="diff-row" style="background:rgba(95,174,95,0.07);">
+         <span class="diff-slot">${esc(fix.rosterPositions[k])}</span>
+         <span style="color:var(--parchment);flex:1;">
+           <span style="color:var(--c-red);text-decoration:line-through;">${esc(luPlayerName(fix.starters[k]))}</span>
+           <span style="color:var(--brown-light);"> → </span>
+           <span style="color:var(--c-green);">${esc(luPlayerName(into))}</span>
+         </span>
+         <span style="color:var(--brown-light);font-size:0.8rem;white-space:nowrap;flex-shrink:0;">${luHaveProj() ? luPlayerPts(fix.starters[k], pc).toFixed(1) : '–'} <span style="color:var(--c-green);">→ ${luHaveProj() ? luPlayerPts(into, pc).toFixed(1) : '–'}</span></span>
+       </div>`).join('')
+    : '';
+
+  // Manual mode opens every league's list; the bulk modes keep it one click away.
+  if (LSW.bMode !== 'manual') {
+    return `<div class="lsw-league">${head}${chosenRow || `<div style="padding:6px 12px;font-size:0.68rem;color:var(--brown-light);">He could start over ${opts.length} starter${opts.length === 1 ? '' : 's'} here.</div>`}
+      <div style="padding:${chosen ? '6px' : '0'} 12px 8px;"><button class="ghost-btn" style="font-size:0.64rem;" onclick="lswBenchSetMode('manual')">${chosen ? 'Choose someone else…' : 'Choose who he replaces…'}</button></div>
+    </div>`;
+  }
+
+  // His own line first — the baseline every starter below is measured against —
+  // then each starter he could replace, with that starter's numbers.
+  const me = luOptRow(fix, LSW.pid, { cls: ' cur', landSlot: luNormPos(S.players[LSW.pid]?.position),
+    tag: '<span style="color:var(--c-green);">▸ </span>' });
+  const list = opts.map(o => {
+    const landSlot = fix.rosterPositions[o.plan.moves[o.plan.moves.length - 1][0]];
+    const myLbl = lswRankLabel(LSW.pid, landSlot, false, pc);
+    const sub = [
+      `<span class="diff-slot" style="font-size:0.58rem;padding:0 4px;margin-right:4px;">${esc(o.slot)}</span>`,
+    ].join('');
+    const via = o.plan.via
+      ? `<span style="display:block;font-size:0.6rem;color:var(--gold-light);">↳ ${esc(luPlayerName(o.plan.via.pid))} moves ${esc(o.plan.via.slot)} → ${esc(o.slot)}, he takes ${esc(landSlot)}${myLbl ? ' as ' + esc(myLbl) : ''}</span>`
+      : (myLbl && luSlotKind(o.slot) !== 'dedicated' ? `<span style="display:block;font-size:0.6rem;color:var(--gold-light);">he'd be ${esc(myLbl)} here</span>` : '');
+    const sel = String(pick) === o.out;
+    return luOptRow(fix, o.out, {
+      landSlot: o.slot, cls: sel ? ' lsw-pick on' : ' lsw-pick',
+      tag: `<span style="color:var(--c-green);display:inline-block;width:14px;">${sel ? '✓' : ''}</span>${sub}`,
+      via, attrs: ` onclick="lswBenchChoose('${t.leagueId}','${o.out}')"`,
+    }).replace(esc(luPlayerName('0')), '<i style="color:var(--brown-light);">empty slot</i>');
+  }).join('');
+  return `<div class="lsw-league">${head}${chosenRow}
+    ${luOptHead('Starts over…')}${me}<div class="lc-opts-list">${list}</div>
+  </div>`;
+}
 // Re-render the (hidden) cards behind the panel so their starters/badges are
 // current when the panel is cleared. Cheap: no fetching, and luProposal is cached
 // per fixture — luPutStarters already dropped the stale ones.
@@ -2737,14 +3048,14 @@ function luRenderLineupCards() {
     const canRank  = luCanOptimize('ranks');
     const cardsHtml = luCardsHtml();
 
-    // "Optimize all" / "Apply all" are projections-only on purpose — see the
-    // comment above optimizeAll().
+    // "Optimize all" comes in both sources; "Apply all" writes the last one used.
     // Only "Apply all" is a write. Optimize all, the sheet upload and the ranks
     // grid are read-only, so the whole toolbar used to vanish for tokenless users
     // for no reason — including the upload they need before ranks work at all.
     const toolbar = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex:1;">
-           <button class="setup-btn" ${canProj ? '' : 'disabled'} onclick="optimizeAll()">⚡ Optimize all</button>
-           ${canWrite ? `<button class="setup-btn go" ${canProj ? '' : 'disabled'} onclick="applyAll()">✓ Apply all</button>` : ''}
+           <button class="setup-btn lsw-mode lu-optall${LU.allSrc === 'projections' ? ' on' : ''}" data-src="projections" ${canProj ? '' : 'disabled title="No projections for this week"'} onclick="optimizeAll('projections')">⚡ Optimize all · Projections</button>
+           <button class="setup-btn lsw-mode lu-optall${LU.allSrc === 'ranks' ? ' on' : ''}" data-src="ranks" ${canRank ? '' : 'disabled title="Upload a ranking sheet first"'} onclick="optimizeAll('ranks')">⚡ Optimize all · Ranks</button>
+           ${canWrite ? `<button class="setup-btn go" id="lu-applyall-btn" ${luCanOptimize(LU.allSrc || 'projections') ? '' : 'disabled'} onclick="applyAll()">✓ Apply all (${LU.allSrc === 'ranks' ? 'ranks' : 'projections'})</button>` : ''}
            <button class="ghost-btn" id="lu-collapse-btn" style="font-size:0.64rem;" onclick="toggleCollapseAll()">Expand all</button>
            <span style="width:1px;height:18px;background:var(--brown-mid);"></span>
            ${luWeekCtlHtml(w)}

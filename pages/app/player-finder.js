@@ -1,54 +1,33 @@
 // Player Finder tab
 
 // ── 2. Player Finder ──────────────────────────────────────────────────────────
-// Player lookup — the top of the Players tab (renderRostership). It used to be
-// its own Player Finder tab; ?tab=player still lands here (swResolve).
+// "Who owns him everywhere" — opens inside a Players-table row when you click the
+// player's name (rsToggleExpand → pfOpen). It used to be a separate lookup box
+// above the table; ?tab=player still lands on Players (swResolve).
 //
-// Any player, not just yours: who owns him in every league, that owner's playoff
-// odds, and a side-by-side roster comparison. The search and its results survive
-// a tab switch and the table's redraws — pfRestore() repaints them from PF.
+// Every league: on my roster (start/bench), on another roster (owner + playoff
+// odds + a side-by-side roster comparison), or a free agent. Rosters come from
+// RS.leagueRosters, which the table already loaded, so opening a row costs only
+// the (app-wide cached) /users read per league.
 
-function pfLookupHtml() {
-  const p = PF.targetPid ? S.players[PF.targetPid] : null;
-  return `<div class="pf-lookup">
-    <div class="search-wrap" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-      <div class="player-ac-wrap" id="pf-ac" style="flex:1;min-width:220px;">
-        <input type="text" id="ps" class="search-input" placeholder="Look up any player — who owns him, their playoff odds…"
-          oninput="showPlayerDropdown('ps', 'pf-dropdown', 'pfSelectPlayer')" autocomplete="off" value="${p ? esc(sleeperName(p)) : ''}" />
-        <div class="player-dropdown" id="pf-dropdown" style="display:none;"></div>
-      </div>
-      ${p ? `<button class="ghost-btn" onclick="pfClearLookup()">✕ Clear</button>` : ''}
-    </div>
-    <div id="ps-r"></div>
-  </div>`;
+// Point the panel at a player. Called BEFORE the table redraws, so the redraw's
+// pfRestore() shows this player's loading state rather than the previous one's.
+function pfOpen(pid) {
+  if (PF.targetPid === pid && PF.allRosterData) return;
+  PF.targetPid = pid; PF.myPid = null; PF.expanded = null; PF.expandedOther = null; PF.allRosterData = null;
 }
 
-// Repaint the lookup's results after the tab (or the table under it) redraws.
+// Repaint the panel into the expanded row after the table (re)draws.
 function pfRestore() {
+  document.removeEventListener('click', _pfOutsideClick);
   document.addEventListener('click', _pfOutsideClick);
   const r = document.getElementById('ps-r');
   if (!r || !PF.targetPid) return;
   if (PF.allRosterData) pfRenderResults();
-  else r.innerHTML = loading('Checking all leagues');
-}
-
-// From a Rostership row: look him up and bring the results into view.
-function pfLookup(pid) {
-  pfSelectPlayer(pid);
-  document.getElementById('pf-ac')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-function pfClearLookup() {
-  PF.targetPid = null; PF.myPid = null; PF.allRosterData = null; PF.expanded = null; PF.expandedOther = null;
-  const inp = document.getElementById('ps'); if (inp) inp.value = '';
-  const r = document.getElementById('ps-r'); if (r) r.innerHTML = '';
-  rsDrawFull();
+  else { r.innerHTML = loading('Checking all leagues'); pfLoadOwnership(PF.targetPid); }
 }
 
 function _pfOutsideClick(e) {
-  const ac = document.getElementById('pf-ac');
-  if (!ac) { document.removeEventListener('click', _pfOutsideClick); return; }
-  if (!ac.contains(e.target)) document.getElementById('pf-dropdown').style.display = 'none';
   const ac2 = document.getElementById('pf-ac2');
   if (ac2 && !ac2.contains(e.target)) {
     const dd2 = document.getElementById('pf-dropdown2');
@@ -97,32 +76,29 @@ function pfClearMyPlayer() {
   pfRenderResults();
 }
 
-async function pfSelectPlayer(pid) {
-  const dd = document.getElementById('pf-dropdown'); if (dd) dd.style.display = 'none';
-  const player = S.players[pid];
-  if (!player) return;
-  const inp = document.getElementById('ps'); if (inp) inp.value = sleeperName(player);
-  PF.targetPid = pid;
-  PF.myPid = null;
-  PF.expanded = null;
-  PF.allRosterData = null;
-  const r = document.getElementById('ps-r');
-  if (r) r.innerHTML = loading('Checking all leagues');
+async function pfLoadOwnership(pid) {
+  if (PF._loadingPid === pid) return;
+  PF._loadingPid = pid;
   try {
     const statsP = ppgLoadStats();
     const data = await Promise.all(S.leagues.filter(lg => lg.source !== 'espn').map(lg =>
-      Promise.all([ api('/league/' + lg.league_id + '/rosters'), leagueUsers(lg.league_id) ])
-        .then(([rs, us]) => {
-          const uMap = Object.fromEntries((us || []).map(u => [u.user_id, u.display_name || u.username]));
-          return { lg, rs: rs || [], uMap };
-        }).catch(() => null)
+      Promise.all([
+        RS.leagueRosters[lg.league_id]?.length ? RS.leagueRosters[lg.league_id] : api('/league/' + lg.league_id + '/rosters'),
+        leagueUsers(lg.league_id),
+      ]).then(([rs, us]) => {
+        const uMap = Object.fromEntries((us || []).map(u => [u.user_id, u.display_name || u.username]));
+        return { lg, rs: rs || [], uMap };
+      }).catch(() => null)
     ));
-    if (PF.targetPid !== pid) return;   // another lookup started meanwhile
-    PF.allRosterData = data;
     await statsP;
+    if (PF.targetPid !== pid) return;   // another row opened meanwhile
+    PF.allRosterData = data;
     pfRenderResults();
     pfLoadOdds();
-  } catch(e) { const r2 = document.getElementById('ps-r'); if (r2) r2.innerHTML = errHtml(e); }
+  } catch(e) {
+    const r2 = document.getElementById('ps-r');
+    if (r2 && PF.targetPid === pid) r2.innerHTML = errHtml(e);
+  } finally { if (PF._loadingPid === pid) PF._loadingPid = null; }
 }
 
 // ── Playoff odds beside every team ──
@@ -175,6 +151,15 @@ function pfRenderResults() {
     }
     if (!found) free.push({ name: rd.lg.name, lgId: rd.lg.league_id });
   }
+  // ESPN leagues aren't read league-wide here (only my own team is), so they
+  // join "On your roster" from the table's own row and nothing else.
+  const tableRow = RS.allRows.find(row => row.key === pid);
+  for (const lgId of (tableRow?.leagueSet || [])) {
+    const lg = S.leagues.find(l => l.league_id === lgId);
+    if (lg?.source === 'espn') mine.push({ lgName: lg.name, lgId, espn: true });
+  }
+  // A repaint rebuilds every comparison panel closed.
+  PF.expanded = null; PF.expandedOther = null;
   // No sort: PF.allRosterData is built by mapping S.leagues, so each list already
   // reads in Sleeper's own league order (ESPN appended) — the order every other
   // league listing in the app uses. Alphabetizing here made this the odd one out.
@@ -207,12 +192,8 @@ function pfRenderResults() {
 
   const r = document.getElementById('ps-r');
   if (!r) return;
-  r.innerHTML = `<div style="margin-bottom:16px;">
-    <div class="cs-panel" style="padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-      <span class="card-title">${esc(player.full_name)}</span>
-      <span class="card-meta">${esc(player.position||'')} · ${esc(player.team||'FA')}</span>
-      ${pfPpg === null ? '' : `<span class="pf-ppg" title="Season-to-date PPG, full PPR — ${pfPpg.toFixed(1)} over ${pfGp} game${pfGp === 1 ? '' : 's'} played">${pfPpg.toFixed(1)} <em>ppg · ppr</em></span>`}
-    </div>
+  r.innerHTML = `<div>
+    ${pfPpg === null ? '' : `<div style="margin-bottom:8px;"><span class="pf-ppg" title="Season-to-date PPG, full PPR — ${pfPpg.toFixed(1)} over ${pfGp} game${pfGp === 1 ? '' : 's'} played">${pfPpg.toFixed(1)} <em>ppg · ppr</em></span></div>`}
 
     <div class="pf-p2-wrap">
       <div class="sect" style="margin-top:0;margin-bottom:6px;">Filter by player I'm offering</div>
@@ -233,7 +214,9 @@ function pfRenderResults() {
     ${mine.length ? `<div class="sect">On your roster</div><div class="pf-mine">${mine.map(f=>`
       <div class="data-row">
         <a href="/analyzer?league=${encodeURIComponent(f.lgId)}" target="_blank" rel="noopener" class="row-link">${esc(f.lgName)}</a>
-        <span style="display:flex;align-items:center;gap:6px;">${pfOddsSlot(f.lgId, f.rid)}${injuryBadge(player.injury_status)}<span class="badge ${f.starter?'badge-green':'badge-outline'}">${f.starter?'Starting':'Bench'}</span></span>
+        <span style="display:flex;align-items:center;gap:6px;">${f.espn
+          ? '<span class="badge badge-outline">ESPN</span>'
+          : `${pfOddsSlot(f.lgId, f.rid)}${injuryBadge(player.injury_status)}<span class="badge ${f.starter?'badge-green':'badge-outline'}">${f.starter?'Starting':'Bench'}</span>`}</span>
       </div>`).join('')}</div>` : ''}
 
     ${theirs.length ? `<div class="sect">On other rosters</div><div class="pf-trade-list">${theirs.map(f => `

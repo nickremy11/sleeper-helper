@@ -316,6 +316,14 @@ footer a:hover { color: var(--gold); }
 .lsw-cand.hdr { cursor: default; font-family: var(--font-display), serif; font-size: 0.62rem; letter-spacing: 0.12em; color: var(--gold); text-transform: uppercase; }
 .lsw-cand.hdr:hover { background: none; }
 .lsw-mode.on { background: var(--gold); color: var(--brown-dark); }
+.lsw-pick { cursor: pointer; }
+.lsw-pick.on { background: rgba(95,174,95,0.14); }
+/* Ranks grid: my own players are clickable — opens the swap chooser (rgOpenSwap) */
+.rg-cell.rg-click { cursor: pointer; }
+.rg-cell.rg-click:hover { outline: 1px solid var(--gold); outline-offset: -1px; }
+.rg-swap-modal { max-width: 620px; padding: 18px 0 12px; }
+.rg-swap-modal .lu-modal-title, .rg-swap-modal .rg-swap-pad { padding: 0 20px; }
+.rg-swap-modal .lc-opts-list { max-height: 55vh; }
 .diff-arrow { color: var(--brown-light); margin: 0 4px; flex-shrink: 0; }
 .diff-proj { color: var(--brown-light); font-style: italic; font-size: 0.82rem; }
 
@@ -541,7 +549,6 @@ footer a:hover { color: var(--gold); }
 .rs-expand-tag { font-family: var(--font-body), serif; font-size: 0.82rem; color: var(--parchment); background: rgba(var(--tint),0.05); border: 1px solid var(--brown-mid); border-radius: 2px; padding: 2px 8px; white-space: nowrap; }
 a.rs-expand-tag { text-decoration: none; display: inline-block; }
 a.rs-expand-tag:hover { border-color: var(--gold); color: var(--gold-light); }
-.pf-lookup { margin-bottom: 8px; }
 .rs-expand-tag .rs-tag-meta { font-size: 0.75rem; color: var(--brown-light); margin-left: 4px; }
 
 /* ── LEAGUE SUMMARIES TAB ── */
@@ -925,14 +932,14 @@ a.row-link.ls-contender-name { color: var(--cream); font-weight: 700 !important;
 <script src="/app/core.js?v=20261123"></script>
 <script src="/app/trades.js?v=20261117"></script>
 <script src="/app/mass-offers.js?v=20261117"></script>
-<script src="/app/player-finder.js?v=20261122"></script>
+<script src="/app/player-finder.js?v=20261125"></script>
 <script src="/app/waivers.js?v=20261117"></script>
-<script src="/app/lineups.js?v=20261122"></script>
-<script src="/app/ranks-grid.js?v=20261117"></script>
+<script src="/app/lineups.js?v=20261124"></script>
+<script src="/app/ranks-grid.js?v=20261124"></script>
 <script src="/app/roi.js?v=20261117"></script>
-<script src="/app/guide.js?v=20261123"></script>
+<script src="/app/guide.js?v=20261125"></script>
 <script src="/app/drafts.js?v=20261117"></script>
-<script src="/app/rostership.js?v=20261117"></script>
+<script src="/app/rostership.js?v=20261125"></script>
 <script src="/app/league-summaries.js?v=20261122"></script>
 <script src="/app/trade-partners.js?v=20261122"></script>
 <script src="/app/scout.js?v=20261123"></script>

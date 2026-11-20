@@ -299,7 +299,8 @@ function rgDraw() {
   const modePills = RG_MODES.map(([m, label]) =>
     `<button class="ghost-btn rg-pill ${RG.mode === m ? 'on' : ''}" style="font-size:0.64rem;" onclick="rgSetMode('${m}')">${label}</button>`).join('');
 
-  const controls = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
+  const controls = `<div style="font-size:0.64rem;color:var(--brown-light);margin:-6px 0 8px;">Click any of your players to swap him — a starter to choose his replacement, a bench player to choose who he starts over.</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
       <span style="font-size:0.65rem;color:var(--brown-light);">League:</span>${leagueSel}
       <span style="width:1px;height:18px;background:var(--brown-mid);"></span>
       <span style="font-size:0.65rem;color:var(--brown-light);">Highlight:</span>${modePills}
@@ -350,7 +351,10 @@ function rgDraw() {
       // leaves the gap rather than claiming 0.0, exactly as on a lineup card.
       const ppg = pid ? rgPpg(pid) : null;
       const gp  = ppg === null ? 0 : playerSeasonGp(pid);
-      return `<div class="rg-cell${bands[i] ? ' rg-tier-b' : ''}${cls}">
+      // My own players open the swap chooser — starters to replace, bench
+      // players to start. Everyone else's cells stay inert.
+      const mine = pid && rostered.has(pid);
+      return `<div class="rg-cell${bands[i] ? ' rg-tier-b' : ''}${cls}${mine ? ' rg-click' : ''}"${mine ? ` onclick="rgOpenSwap('${pid}')" title="${starters?.has(pid) && RG.mode === 'current' ? 'Starting — click to swap him out' : 'Click to swap him in'}"` : ''}>
         <span class="rg-rank">${r.rank}</span>
         <span class="rg-name">${esc(r.name)}</span>
         ${ppg === null ? '' : `<span class="rg-ppg" title="Season PPG in this league's scoring — ${ppg.toFixed(1)} over ${gp} game${gp === 1 ? '' : 's'} played">${ppg.toFixed(1)}</span>`}
@@ -376,4 +380,102 @@ function rgDraw() {
   }).join('')}</div>`;
 
   setC(`<div>${head}${controls}${rgApplyBarHtml(fix)}${rgUnrankedHtml(fix, RG.mode, inGrid)}${grid}</div>`);
+}
+
+// ── Manual swap from the grid ─────────────────────────────────────────────────
+// Click one of my players: a starter lists everyone who could take his slot
+// (lswCandidates — the lineup card's own slot-options list), a bench player lists
+// every starter he could replace (luBenchOptions, its reverse). Either way the
+// write is lswPlanFor → luPutStarters, the same one-slot write the card's ⇄ Start
+// does, so the grid can never set a lineup the cards wouldn't.
+function rgOpenSwap(pid) {
+  const fix = LU.lineups[RG.leagueIdx];
+  if (!fix) return;
+  pid = String(pid);
+  // The chooser works on the lineup as it is set, so the highlight should show it.
+  if (RG.mode !== 'current') { RG.mode = 'current'; rgDraw(); }
+  document.getElementById('rg-swap-modal')?.remove();
+  const ov = document.createElement('div');
+  ov.id = 'rg-swap-modal';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML = `<div class="lu-modal rg-swap-modal">${rgSwapHtml(fix, pid)}</div>`;
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+  document.body.appendChild(ov);
+}
+
+function rgCloseSwap() { document.getElementById('rg-swap-modal')?.remove(); }
+
+function rgSwapHtml(fix, pid) {
+  const p        = S.players[pid] || {};
+  const slotIdx  = fix.starters.map(String).indexOf(pid);
+  const starting = slotIdx >= 0;
+  const canSwap  = luCanWrite() && !fix._espn;
+  const btn = (j, inPid, label) => canSwap
+    ? `<button class="ghost-btn" style="font-size:0.64rem;padding:2px 6px;" onclick="rgSwapDo(${j},'${inPid}')">${label}</button>` : '';
+  const close = `<button class="ghost-btn" style="font-size:0.64rem;" onclick="rgCloseSwap()">Close</button>`;
+  const title = `<div class="lu-modal-title">${esc(luPlayerName(pid))} <span style="color:var(--brown-light);letter-spacing:0.06em;">· ${esc(fix.leagueName)}</span></div>`;
+  const foot = msg => `<div class="rg-swap-pad" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;font-size:0.64rem;color:var(--brown-light);">
+      <span id="rg-swap-msg">${msg || ''}</span>
+      <span style="flex:1;"></span>
+      ${fix._espn ? '<span>read-only — set it in ESPN</span>' : luCanWrite() ? '' : '<span>preview only — <a href="/myprofile">add a Sleeper token</a> to swap</span>'}
+      ${close}
+    </div>`;
+  const empty = text => `${title}<div class="rg-swap-pad" style="font-size:0.75rem;color:var(--c-amber);">${text}</div>${foot('')}`;
+
+  if (starting) {
+    const slot  = fix.rosterPositions[slotIdx];
+    const cands = lswCandidates(fix, slotIdx);
+    if (!cands.length) return empty(luLocked(pid)
+      ? '🔒 His game has already started — this slot is locked.'
+      : `Nobody on your bench is eligible for his ${esc(slot)} slot.`);
+    const cur = luOptRow(fix, pid, { cls: ' cur', landSlot: slot, tag: `<span style="color:var(--c-green);">▸ </span>` });
+    const list = cands.map(c => {
+      const landSlot = fix.rosterPositions[c.moves[c.moves.length - 1][0]];
+      const via = c.via ? `<span style="display:block;font-size:0.6rem;color:var(--gold-light);">↳ ${esc(luPlayerName(c.via.pid))} moves ${esc(c.via.slot)} → ${esc(slot)}</span>` : '';
+      return luOptRow(fix, c.pid, { landSlot, mixed: c.mixed, via, action: btn(slotIdx, c.pid, '⇄ Start') });
+    }).join('');
+    return `${title}<div class="rg-swap-pad" style="font-size:0.7rem;color:var(--parchment);margin-bottom:8px;">Starting at <b>${esc(slot)}</b> — choose who replaces him.</div>
+      ${luOptHead(esc(slot) + ' — replacements')}${cur}<div class="lc-opts-list">${list}</div>${foot('')}`;
+  }
+
+  if (!(fix.players || []).map(String).includes(pid)) return empty('Not on your roster in this league.');
+  const opts = luBenchOptions(fix, pid);
+  if (!opts.length) return empty(`He can't be started here — ${esc(luBenchWhyNot(fix, pid))}.`);
+  const me = luOptRow(fix, pid, { cls: ' cur', landSlot: luNormPos(p.position), tag: `<span style="color:var(--c-green);">▸ </span>` });
+  const pc = luPtsCtx(fix);
+  const list = opts.map(o => {
+    const landSlot = fix.rosterPositions[o.plan.moves[o.plan.moves.length - 1][0]];
+    const myLbl = lswRankLabel(pid, landSlot, false, pc);
+    const via = o.plan.via
+      ? `<span style="display:block;font-size:0.6rem;color:var(--gold-light);">↳ ${esc(luPlayerName(o.plan.via.pid))} moves ${esc(o.plan.via.slot)} → ${esc(o.slot)}, he takes ${esc(landSlot)}${myLbl ? ' as ' + esc(myLbl) : ''}</span>`
+      : (myLbl && luSlotKind(o.slot) !== 'dedicated' ? `<span style="display:block;font-size:0.6rem;color:var(--gold-light);">he'd be ${esc(myLbl)} here</span>` : '');
+    const tag = `<span class="diff-slot" style="font-size:0.58rem;padding:0 4px;margin-right:4px;">${esc(o.slot)}</span>`;
+    const row = luOptRow(fix, o.out, { landSlot: o.slot, tag, via, action: btn(o.slotIdx, pid, '⇄ Swap') });
+    return o.out === '0' ? row.replace(esc(luPlayerName('0')), '<i style="color:var(--brown-light);">empty slot</i>') : row;
+  }).join('');
+  return `${title}<div class="rg-swap-pad" style="font-size:0.7rem;color:var(--parchment);margin-bottom:8px;">On your bench — choose which starter he replaces.</div>
+    ${luOptHead('Starts over…')}${me}<div class="lc-opts-list">${list}</div>${foot('')}`;
+}
+
+async function rgSwapDo(slotIdx, inPid) {
+  const fix = LU.lineups[RG.leagueIdx];
+  if (!fix || fix._espn || !luCanWrite()) return;
+  const msg = document.getElementById('rg-swap-msg');
+  const say = (c, t) => { if (msg) msg.innerHTML = `<span style="color:${c};">${t}</span>`; };
+  const plan = lswPlanFor(fix, slotIdx, inPid);
+  if (!plan) { say('var(--c-red)', '✗ that swap is no longer possible'); return; }
+  say('var(--brown-light)', 'applying…');
+  const next = fix.starters.map(String);
+  plan.moves.forEach(([k, p]) => { next[k] = String(p); });
+  try {
+    const ok = await luPutStarters(fix, next);
+    rgCloseSwap();
+    RG.mode = 'current';
+    RG.msg = { leagueId: fix.leagueId, color: ok ? 'var(--c-green)' : 'var(--c-amber)',
+               text: ok ? `✓ ${luPlayerName(inPid)} is now starting at ${fix.rosterPositions[plan.moves[plan.moves.length - 1][0]]}`
+                        : '⚠ saved but Sleeper returned a different lineup' };
+    if (S.tab === 'ranksgrid') rgDraw();
+  } catch (e) {
+    say('var(--c-red)', '✗ ' + esc(e.message || 'failed'));
+  }
 }

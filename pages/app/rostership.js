@@ -2,8 +2,9 @@
 
 // ── 7. Rostership ─────────────────────────────────────────────────────────────
 
-// The Players tab: the any-player lookup that used to be Player Finder on top
-// (pf* in player-finder.js), and the cross-league rostership table under it.
+// The Players tab: the cross-league rostership table. Clicking a player's name
+// opens his row: who owns him in every league, with odds and roster comparisons
+// (pf* in player-finder.js — it used to be a separate lookup box above the table).
 async function renderRostership() {
   // First visit: init league selection and load prefs
   if (RS.selectedLeagues === null) {
@@ -128,8 +129,6 @@ function rsDrawFull() {
 
   setC(`<div>
     <div class="section-head"><h2>Players</h2><div class="section-head-line"></div></div>
-    ${pfLookupHtml()}
-    <div class="section-head" style="margin-top:26px;"><h2>Your Rostership</h2><div class="section-head-line"></div></div>
     <div class="rs-lg-panel">
       <div class="rs-lg-header">
         <span class="rs-lg-title">Leagues</span>
@@ -150,7 +149,7 @@ function rsDrawFull() {
     ${RS.loaded ? `
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
       <input type="text" class="search-input" id="rs-search"
-        placeholder="Filter your players, picks, teams…" oninput="rsOnSearch()" value="${esc(RS.search)}" />
+        placeholder="Filter your players, picks, teams — or search any player…" oninput="rsOnSearch()" value="${esc(RS.search)}" />
     </div>` : ''}
 
     ${filterHtml}
@@ -166,7 +165,6 @@ function rsDrawFull() {
   </div>`);
 
   if (RS.loaded) rsUpdateTable();
-  pfRestore();
 }
 
 // ── Load all roster + draft data ──────────────────────────────────────────────
@@ -457,7 +455,27 @@ function rsComputeVisible() {
     }
   });
 
-  return visible;
+  return visible.concat(rsUnownedMatches(q));
+}
+
+// Search reaches players I don't own too, so this table is the one place to look
+// anyone up: up to RS_UNOWNED_MAX name matches, listed after my own rows with no
+// shares. Opening one shows who owns him everywhere, same as any other row.
+const RS_UNOWNED_MAX = 8;
+function rsUnownedMatches(q) {
+  if (!q || q.length < 3) return [];
+  const owned = new Set(RS.allRows.map(r => r.key));
+  const out = [];
+  for (const [pid, p] of Object.entries(S.players)) {
+    if (owned.has(pid) || !p.full_name?.toLowerCase().includes(q)) continue;
+    const pos = crNormPos(p.position);
+    if (!pos || !RS.filtPositions.has(pos)) continue;
+    if (RS.filtTeam && (p.team || 'FA') !== RS.filtTeam) continue;
+    out.push({ key: pid, name: p.full_name, pos, team: p.team || 'FA', exp: p.years_exp ?? null,
+      fcVal: RS.fcMap[pid] ?? null, isPick: false, leagueSet: new Set(), shares: 0, pct: 0, unowned: true,
+      _rank: (p.full_name.toLowerCase().startsWith(q) ? 0 : 1e6) + (p.search_rank ?? 9e5) });
+  }
+  return out.sort((a, b) => a._rank - b._rank).slice(0, RS_UNOWNED_MAX);
 }
 
 // ── Update table only (fast — no full redraw) ─────────────────────────────────
@@ -493,7 +511,7 @@ function rsUpdateTable() {
 
   const maxPct = Math.max(100, ...visible.map(r => r.pct));
 
-  tbody.innerHTML = visible.map(row => {
+  tbody.innerHTML = visible.map((row, i) => {
     const barW     = Math.min((row.pct / maxPct) * 100, 100).toFixed(1);
     const pctStr   = row.pct < 1 ? row.pct.toFixed(1) : row.pct.toFixed(row.pct >= 100 ? 0 : 1);
     const valStr   = row.fcVal != null ? Number(row.fcVal).toLocaleString() : '—';
@@ -503,7 +521,12 @@ function rsUpdateTable() {
 
     // Build expansion row (league list) if this row is expanded
     let expandHtml = '';
-    if (isExpanded) {
+    const hasPanel = !row.isPick && !!S.players[row.key];
+    if (isExpanded && hasPanel) {
+      expandHtml = `<tr class="rs-expand-row">
+        <td colspan="7"><div class="rs-expand-inner"><div id="ps-r"></div></div></td>
+      </tr>`;
+    } else if (isExpanded) {
       const leagueIds = row.isPick
         ? Object.keys(row.leagueCounts)
         : [...row.leagueSet];
@@ -527,19 +550,20 @@ function rsUpdateTable() {
         <td colspan="7"><div class="rs-expand-inner">
           <div class="rs-expand-title">${label}</div>
           <div class="rs-expand-leagues">${tags || '<span style="font-style:italic;color:var(--brown-light);font-size:0.85rem;">None</span>'}</div>
-          ${!row.isPick && S.players[row.key] ? `<button class="ghost-btn" style="margin-top:10px;" onclick="pfLookup(${jsArg(row.key)})">⌕ Who owns him everywhere, with playoff odds ↑</button>` : ''}
         </div></td>
       </tr>`;
     }
 
-    return `<tr style="${isExpanded ? 'background:rgba(201,150,42,0.06);' : ''}">
+    const divider = row.unowned && !visible[i - 1]?.unowned
+      ? `<tr class="rs-expand-row"><td colspan="7"><div class="rs-expand-title" style="padding:12px 14px 4px;">Not on any of your rosters</div></td></tr>` : '';
+    return `${divider}<tr style="${isExpanded ? 'background:rgba(201,150,42,0.06);' : ''}${row.unowned ? 'opacity:0.85;' : ''}">
       <td><button class="rs-name-btn${isExpanded?' rs-expanded':''}" onclick="rsToggleExpand('${safeKey}')">
         ${esc(row.name)}<span class="rs-chevron">▾</span>
       </button></td>
       <td><span class="rs-pos rs-pos-${row.pos}">${row.pos}</span></td>
       <td style="font-family:var(--font-body),serif;font-size:0.88rem;font-weight:600;letter-spacing:0.04em;color:var(--parchment);">${row.team !== '—' ? esc(row.team) : '—'}</td>
       <td style="font-family:var(--font-body),serif;font-size:0.88rem;font-style:italic;color:var(--brown-light);">${expStr}</td>
-      <td style="font-family:var(--font-head),serif;color:var(--cream);">${row.shares}</td>
+      <td style="font-family:var(--font-head),serif;color:var(--cream);">${row.unowned ? '—' : row.shares}</td>
       <td><div class="rs-pct-wrap">
         <div class="rs-pct-bar"><div class="rs-pct-fill" style="width:${barW}%"></div></div>
         <span class="rs-pct-txt">${pctStr}%</span>
@@ -548,12 +572,15 @@ function rsUpdateTable() {
     </tr>${expandHtml}`;
   }).join('');
 
+  if (visible.some(r => r.key === RS.expandedKey && !r.isPick && S.players[r.key])) pfRestore();
+
   if (meta) meta.textContent = `${visible.length} result${visible.length!==1?'s':''} · ${RS.selectedLeagues.size} league${RS.selectedLeagues.size!==1?'s':''} selected`;
 }
 
 // ── Expand / collapse player row ─────────────────────────────────────────────
 function rsToggleExpand(key) {
   RS.expandedKey = RS.expandedKey === key ? null : key;
+  if (RS.expandedKey && S.players[key]) pfOpen(key);
   rsUpdateTable();
 }
 

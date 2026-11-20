@@ -24,7 +24,7 @@ const GUIDE = [
     { name:'Lineups · Ranks grid', tab:'ranksgrid', espn:true,
       desc:"The second view in Lineups: your weekly ranking sheet as position columns, with one league's roster painted on it — green starting, red benched, yellow free agent." },
     { name:'Players',          tab:'rostership', espn:true,
-      desc:'Look up any player to see who owns him in every league, with that team’s playoff odds and a side-by-side roster comparison. Below it, how many of your leagues each of your players is on.' },
+      desc:'How many of your leagues each of your players is on. Click a name to see who owns him in every league, with that team’s playoff odds and a side-by-side roster comparison — search reaches players you don’t own too.' },
     { name:'Waivers',          tab:'waivers',    espn:true,
       desc:'Dynasty: the best free agents left across all your leagues by FantasyCalc value. Redraft: your uploaded ranking sheet as a grid for one league, with your players in green and free agents in yellow. vs My Ranks: any of your My Ranks tier boards as a grid over one league, overall or broken out by position.' },
   ]},
