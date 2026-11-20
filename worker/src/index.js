@@ -61,6 +61,7 @@ import { handleEliteFFL, syncEliteFFL } from './eliteffl.js';
 import { handleProjections } from './projections.js';
 import { handleDevy } from './devy.js';
 import { handleMadden } from './madden.js';
+import { parseRankLines } from './ranks-image.js';
 import { getCors, CORS, cacheFor, jsonBody, kvCachedJson } from './http.js';
 
 const SLEEPER_BASE  = 'https://api.sleeper.app/v1';
@@ -625,22 +626,28 @@ function roiId(v) { const s = String(v ?? ''); return /^[A-Za-z0-9_-]{1,64}$/.te
 // block a header is, which cell is the team vs the opponent, name matching)
 // happens client-side, next to the CSV parser it shares a builder with.
 //
-// Model choice was measured on a real 9-band sheet: Llama 4 Scout and Mistral
-// Small 3.1 both returned every row of every table (~25s a band) with only a
-// couple of misspelled names, which the client's fuzzy match absorbs. Gemma 4
-// was as accurate but ~5x slower. JSON-schema mode was WORSE — both models
-// started dropping the optional pos/opp fields — so the output is free-form
-// JSON with rows as arrays in printed column order.
-const RANKS_IMAGE_MODEL = '@cf/meta/llama-4-scout-17b-16e-instruct';
+// Model: Mistral Small 3.1. Llama 4 Scout was the original pick (both returned
+// every row at ~25s a band in October), but by mid-November Scout on Workers AI
+// slowed to ~8 tokens/s and then hit the 120s limit on every band. Re-measured
+// 2026-11-19 on a real 8-band sheet: Mistral read every row exactly, 11-23s a
+// band, 23s for the whole sheet. Gemma 4 was as accurate but ~5x slower.
+// JSON-schema mode was WORSE (both models dropped the optional pos/opp fields).
+//
+// Output is one plain line per printed row (parseRankLines, ranks-image.js),
+// not JSON — fewer output tokens, which is what a band's time is made of. A
+// model that answers in the old JSON shape anyway is still read.
+const RANKS_IMAGE_MODEL = '@cf/mistralai/mistral-small-3.1-24b-instruct';
 const RANKS_IMAGE_MAX   = 4_000_000;   // data-URL chars — one band is ~400KB
 // AI Gateway this app's model calls log through (account Nick Lab). Created with
 // collect_logs on, cache off, and a gateway-wide 120 req/min sliding rate limit
 // as a cost guard — a full sheet is ~9 requests.
 const RANKS_IMAGE_GATEWAY = 'sleeper-helper';
 const RANKS_IMAGE_PROMPT = `This image is a vertical strip cut from a fantasy football weekly rankings sheet. It holds one or more ranked tables. Each table starts with a header row such as "Rank Quarterback Team Opp Tier", "Rank FLEX Pos Opp", "Rank TEP FLEX Pos Opp", "Rank Defense Opp Tier" or "Rank Kicker Team Opp Tier".
-Transcribe EVERY data row exactly as printed, top to bottom, spelling names exactly as printed. Output ONLY JSON, no prose:
-{"tables":[{"header":"<header row text, or null if this strip starts mid-table>","rows":[[rank, "name", "team or pos", "opp", tier]]}]}
-Each row lists its cells in the order the columns are printed. Use null for a missing cell. Tier is the small number at the right edge (null if the table has no Tier column).`;
+Transcribe EVERY data row exactly as printed, top to bottom, spelling names exactly as printed. Output plain text only, one line per printed row, nothing else:
+- A header row: # followed by the header text, e.g. "# Rank Quarterback Team Opp Tier"
+- A data row: its cells in printed column order, separated by " | ", e.g. "1 | Josh Allen | BUF | MIA | 1"
+Every printed header row gets its own # line, including one at the very top of the strip — check the top of the image for a header before the first data row. Only when the strip starts directly with numbered data rows (a table continued from the previous strip) is there no header line.
+Leave a cell empty if it is blank.`;
 
 // The model sometimes gets every row right and then closes the brackets out of
 // order — `]]}}]` for `]]}]}` — and at temperature 0 a retry repeats it exactly.
@@ -714,7 +721,9 @@ async function handleRanksImage(request, env) {
         { type: 'text', text: RANKS_IMAGE_PROMPT },
         { type: 'image_url', image_url: { url: image } },
       ] }],
-      max_tokens: 8000,
+      // A full 50-row band is ~750 tokens in the line format; this bounds a runaway
+      // repetition without cutting off a real band.
+      max_tokens: 3000,
       // A retry gets a little randomness: at 0 a malformed read repeats exactly.
       temperature: body.retry === true ? 0.3 : 0,
     }, {
@@ -732,6 +741,12 @@ async function handleRanksImage(request, env) {
   if (choice?.finish_reason === 'length') return res({ error: 'The model ran out of room reading this part' }, 502);
   const content = choice?.message?.content ?? out?.response;
   let parsed = content && typeof content === 'object' ? content : null;
+  // The asked-for format: one `#` header / `1|name|…` row per line.
+  if (!parsed && typeof content === 'string') {
+    const tables = parseRankLines(content);
+    if (tables.some(t => t.rows.length)) parsed = { tables };
+  }
+  // A model that answered in the old JSON shape anyway.
   if (!parsed && typeof content === 'string') {
     const a = content.indexOf('{');
     if (a >= 0) {
