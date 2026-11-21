@@ -1975,12 +1975,12 @@ function lswCandRow(t, c, chosen) {
   const ppg = playerSeasonPpg(c.pid, t.fix.scoringSettings || {});
   const gp  = ppg === null ? 0 : playerSeasonGp(c.pid);
   return `<div class="lsw-cand${chosen ? ' chosen' : ''}" onclick="lswChoose('${t.leagueId}','${c.pid}')">
-    <span style="width:14px;flex-shrink:0;color:var(--c-green);">${chosen ? '✓' : ''}</span>
-    <span style="color:var(--parchment);flex:1;">${esc(luPlayerName(c.pid))}${inj ? ' ' + inj : ''}${via}</span>
-    <span style="color:var(--brown-light);font-size:0.65rem;width:52px;flex-shrink:0;">${esc(luNormPos(p.position) || '')}${p.team ? ' ' + esc(p.team) : ''}</span>
-    <span style="color:${lbl ? 'var(--gold-light)' : 'var(--brown-light)'};font-size:0.68rem;width:56px;text-align:right;flex-shrink:0;">${lbl ? esc(lbl) : '—'}</span>
-    <span style="color:var(--parchment);font-size:0.7rem;width:44px;text-align:right;flex-shrink:0;"${ppg === null ? '' : ` title="${ppg.toFixed(1)} over ${gp} game${gp === 1 ? '' : 's'} played"`}>${ppg === null ? '–' : ppg.toFixed(1)}</span>
-    <span style="color:var(--brown-light);font-size:0.7rem;width:44px;text-align:right;flex-shrink:0;">${luHaveProj() ? c.pts.toFixed(1) : '–'}</span>
+    <span style="color:var(--c-green);">${chosen ? '✓' : ''}</span>
+    <span class="lsw-rank${lbl ? '' : ' none'}">${lbl ? esc(lbl) : '—'}</span>
+    <span class="lsw-name">${esc(luPlayerName(c.pid))}${inj ? ' ' + inj : ''}${via}</span>
+    <span class="lsw-pos">${esc(luNormPos(p.position) || '')}${p.team ? ' ' + esc(p.team) : ''}</span>
+    <span class="lsw-num" style="color:var(--parchment);"${ppg === null ? '' : ` title="${ppg.toFixed(1)} over ${gp} game${gp === 1 ? '' : 's'} played"`}>${ppg === null ? '–' : ppg.toFixed(1)}</span>
+    <span class="lsw-num" style="color:var(--brown-light);">${luHaveProj() ? c.pts.toFixed(1) : '–'}</span>
   </div>`;
 }
 
@@ -1996,6 +1996,7 @@ function lswLeagueBlock(t) {
       <span style="font-family:var(--font-head),serif;font-weight:700;font-size:0.9rem;color:var(--cream);">${esc(fix.leagueName)}</span>
       ${fix._espn ? `<span style="font-family:var(--font-display),serif;font-size:0.62rem;letter-spacing:0.1em;color:var(--gold-light);">ESPN</span>` : ''}
       <span class="diff-slot" style="flex:0 0 auto;">${esc(t.slot)}</span>
+      ${!applied && !pick && cands.length ? `<span style="font-size:0.65rem;color:var(--parchment);">${cands.length} on the bench — pick one</span>` : ''}
       ${state === 'ok'   ? `<span style="font-size:0.65rem;color:var(--c-green);">✓ applied</span>` : ''}
       ${state === 'fail' ? `<span style="font-size:0.65rem;color:var(--c-red);">✗ failed</span>` : ''}
       <span style="margin-left:auto;display:flex;gap:8px;align-items:center;">
@@ -2044,7 +2045,7 @@ function lswLeagueBlock(t) {
          </span>
          <span style="color:var(--brown-light);font-size:0.8rem;white-space:nowrap;flex-shrink:0;">${luHaveProj() ? luPlayerPts(fix.starters[k], pc).toFixed(1) : '–'} <span style="color:var(--c-green);">→ ${luHaveProj() ? luPlayerPts(into, pc).toFixed(1) : '–'}</span></span>
        </div>`).join('')
-    : `<div style="padding:6px 12px;font-size:0.68rem;color:var(--brown-light);">${cands.length} eligible bench player${cands.length === 1 ? '' : 's'} — pick a replacement.</div>`;
+    : '';
 
   // Manual mode opens every league's chooser; the bulk modes keep them closed but
   // one click away, since a bulk pick you disagree with in one league is the
@@ -2053,12 +2054,12 @@ function lswLeagueBlock(t) {
   const list = listOpen
     ? `<div class="lsw-cands">
          <div class="lsw-cand hdr">
-           <span style="width:14px;flex-shrink:0;"></span>
-           <span style="flex:1;">Replacement</span>
-           <span style="width:52px;flex-shrink:0;">Pos</span>
-           <span style="width:56px;text-align:right;flex-shrink:0;">Rank</span>
-           <span style="width:44px;text-align:right;flex-shrink:0;" title="Season-to-date PPG in this league's scoring">PPG</span>
-           <span style="width:44px;text-align:right;flex-shrink:0;">Proj</span>
+           <span></span>
+           <span class="lsw-rank-h">Rank</span>
+           <span>Replacement</span>
+           <span>Pos</span>
+           <span class="lsw-num" title="Season-to-date PPG in this league's scoring">PPG</span>
+           <span class="lsw-num">Proj</span>
          </div>
          ${cands.map(c => lswCandRow(t, c, String(pick) === c.pid)).join('')}
        </div>`
@@ -2127,7 +2128,7 @@ function lswStarterSectionHtml(rows) {
       ${!canWrite ? `<span style="font-size:0.6rem;color:var(--brown-light);">add a Sleeper token to write lineups</span>` : ''}
     </div>
     ${LSW.msg ? `<div style="padding:0 12px 8px;font-size:0.68rem;color:${LSW.msgColor};">${esc(LSW.msg)}</div>` : ''}
-    <div>${rows.map(lswLeagueBlock).join('')}</div>`;
+    <div class="lsw-leagues">${rows.map(lswLeagueBlock).join('')}</div>`;
 }
 
 // ── bench half: leagues where he's NOT starting, and who he'd start over ──

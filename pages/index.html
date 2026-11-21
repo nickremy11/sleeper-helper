@@ -289,7 +289,7 @@ footer a:hover { color: var(--gold); }
 .lc-opt-name { color: var(--parchment); flex: 1; min-width: 0; }
 .lc-opt-pos { color: var(--brown-light); font-size: 0.65rem; width: 54px; flex-shrink: 0; }
 .lc-opt-num { font-size: 0.72rem; width: 46px; text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums; }
-.lc-opt-rank { color: var(--gold-light); font-size: 0.7rem; width: 56px; text-align: right; flex-shrink: 0; }
+.lc-opt-rank { color: var(--gold-light); font-weight: 700; font-size: 0.76rem; width: 56px; text-align: right; flex-shrink: 0; }
 .lc-opt-act { width: 62px; text-align: right; flex-shrink: 0; }
 /* Injury swap — search suggestions, per-league blocks, candidate chooser */
 .lsw-sug { display: flex; align-items: center; gap: 8px; padding: 6px 10px; cursor: pointer; font-family: var(--font-body), serif; font-size: 0.85rem; border-bottom: 1px dashed rgba(var(--tint),0.07); }
@@ -309,12 +309,24 @@ footer a:hover { color: var(--gold); }
 .lsw-panel { border: 1px solid var(--gold); border-radius: 2px; background: var(--brown-dark); overflow: hidden; }
 .lsw-league { border-top: 1px solid var(--brown-mid); }
 .lsw-league:first-child { border-top: none; }
-.lsw-cands { max-height: 300px; overflow-y: auto; border-top: 1px dashed rgba(var(--tint),0.1); }
-.lsw-cand { display: flex; align-items: center; gap: 8px; padding: 5px 12px; cursor: pointer; font-family: var(--font-body), serif; font-size: 0.85rem; border-bottom: 1px dashed rgba(var(--tint),0.06); }
+/* Starter half: leagues tile side by side once there's room, so a wide screen
+   shows two choosers at once instead of one row stretched across 1200px. */
+.lsw-leagues { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); gap: 10px; padding: 0 12px 12px; align-items: start; }
+.lsw-leagues > .lsw-league { border: 1px solid var(--brown-mid); border-radius: 6px; overflow: hidden; }
+.lsw-cands { max-height: 360px; overflow-y: auto; border-top: 1px dashed rgba(var(--tint),0.1); }
+.lsw-cand { display: grid; grid-template-columns: 12px 64px minmax(0,1fr) 56px 38px 38px; column-gap: 8px; align-items: center; padding: 4px 10px; cursor: pointer; font-family: var(--font-body), serif; font-size: 0.85rem; border-bottom: 1px dashed rgba(var(--tint),0.06); }
+.lsw-name { color: var(--parchment); min-width: 0; overflow-wrap: anywhere; }
+.lsw-pos { color: var(--brown-light); font-size: 0.65rem; white-space: nowrap; }
+.lsw-num { font-size: 0.72rem; text-align: right; font-variant-numeric: tabular-nums; }
+/* The rank leads the row as a filled chip — it's what the list is sorted by. */
+.lsw-rank { justify-self: start; font-weight: 700; font-size: 0.74rem; color: var(--gold-light); background: rgba(var(--tint),0.08); border: 1px solid rgba(var(--tint),0.14); border-radius: 4px; padding: 1px 6px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lsw-rank.none { font-weight: 400; color: var(--brown-light); background: none; border-color: transparent; }
+.lsw-rank-h { padding-left: 7px; }
 .lsw-cand:hover { background: rgba(212,175,55,0.1); }
 .lsw-cand.chosen { background: rgba(95,174,95,0.12); }
 .lsw-cand.hdr { cursor: default; font-family: var(--font-display), serif; font-size: 0.62rem; letter-spacing: 0.12em; color: var(--gold); text-transform: uppercase; }
 .lsw-cand.hdr:hover { background: none; }
+.lsw-cand.hdr > span { font-size: inherit; color: var(--gold); }
 .lsw-mode.on { background: var(--gold); color: var(--brown-dark); }
 .lsw-pick { cursor: pointer; }
 .lsw-pick.on { background: rgba(95,174,95,0.14); }
