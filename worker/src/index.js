@@ -641,10 +641,14 @@ function roiId(v) { const s = String(v ?? ''); return /^[A-Za-z0-9_-]{1,64}$/.te
 // model that answers in the old JSON shape anyway is still read.
 const RANKS_IMAGE_MODEL = '@cf/mistralai/mistral-small-3.1-24b-instruct';
 const RANKS_IMAGE_MAX   = 4_000_000;   // data-URL chars — one band is ~400KB
-// AI Gateway this app's model calls log through (account Nick Lab). Created with
-// collect_logs on, cache off, and a gateway-wide 120 req/min sliding rate limit
-// as a cost guard — a full sheet is ~9 requests.
-const RANKS_IMAGE_GATEWAY = 'sleeper-helper';
+// AI Gateway the screenshot reads log through (account Nick Lab). Its OWN gateway,
+// not Ask Madden's `sleeper-helper`, because that one runs guardrails (Llama Guard)
+// on every request — and a guardrail reads a band's image as ~73k tokens of text,
+// ~$0.035 a scan against ~$0.0006 for the read itself (~$1.30 a sheet, Nov 2026).
+// Same settings otherwise: logs on, 60 req/min sliding rate limit (a full sheet is
+// ~9 requests), and authentication on — bindings are pre-authenticated, and new
+// gateways can't be created without it. Never add guardrails here.
+const RANKS_IMAGE_GATEWAY = 'sleeper-helper-ranks';
 const RANKS_IMAGE_PROMPT = `This image is a vertical strip cut from a fantasy football weekly rankings sheet. It holds one or more ranked tables. Each table starts with a header row such as "Rank Quarterback Team Opp Tier", "Rank FLEX Pos Opp", "Rank TEP FLEX Pos Opp", "Rank Defense Opp Tier" or "Rank Kicker Team Opp Tier".
 Transcribe EVERY data row exactly as printed, top to bottom, spelling names exactly as printed. Output plain text only, one line per printed row, nothing else:
 - A header row: # followed by the header text, e.g. "# Rank Quarterback Team Opp Tier"
