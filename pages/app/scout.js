@@ -201,7 +201,7 @@ async function scoutLoadRankSets() {
       if (!dataRes.ok || !setsRes.ok) throw new Error(dataRes.status === 401 ? 'Sign in to use My Ranks' : 'Could not load My Ranks');
       const [data, sets] = await Promise.all([dataRes.json(), setsRes.json()]);
       const opts = [];
-      if (data.rankings?.length) opts.push({ id: 'primary', label: 'My Rankings' });
+      if (data.rankings?.length) opts.push({ id: 'primary', label: data.name || 'My Rankings' });
       for (const st of (sets.sets || [])) opts.push({ id: 'set:' + st.id, label: st.name });
       for (const st of (sets.sharedSets || [])) opts.push({
         id: String(st.id),

@@ -1,5 +1,5 @@
 /**
- * Sleeper Helper — Cloudflare Worker
+ * League Assist — Cloudflare Worker
  *
  * Routes:
  *   POST /api/auth/register       → create account (sends OTP, no session until verified)
@@ -526,7 +526,7 @@ function espnGameRows(events) {
 async function handleRootformePrefs(request, env) {
   const user = await getAuthUser(request, env);
   if (!user) {
-    return new Response(JSON.stringify({ error: 'Not authenticated' }), { status: 401, headers: CORS });
+    return new Response(JSON.stringify({ error: 'Not authenticated' }), { status: 401, headers: getCors(request) });
   }
 
   if (request.method === 'GET') {
@@ -538,7 +538,10 @@ async function handleRootformePrefs(request, env) {
     for (const row of (rows.results || [])) {
       prefs[row.league_id] = { value: row.value, contender: row.contender === 1 };
     }
-    return jsonBody(JSON.stringify({ prefs }));
+    // Per-request CORS: Getting Started on ffhistorian.com reads this with the session cookie
+    return new Response(JSON.stringify({ prefs }), {
+      headers: { ...getCors(request), 'Content-Type': 'application/json;charset=UTF-8' },
+    });
   }
 
   if (request.method === 'POST') {

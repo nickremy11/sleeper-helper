@@ -5,6 +5,8 @@ const ALLOWED_ORIGINS = new Set([
   'https://helper.ffhistorian.com',
   'https://projections.ffhistorian.com',
   'https://myranks.ffhistorian.com',
+  'https://recordbook.ffhistorian.com',
+  'https://playoff.ffhistorian.com',
 ]);
 
 export function getCors(request) {

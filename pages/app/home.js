@@ -256,7 +256,7 @@ const HOME_TILES = [
 function homeWelcomeHtml() {
   return `<div class="home-welcome">
     <img src="/assets/ffhistorianlogo.png" alt="FF Historian" class="home-logo" />
-    <h2 class="home-title">Welcome to the <span>FF Historian</span></h2>
+    <h2 class="home-title">Welcome to <span>League Assist</span></h2>
     <div class="home-rule"></div>
     <p class="home-lede">Explore all the tools to help you manage your leagues</p>
     <div class="home-tiles">${HOME_TILES.map(([tab, name, desc]) =>
@@ -268,6 +268,7 @@ function homeWelcomeHtml() {
         ? 'Add your Sleeper username in <a href="/myprofile">your profile</a> to load your leagues and get started.'
         : 'Enter your Sleeper username above to load your leagues and get started.'}
       Play in ESPN leagues too? <a href="/espn-setup">Here’s how to connect them.</a>
+      New to FF Historian? <a href="https://ffhistorian.com/getting-started/">Getting Started</a> walks through every step and what it unlocks.
     </p>
   </div>`;
 }

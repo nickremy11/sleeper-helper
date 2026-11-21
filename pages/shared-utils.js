@@ -773,7 +773,7 @@ async function mrbFetchSources() {
   const [data, sets] = await Promise.all([dataRes.json(), setsRes.json()]);
 
   const out = [];
-  if (data.rankings?.length) out.push({ id: 'primary', label: 'My Rankings', rankings: data.rankings });
+  if (data.rankings?.length) out.push({ id: 'primary', label: data.name || 'My Rankings', rankings: data.rankings });
   for (const s of (sets.sets || [])) out.push({ id: 'set:' + s.id, label: s.name });
   for (const s of (sets.sharedSets || [])) {
     out.push({

@@ -119,14 +119,14 @@ export async function encryptLegacyEspnRows(env) {
 // onboarded for Email Sending, so any @ffhistorian.com sender works.
 
 async function sendMail(env, { to, subject, html, text }) {
-  await env.EMAIL.send({ to, from: { email: 'noreply@ffhistorian.com', name: 'Sleeper Helper' }, subject, html, text });
+  await env.EMAIL.send({ to, from: { email: 'noreply@ffhistorian.com', name: 'League Assist' }, subject, html, text });
 }
 
 async function notifyAdmin(env, subject, text) {
   if (!env.ADMIN_EMAIL) { console.warn('notifyAdmin skipped: ADMIN_EMAIL secret not set'); return; }
   try {
     await env.EMAIL.send({
-      to: env.ADMIN_EMAIL, from: { email: 'alerts@ffhistorian.com', name: 'Sleeper Helper' },
+      to: env.ADMIN_EMAIL, from: { email: 'alerts@ffhistorian.com', name: 'League Assist' },
       subject, text, html: `<p>${text}</p>`,
     });
   } catch (e) {
@@ -212,6 +212,7 @@ async function deleteUserAccount(userId, env) {
     env.DB.prepare('DELETE FROM roi_leagues WHERE user_id = ?').bind(userId),
     env.DB.prepare('DELETE FROM user_rankings WHERE user_id = ?').bind(userId),
     env.DB.prepare('DELETE FROM user_tier_picks WHERE user_id = ?').bind(userId),
+    env.DB.prepare('DELETE FROM user_rankings_meta WHERE user_id = ?').bind(userId),
     env.DB.prepare('DELETE FROM named_ranking_players WHERE set_id IN (SELECT id FROM named_ranking_sets WHERE owner_user_id = ?)').bind(userId),
     env.DB.prepare('DELETE FROM named_ranking_set_shares WHERE set_id IN (SELECT id FROM named_ranking_sets WHERE owner_user_id = ?) OR shared_with_user_id = ?').bind(userId, userId),
     env.DB.prepare('DELETE FROM named_ranking_sets WHERE owner_user_id = ?').bind(userId),

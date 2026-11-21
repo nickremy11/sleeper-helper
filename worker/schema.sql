@@ -161,6 +161,13 @@ CREATE TABLE IF NOT EXISTS user_rankings_shares (
 
 CREATE INDEX IF NOT EXISTS idx_ur_shares_viewer ON user_rankings_shares(shared_with_user_id);
 
+-- The primary tier board's own name (My Ranks → ✎ Rename). No row = "My Rankings".
+CREATE TABLE IF NOT EXISTS user_rankings_meta (
+  user_id    TEXT PRIMARY KEY,
+  name       TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
 -- ── ESPN Settings ─────────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS espn_settings (

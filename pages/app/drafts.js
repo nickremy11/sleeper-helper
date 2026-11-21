@@ -1212,7 +1212,7 @@ async function populateMyRanksPicker() {
     T.myRanksSets = { primary: data.rankings || [], sets: setsData.sets || [], sharedSets: setsData.sharedSets || [] };
 
     const options = [];
-    if (data.rankings?.length) options.push({ id: 'primary', label: 'My Rankings' });
+    if (data.rankings?.length) options.push({ id: 'primary', label: data.name || 'My Rankings' });
     for (const s of (setsData.sets || [])) options.push({ id: 'set:' + s.id, label: s.name });
     for (const s of (setsData.sharedSets || [])) {
       const label = s.is_primary

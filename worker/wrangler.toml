@@ -1,4 +1,4 @@
-# Sleeper Helper — Worker config
+# League Assist — Worker config
 # Docs: https://developers.cloudflare.com/workers/wrangler/configuration/
 
 name               = "sleeper-helper-worker"
