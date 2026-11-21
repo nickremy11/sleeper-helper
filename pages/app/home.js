@@ -21,7 +21,7 @@ function mnmName(pid) {
 const DASH = { games: {}, sb: null };
 
 function renderHome() {
-  if (!S.userId) { setC(homeWelcomeHtml()); return; }
+  if (!S.userId) { setC(S.booting ? loading('Loading') : homeWelcomeHtml()); return; }
   const st = S.nflState || {};
   const regular = st.season_type === 'regular';
   const week = regular ? luWeekFor(st) : null;

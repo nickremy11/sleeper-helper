@@ -96,4 +96,8 @@ async function saveTokenToAccount() {
   // onLogin only fires when signing in via the modal — handle the
   // already-signed-in case (existing session cookie) here.
   if (initUser) _applyAuth(initUser);
+  else { updateTokenRow(null); updateSetupCard(null); }
+  // No Sleeper username to load means start-up is done here; otherwise
+  // loadUser() ends it once the leagues are in.
+  if (!initUser?.sleeper_username) { S.booting = false; render(S.tab); }
 })();

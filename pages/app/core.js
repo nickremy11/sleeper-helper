@@ -6,7 +6,10 @@ const SLEEPER_API    = IS_LOCAL ? 'https://api.sleeper.app/v1' : '/api/sleeper';
 const PLAYERS_URL = IS_LOCAL ? 'https://api.sleeper.app/v1/players/nfl' : '/api/players';
 const GQL_URL     = IS_LOCAL ? null : '/api/graphql';
 
-const S = { userId: null, leagues: [], leagueDetails: {}, players: {}, nflState: null, token: null, tab: 'home', auth: null, espnSettings: null, _playersByName: {} };
+// booting: true until start-up knows who this is (signed in or not, leagues loaded
+// or not). While it's true nothing paints a signed-out screen — that's what made
+// the welcome page flash before a signed-in user's dashboard.
+const S = { booting: true, userId: null, leagues: [], leagueDetails: {}, players: {}, nflState: null, token: null, tab: 'home', auth: null, espnSettings: null, _playersByName: {} };
 const TP = { user1Id: null, user2Id: null, user1Leagues: [], user2Leagues: [], allLeagues: [], commonLeagues: [], u1Label: '', u2Label: '' };
 
 // ── Rostership state ──────────────────────────────────────────────────────────
@@ -265,6 +268,8 @@ async function loadUser() {
     st.className = 'setup-status err';
   }
   btn.disabled = false; btn.textContent = 'Load';
+  // Start-up is over either way; a failed load still needs its signed-out screen.
+  if (S.booting) { S.booting = false; if (!S.userId) render(S.tab); }
 }
 
 async function loadEspnLeagues(season) {
@@ -420,7 +425,7 @@ function render(tab) {
   if (!S.userId && !TABS_WITHOUT_USER.has(tab)) {
     // A signed-in user's leagues load on their own — say so rather than asking
     // for a username they already gave us.
-    setC(S.auth?.sleeper_username
+    setC(S.booting || S.auth?.sleeper_username
       ? loading('Loading your leagues')
       : '<div class="empty-state"><p>Enter your Sleeper username above to get started</p></div>');
     return;
