@@ -168,6 +168,7 @@
     .ta-asset-name { font-family: var(--font-body), serif; font-size: 0.88rem; color: var(--parchment); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .ta-asset-via  { font-style: italic; font-size: 0.72rem; color: var(--brown-light); }
     .ta-asset-val  { font-family: var(--font-body), serif; font-size: 0.78rem; color: var(--brown-light); white-space: nowrap; flex-shrink: 0; }
+    .ta-ppg-unit { font-size: 0.66rem; opacity: 0.75; }
     .ta-asset-row.ta-ranked .ta-asset-name { flex: 0 1 auto; }
     .ta-gap { flex: 1 1 auto; min-width: 8px; }
     .ta-asset-row { --mrb-size: 0.78rem; }   /* ranks read at .ta-asset-val's size */
@@ -739,7 +740,8 @@
         if (pid) sleeperPids.push(pid);
         const val       = pid ? (fcMap[pid] ?? 0) : 0;   // TE premium is already in fcMap
         const isStarter = entry.lineupSlotId !== 20 && entry.lineupSlotId !== 21; // 20=Bench, 21=IR
-        playerList.push({ pid: pid || pl.fullName, name: sleeperP?.full_name || pl.fullName || '', pos, val, yearsExp: sleeperP?.years_exp ?? 0, isStarter });
+        playerList.push({ pid: pid || pl.fullName, name: sleeperP?.full_name || pl.fullName || '', pos, val, yearsExp: sleeperP?.years_exp ?? 0, isStarter,
+                          espnPpg: taEspnSeasonAvg(pl, nflSeason) });
       }
       playerList.sort((a, b) => {
         const ORDER = ['QB','RB','WR','TE','DL','LB','DB'];
@@ -973,6 +975,37 @@
   // `_analysis`, so redrawing under a finished analysis does not discard it.
   // Does nothing before init has painted once: the badge fetch is started early
   // and could otherwise land first and render a view init is about to replace.
+  // ── Season-to-date PPG ──────────────────────────────────────────────────────
+  // Shown in place of the FantasyCalc value on IDP rows (FC prices them at 0)
+  // and on every row of a redraft / best-ball league. Display only — the trade
+  // balance, ranks and sim still read FC. Same definition as index.html's
+  // playerSeasonPpg and analyzer.html's azPpg: computeProjPts over Sleeper's
+  // season line in the league's scoring, ÷ games played; ESPN leagues prefer
+  // ESPN's own appliedAverage (crParseEspnScoring maps offence only).
+  let _seasonStats = null;
+  async function taLoadStats() {
+    if (_seasonStats) return;
+    try {
+      const r = await fetch(`${API}/sleeper/stats/nfl/regular/${_rawData.season}`);
+      _seasonStats = r.ok ? (await r.json() || {}) : {};
+    } catch { _seasonStats = {}; }
+    taRedraw();
+  }
+  function taEspnSeasonAvg(pl, season) {
+    const st = (pl?.stats || []).find(x => x.statSourceId === 0 && Number(x.scoringPeriodId) === 0
+      && Number(x.statSplitTypeId) === 0 && (x.seasonId == null || Number(x.seasonId) === Number(season)));
+    return st && typeof st.appliedAverage === 'number' && st.appliedAverage !== 0 ? st.appliedAverage : null;
+  }
+  function taPpg(pl) {
+    if (typeof pl.espnPpg === 'number') return { ppg: pl.espnPpg, gp: null };
+    const line = _seasonStats?.[pl.pid];
+    const ss   = _rawData?.scoringSettings;
+    if (!line || !(line.gp > 0) || !ss || !Object.keys(ss).length) return null;
+    return { ppg: computeProjPts(line, ss) / line.gp, gp: line.gp };
+  }
+  const TA_IDP = new Set(['DL','LB','DB']);
+  const taShowsPpg = pos => _rawData?.category !== 'dynasty' || TA_IDP.has(pos);
+
   function taRedraw() {
     if (!_painted) return;
     if (_teamIds.length >= 2) renderTradeBuilder();
@@ -1192,7 +1225,13 @@
     if (byPos.DEVY && typeof devyCompare === 'function') byPos.DEVY.sort((a, b) => devyCompare({ ...a.devy, name: a.name }, { ...b.devy, name: b.name }));
 
     const playerSections = POS_ORDER.filter(p => byPos[p]?.length).map(pos => {
-      const rows = byPos[pos].map(pl => {
+      // PPG rows sort by the number they show; FC rows keep the loader's order.
+      const ppgRows = pos !== 'DEVY' && taShowsPpg(pos);
+      const ppgOf = new Map(ppgRows ? byPos[pos].map(pl => [pl, taPpg(pl)]) : []);
+      const list = ppgRows
+        ? [...byPos[pos]].sort((a, b) => (ppgOf.get(b)?.ppg ?? -1e9) - (ppgOf.get(a)?.ppg ?? -1e9) || b.val - a.val)
+        : byPos[pos];
+      const rows = list.map(pl => {
         const key = playerKey(pl); const sel = routes.has(key);
         if (pos === 'DEVY') {
           // Devy name + "QB · Texas"; the NFL placeholder Sleeper will actually trade sits on the right.
@@ -1213,7 +1252,16 @@
           <div class="ta-check"></div>
           <span class="ta-asset-name">${esc(pl.name)}</span>
           ${badge ? badge + '<span class="ta-gap"></span>' : ''}
-          <span class="ta-asset-val">${pl.val > 0 ? Number(Math.round(pl.val)).toLocaleString() : '—'}</span>
+          ${(() => {
+            const fcStr = pl.val > 0 ? Number(Math.round(pl.val)).toLocaleString() : '—';
+            if (!ppgRows) return `<span class="ta-asset-val">${fcStr}</span>`;
+            const r = ppgOf.get(pl);
+            const txt = r ? `${r.ppg.toFixed(1)}<span class="ta-ppg-unit"> ppg</span>` : (_seasonStats || typeof pl.espnPpg === 'number' ? '—' : '…');
+            const title = (r ? `${r.ppg.toFixed(1)} PPG this season in this league's scoring${r.gp ? ` · ${r.gp} game${r.gp === 1 ? '' : 's'}` : ''}`
+                             : (_seasonStats ? 'No games played this season' : 'Loading season stats…'))
+                        + (pl.val > 0 ? ` · FantasyCalc ${fcStr}` : '');
+            return `<span class="ta-asset-val" title="${esc(title)}">${txt}</span>`;
+          })()}
         </div>${sel ? destPickerHtml(key) : ''}`;
       }).join('');
       return `<div class="ta-asset-section">
@@ -1779,6 +1827,7 @@
       // Badges are non-blocking and land on a redraw. Kicked off HERE, ahead of
       // every branch below — the preset-trade path renders and returns early.
       taLoadMyRanks();
+      taLoadStats();   // season PPG for IDP / redraft rows, also on a redraw
 
       // Auto-detect user's team as Team A
       const user = SharedAuth.getUser?.();

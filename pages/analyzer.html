@@ -153,6 +153,7 @@
     .pf-player-row.pf-ranked .pf-player-name { flex: 0 1 auto; }
     .pf-gap { flex: 1 1 auto; min-width: 8px; }
     .pf-player-row { --mrb-size: 0.8rem; }   /* ranks read at .pf-player-val's size */
+    .pf-ppg-unit    { font-size: 0.66rem; opacity: 0.75; }
     .pf-player-via  { font-size: 0.7rem; color: var(--brown-light); font-style: italic; }
 
     .az-badge { font-size: 0.65rem; padding: 6px 14px; border: 1.5px solid; display: inline-block; }
@@ -408,6 +409,12 @@
   // for redraft leagues regardless of best-ball status.
   let isDynasty = false;
   let isBB      = false;
+  // Season-to-date PPG in THIS league's scoring — shown in place of the
+  // FantasyCalc value on IDP rows (FC prices them all at 0) and on every row of
+  // a redraft league. Display only: totals, ranks and the sim stay on FC.
+  let azScoring = null;   // the league's scoring map (Sleeper scoring_settings / crParseEspnScoring)
+  let azStats   = null;   // Sleeper season stat lines, {pid: line} — loaded after first paint
+  const AZ_IDP  = new Set(['DL','LB','DB']);
   // Devy league (worker/src/devy.js allowlist): every K/IDP is a college-player
   // placeholder, shown under its devy name with no value. Null otherwise.
   let devySheetUrl = null;
@@ -891,6 +898,7 @@
       : isPointsOnly ? POINTS_ONLY_REGULAR_SEASON_WEEKS
       : Math.max(1, playoffWeekStart - 1);
     const scoringSettings    = leagueRes?.scoring_settings || {};
+    azScoring                = scoringSettings;
     // Median ("league average match") leagues play two games a week — the sim
     // has to award both, or this page's odds drift from the League Summaries tab.
     const isMedian           = leagueRes?.settings?.league_average_match === 1;
@@ -1097,6 +1105,7 @@
     const espnTeSlots = teSlotCount(espnRosterPositionsFromSlotCounts(espnRes?.settings?.rosterSettings?.lineupSlotCounts));
     const fcMap     = fcApplyTeMult(buildFcMap(fcRes, { redraft: true }), players, fcTeMult(espnBonusRecTe, espnTeSlots));
     const lgName    = espnRes?.settings?.name || `ESPN ${espnNumId}`;
+    azScoring       = espnScoring;
     isDynasty       = false; // ESPN leagues have no dynasty concept in this app
     isBB            = false;
     isBigPool       = false;
@@ -1134,7 +1143,8 @@
         const bucket = ['DL','LB','DB'].includes(pos) ? 'DL' : pos;
         if (bucket in posValues) posValues[bucket] += val;
         const isStarter = entry.lineupSlotId !== 20 && entry.lineupSlotId !== 21;
-        playerList.push({ pid: pid || pl.fullName, name: sleeperP?.full_name || pl.fullName || '', pos, val, isStarter });
+        playerList.push({ pid: pid || pl.fullName, name: sleeperP?.full_name || pl.fullName || '', pos, val, isStarter,
+                          espnPpg: azEspnSeasonAvg(pl, nflSeason) });
       }
       playerList.sort((a, b) => {
         const ORDER = ['QB','RB','WR','TE','DL','LB','DB'];
@@ -1336,7 +1346,42 @@
     window._azRanks = computeRanks(teams);
     renderAll();
     azLoadMyRanks();   // non-blocking — badges appear on the redraw
+    azLoadStats(season);   // non-blocking — PPG appears on the redraw
   }
+
+  // ── Season-to-date PPG ────────────────────────────────────────────────────────
+  // Same definition as index.html's playerSeasonPpg: the generic scorer
+  // (computeProjPts) over Sleeper's season line in the league's own scoring,
+  // divided by games PLAYED. ESPN leagues prefer ESPN's own appliedAverage,
+  // which is already in league scoring and covers what crParseEspnScoring
+  // doesn't (it maps offence only, so an ESPN IDP would otherwise read 0.0).
+  async function azLoadStats(season) {
+    if (azStats) return;
+    try {
+      const r = await fetch(`${API}/sleeper/stats/nfl/regular/${season}`);
+      azStats = r.ok ? (await r.json() || {}) : {};
+    } catch { azStats = {}; }
+    if (window._azTeams) azRedraw();
+  }
+
+  // The season ACTUAL line on an ESPN player: statSourceId 0, scoringPeriodId 0,
+  // statSplitTypeId 0, this season. appliedAverage is per game, league scoring.
+  function azEspnSeasonAvg(pl, season) {
+    const st = (pl?.stats || []).find(x => x.statSourceId === 0 && Number(x.scoringPeriodId) === 0
+      && Number(x.statSplitTypeId) === 0 && (x.seasonId == null || Number(x.seasonId) === Number(season)));
+    return st && typeof st.appliedAverage === 'number' && st.appliedAverage !== 0 ? st.appliedAverage : null;
+  }
+
+  // {ppg, gp} or null when he hasn't played / there's no line / no scoring.
+  function azPpg(p) {
+    if (typeof p.espnPpg === 'number') return { ppg: p.espnPpg, gp: null };
+    const line = azStats?.[p.pid];
+    if (!line || !(line.gp > 0) || !azScoring || !Object.keys(azScoring).length) return null;
+    return { ppg: computeProjPts(line, azScoring) / line.gp, gp: line.gp };
+  }
+
+  // Which rows show PPG instead of the FC value.
+  const azShowsPpg = pos => !isDynasty || AZ_IDP.has(pos);
 
   // ── My Ranks badges ───────────────────────────────────────────────────────────
   // "RB12 · #27" beside each player, off one of your My Ranks sets. Purely an
@@ -1597,8 +1642,22 @@
         const rk  = (ranks[posRankKey[pos]] || {})[team.rosterId];
         const rkBg = rk ? rankColor(rk, teams.length) : 'transparent';
         const rkBadge = rk ? `<span class="az-pos-rank-badge" style="background:${rkBg};">${rk}</span>` : '';
-        const rows = posPlayers.map(p => {
-          const valStr = p.val > 0 ? Number(p.val).toLocaleString() : '—';
+        // PPG rows sort by the number they show; FC rows keep the loader's order.
+        const ppgRows = azShowsPpg(pos);
+        const ppgOf = new Map(ppgRows ? posPlayers.map(p => [p, azPpg(p)]) : []);
+        const ordered = ppgRows
+          ? [...posPlayers].sort((a, b) => (ppgOf.get(b)?.ppg ?? -1e9) - (ppgOf.get(a)?.ppg ?? -1e9) || b.val - a.val)
+          : posPlayers;
+        const rows = ordered.map(p => {
+          let valStr = p.val > 0 ? Number(p.val).toLocaleString() : '—';
+          let valTitle = '';
+          if (ppgRows) {
+            const r = ppgOf.get(p);
+            valStr = r ? `${r.ppg.toFixed(1)}<span class="pf-ppg-unit"> ppg</span>` : (azStats || typeof p.espnPpg === 'number' ? '—' : '…');
+            valTitle = (r ? `${r.ppg.toFixed(1)} PPG this season in this league's scoring${r.gp ? ` · ${r.gp} game${r.gp === 1 ? '' : 's'}` : ''}`
+                          : (azStats ? 'No games played this season' : 'Loading season stats…'))
+                     + (p.val > 0 ? ` · FantasyCalc ${Number(p.val).toLocaleString()}` : '');
+          }
           // The rank reads against the NAME, not against the value column — so
           // when there is one the name stops stretching and a spacer pushes the
           // value right instead (same idiom as the lineup rows in index.html).
@@ -1610,7 +1669,7 @@
             ${p.isStarter ? `<span style="color:var(--gold);font-size:0.68rem;flex-shrink:0;">★</span>` : `<span style="min-width:12px;flex-shrink:0;"></span>`}
             <span class="pf-player-name">${esc(p.name)}</span>
             ${badge ? badge + '<span class="pf-gap"></span>' : ''}
-            <span class="pf-player-val">${valStr}</span>
+            <span class="pf-player-val"${valTitle ? ` title="${esc(valTitle)}"` : ''}>${valStr}</span>
           </div>`;
         }).join('');
         return `<div class="az-pos-section">
