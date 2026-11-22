@@ -2936,6 +2936,11 @@ async function luEnsureLineupData(force = false) {
   }
 
   await loadPlayers();
+  // ESPN leagues are appended to S.leagues asynchronously after start-up. Home
+  // (the landing tab) and a refresh on ?tab=lineups both get here before they
+  // land, and the result is cached for 5 minutes — so without this wait ESPN
+  // leagues were missing from Lineups even though Summaries backfills them.
+  try { await S.espnReady; } catch (_) {}
   const nflState = await getNflState();
   // Drop a spent override before resolving — once Sleeper's own week moves off
   // the one the override was pinned against it has served its purpose.

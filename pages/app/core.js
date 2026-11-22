@@ -264,8 +264,10 @@ async function loadUser() {
     ));
     st.textContent = S.leagues.length + ' leagues loaded for ' + esc(user.display_name || u) + ' (' + season + ')';
     st.className = 'setup-status ok';
-    // Load ESPN leagues (non-blocking — they append to S.leagues after Sleeper leagues)
-    loadEspnLeagues(season);
+    // Load ESPN leagues (non-blocking — they append to S.leagues after Sleeper leagues).
+    // The promise is kept so a loader that snapshots S.leagues and caches the
+    // result (luEnsureLineupData) can wait for them instead of caching without them.
+    S.espnReady = loadEspnLeagues(season);
     // Whatever tab the URL names (it tracks every switch, so this is also the
     // tab the user was on before a refresh).
     sw(new URLSearchParams(location.search).get('tab') || S.tab, { history: 'replace' });
