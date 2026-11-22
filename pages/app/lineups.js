@@ -337,8 +337,10 @@ function luCmpKey(a, b) {
 }
 
 // Kickoff time (ms) for a player's NFL game this week; Infinity if unknown.
+// ESPN's team wins when an ESPN league has told us one — Sleeper's can be
+// missing (see luEspnPid).
 function luGameTime(pid) {
-  const team = S.players[pid]?.team;
+  const team = LU_ESPN_TEAM[pid] || S.players[pid]?.team;
   const iso  = team && LU.kick[team];
   return iso ? new Date(iso).getTime() : Infinity;
 }
@@ -354,9 +356,26 @@ function luGameTime(pid) {
 // player with no NFL team, and — deliberately — a scoreboard fetch that failed.
 // A missing feed switches the whole feature off rather than locking the wrong half
 // of a lineup.
+//
+// Second test, for when the kickoff can't be found (Sleeper sometimes carries a
+// player with no team): anyone a league already credits with points this week
+// has played. Non-zero only — Sleeper's players_points lists every rostered
+// player at 0 before his game.
 function luLocked(pid) {
   const t = luGameTime(pid);
-  return t !== Infinity && t <= Date.now();
+  if (t !== Infinity) return t <= Date.now();
+  return luPlayedSet().has(String(pid));
+}
+let _luPlayed = { src: null, set: new Set() };
+function luPlayedSet() {
+  if (_luPlayed.src !== LU.lineups) {
+    const s = new Set();
+    for (const f of (LU.lineups || []))
+      for (const [pid, v] of Object.entries(f?._pts || {}))
+        if (typeof v === 'number' && v !== 0) s.add(String(pid));
+    _luPlayed = { src: LU.lineups, set: s };
+  }
+  return _luPlayed.set;
 }
 
 // Proposals are cached on the fixture, so they have to be invalidated when a game
@@ -2770,13 +2789,29 @@ function luEspnRosterPositions(lineupSlotCounts) {
 // A D/ST is "Chargers D/ST" on ESPN and "Los Angeles Chargers" on Sleeper, so
 // names never match — but Sleeper's DEF player_id IS the team abbreviation, which
 // proTeamId gives us directly.
+//
+// Players match by name, but a name alone is ambiguous (three active Josh
+// Johnsons: QB, RB, WR), so ESPN's own team and position narrow it first:
+// name + team (if that player is the right position), then name + position,
+// and only then the bare name.
+//
+// ESPN's team is also remembered (LU_ESPN_TEAM) for the kickoff lock: Sleeper
+// can carry a player with no team at all (Daniel Jones), which made luGameTime
+// read "no game" and left an already-played starter movable.
+const LU_ESPN_TEAM = {};
 function luEspnPid(pl) {
   if (!pl) return null;
-  if (pl.defaultPositionId === 16) {
-    const abbr = normTeamAbbr(ESPN_TEAM_MAP[pl.proTeamId] || '');
-    return S.players[abbr] ? abbr : null;
-  }
-  return S._playersByName[normName(pl.fullName || '')] || null;
+  const team = normTeamAbbr(ESPN_TEAM_MAP[pl.proTeamId] || '') || null;
+  if (pl.defaultPositionId === 16) return team && S.players[team] ? team : null;
+  const key = normName(pl.fullName || '');
+  if (!key) return null;
+  const pos    = ESPN_POS_MAP[pl.defaultPositionId] || null;
+  const byTeam = team && S._playersByNameTeam?.[key + '|' + team];
+  const pid = (byTeam && (!pos || luNormPos(S.players[byTeam]?.position) === pos) ? byTeam : null)
+           || (pos && S._playersByNamePos?.[key + '|' + pos])
+           || S._playersByName[key] || null;
+  if (pid && team) LU_ESPN_TEAM[pid] = team;
+  return pid;
 }
 
 async function luLoadEspnLineup(lg, week) {

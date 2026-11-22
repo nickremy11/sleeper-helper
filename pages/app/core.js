@@ -168,6 +168,12 @@ async function loadPlayers() {
   S.players = Object.fromEntries(Object.entries(all).filter(([,p]) => keep.has(p.position)));
   S._playersByName = {};
   S._playersByNameTeam = {};
+  // name|position → id, for sources that know the position (ESPN's
+  // defaultPositionId). Sleeper has three active "Josh Johnson"s — QB, RB, WR —
+  // and the name-only index picks whichever ranks highest, which put a QB free
+  // agent on an ESPN wire as a flex-eligible WR.
+  S._playersByNamePos = {};
+  const posKey = p => (p.position === 'K' || p.position === 'DEF') ? p.position : crNormPos(p.position);
   const rankOf = p => (p.search_rank != null && p.search_rank < 9999999) ? p.search_rank : Infinity;
   for (const [id, p] of Object.entries(S.players)) {
     const nm = sleeperName(p);
@@ -178,6 +184,11 @@ async function loadPlayers() {
     const existing = S._playersByName[key];
     if (existing == null || rankOf(p) < rankOf(S.players[existing])) {
       S._playersByName[key] = id;
+    }
+    const pp = posKey(p);
+    if (pp) {
+      const pk = key + '|' + pp, ex = S._playersByNamePos[pk];
+      if (ex == null || rankOf(p) < rankOf(S.players[ex])) S._playersByNamePos[pk] = id;
     }
     // Secondary index — lets a ranking sheet's team column break a name tie that
     // search_rank alone would resolve the wrong way.
