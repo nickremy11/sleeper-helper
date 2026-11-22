@@ -104,7 +104,7 @@ export default {
       .catch(e => console.error('[espn encrypt] failed:', e.message)));
   },
 
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
     // data.ffhistorian.com is admin-only and same-origin — it never shares the
@@ -128,7 +128,7 @@ export default {
     }
 
     if (url.pathname === '/api/players' && request.method === 'GET') {
-      return handlePlayers(env);
+      return handlePlayers(request, env, ctx);
     }
 
     if (url.pathname.startsWith('/api/sleeper/') && request.method === 'GET') {
@@ -926,7 +926,20 @@ function randId(len) {
 
 // ── Existing handlers (unchanged) ─────────────────────────────────────────────
 
-async function handlePlayers(env) {
+// The player map is ~2MB, and a KV read of it averaged ~830ms to first byte.
+// The colo's Cache API answers the same body in tens of ms; KV stays behind it
+// as the cross-colo copy. Kept for PLAYERS_BROWSER_TTL (the response's max-age).
+async function handlePlayers(request, env, ctx) {
+  const cache = caches.default;
+  const cacheKey = new Request(new URL('/api/players', request.url).toString(), { method: 'GET' });
+  const hit = await cache.match(cacheKey);
+  if (hit) return hit;
+  const res = await handlePlayersKv(env);
+  if (res.ok) ctx.waitUntil(cache.put(cacheKey, res.clone()));
+  return res;
+}
+
+async function handlePlayersKv(env) {
   return kvCachedJson(env, 'players_nfl', {
     ttl: PLAYERS_TTL,
     headers: cacheFor(PLAYERS_BROWSER_TTL, PLAYERS_SWR),
@@ -984,26 +997,72 @@ async function handleGraphQL(request, env) {
 // that's either a cache-buster (lsEnsureLineupData appends ?_=Date.now() to its
 // matchup fetches for exactly this reason) or a variant this table doesn't model,
 // and ignoring it would also let two different queries collide on one KV key.
+// `browser` = Cache-Control max-age we send. `edge` = how long Cloudflare's edge
+// cache keeps Sleeper's answer (the upstream fetch's `cf.cacheTtl`), shared by
+// every caller in that data centre — so ~70 leagues refreshed from three tabs
+// is one Sleeper read per league, not three. `kv` = a cross-colo KV copy.
+// Matchups was ~54% of all real traffic before the edge TTL existed.
 const PROXY_CACHE_RULES = [
   // Weekly projections drift as news breaks, but nothing reads them live — every
   // caller here is scoring a whole season at once. Worth a KV copy as well: this
   // is ~70KB x 13 weeks on a cold analyzer load, the second-biggest cost after
   // the player map.
-  { re: /^\/projections\/nfl\/[a-z]+\/\d{4}\/\d+$/, browser: 21600, kv: 21600 },
-  // Matchups carry in-progress scores, so browser-only and short: long enough
-  // that hopping between pages costs nothing, short enough that a live score is
-  // never more than a minute behind. No KV copy — it would outlive that window.
-  { re: /^\/league\/\d+\/matchups\/\d+$/,           browser: 60 },
+  { re: /^\/projections\/nfl\/[a-z]+\/\d{4}\/\d+$/, browser: 21600, kv: 21600, edge: 3600 },
+  // Matchups carry in-progress scores, so short: a 20s edge copy is what the
+  // Scoreboard's Refresh can be behind by (its `cache: 'no-cache'` skips only
+  // the browser copy). A week before Sleeper's display_week is finished, and
+  // gets MATCHUP_FINAL_* instead — see proxyCacheFor().
+  { re: /^\/league\/\d+\/matchups\/(\d+)$/,         browser: 60, edge: 20, finalWeek: true },
   // Season-to-date actual stats — ~1MB of every player's totals, pulled once per
   // Scout run to price players on real PPG rather than projections. It moves only
   // as games finish, so 15 minutes is well inside "current" while keeping a cold
   // run from re-fetching a megabyte per tab.
-  { re: /^\/stats\/nfl\/[a-z]+\/\d{4}$/,              browser: 900, kv: 900 },
+  { re: /^\/stats\/nfl\/[a-z]+\/\d{4}$/,              browser: 900, kv: 900, edge: 900 },
   // A league's managers — names and avatars, which barely move. Read once per
   // league by the Find a Trade autocomplete, the Players lookup and Open Trades;
   // an hour in the browser makes moving between those free. No KV copy needed.
-  { re: /^\/league\/\d+\/users$/,                    browser: 3600 },
+  { re: /^\/league\/\d+\/users$/,                    browser: 3600, edge: 3600 },
+  // Rosters, traded picks and drafts move on a trade, and Mass Offers re-reads
+  // them right before sending to catch a moved player — so the edge copy stays
+  // short enough that the check still means something, and no browser copy.
+  { re: /^\/league\/\d+\/rosters$/,                  browser: 0, edge: 15 },
+  { re: /^\/league\/\d+\/(traded_picks|drafts)$/,    browser: 0, edge: 30 },
+  // League meta (settings, status, name) — changes a handful of times a season.
+  { re: /^\/league\/\d+$/,                           browser: 300, edge: 300 },
+  // Season/week. Flips once a week; the lineup tab's week logic reads it.
+  { re: /^\/state\/nfl$/,                            browser: 300, edge: 300 },
 ];
+
+// A finished week's matchups never change after stat corrections (Tue/Wed), so
+// a week strictly before Sleeper's display_week is cached for hours, not seconds.
+// A league from an earlier season has all weeks finished, but nothing in the
+// path says so — it just gets the live TTL, which is merely less efficient.
+const MATCHUP_FINAL_EDGE    = 6 * 3600;
+const MATCHUP_FINAL_BROWSER = 3600;
+
+async function sleeperDisplayWeek() {
+  try {
+    const r = await fetch(`${SLEEPER_BASE}/state/nfl`, {
+      headers: { 'User-Agent': 'sleeper-helper/1.0 (helper.ffhistorian.com)' },
+      cf: { cacheTtl: 300, cacheEverything: true },
+    });
+    if (!r.ok) return null;
+    const s = await r.json();
+    return s?.season_type === 'regular' ? Number(s.display_week) || null : null;
+  } catch (_) { return null; }
+}
+
+// The browser + edge lifetimes for one path, after the finished-week check.
+async function proxyCacheFor(rule, path) {
+  if (!rule) return null;
+  if (!rule.finalWeek) return rule;
+  const week = Number(path.match(rule.re)?.[1]);
+  const shown = await sleeperDisplayWeek();
+  if (week && shown && week < shown) {
+    return { ...rule, browser: MATCHUP_FINAL_BROWSER, edge: MATCHUP_FINAL_EDGE };
+  }
+  return rule;
+}
 
 function proxyCacheRule(path) {
   return PROXY_CACHE_RULES.find(r => r.re.test(path)) || null;
@@ -1015,16 +1074,19 @@ function isJsonBody(s) {
 
 async function handleProxy(url, env) {
   const path = url.pathname.replace('/api/sleeper', '');
-  const rule = url.search ? null : proxyCacheRule(path);
+  const rule = url.search ? null : await proxyCacheFor(proxyCacheRule(path), path);
   const key  = rule?.kv ? `proxy_${path}` : null;
 
   if (key && env?.SLEEPER_KV) {
     const hit = await env.SLEEPER_KV.get(key, 'text');
-    if (hit) return jsonBody(hit, { 'X-Cache': 'HIT', ...cacheFor(rule.browser, rule.swr || 0) });
+    if (hit) return jsonBody(hit, { 'X-Cache': 'HIT', ...proxyBrowserCache(rule) });
   }
 
+  // cacheTtlByStatus, not cacheTtl: only a 200 is kept at the edge, so a
+  // Sleeper 404/5xx is never pinned for the TTL.
   const upstream = await fetch(`${SLEEPER_BASE}${path}${url.search}`, {
     headers: { 'User-Agent': 'sleeper-helper/1.0 (helper.ffhistorian.com)' },
+    ...(rule?.edge ? { cf: { cacheEverything: true, cacheTtlByStatus: { '200-299': rule.edge, '300-599': 0 } } } : {}),
   });
   const body   = await upstream.text();
   const status = upstream.ok ? 200 : upstream.status;
@@ -1042,9 +1104,14 @@ async function handleProxy(url, env) {
       ...CORS,
       'Content-Type': 'application/json;charset=UTF-8',
       // An error response must never carry a cache lifetime.
-      ...(rule && upstream.ok ? cacheFor(rule.browser, rule.swr || 0) : {}),
+      ...(rule && upstream.ok ? proxyBrowserCache(rule) : {}),
     },
   });
+}
+
+// browser: 0 means "don't keep a browser copy" (the edge copy still applies).
+function proxyBrowserCache(rule) {
+  return rule.browser > 0 ? cacheFor(rule.browser, rule.swr || 0) : { 'Cache-Control': 'no-cache' };
 }
 
 // ── ESPN Fantasy League Settings ──────────────────────────────────────────────

@@ -270,7 +270,7 @@ footer { padding: 32px 0 20px; }
 </div>
 
 <script src="/shared-nav.js?v=20261122"></script>
-  <script src="/shared-auth.js?v=20261118"></script>
+  <script src="/shared-auth.js?v=20261121"></script>
 <script src="/shared-core.js?v=20261117"></script>
 <script src="/shared-utils.js?v=20261117"></script>
 <script>
@@ -462,8 +462,9 @@ async function changePassword() {
       credentials: 'include',
       body: JSON.stringify({ currentPassword: cur, newPassword: nw }),
     });
-    const d = await r.json();
-    if (d.error) throw new Error(d.error);
+    // readAuthResponse turns a WAF block (leaked new password) or the auth
+    // rate limit into a readable message instead of "Unexpected token".
+    await SharedAuth.readAuthResponse(r, SH_API + '/auth/change-password');
     document.getElementById('field-cur-pass').value  = '';
     document.getElementById('field-new-pass').value  = '';
     document.getElementById('field-new-pass2').value = '';

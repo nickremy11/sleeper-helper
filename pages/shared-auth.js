@@ -223,6 +223,38 @@
 
   // ── Network helpers ───────────────────────────────────────────────────────────
 
+  // Reads an auth response. Cloudflare can answer before the worker does, and
+  // those answers aren't our JSON:
+  //  - 403 text/plain from a WAF rule (leaked credentials, leaked new password):
+  //    err.code = 'leaked' on login (email+password pair breached), else
+  //    'leaked_password' — the rule's own text is the message.
+  //  - 429 from the auth rate limit (HTML page): err.code = 'rate_limited'.
+  // Anything else non-JSON stays "Server error (status)".
+  async function _readAuthResponse(r, url) {
+    var text = await r.text();
+    var data = null;
+    try { data = JSON.parse(text); } catch (_) {}
+    if (data) {
+      if (data.error) { var e = new Error(data.error); e.status = r.status; throw e; }
+      return data;
+    }
+    var err;
+    if (r.status === 429) {
+      err = new Error('Too many attempts from this network. Wait about 10 minutes, then try again.');
+      err.code = 'rate_limited';
+    } else if (r.status === 403 && text && text.length < 300 && !/</.test(text)) {
+      var isLogin = /\/auth\/login$/.test(url || r.url || '');
+      err = new Error(isLogin
+        ? 'This email and password appear together in a public data breach, so sign-in with it is blocked. Reset your password to get back in.'
+        : text.trim());
+      err.code = isLogin ? 'leaked' : 'leaked_password';
+    } else {
+      err = new Error('Server error (' + r.status + ')');
+    }
+    err.status = r.status;
+    throw err;
+  }
+
   async function _authPost(url, body) {
     var r = await fetch(url, {
       method: 'POST',
@@ -230,10 +262,26 @@
       credentials: 'include',
       body: JSON.stringify(body),
     });
-    var data;
-    try { data = await r.json(); } catch (e) { throw new Error('Server error (' + r.status + ')'); }
-    if (data.error) throw new Error(data.error);
-    return data;
+    return _readAuthResponse(r, url);
+  }
+
+  // Login error, with a one-click way out when the pair is breached: the
+  // forgot-password form, email pre-filled. Forgot/reset never carry the old
+  // password, so the WAF rule can't block that path.
+  function _showLoginError(errEl, e) {
+    errEl.textContent = e.message;
+    if (e.code === 'leaked') {
+      var a = document.createElement('a');
+      a.href = '#';
+      a.className = 'sh-modal-link';
+      a.style.display = 'block';
+      a.style.marginTop = '6px';
+      a.textContent = 'Reset your password →';
+      a.onclick = function (ev) { ev.preventDefault(); _showForgot(); };
+      errEl.appendChild(a);
+      document.getElementById('sh-pass-l').value = '';
+    }
+    errEl.style.display = 'block';
   }
 
   async function _refreshUser() {
@@ -259,7 +307,7 @@
       _renderChip();
       _closeModal();
       _loginCbs.forEach(function (cb) { cb(_user); });
-    } catch (e) { err.textContent = e.message; err.style.display = 'block'; }
+    } catch (e) { _showLoginError(err, e); }
   }
 
   async function _submitRegister() {
@@ -362,6 +410,7 @@
     _submitLogin:       _submitLogin,
     _submitRegister:    _submitRegister,
     _showForgot:        _showForgot,
+    readAuthResponse:   _readAuthResponse,
     _submitVerify:      _submitVerify,
     _resendCode:        _resendCode,
     _submitForgot:      _submitForgot,
