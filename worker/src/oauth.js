@@ -66,6 +66,17 @@ function failTo(next, reason) {
   return bouncePage(u.toString(), null, 'Sign-in did not complete.');
 }
 
+// We keep first name + last initial ("Nick R.") and nothing else from the
+// Google profile — the photo URL and full surname are never stored. (Google
+// bundles name and picture into the one `profile` scope, so the consent screen
+// still lists the picture; we just don't read it.)
+function shortName(c) {
+  const first = String(c.given_name || String(c.name || '').split(/\s+/)[0] || '').trim();
+  const last  = String(c.family_name || '').trim();
+  const out = (first + (last ? ` ${last[0].toUpperCase()}.` : '')).trim();
+  return out ? out.slice(0, 64) : null;
+}
+
 function b64urlJson(part) {
   const s = part.replace(/-/g, '+').replace(/_/g, '/');
   return JSON.parse(atob(s + '='.repeat((4 - s.length % 4) % 4)));
@@ -135,7 +146,7 @@ async function googleCallback(env, url) {
       await db.prepare(
         `INSERT INTO users (id, email, password_hash, password_salt, name, created_at, email_verified)
          VALUES (?, ?, ?, ?, ?, ?, 1)`
-      ).bind(userId, email, OAUTH_NO_PASSWORD, salt, claims.name ? String(claims.name).slice(0, 64) : null, now).run();
+      ).bind(userId, email, OAUTH_NO_PASSWORD, salt, shortName(claims), now).run();
       await notifyAdmin(env, 'New account (Google)', `New account via Google sign-in: ${email}`);
     }
     await db.prepare(
