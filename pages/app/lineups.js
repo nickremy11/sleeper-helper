@@ -1189,7 +1189,9 @@ function luSummaryMeta(fix, idx) {
   const reason = st.detail
     ? `<span style="font-size:0.85rem;color:${color};">${esc(st.detail)}</span>` : '';
   const icon  = st.level === 'bad' ? '⚠ ' : st.level === 'ok' ? '✓ ' : '';
-  const badge = `<span style="font-family:var(--font-display),serif;font-size:0.64rem;letter-spacing:0.1em;text-transform:uppercase;color:${color};border:1px solid ${color};border-radius:2px;padding:2px 6px;white-space:nowrap;">${icon}${esc(st.label)}</span>`;
+  // Action needed is a solid red chip — an outline alone was easy to miss on cream.
+  const badgeFill = st.level === 'bad' ? `background:var(--red);color:#f3e9d2;border:1px solid var(--red);font-weight:700;` : `color:${color};border:1px solid ${color};`;
+  const badge = `<span class="lc-badge" style="font-family:var(--font-display),serif;font-size:0.64rem;letter-spacing:0.1em;text-transform:uppercase;${badgeFill}border-radius:2px;padding:2px 6px;white-space:nowrap;">${icon}${esc(st.label)}</span>`;
   // Its own chip rather than folded into the status badge: a free-agent upgrade is
   // a different kind of problem from a bad lineup, and a team can easily have one
   // while already being Optimal.
@@ -3069,7 +3071,7 @@ function luCardsHtml() {
 
     return `<details class="lineup-card" id="lc-${idx}">
       <summary>
-        <span style="font-family:var(--font-head),serif;font-weight:700;font-size:0.95rem;color:var(--cream);flex-shrink:0;margin-right:12px;">${esc(fix.leagueName)}${fix._espn ? ' <span style="font-family:var(--font-display),serif;font-size:0.62rem;letter-spacing:0.1em;color:var(--brown-light);">ESPN</span>' : ''}</span>
+        <span class="lc-name" style="font-family:var(--font-head),serif;font-weight:700;font-size:0.95rem;color:var(--cream);flex-shrink:0;margin-right:12px;">${esc(fix.leagueName)}${fix._espn ? ' <span style="font-family:var(--font-display),serif;font-size:0.62rem;letter-spacing:0.1em;color:var(--brown-light);">ESPN</span>' : ''}</span>
         ${luSummaryMeta(fix, idx)}
       </summary>
       <div id="lc-body-${idx}">${luBodyRows(fix, 'current')}</div>

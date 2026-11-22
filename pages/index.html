@@ -261,6 +261,10 @@ footer a:hover { color: var(--gold); }
 .lu-cards { display: flex; flex-direction: column; gap: 8px; }
 .lineup-card { border: 2px solid var(--brown-mid); border-radius: 10px; overflow: hidden; }
 .lineup-card:has(> summary [data-level="bad"]) { border-color: var(--red); }
+/* Closed card that needs action: red league name and a faint red wash, so it
+   stands out in a list of cream cards (the red border alone didn't). */
+.lineup-card:not([open]):has(> summary [data-level="bad"]) > summary { background: rgba(168,50,31,0.08); }
+.lineup-card:not([open]):has(> summary [data-level="bad"]) .lc-name { color: var(--c-red) !important; }
 .lineup-card[open] > summary { background: var(--ink-bg); border-bottom: none; }
 .lineup-card[open] > summary:hover { background: var(--ink-bg); }
 .lineup-card[open]:has(> summary [data-level="bad"]) > summary,
@@ -952,7 +956,7 @@ a.row-link.ls-contender-name { color: var(--cream); font-weight: 700 !important;
 <script src="/app/mass-offers.js?v=20261117"></script>
 <script src="/app/player-finder.js?v=20261125"></script>
 <script src="/app/waivers.js?v=20261117"></script>
-<script src="/app/lineups.js?v=20261126"></script>
+<script src="/app/lineups.js?v=20261127"></script>
 <script src="/app/ranks-grid.js?v=20261124"></script>
 <script src="/app/roi.js?v=20261117"></script>
 <script src="/app/guide.js?v=20261125"></script>
