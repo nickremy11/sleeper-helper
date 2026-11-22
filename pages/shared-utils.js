@@ -342,6 +342,30 @@ async function loadStoredLeaguePrefs(signedIn) {
   try { return JSON.parse(localStorage.getItem('rfm_prefs') || '{}'); } catch { return {}; }
 }
 
+// Save ONE league's pref, merged over what's stored, so a checkbox that only
+// knows "contending?" never wipes the $ value set in the profile (and vice
+// versa). The server upserts per league; signed out, this browser's copy.
+// Returns the merged pref. `patch` is {contender?, value?}.
+async function saveLeaguePref(signedIn, lgId, patch) {
+  const stored = await loadStoredLeaguePrefs(signedIn);
+  const pref = { value: 0, contender: true, ...(stored[lgId] || {}), ...patch };
+  if (signedIn) {
+    const r = await fetch(`${SH_API}/rootforme/prefs`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prefs: { [lgId]: pref } }),
+    });
+    if (!r.ok) throw new Error('Could not save');
+  } else {
+    stored[lgId] = pref;
+    try { localStorage.setItem('rfm_prefs', JSON.stringify(stored)); } catch {}
+  }
+  return pref;
+}
+
+// Where contending leagues and $ stakes are edited (profile → Contending tab).
+const PREFS_SETUP_URL = 'https://ffhistorian.com/profile/#contending';
+
 // ESPN has no per-week matchup endpoint like Sleeper's — mMatchupScore returns
 // the WHOLE season's schedule in one call (data.schedule[], each entry
 // {matchupPeriodId, home:{teamId,totalPoints}, away:{teamId,totalPoints}}) —

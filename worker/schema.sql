@@ -303,3 +303,16 @@ CREATE TABLE IF NOT EXISTS data_player_seasons (
 );
 
 CREATE INDEX IF NOT EXISTS idx_data_ps_season ON data_player_seasons(season);
+
+-- ── Federated sign-in (src/oauth.js) ──
+-- One row per linked provider account. An account created by Google sign-in has
+-- users.password_hash = '!' (never verifies) until the user sets one.
+CREATE TABLE IF NOT EXISTS user_identities (
+  provider   TEXT    NOT NULL,           -- 'google'
+  subject    TEXT    NOT NULL,           -- the provider's stable user id (OIDC sub)
+  user_id    TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  email      TEXT,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (provider, subject)
+);
+CREATE INDEX IF NOT EXISTS idx_user_identities_user ON user_identities(user_id);

@@ -350,7 +350,7 @@ const MADDEN_TOOL_FNS = {
       leagues: leagues.map(maddenLeagueFacts),
       notes: [
         LS.loaded ? null : 'Records and playoff odds appear once League Summaries has loaded.',
-        Object.values(RS.prefs || {}).some(Boolean) ? null : 'No contender/rebuilder tags are set (they come from Root For Me).',
+        Object.values(RS.prefs || {}).some(Boolean) ? null : 'No contender/rebuilder tags are set (set them in the profile → Contending, or tick Contending on League Summaries).',
       ].filter(Boolean),
     };
   },

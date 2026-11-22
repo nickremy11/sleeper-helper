@@ -13,7 +13,10 @@ routes = [
   # The whole data.ffhistorian.com host is this Worker (page + API), so the
   # admin gate runs before anything is served. custom_domain makes wrangler
   # create the DNS record + certificate itself on deploy.
-  { pattern = "data.ffhistorian.com", custom_domain = true }
+  { pattern = "data.ffhistorian.com", custom_domain = true },
+  # Google sign-in lives on the root domain (src/oauth.js). /api/* there is the
+  # Record Book worker's, hence /auth/*.
+  { pattern = "ffhistorian.com/auth/*", zone_name = "ffhistorian.com" }
 ]
 
 # src/data-page.html is imported as a string by src/data.js.

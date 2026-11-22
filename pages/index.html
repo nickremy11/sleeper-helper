@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" href="https://ffhistorian.com/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="https://ffhistorian.com/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="https://ffhistorian.com/apple-touch-icon.png" />
 <title>League Assist — FF Historian</title>
 <link href="https://fonts.googleapis.com/css2?family=Graduate&family=Bitter:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="/shared-styles.css?v=20261122" />
@@ -576,7 +579,7 @@ a.rs-expand-tag:hover { border-color: var(--gold); color: var(--gold-light); }
 .ls-table tbody tr:hover td { background: rgba(var(--tint),0.025); }
 /* Contender league-name highlight */
 a.row-link.ls-contender-name { color: var(--cream); font-weight: 700 !important; }
-.ls-table td:first-child a:not(.ls-contender-name) { font-weight: 400; }
+.ls-table td:nth-child(2) a:not(.ls-contender-name) { font-weight: 400; }
 /* A contender row: gold bar down the left edge, a gold wash across the row and a
    bold name. Colour alone (green name vs dark-green name) was too close to tell. */
 .ls-table tbody tr.ls-contender td { background: rgba(240,185,58,0.16); }
@@ -642,6 +645,11 @@ a.row-link.ls-contender-name { color: var(--cream); font-weight: 700 !important;
   .mo-offer-sides, .mo-editor { grid-template-columns: 1fr; }
 }
 .ls-reset-sort { background: none; border: none; color: var(--brown-light); font-family: var(--font-body), serif; font-size: 0.82rem; cursor: pointer; text-decoration: underline dotted; padding: 0; }
+.ls-table th.ls-ct-th { cursor: default; width: 1%; text-align: center; padding-left: 10px; padding-right: 6px; }
+.ls-table td.ls-ct-td { text-align: center; width: 1%; padding-right: 4px; }
+.ls-ct-check { width: 18px; height: 18px; accent-color: var(--card-gold); cursor: pointer; vertical-align: middle; }
+.ls-ct-setup { margin-left: auto; font-family: var(--font-body), serif; font-size: 0.85rem; color: var(--gold); text-decoration: none; border-bottom: 1px dotted var(--gold); }
+@media (max-width: 600px) { .ls-table th.ls-ct-th { font-size: 0; } .ls-table th.ls-ct-th::after { content: "✓"; font-size: 0.8rem; } }
 .ls-reset-sort:hover { color: var(--gold-light); }
 
 /* Weekly Recap — parchment "dispatch" cards */
@@ -701,7 +709,7 @@ a.row-link.ls-contender-name { color: var(--cream); font-weight: 700 !important;
 .ls-table { border: 2px solid var(--edge); }
 .ls-table th { padding: 11px 12px; border-bottom: none; }
 .ls-table td { padding: 8px 12px; border-bottom: 1px solid var(--rule); }
-.ls-table td:first-child a { font-weight: 600; }
+.ls-table td:nth-child(2) a { font-weight: 600; }
 .ls-table tbody tr:hover td { background: var(--card-hover); }
 @media (max-width: 420px) { .rc-row { grid-template-columns: 1fr 1fr; } .rc-row > :first-child { grid-column: 1 / -1; } }
 
@@ -895,7 +903,7 @@ a.row-link.ls-contender-name { color: var(--cream); font-weight: 700 !important;
       </div>
       <div id="profile-hint" style="display:none;">
         <div class="setup-status">
-          Add your Sleeper username in <a href="/myprofile" style="color:var(--gold-light);">your profile</a> to load your leagues.
+          Add your Sleeper username in <a href="https://ffhistorian.com/profile/" style="color:var(--gold-light);">your profile</a> to load your leagues.
         </div>
       </div>
       <div id="auth-token-section">
@@ -931,20 +939,20 @@ a.row-link.ls-contender-name { color: var(--cream); font-weight: 700 !important;
 </div>
 
 <script src="/shared-nav.js?v=20261122"></script>
-<script src="/shared-auth.js?v=20261121"></script>
+<script src="/shared-auth.js?v=20261124"></script>
 <script src="/shared-core.js?v=20261117"></script>
-<script src="/shared-utils.js?v=20261117"></script>
+<script src="/shared-utils.js?v=20261124"></script>
 <script src="/league-engine.js?v=20261119"></script>
 <script src="/miracle.js?v=20261117"></script>
 <script src="/matchup-tracker.js?v=20261117"></script>
 <!-- Before core.js on purpose: it defines loadEspnLeagues/loadOneEspnLeague too, and the app's must win. -->
 <script src="/league-matchups.js?v=20261122"></script>
-<script src="/app/core.js?v=20261125"></script>
+<script src="/app/core.js?v=20261126"></script>
 <script src="/app/trades.js?v=20261117"></script>
 <script src="/app/mass-offers.js?v=20261117"></script>
 <script src="/app/player-finder.js?v=20261125"></script>
 <script src="/app/waivers.js?v=20261117"></script>
-<script src="/app/lineups.js?v=20261125"></script>
+<script src="/app/lineups.js?v=20261126"></script>
 <script src="/app/ranks-grid.js?v=20261124"></script>
 <script src="/app/roi.js?v=20261117"></script>
 <script src="/app/guide.js?v=20261125"></script>

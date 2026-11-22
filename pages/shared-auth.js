@@ -15,6 +15,8 @@
   var _onHelper = location.hostname === 'helper.ffhistorian.com' || /(^|\.)sleeper-helper\.pages\.dev$/.test(location.hostname);
   var _siteBase = _onHelper ? '' : 'https://helper.ffhistorian.com';
   var _apiBase  = _siteBase ? _siteBase + '/api' : '/api';
+  // The profile is shared by every site, so it lives on the root domain.
+  var PROFILE_URL = 'https://ffhistorian.com/profile/';
   var _user     = null;
   var _chipId   = 'auth-chip';
   var _loginCbs  = [];
@@ -59,8 +61,46 @@
       '.sh-modal-link:hover{text-decoration:underline;}',
       '.sh-modal-forgot-row{text-align:right;margin-top:-6px;margin-bottom:14px;}',
       '.sh-modal-link-row{text-align:center;margin-top:10px;}',
+      /* federated sign-in (shown only when /api/oauth/providers lists one) */
+      '.sh-oauth-box{display:none;margin-bottom:18px;}',
+      '.sh-oauth-box.sh-has{display:block;}',
+      '.sh-oauth-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;height:42px;background:#fff;color:#1f1f1f;border:1px solid #747775;border-radius:6px;font-family:Roboto,Arial,sans-serif;font-size:0.92rem;font-weight:500;text-decoration:none;box-sizing:border-box;}',
+      '.sh-oauth-btn:hover{background:#f2f2f2;}',
+      '.sh-oauth-or{display:flex;align-items:center;gap:10px;margin-top:16px;font-family:var(--font-body),serif;font-size:0.78rem;font-style:italic;color:var(--brown-light);}',
+      '.sh-oauth-or::before,.sh-oauth-or::after{content:"";flex:1;border-top:1px solid var(--brown-mid);}',
     ].join('');
     document.head.appendChild(s);
+  }
+
+  // Google's "G" mark, as their sign-in branding guidelines ask for.
+  var GOOGLE_G = '<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>';
+
+  // Federated sign-in: the button appears only for providers the worker has
+  // secrets for. It's a plain link — the worker redirects to Google and back.
+  var SIGNIN_ERRORS = {
+    expired:    'That sign-in took too long — try again.',
+    cancelled:  'Google sign-in was cancelled.',
+    unverified: 'Google has not verified that email address.',
+    google:     'Google sign-in failed — try again, or use your email.',
+  };
+  function _loadProviders() {
+    fetch(_apiBase + '/oauth/providers').then(function (r) { return r.ok ? r.json() : { providers: [] }; })
+      .then(function (d) {
+        var box = document.getElementById('sh-oauth-box');
+        if (!box || (d.providers || []).indexOf('google') < 0) return;
+        var next = location.href.replace(/([?&])signin_error=[^&#]*&?/, '$1').replace(/[?&]$/, '');
+        document.getElementById('sh-oauth-google').href = 'https://ffhistorian.com/auth/google/start?next=' + encodeURIComponent(next);
+        box.classList.add('sh-has');
+      }).catch(function () {});
+  }
+  // The worker sends a failed Google sign-in back with ?signin_error=<reason>.
+  function _showSigninError() {
+    var m = /[?&]signin_error=([a-z]+)/.exec(location.search);
+    if (!m || _user) return;
+    try { history.replaceState(null, '', location.href.replace(/([?&])signin_error=[a-z]+&?/, '$1').replace(/[?&]$/, '')); } catch (_) {}
+    _openModal();
+    var el = document.getElementById('sh-err-l');
+    if (el) { el.textContent = SIGNIN_ERRORS[m[1]] || SIGNIN_ERRORS.google; el.style.display = 'block'; }
   }
 
   // ── Modal HTML injection ──────────────────────────────────────────────────────
@@ -75,6 +115,10 @@
           '<div class="sh-modal-tabs" id="sh-modal-tabs-row">' +
             '<button id="sh-tab-login"    class="sh-modal-tab sh-active" onclick="SharedAuth._switchTab(\'login\')">Sign In</button>' +
             '<button id="sh-tab-register" class="sh-modal-tab"           onclick="SharedAuth._switchTab(\'register\')">Create Account</button>' +
+          '</div>' +
+          '<div id="sh-oauth-box" class="sh-oauth-box">' +
+            '<a id="sh-oauth-google" class="sh-oauth-btn" href="#">' + GOOGLE_G + '<span>Continue with Google</span></a>' +
+            '<div class="sh-oauth-or">or use your email</div>' +
           '</div>' +
           '<div id="sh-login-form">' +
             '<label class="sh-modal-label">Email</label>' +
@@ -151,7 +195,7 @@
       container.innerHTML =
         '<span class="sh-chip sh-signed-in">' +
           'Signed in as <strong style="margin-left:4px;">' + displayName + '</strong>' +
-          '<a href="' + _siteBase + '/myprofile" class="sh-profile-link">View my profile</a>' +
+          '<a href="' + PROFILE_URL + '" class="sh-profile-link">View my profile</a>' +
           (_user.is_admin ? '<a href="' + _siteBase + '/admin" class="sh-profile-link">Site Lead</a>' : '') +
           '<a href="#" class="sh-signout-link" onclick="SharedAuth._logout();return false;">Sign out</a>' +
         '</span>';
@@ -199,6 +243,8 @@
     });
     var tabsRow = document.getElementById('sh-modal-tabs-row');
     if (tabsRow) tabsRow.style.display = (step === 'login' || step === 'register') ? '' : 'none';
+    var oauthBox = document.getElementById('sh-oauth-box');
+    if (oauthBox) oauthBox.style.display = (step === 'login' || step === 'register') ? '' : 'none';
     document.getElementById('sh-tab-login').classList.toggle('sh-active',    step === 'login');
     document.getElementById('sh-tab-register').classList.toggle('sh-active', step === 'register');
   }
@@ -400,6 +446,8 @@
       } catch (_) { _user = null; }
 
       _renderChip();
+      _loadProviders();
+      _showSigninError();
       return _user;
     },
 

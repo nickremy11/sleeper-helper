@@ -29,6 +29,8 @@
  *   POST /api/madden              → Ask Madden chatbot, one model step (auth required) — madden.js
  *   GET  /api/rootforme/prefs     → get league preferences for logged-in user
  *   POST /api/rootforme/prefs     → save league preferences for logged-in user
+ *   GET  /api/oauth/providers, /api/oauth/google/{start,callback} → Google sign-in (oauth.js)
+ *   POST /api/feedback            → Help & Feedback form, mailed to ADMIN_EMAIL (feedback.js)
  *   GET  /api/scoreboard/favorites → {favs: [leagueId]} — Scoreboard's pinned leagues (auth required)
  *   POST /api/scoreboard/favorites → {favs: [leagueId]} replaces the whole set (auth required)
  *   GET  /api/roi                 → ROI Tracker ledger (leagues + seasons) for logged-in user
@@ -61,6 +63,8 @@ import { handleEliteFFL, syncEliteFFL } from './eliteffl.js';
 import { handleProjections } from './projections.js';
 import { handleDevy } from './devy.js';
 import { handleMadden } from './madden.js';
+import { handleOAuth } from './oauth.js';
+import { handleFeedback } from './feedback.js';
 import { parseRankLines } from './ranks-image.js';
 import { getCors, CORS, cacheFor, jsonBody, kvCachedJson } from './http.js';
 
@@ -113,8 +117,23 @@ export default {
       return handleDataSite(request, env, url);
     }
 
+    // ffhistorian.com/auth/* — Google sign-in on the root domain (oauth.js).
+    if (url.hostname === 'ffhistorian.com') {
+      if (url.pathname.startsWith('/auth/')) return handleOAuth(request, env, url);
+      return new Response('Not found', { status: 404 });
+    }
+
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: getCors(request) });
+    }
+
+    // Google sign-in redirects — outside /api/auth/, whose wrapper forces JSON.
+    if (url.pathname.startsWith('/api/oauth/')) {
+      return handleOAuth(request, env, url);
+    }
+
+    if (url.pathname === '/api/feedback') {
+      return handleFeedback(request, env);
     }
 
     if (url.pathname.startsWith('/api/auth/')) {
@@ -562,10 +581,13 @@ async function handleRootformePrefs(request, env) {
     );
 
     if (stmts.length) await env.DB.batch(stmts);
-    return jsonBody(JSON.stringify({ ok: true }));
+    // Credentialed CORS: the profile on ffhistorian.com saves here cross-origin.
+    return new Response(JSON.stringify({ ok: true }), {
+      headers: { ...getCors(request), 'Content-Type': 'application/json;charset=UTF-8' },
+    });
   }
 
-  return new Response('Method not allowed', { status: 405, headers: CORS });
+  return new Response('Method not allowed', { status: 405, headers: getCors(request) });
 }
 
 // ── Scoreboard favourites ────────────────────────────────────────────────────

@@ -629,7 +629,7 @@ async function scoutRun() {
     SC.results = results;
     SC.skipNote = [
       otherFormatCount ? `${otherFormatCount} ${SC.format === 'dynasty' ? 'redraft' : 'dynasty'} league${otherFormatCount !== 1 ? 's' : ''} not searched (switch format above)` : '',
-      noOddsCount ? `${noOddsCount} league${noOddsCount !== 1 ? 's' : ''} skipped (no playoff odds yet — set a Root For Me pref or wait for projections)` : '',
+      noOddsCount ? `${noOddsCount} league${noOddsCount !== 1 ? 's' : ''} skipped (no playoff odds yet — mark it contending in your profile or wait for projections)` : '',
       unreadCount ? `${unreadCount} league${unreadCount !== 1 ? 's' : ''} skipped (couldn’t read your team — check credentials for ESPN leagues)` : '',
       SC.rankSrc !== 'fc' && mode === 'adp' ? 'projections unavailable — ranked by ADP instead' : '',
     ].filter(Boolean).join(' · ');

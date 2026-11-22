@@ -121,8 +121,8 @@ function rsDrawFull() {
         <span class="filter-lbl-rs">League Role</span>
         <div style="display:flex;gap:4px;">
           <button class="pos-pill${RS.filtContReb==='all'       ?' active':''}" onclick="rsSetContReb('all')">All</button>
-          <button class="pos-pill${RS.filtContReb==='contender' ?' active':''}" onclick="rsSetContReb('contender')" ${hasPrefs?'':'disabled title="Fill out Root For Me first"'}>Contenders</button>
-          <button class="pos-pill${RS.filtContReb==='rebuilder' ?' active':''}" onclick="rsSetContReb('rebuilder')"  ${hasPrefs?'':'disabled title="Fill out Root For Me first"'}>Rebuilders</button>
+          <button class="pos-pill${RS.filtContReb==='contender' ?' active':''}" onclick="rsSetContReb('contender')" ${hasPrefs?'':'disabled title="Tick Contending on a league, or set them in your profile"'}>Contenders</button>
+          <button class="pos-pill${RS.filtContReb==='rebuilder' ?' active':''}" onclick="rsSetContReb('rebuilder')"  ${hasPrefs?'':'disabled title="Tick Contending on a league, or set them in your profile"'}>Rebuilders</button>
         </div>
       </div>
     </div>` : '';
@@ -137,8 +137,8 @@ function rsDrawFull() {
         <button class="ghost-btn" onclick="rsDeselectAll()">None</button>
         <button class="ghost-btn" onclick="rsSelectRedraft()">Redraft</button>
         <button class="ghost-btn" onclick="rsSelectDynasty()">Dynasty</button>
-        <button class="ghost-btn" id="rs-btn-cont" ${hasPrefs?'':'disabled title="Fill out Root For Me first"'} onclick="rsSelectContenders()">Contenders</button>
-        <button class="ghost-btn" id="rs-btn-reb" ${hasPrefs?'':'disabled title="Fill out Root For Me first"'} onclick="rsSelectRebuilders()">Rebuilders</button>
+        <button class="ghost-btn" id="rs-btn-cont" ${hasPrefs?'':'disabled title="Tick Contending on a league, or set them in your profile"'} onclick="rsSelectContenders()">Contenders</button>
+        <button class="ghost-btn" id="rs-btn-reb" ${hasPrefs?'':'disabled title="Tick Contending on a league, or set them in your profile"'} onclick="rsSelectRebuilders()">Rebuilders</button>
         <div style="flex:1;"></div>
         <button class="setup-btn" id="rs-load-btn" onclick="loadRostershipData()" style="height:32px;" ${RS.loading ? 'disabled' : ''}>${RS.loading ? 'Loading…' : RS.loaded ? '↻ Refresh' : 'Load'}</button>
         <span class="setup-status" id="rs-load-status" style="margin:0;"></span>

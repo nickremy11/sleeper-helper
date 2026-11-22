@@ -56,12 +56,12 @@ const GUIDE = [
     { name:'ROI Tracker',      tab:'roi',        espn:true,
       desc:'Dues, winnings and finish for every league you have played in, year by year, with profit and ROI per season and all time. Finishes come from Sleeper and ESPN; money is entered by hand or imported once from your spreadsheet.' },
     { name:'Root For Me',      href:'/rootforme', espn:true,
-      desc:"Which way to root in each NFL game, weighted by whether you're contending or rebuilding in each league." },
+      desc:"Which way to root in each NFL game, weighted by the leagues you're contending in and the $ riding on each (set in your profile)." },
     { name:'Monday Night Miracle', href:'/miracle', espn:true,
-      desc:'What every live matchup needs from the players still to play on Monday night, and the box scores that win the most $. Uses the $ values and contender tags from Root For Me.' },
+      desc:'What every live matchup needs from the players still to play on Monday night, and the box scores that win the most $. Uses the $ values and contending leagues from your profile.' },
     { name:'My Ranks',         href:'https://myranks.ffhistorian.com',
       desc:'Your own player and pick tiers, kept in one place and shareable with other managers.' },
-    { name:'My Profile',       href:'/myprofile',
+    { name:'My Profile',       href:'https://ffhistorian.com/profile/',
       desc:'Your account, your Sleeper auth token and your ESPN league credentials.' },
     { name:'Connecting ESPN',  href:'/espn-setup', espn:true,
       desc:'What ESPN needs to let this site read your leagues, where to find the two cookies, and what works once they are in.' },
@@ -83,11 +83,11 @@ function guideStartHtml() {
       ${step(hasUser, 'Load your leagues',
         'Type your Sleeper username in the box at the top of the page and press Load. That alone fills League Summaries, Players, Waivers, Scout, the Scoreboard and both analyzers with every league you are in.')}
       ${step(signedIn, 'Create a free account',
-        'Use Sign in at the top right. An account remembers your username, saves your Root For Me and Scoreboard settings across devices, and is needed for ROI Tracker, ESPN and My Ranks.')}
+        'Use Sign in at the top right. An account remembers your username, saves your contending leagues and Scoreboard settings across devices, and is needed for ROI Tracker, ESPN and My Ranks.')}
       ${step(hasToken, 'Add your Sleeper token to make changes',
-        'Without it everything still reads and previews. With it saved in <a href="/myprofile">your profile</a>, you can apply lineups, send trade offers, and see pending trades. It is stored encrypted and only used for those writes.')}
+        'Without it everything still reads and previews. With it saved in <a href="https://ffhistorian.com/profile/">your profile</a>, you can apply lineups, send trade offers, and see pending trades. It is stored encrypted and only used for those writes.')}
       ${step(!!S.espnSettings?.has_credentials, 'Connect ESPN (optional)',
-        'Play in ESPN leagues too? Add two cookies in <a href="/myprofile">your profile</a> and your ESPN leagues join the tools tagged ESPN below. <a href="/espn-setup">The walkthrough is here.</a> ESPN is read-only: you still set those lineups in ESPN.')}
+        'Play in ESPN leagues too? Add two cookies in <a href="https://ffhistorian.com/profile/">your profile</a> and your ESPN leagues join the tools tagged ESPN below. <a href="/espn-setup">The walkthrough is here.</a> ESPN is read-only: you still set those lineups in ESPN.')}
     </ol>
     <p class="gd-start-more"><strong>Then, to go further:</strong> build tiered boards in <a href="https://myranks.ffhistorian.com">My Ranks</a> to see them over any league in Waivers and the Analyzer; upload your weekly ranking sheet in Lineups to optimize by rank; star leagues on the <a href="/scoreboard">Scoreboard</a> to pin them to Home; set contender or rebuilder and your $ values in <a href="/rootforme">Root For Me</a>.</p>
   </div>`;

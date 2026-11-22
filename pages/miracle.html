@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" href="https://ffhistorian.com/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="https://ffhistorian.com/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="https://ffhistorian.com/apple-touch-icon.png" />
 <title>Monday Night Miracle — FF Historian</title>
 <link href="https://fonts.googleapis.com/css2?family=Graduate&family=Bitter:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="/shared-styles.css?v=20261122" />
@@ -400,7 +403,7 @@ details.pos-group[open] > summary .pos-group-toggle { transform: rotate(90deg); 
     <div class="section-head"><h2>Setup</h2><div class="section-head-line"></div></div>
     <div class="setup-card">
       <div class="setup-status">
-        Add your Sleeper username in <a href="/myprofile" style="color:var(--gold-light);">your profile</a> to load your leagues.
+        Add your Sleeper username in <a href="https://ffhistorian.com/profile/" style="color:var(--gold-light);">your profile</a> to load your leagues.
       </div>
     </div>
   </div>
@@ -418,7 +421,7 @@ details.pos-group[open] > summary .pos-group-toggle { transform: rotate(90deg); 
       </label>
       <button class="load-btn" id="load-btn" onclick="refreshScores()" disabled>↻ Refresh</button>
     </div>
-    <p class="rfm-moved">$ values and contender tags are set on <a href="/rootforme">Root For Me →</a></p>
+    <p class="rfm-moved">$ values and contending leagues are set in <a href="https://ffhistorian.com/profile/#contending">your profile →</a></p>
   </div>
 
   <!-- Monday Night Miracle -->
@@ -437,9 +440,9 @@ details.pos-group[open] > summary .pos-group-toggle { transform: rotate(90deg); 
 </main>
 
 <script src="/shared-nav.js?v=20261122"></script>
-  <script src="/shared-auth.js?v=20261121"></script>
+  <script src="/shared-auth.js?v=20261124"></script>
 <script src="/shared-core.js?v=20261117"></script>
-<script src="/shared-utils.js?v=20261117"></script>
+<script src="/shared-utils.js?v=20261124"></script>
 <script src="/miracle.js?v=20261117"></script>
 <script src="/matchup-tracker.js?v=20261117"></script>
 <script src="/league-matchups.js?v=20261122"></script>
@@ -509,7 +512,7 @@ async function init() {
   S.auth = user;
   const stored   = localStorage.getItem('rfm_username');
   const fromAuth = S.auth?.sleeper_username;
-  // When signed in, the Sleeper username is tied to the account (changed on /myprofile).
+  // When signed in, the Sleeper username is tied to the account (changed on ffhistorian.com/profile).
   S.username = S.auth ? (fromAuth || '') : (stored || '');
   updateSetupVisibility();
   if (S.username) {
@@ -1053,7 +1056,7 @@ function mnmNotesHtml(ctx, bestBall) {
   const bits = [`Win % and the chips come from ${ctx.sims.toLocaleString()} simulations of Monday night off Sleeper's Week ${S.week} projections; the stat lines are exact thresholds in each league's scoring, starting from what each player already has.`];
   if (ctx.rows.some(r => r.notMonday) || ctx.live.some(r => r.my.pend.length || r.opp.pend.length))
     bits.push('Starters still playing before Monday count at their current score + projection.');
-  if (ctx.unit === 'W') bits.push('No $ values set on these leagues, so results count matchups won — set values on Root For Me.');
+  if (ctx.unit === 'W') bits.push('No $ values set on these leagues, so results count matchups won — set values in your profile (Contending).');
   if (bestBall) bits.push(`${bestBall} best ball league${bestBall !== 1 ? 's' : ''} left out (their score is an optimal lineup picked after the fact).`);
   if (ctx.live.some(r => r.isEspn)) bits.push('ESPN kickers and D/ST are priced with Sleeper\'s default scoring.');
   return `<div class="mnm-note">${bits.join(' ')}</div>`;

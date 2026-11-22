@@ -19,6 +19,9 @@ const OTP_TTL_MS       = 15 * 60 * 1000;  // code validity window
 const OTP_RESEND_MS    = 45 * 1000;       // min gap between sends
 const OTP_MAX_ATTEMPTS = 5;
 
+// password_hash of an account created through Google sign-in: never a valid hash.
+export const OAUTH_NO_PASSWORD = '!';
+
 const RESET_TTL_MS = 30 * 60 * 1000;      // reset link validity window
 const RESET_PAGE   = 'https://helper.ffhistorian.com/reset-password';
 
@@ -122,7 +125,7 @@ async function sendMail(env, { to, subject, html, text }) {
   await env.EMAIL.send({ to, from: { email: 'noreply@ffhistorian.com', name: 'League Assist' }, subject, html, text });
 }
 
-async function notifyAdmin(env, subject, text) {
+export async function notifyAdmin(env, subject, text) {
   if (!env.ADMIN_EMAIL) { console.warn('notifyAdmin skipped: ADMIN_EMAIL secret not set'); return; }
   try {
     await env.EMAIL.send({
@@ -223,6 +226,8 @@ async function deleteUserAccount(userId, env) {
     env.DB.prepare('DELETE FROM player_projection_scores WHERE user_id = ?').bind(userId),
     env.DB.prepare('DELETE FROM email_verifications WHERE user_id = ?').bind(userId),
     env.DB.prepare('DELETE FROM password_resets WHERE user_id = ?').bind(userId),
+    env.DB.prepare('DELETE FROM user_identities WHERE user_id = ?').bind(userId),
+    env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(userId),
     env.DB.prepare('DELETE FROM users WHERE id = ?').bind(userId),
   ]);
   return user.email;
@@ -230,7 +235,7 @@ async function deleteUserAccount(userId, env) {
 
 // ── Session helpers ───────────────────────────────────────────────────────────
 
-function randomHex(bytes = 32) {
+export function randomHex(bytes = 32) {
   return Array.from(crypto.getRandomValues(new Uint8Array(bytes)), b => b.toString(16).padStart(2, '0')).join('');
 }
 
@@ -270,7 +275,7 @@ function errRes(msg, status = 400) {
 
 // ── Session creation ──────────────────────────────────────────────────────────
 
-async function createSession(userId, env) {
+export async function createSession(userId, env) {
   const id = randomHex(32);
   await env.DB.prepare('INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)')
     .bind(id, userId, Date.now() + SESSION_TTL_MS).run();
@@ -452,12 +457,16 @@ async function deleteAccount(request, env) {
   if (!user) return errRes('Not authenticated', 401);
   let body;
   try { body = await request.json(); } catch { return errRes('Invalid JSON'); }
-  const { password } = body ?? {};
-  if (!password) return errRes('Password required');
-
+  const { password, confirm } = body ?? {};
   const fullUser = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(user.user_id).first();
-  const ok = await verifyPassword(String(password), fullUser.password_hash, fullUser.password_salt);
-  if (!ok) return errRes('Incorrect password');
+  if (fullUser.password_hash === OAUTH_NO_PASSWORD) {
+    // Google-only account: no password to confirm with, so the user types DELETE.
+    if (String(confirm || '').trim().toUpperCase() !== 'DELETE') return errRes('Type DELETE to confirm');
+  } else {
+    if (!password) return errRes('Password required');
+    const ok = await verifyPassword(String(password), fullUser.password_hash, fullUser.password_salt);
+    if (!ok) return errRes('Incorrect password');
+  }
 
   const email = await deleteUserAccount(user.user_id, env);
   await notifyAdmin(env, 'Account deleted', `Account deleted: ${email}`);
@@ -508,8 +517,16 @@ async function adminEncryptEspn(request, env) {
 async function me(request, env) {
   const user = await getAuthUser(request, env);
   if (!user) return jsonRes({ user: null });
+  // An account made by Google sign-in has no password ('!' can never verify);
+  // the profile offers "set one with a reset link" instead of Change Password.
+  const [pw, ids] = await Promise.all([
+    env.DB.prepare('SELECT password_hash FROM users WHERE id = ?').bind(user.user_id).first(),
+    env.DB.prepare('SELECT provider FROM user_identities WHERE user_id = ?').bind(user.user_id).all().catch(() => ({ results: [] })),
+  ]);
   return jsonRes({
     user: {
+      has_password:     pw?.password_hash !== OAUTH_NO_PASSWORD,
+      providers:        (ids.results || []).map(r => r.provider),
       email:            user.email,
       name:             user.name || null,
       sleeper_username: user.sleeper_username,

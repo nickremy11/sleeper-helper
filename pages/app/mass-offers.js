@@ -504,7 +504,7 @@ function moBarHtml() {
     <span class="mo-meta">${n} selected${sent ? ` · ${sent} sent` : ''}</span>
     <button class="setup-btn" style="min-height:34px;" onclick="moOpenConfirm()" ${n && canWrite ? '' : 'disabled'}>Send ${n} offer${s}</button>
     ${canWrite ? '' : `<span class="mo-meta">${S.auth
-      ? 'Add your Sleeper token in <a href="/myprofile" style="color:var(--gold-light);">your profile</a> to send'
+      ? 'Add your Sleeper token in <a href="https://ffhistorian.com/profile/" style="color:var(--gold-light);">your profile</a> to send'
       : 'Paste your Sleeper token above to send'}</span>`}
   </div>`;
 }

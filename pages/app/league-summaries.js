@@ -1029,7 +1029,7 @@ function lsRecapHtml() {
     <span class="ls-mode-label">${f.lbl}</span>
     ${f.opts.map(([v, l]) => {
       const off = f.key === 'role' && v !== 'all' && !roles.has(v);
-      return `<button class="ls-mode-pill${LS.recap[f.key] === v ? ' active' : ''}" onclick="lsRecapSet('${f.key}','${v}')"${off ? ' disabled title="Fill out Root For Me first"' : ''}>${l}</button>`;
+      return `<button class="ls-mode-pill${LS.recap[f.key] === v ? ' active' : ''}" onclick="lsRecapSet('${f.key}','${v}')"${off ? ' disabled title="Tick Contending on a league, or set them in your profile"' : ''}>${l}</button>`;
     }).join('')}
   </div>`).join('');
   // The latest week is stored as null so the view rolls forward when a new week posts.
@@ -1064,6 +1064,21 @@ function lsRecapHtml() {
       ${lsRecapCard(cum,    { kicker: `Season Ledger · Thru Week ${W}`, scope, cumulative: true, oddsNote })}
     </div>
   </div>`;
+}
+
+// The table's Contending checkbox. Only `contender` changes; the $ stake set in
+// the profile is kept (saveLeaguePref merges over the stored pref).
+async function lsSetContending(lgId, on, el) {
+  if (el) el.disabled = true;
+  try {
+    const pref = await saveLeaguePref(S.auth, lgId, { contender: on });
+    RS.prefs[lgId] = pref;
+    if (RS._storedPrefs) RS._storedPrefs[lgId] = pref;
+  } catch {
+    if (el) el.checked = !on;
+    alert('Could not save — check your connection and try again.');
+  }
+  lsDrawTable();
 }
 
 function lsDrawTable() {
@@ -1124,7 +1139,7 @@ function lsDrawTable() {
     { key: 'chances',   lbl: 'Playoff Chances'},
   ];
 
-  const thead = `<thead><tr>${cols.map(c =>
+  const thead = `<thead><tr><th class="ls-ct-th" title="Contending this season? Saved to your profile, read by Root For Me, the Scoreboard and Scout">Contending</th>${cols.map(c =>
     `<th class="${thCls(c.key)}" onclick="lsSort('${c.key}')">${c.lbl}${arr(c.key)}</th>`
   ).join('')}</tr></thead>`;
 
@@ -1178,7 +1193,12 @@ function lsDrawTable() {
       chancesCell = `<td><span class="${cls}">${label}</span></td>`;
     }
 
-    return `<tr${row.prefContender ? ' class="ls-contender"' : ''}>${nameCell}${standingCell}${recordCell}${apCell}${chancesCell}</tr>`;
+    // Contending checkbox: one league's pref, saved to the account (or this
+    // browser signed out) and shared with Root For Me / the profile.
+    const ctCell = `<td class="ls-ct-td"><input type="checkbox" class="ls-ct-check"${row.prefContender ? ' checked' : ''}
+      aria-label="Contending in ${esc(row.name)}" title="${row.role ? (row.prefContender ? 'Contending' : 'Not contending') : 'Not set yet'}"
+      onchange="lsSetContending(${jsArg(row.lgId)}, this.checked, this)" /></td>`;
+    return `<tr${row.prefContender ? ' class="ls-contender"' : ''}>${ctCell}${nameCell}${standingCell}${recordCell}${apCell}${chancesCell}</tr>`;
   }).join('')}</tbody>`;
 
   const filterBtns = `
@@ -1187,13 +1207,14 @@ function lsDrawTable() {
       <button class="ghost-btn${LS.filter==='all'?' active':''}" onclick="lsSetFilter('all')" style="${LS.filter==='all'?'border-color:var(--gold);color:var(--gold);':''}">All</button>
       <button class="ghost-btn${LS.filter==='contenders'?' active':''}" onclick="lsSetFilter('contenders')"
         style="${LS.filter==='contenders'?'border-color:var(--gold);color:var(--gold);':''}"
-        ${roles.has('contender')?'':'disabled title="Fill out Root For Me first"'}>Contenders</button>
+        ${roles.has('contender')?'':'disabled title="Tick Contending on a league, or set them in your profile"'}>Contenders</button>
       <button class="ghost-btn${LS.filter==='rebuilders'?' active':''}" onclick="lsSetFilter('rebuilders')"
         style="${LS.filter==='rebuilders'?'border-color:var(--gold);color:var(--gold);':''}"
-        ${roles.has('rebuilder')?'':'disabled title="Tag a league as rebuilding in Root For Me"'}>Rebuilders</button>
+        ${roles.has('rebuilder')?'':'disabled title="Untick Contending on a league, or set them in your profile"'}>Rebuilders</button>
       <input type="text" class="search-input" id="ls-search" placeholder="Search leagues…"
         oninput="lsOnSearch()" value="${esc(LS.search)}" style="max-width:180px;margin-left:4px;" />
       ${LS.sortCol ? `<button class="ls-reset-sort" onclick="lsSort(null)">Sleeper order</button>` : ''}
+      <a class="ls-ct-setup" href="${PREFS_SETUP_URL}">Contending leagues &amp; $ stakes →</a>
     </div>`;
 
   const oddsBtn = LS.oddsLoading

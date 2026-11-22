@@ -54,7 +54,7 @@ async function renderTrades() {
   if (!S.token && !S.auth?.has_token) {
     if (S.auth) {
       setC(`<div class="empty-state">
-        <p>Add your Sleeper auth token in <a href="/myprofile" style="color:var(--gold-ink);">your profile</a> to see pending trades</p>
+        <p>Add your Sleeper auth token in <a href="https://ffhistorian.com/profile/" style="color:var(--gold-ink);">your profile</a> to see pending trades</p>
       </div>`);
     } else {
       setC(`<div class="empty-state">

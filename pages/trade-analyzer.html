@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="https://ffhistorian.com/favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="https://ffhistorian.com/favicon-32.png" type="image/png" sizes="32x32" />
+  <link rel="apple-touch-icon" href="https://ffhistorian.com/apple-touch-icon.png" />
   <title>Trade Analyzer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Graduate&family=Bitter:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
@@ -318,9 +321,9 @@
 
   <script src="/shared-nav.js?v=20261122"></script>
   <script src="/shared-core.js?v=20261117"></script>
-  <script src="/shared-utils.js?v=20261117"></script>
+  <script src="/shared-utils.js?v=20261124"></script>
   <script src="/league-engine.js?v=20261119"></script>
-  <script src="/shared-auth.js?v=20261121"></script>
+  <script src="/shared-auth.js?v=20261124"></script>
   <script>
   'use strict';
 
@@ -1442,7 +1445,7 @@
   function proposeBlocker(assets) {
     const user = SharedAuth.getUser?.();
     if (!user) return 'Sign in to propose this trade in Sleeper';
-    if (!user.has_token) return 'Add your Sleeper token in <a href="/myprofile">your profile</a> to propose in Sleeper';
+    if (!user.has_token) return 'Add your Sleeper token in <a href="https://ffhistorian.com/profile/">your profile</a> to propose in Sleeper';
     if (_myRosterId == null) return 'Couldn’t find your team in this league';
     if (!_teamIds.includes(_myRosterId)) return 'You’re not one of the teams in this trade';
     if (!assets.length) return null; // nothing selected yet — the button is just disabled

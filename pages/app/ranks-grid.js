@@ -100,7 +100,7 @@ function rgApplyBarHtml(fix) {
     : `<span class="rg-ap-grp">same players, slots reshuffled</span>`;
   const act = fix._espn ? '<span style="color:var(--brown-light);">set it in ESPN</span>'
     : luCanWrite() ? `<button class="setup-btn" style="padding:5px 12px;font-size:0.6rem;" onclick="rgApply()">Apply this lineup</button>`
-    : '<span style="color:var(--brown-light);">preview only — <a href="/myprofile">add a Sleeper token</a> to apply</span>';
+    : '<span style="color:var(--brown-light);">preview only — <a href="https://ffhistorian.com/profile/">add a Sleeper token</a> to apply</span>';
   return `<div class="rg-apply">
       <span class="rg-ap-grp"><b>By ${label(src)}</b></span>${swaps}
       <span class="rg-ap-grp" style="color:${dc};">${x.d >= 0 ? '+' : ''}${x.d.toFixed(1)} proj</span>
@@ -417,7 +417,7 @@ function rgSwapHtml(fix, pid) {
   const foot = msg => `<div class="rg-swap-pad" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;font-size:0.64rem;color:var(--brown-light);">
       <span id="rg-swap-msg">${msg || ''}</span>
       <span style="flex:1;"></span>
-      ${fix._espn ? '<span>read-only — set it in ESPN</span>' : luCanWrite() ? '' : '<span>preview only — <a href="/myprofile">add a Sleeper token</a> to swap</span>'}
+      ${fix._espn ? '<span>read-only — set it in ESPN</span>' : luCanWrite() ? '' : '<span>preview only — <a href="https://ffhistorian.com/profile/">add a Sleeper token</a> to swap</span>'}
       ${close}
     </div>`;
   const empty = text => `${title}<div class="rg-swap-pad" style="font-size:0.75rem;color:var(--c-amber);">${text}</div>${foot('')}`;

@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" href="https://ffhistorian.com/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="https://ffhistorian.com/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="https://ffhistorian.com/apple-touch-icon.png" />
 <title>Connecting ESPN — FF Historian</title>
 <link href="https://fonts.googleapis.com/css2?family=Graduate&family=Bitter:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="/shared-styles.css?v=20261122" />
@@ -151,7 +154,7 @@ footer { padding: 40px 0 20px; }
     <div class="step">
       <div class="step-num">1</div>
       <h3>Sign in here, then open My Profile</h3>
-      <p>Use the chip in the top-right of any page to sign in, then go to <a href="/myprofile">My Profile</a> and scroll to <strong>ESPN Integration</strong>.</p>
+      <p>Use the chip in the top-right of any page to sign in, then go to <a href="https://ffhistorian.com/profile/#connections">My Profile</a> and open <strong>Connections</strong>.</p>
     </div>
 
     <div class="step">
@@ -218,7 +221,7 @@ footer { padding: 40px 0 20px; }
       <p>Open <a href="/?tab=leagues">League Summaries</a>. Your ESPN leagues load a moment after the Sleeper ones and sit in the same list. If a league is there but your team isn't highlighted as yours, see troubleshooting below.</p>
     </div>
 
-    <p style="text-align:center;margin:28px 0 8px;"><a class="cta" href="/myprofile">Open My Profile &rarr;</a></p>
+    <p style="text-align:center;margin:28px 0 8px;"><a class="cta" href="https://ffhistorian.com/profile/#connections">Open My Profile &rarr;</a></p>
 
     <div class="section-head"><h2>Do I Have To Enter League IDs?</h2><div class="section-head-line"></div></div>
     <p>No &mdash; that's what <strong>Find my leagues</strong> is for. ESPN publishes no official &ldquo;list my leagues&rdquo; endpoint, but the site's own Fan API knows every fantasy team your account follows, and that's what the button reads. Every league it finds is then verified against the real football endpoint before it's offered to you, so basketball and baseball entries, leagues from past seasons, and anything your cookies can't actually read all drop out on their own.</p>
@@ -254,7 +257,7 @@ footer { padding: 40px 0 20px; }
         <li>Requests to ESPN are made <strong>by the server</strong>, attaching your cookies. Your browser never talks to ESPN directly.</li>
         <li><code>SWID</code> <em>is</em> returned to you when you're signed in &mdash; it's just an account identifier, and the pages need it to work out which team in a league is yours.</li>
         <li>They're worth guarding: together they are a logged-in ESPN session for your whole account, not just fantasy. Only paste them into sites you trust.</li>
-        <li><strong>To revoke:</strong> log out of ESPN everywhere (or change your ESPN password) and the cookies stop working immediately. To remove them from here, delete your account under <a href="/myprofile">My Profile &rarr; Danger Zone</a>, which wipes the stored credentials along with everything else.</li>
+        <li><strong>To revoke:</strong> log out of ESPN everywhere (or change your ESPN password) and the cookies stop working immediately. To remove them from here, delete your account under <a href="https://ffhistorian.com/profile/#delete">My Profile &rarr; Delete Account</a>, which wipes the stored credentials along with everything else.</li>
       </ul>
     </div>
 
@@ -301,7 +304,7 @@ footer { padding: 40px 0 20px; }
       </ul>
     </div>
 
-    <p style="text-align:center;margin:32px 0 8px;"><a class="cta" href="/myprofile">Open My Profile &rarr;</a></p>
+    <p style="text-align:center;margin:32px 0 8px;"><a class="cta" href="https://ffhistorian.com/profile/#connections">Open My Profile &rarr;</a></p>
 
     <footer>
       <a href="https://ffhistorian.com">ffhistorian.com</a>
@@ -310,7 +313,7 @@ footer { padding: 40px 0 20px; }
 </div>
 
 <script src="/shared-nav.js?v=20261122"></script>
-  <script src="/shared-auth.js?v=20261121"></script>
+  <script src="/shared-auth.js?v=20261124"></script>
 <script>
 function pickTab(id) {
   document.querySelectorAll('.tab-pill').forEach(b => b.classList.toggle('on', b.dataset.tab === id));

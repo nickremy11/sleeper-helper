@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="https://ffhistorian.com/favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="https://ffhistorian.com/favicon-32.png" type="image/png" sizes="32x32" />
+  <link rel="apple-touch-icon" href="https://ffhistorian.com/apple-touch-icon.png" />
   <title>League Analyzer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Graduate&family=Bitter:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
@@ -191,6 +194,11 @@
     .az-trade-item:hover { background: rgba(var(--tint),0.06); color: var(--cream); }
     .az-trade-item-sub { font-size: 0.74rem; color: var(--brown-light); margin-top: 1px; }
     .az-switcher-wrap { position: relative; }
+    .az-ct { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border: 2px solid var(--edge); border-radius: 6px;
+      background: var(--card); color: var(--card-text); cursor: pointer; white-space: nowrap;
+      font-family: var(--font-display), serif; font-size: 0.62rem; letter-spacing: 0.14em; text-transform: uppercase; }
+    .az-ct.on { background: var(--sel-bg); border-color: var(--sel-bg); color: var(--sel-fg); }
+    .az-ct input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; margin: 0; }
     .az-switcher-btn {
       font-family: var(--font-display), serif; font-size: 0.62rem; letter-spacing: 0.14em;
       text-transform: uppercase; padding: 7px 13px; border: 1.5px solid var(--brown-mid);
@@ -367,6 +375,9 @@
             <div id="az-targets-content"></div>
           </div>
         </div>
+        <label id="az-ct" class="az-ct" style="display:none;" title="Are you contending in this league this season? Saved to your profile; Root For Me, the Scoreboard and Trade Targets read it">
+          <input type="checkbox" id="az-ct-check" onchange="azSetContending(this.checked, this)" /> Contending
+        </label>
         <button id="az-ranks-btn" class="az-switcher-btn" onclick="openRanksGrid()">▦ View vs Ranks</button>
         <div class="az-switcher-wrap">
           <button class="az-switcher-btn" onclick="toggleSwitcher(event)">⇅ Switch League</button>
@@ -382,9 +393,9 @@
 
   <script src="/shared-nav.js?v=20261122"></script>
   <script src="/shared-core.js?v=20261117"></script>
-  <script src="/shared-utils.js?v=20261117"></script>
+  <script src="/shared-utils.js?v=20261124"></script>
   <script src="/league-engine.js?v=20261119"></script>
-  <script src="/shared-auth.js?v=20261121"></script>
+  <script src="/shared-auth.js?v=20261124"></script>
   <script>
   'use strict';
 
@@ -1340,7 +1351,9 @@
       Promise.all([
         azLoadIdentity(allRosters || []),
         azLoadPref(),
-      ]).then(() => renderTradeTargetsBtn());
+      ]).then(() => { renderTradeTargetsBtn(); azPaintCt(); });
+    } else {
+      azLoadPref().then(azPaintCt);
     }
 
     window._azRanks = computeRanks(teams);
@@ -1429,6 +1442,32 @@
       const mine = allRosters.find(r => r.owner_id === su.user_id);
       window._azMyRosterId = mine?.roster_id ?? null;
     } catch {}
+  }
+
+  // The Contending toggle in the toolbar: shown once the pref is read (and, for
+  // Sleeper, only when you have a team here). Saves just `contender`; the $
+  // stake set in the profile is kept (saveLeaguePref merges).
+  function azPaintCt() {
+    const box = document.getElementById('az-ct');
+    if (!box) return;
+    const inLeague = lgId.startsWith('espn_') || window._azMyRosterId != null;
+    box.style.display = inLeague ? 'inline-flex' : 'none';
+    const on = window._azMyPref === 'contender';
+    document.getElementById('az-ct-check').checked = on;
+    box.classList.toggle('on', on);
+  }
+  async function azSetContending(on, el) {
+    el.disabled = true;
+    try {
+      const pref = await saveLeaguePref(SharedAuth.getUser?.(), lgId, { contender: on });
+      window._azMyPref = pref.contender ? 'contender' : 'rebuilder';
+      renderTradeTargetsBtn();
+    } catch {
+      el.checked = !on;
+      alert('Could not save — check your connection and try again.');
+    }
+    el.disabled = false;
+    azPaintCt();
   }
 
   async function azLoadPref() {
@@ -2114,7 +2153,7 @@
 
     const POS_CLS = { QB: 'rs-pos-QB', RB: 'rs-pos-RB', WR: 'rs-pos-WR', TE: 'rs-pos-TE' };
 
-    const noPrefNote = myPref ? '' : `<div class="az-tgt-nopref">Set your contender/rebuilder preference in <a href="/rootforme" style="color:var(--gold);">Root For Me</a> for tailored results.</div>`;
+    const noPrefNote = myPref ? '' : `<div class="az-tgt-nopref">Tick <strong>Contending</strong> above (or set it in <a href="https://ffhistorian.com/profile/#contending" style="color:var(--gold);">your profile</a>) for tailored results.</div>`;
 
     const targetsHtml = targets.length === 0
       ? `<div class="az-tgt-empty">No clear trade targets found for this league.</div>`

@@ -1,1 +1,4 @@
 /dispersal/*   /dispersal.html   200
+# The profile moved to the root domain (shared by every site). A 301 keeps the #tab.
+/myprofile       https://ffhistorian.com/profile/ 301
+/myprofile.html  https://ffhistorian.com/profile/ 301

@@ -90,7 +90,7 @@ async function dashTrades(regular) {
   const fill = body => dashFill('dash-trades', 'Open Trades', 'trades', body);
   if (!S.token && !S.auth?.has_token) {
     return fill(dashLine(S.auth
-      ? 'Add your Sleeper token in <a href="/myprofile">your profile</a> to see pending trades.'
+      ? 'Add your Sleeper token in <a href="https://ffhistorian.com/profile/">your profile</a> to see pending trades.'
       : 'Paste your Sleeper token above to see pending trades.', 'dim'));
   }
   try {
@@ -265,7 +265,7 @@ function homeWelcomeHtml() {
     <div class="home-rule wide"></div>
     <p class="home-note">
       ${S.auth
-        ? 'Add your Sleeper username in <a href="/myprofile">your profile</a> to load your leagues and get started.'
+        ? 'Add your Sleeper username in <a href="https://ffhistorian.com/profile/">your profile</a> to load your leagues and get started.'
         : 'Enter your Sleeper username above to load your leagues and get started.'}
       Play in ESPN leagues too? <a href="/espn-setup">Here’s how to connect them.</a>
       New to FF Historian? <a href="https://ffhistorian.com/getting-started/">Getting Started</a> walks through every step and what it unlocks.

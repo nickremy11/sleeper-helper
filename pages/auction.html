@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="https://ffhistorian.com/favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="https://ffhistorian.com/favicon-32.png" type="image/png" sizes="32x32" />
+  <link rel="apple-touch-icon" href="https://ffhistorian.com/apple-touch-icon.png" />
   <title>Auction Draft Tracker</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Graduate&family=Bitter:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
@@ -454,8 +457,8 @@
 
   <script src="/shared-nav.js?v=20261122"></script>
   <script src="/shared-core.js?v=20261117"></script>
-  <script src="/shared-utils.js?v=20261117"></script>
-  <script src="/shared-auth.js?v=20261121"></script>
+  <script src="/shared-utils.js?v=20261124"></script>
+  <script src="/shared-auth.js?v=20261124"></script>
   <script>
   'use strict';
 
@@ -974,14 +977,14 @@
       <div class="auc-field">
         <label class="auc-label">Sleeper League (optional — enables live sync)</label>
         <div style="font-family:var(--font-body),serif;font-size:0.86rem;color:var(--brown-light);font-style:italic;">
-          Set your Sleeper username in your <a href="/myprofile" style="color:var(--gold);">profile</a> to enable Sleeper live sync.
+          Set your Sleeper username in your <a href="https://ffhistorian.com/profile/" style="color:var(--gold);">profile</a> to enable Sleeper live sync.
         </div>
       </div>`
       : A._sleeperFetchState === 'error' ? `
       <div class="auc-field">
         <label class="auc-label">Sleeper League (optional — enables live sync)</label>
         <div style="font-family:var(--font-body),serif;font-size:0.86rem;color:var(--c-red);">
-          Could not look up Sleeper leagues for "${esc(A._sleeperUsername || '')}" — check the username in your <a href="/myprofile" style="color:var(--gold);">profile</a>.
+          Could not look up Sleeper leagues for "${esc(A._sleeperUsername || '')}" — check the username in your <a href="https://ffhistorian.com/profile/" style="color:var(--gold);">profile</a>.
         </div>
       </div>`
       : A._sleeperFetchState === 'ok' ? `
