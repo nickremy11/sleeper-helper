@@ -15,8 +15,11 @@ const POINTS_ONLY_TOP_COUNT = 3;
 
 // Per-starter weekly spread as a fraction of projected points. Players are drawn
 // independently, so a lineup's sigma is these combined in quadrature — which came
-// out ~18-24 pts a team, tighter than real fantasy scoring (~25-30). Hence the
-// 1.3x over the old 0.43/0.50/0.52/0.58/0.55 values; odds were skewing too extreme.
+// out ~18-24 pts a team, tighter than real fantasy scoring. Hence the 1.3x over
+// the old 0.43/0.50/0.52/0.58/0.55 values; odds were skewing too extreme.
+// Checked 2026-11-22 against 60 Sleeper leagues / 8,167 team-weeks (wks 1-11):
+// real misses vs projection SD 32.6, these CVs give 33.6 — calibrated. ±50 is
+// a ~1-in-9 week (90th percentile), not one SD; don't widen without re-measuring.
 const POS_CV = { QB: 0.56, RB: 0.65, WR: 0.68, TE: 0.75, DL: 0.72, LB: 0.72, DB: 0.72 };
 const DEFAULT_CV = 0.65;
 const SIGMA_FLOOR = 15;
@@ -397,7 +400,9 @@ function computeRanks(teams) {
     return map;
   };
   return {
-    overall: rankBy(t => t.overall), contender: rankBy(t => t.contender ?? 0),
+    // Overall = players + picks. t.overall stays players-only: the sims' empty-
+    // projection fallback scales it into weekly points, and picks don't score.
+    overall: rankBy(t => t.overall + (t.draft || 0)),
     QB: rankBy(t => t.posValues.QB), RB: rankBy(t => t.posValues.RB),
     WR: rankBy(t => t.posValues.WR), TE: rankBy(t => t.posValues.TE),
     DL: rankBy(t => t.posValues.DL), draft: rankBy(t => t.draft),
@@ -438,4 +443,86 @@ function applyOddsToTeams(teams, { odds, bye, lastPf }) {
     t.byeOdds       = bye?.[t.rosterId] ?? null;
     t.lastPlaceOdds = lastPf[t.rosterId] ?? null;
   }
+}
+
+// ── Playoff power ───────────────────────────────────────────────────────────
+// A 0-100 power score for the playoff weeks only, from each team's projected
+// optimal lineup (mu) and its spread (sigma) per playoff week.
+//
+// 1. Each week's reference is THAT week's best projected team, so a team is
+//    never measured against someone it outprojects — two teams that trade the
+//    top spot can both read 100.
+// 2. Per week: p = 2 × P(outscores that week's best) — 1 for the best team.
+// 3. Weeks combine as the geometric mean of p (a bye-week hole still costs,
+//    spread across the weeks counted), turned back into an effective gap in
+//    swings: z = −Φ⁻¹(mean / 2).
+// 4. The smallest z in the league is subtracted (the strongest team is 0), then
+//    score = 100 × exp(−(z / PP_BELL)²): flat near the top so close teams stay
+//    close, steep in the middle so a team ~30 pts/wk back lands near 12.
+//
+// Why sigma isn't inflated: measured over 60 real Sleeper leagues / 8,167
+// team-weeks (2026 wks 1-11), as-set lineups missed projection by SD 32.6 pts;
+// the POS_CV model gives 33.6 for the same lineups. ±50 is the ~90th-percentile
+// miss (11% of team-weeks), not one standard deviation.
+
+const PP_ALIVE_MIN = 0.05;   // playoff odds below this → no Playoff Power rank
+const PP_BELL = 0.44;        // gap (in matchup swings) where the score falls to 1/e ≈ 37
+
+// Standard normal CDF (Abramowitz–Stegun 7.1.26 erf, |error| < 1.5e-7).
+function normCdf(z) {
+  const x = Math.abs(z) / Math.SQRT2, t = 1 / (1 + 0.3275911 * x);
+  const erf = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
+  return z >= 0 ? 0.5 * (1 + erf) : 0.5 * (1 - erf);
+}
+
+// Inverse of normCdf by bisection — called once per team, so speed is moot.
+function normInv(p) {
+  if (p <= 0) return -Infinity;
+  if (p >= 1) return Infinity;
+  let lo = -9, hi = 9;
+  for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; if (normCdf(m) < p) lo = m; else hi = m; }
+  return (lo + hi) / 2;
+}
+
+// NFL weeks a league's bracket is played in. Sleeper playoff_round_type:
+// 0 = one week a round, 1 = two-week championship, 2 = two weeks a round.
+function playoffWeeksFor({ start, playoffTeams, roundType = 0, lastWeek = 18 }) {
+  if (!start || !playoffTeams) return [];
+  const rounds = Math.max(1, Math.ceil(Math.log2(Math.max(2, playoffTeams))));
+  const n = roundType === 2 ? rounds * 2 : roundType === 1 ? rounds + 1 : rounds;
+  const weeks = [];
+  for (let w = start; w < start + n && w <= lastWeek; w++) weeks.push(w);
+  return weeks;
+}
+
+// rows: [{ rid, weeks: [{mu, sigma}, …] }] — every row the same weeks, in order.
+// → { rid: { score (0-100 int), ppw (projected points per playoff week), gap (z) } }
+function playoffPowerScores(rows) {
+  const out = {};
+  const live = rows.filter(r => r.weeks?.length);
+  if (!live.length) return out;
+  const n = live[0].weeks.length;
+  const best = Array.from({ length: n }, (_, i) =>
+    live.reduce((a, r) => (r.weeks[i].mu > a.mu ? r.weeks[i] : a), live[0].weeks[i]));
+  const z = {};
+  for (const r of live) {
+    let logP = 0;
+    r.weeks.forEach((w, i) => {
+      const b = best[i];
+      const sd = Math.sqrt(w.sigma ** 2 + b.sigma ** 2) || 1;
+      logP += Math.log(Math.max(1e-12, 2 * normCdf(-(b.mu - w.mu) / sd)));
+    });
+    const gm = Math.exp(logP / n);
+    z[r.rid] = gm >= 1 ? 0 : -normInv(gm / 2);
+  }
+  const zMin = Math.min(...Object.values(z));
+  for (const r of live) {
+    const g = Math.max(0, z[r.rid] - zMin);
+    out[r.rid] = {
+      score: Math.round(100 * Math.exp(-((g / PP_BELL) ** 2))),
+      ppw: r.weeks.reduce((s, w) => s + w.mu, 0) / n,
+      gap: g,
+    };
+  }
+  return out;
 }

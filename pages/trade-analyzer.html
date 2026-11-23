@@ -322,7 +322,7 @@
   <script src="/shared-nav.js?v=20261122"></script>
   <script src="/shared-core.js?v=20261117"></script>
   <script src="/shared-utils.js?v=20261124"></script>
-  <script src="/league-engine.js?v=20261119"></script>
+  <script src="/league-engine.js?v=20261122"></script>
   <script src="/shared-auth.js?v=20261124"></script>
   <script>
   'use strict';
@@ -523,7 +523,6 @@
 
     const ownerNames = rosterOwnerNames(allRosters, usersRes);
 
-    const SKILL = new Set(['QB','RB','WR','TE']);
     const DEF_P = new Set(['DL','LB','DB']);
 
     const teams = allRosters.map(roster => {
@@ -533,7 +532,7 @@
       const fpts   = (roster.settings?.fpts ?? 0) + (roster.settings?.fpts_decimal ?? 0) / 100;
       const starterSet = new Set(roster.starters || []);
 
-      let overall = 0, contenderBase = 0;
+      let overall = 0;
       const posValues = { QB: 0, RB: 0, WR: 0, TE: 0, DL: 0 };
       const playerList = [];
 
@@ -553,7 +552,6 @@
         overall += val;
         const bucket = DEF_P.has(pos) ? 'DL' : pos;
         if (bucket in posValues) posValues[bucket] += val;
-        if (SKILL.has(pos) && (p.years_exp ?? 0) >= 3 && val > 0) contenderBase += val;
         playerList.push({ pid, name: p.full_name || pid, pos, val, yearsExp: p.years_exp ?? 0, isStarter: starterSet.has(pid) });
       }
       playerList.sort((a, b) => {
@@ -576,7 +574,7 @@
       return {
         rosterId: roster.roster_id, teamName: info.teamName, ownerName: info.displayName,
         wins, losses, fpts, maxPf: sleeperMaxPf(roster),
-        overall: Math.round(overall), contender: Math.round(contenderBase + wins * 50),
+        overall: Math.round(overall),
         posValues: { QB: Math.round(posValues.QB), RB: Math.round(posValues.RB), WR: Math.round(posValues.WR), TE: Math.round(posValues.TE), DL: Math.round(posValues.DL) },
         draft: Math.round(draftValue), playerList, pickList, standing: 0, playoffOdds: null, byeOdds: null,
       };
@@ -754,11 +752,11 @@
       const t = {
         rosterId: team.id, teamName: team.name || null, ownerName: null,
         wins, losses, fpts,
-        overall: 0, contender: 0, posValues: { QB: 0, RB: 0, WR: 0, TE: 0, DL: 0 }, draft: 0,
+        overall: 0, posValues: { QB: 0, RB: 0, WR: 0, TE: 0, DL: 0 }, draft: 0,
         playerList, pickList: [], standing: 0, playoffOdds: null, byeOdds: null, lastPlaceOdds: null,
         _sleeperPids: sleeperPids,
       };
-      recomputeTeamValues(t); // fills overall/contender/posValues/draft from playerList/pickList — same formula as Sleeper teams
+      recomputeTeamValues(t); // fills overall/posValues/draft from playerList/pickList — same formula as Sleeper teams
       return t;
     });
 
@@ -845,20 +843,17 @@
   // ── Trade analysis ──────────────────────────────────────────────────────────
 
   function recomputeTeamValues(t) {
-    const SKILL = new Set(['QB','RB','WR','TE']);
     const DEF_P = new Set(['DL','LB','DB']);
-    let overall = 0, contenderBase = 0;
+    let overall = 0;
     const pv = { QB: 0, RB: 0, WR: 0, TE: 0, DL: 0 };
     for (const pl of t.playerList) {
       overall += pl.val;
       const bucket = DEF_P.has(pl.pos) ? 'DL' : pl.pos;
       if (bucket in pv) pv[bucket] += pl.val;
-      if (SKILL.has(pl.pos) && pl.yearsExp >= 3 && pl.val > 0) contenderBase += pl.val;
     }
     let draftValue = 0;
     for (const pick of t.pickList) draftValue += pick.val;
     t.overall   = Math.round(overall);
-    t.contender = Math.round(contenderBase + t.wins * 50);
     t.posValues = { QB: Math.round(pv.QB), RB: Math.round(pv.RB), WR: Math.round(pv.WR), TE: Math.round(pv.TE), DL: Math.round(pv.DL) };
     t.draft     = Math.round(draftValue);
   }
@@ -1692,7 +1687,6 @@
 
     const METRICS = [
       { key: 'overall',   label: 'Overall'   },
-      { key: 'contender', label: 'Contender' },
       { key: 'QB',        label: 'QB'        },
       { key: 'RB',        label: 'RB'        },
       { key: 'WR',        label: 'WR'        },

@@ -166,3 +166,46 @@ test('the TE multiplier moves tight ends only', () => {
   assert.deepStrictEqual(plain(E.fcApplyTeMult(fc, players, E.fcTeMult(1, 2))), { t: 12047, w: 10437, x: 500 });
   assert.strictEqual(E.fcApplyTeMult(fc, players, 1), fc);   // no premium: the same map back
 });
+
+const PP = vm.runInContext('({ normCdf, playoffWeeksFor, playoffPowerScores })', ctx);
+
+test('normal CDF matches the table', () => {
+  assert.ok(Math.abs(PP.normCdf(0) - 0.5) < 1e-7);
+  assert.ok(Math.abs(PP.normCdf(1) - 0.841345) < 1e-6);
+  assert.ok(Math.abs(PP.normCdf(-1.96) - 0.024998) < 1e-6);
+});
+
+test('playoff weeks follow bracket size and round type', () => {
+  assert.deepStrictEqual(plain(PP.playoffWeeksFor({ start: 15, playoffTeams: 6 })), [15, 16, 17]);
+  assert.deepStrictEqual(plain(PP.playoffWeeksFor({ start: 15, playoffTeams: 4 })), [15, 16]);
+  assert.deepStrictEqual(plain(PP.playoffWeeksFor({ start: 14, playoffTeams: 4, roundType: 1 })), [14, 15, 16]);
+  assert.deepStrictEqual(plain(PP.playoffWeeksFor({ start: 15, playoffTeams: 8, roundType: 2 })), [15, 16, 17, 18]);
+  assert.deepStrictEqual(plain(PP.playoffWeeksFor({ start: 0, playoffTeams: 6 })), []);
+});
+
+test('playoff power: bell curve — close stays close, 30 back lands near 12', () => {
+  const row = (rid, mus, sigma = 33) => ({ rid, weeks: mus.map(mu => ({ mu, sigma })) });
+  const s = PP.playoffPowerScores([
+    row('best', [130, 130, 130]), row('close', [125.6, 125.6, 125.6]),
+    row('mid', [120, 120, 120]), row('weak', [100, 100, 100]),
+  ]);
+  assert.strictEqual(s.best.score, 100);
+  assert.ok(s.close.score >= 94 && s.close.score <= 98, `close ${s.close.score}`);
+  assert.ok(s.mid.score >= 75 && s.mid.score <= 83, `mid ${s.mid.score}`);
+  assert.ok(s.weak.score >= 9 && s.weak.score <= 15, `weak ${s.weak.score}`);
+  assert.strictEqual(Math.round(s.mid.ppw), 120);
+  // Adding weeks doesn't make an even gap harsher.
+  const two = PP.playoffPowerScores([row('best', [130, 130]), row('mid', [120, 120])]);
+  assert.ok(Math.abs(two.mid.score - s.mid.score) <= 1, `2wk ${two.mid.score} vs 3wk ${s.mid.score}`);
+});
+
+test('playoff power: teams that trade the top spot can both read 100', () => {
+  const row = (rid, mus) => ({ rid, weeks: mus.map(mu => ({ mu, sigma: 33 })) });
+  const s = PP.playoffPowerScores([row('a', [140, 120, 130]), row('b', [120, 140, 130]), row('c', [110, 110, 110])]);
+  assert.strictEqual(s.a.score, 100);
+  assert.strictEqual(s.b.score, 100);
+  assert.ok(s.c.score < 50, `c ${s.c.score}`);
+  // A one-week hole still costs.
+  const h = PP.playoffPowerScores([row('top', [130, 130, 130]), row('hole', [130, 130, 90])]);
+  assert.ok(h.hole.score < 90 && h.hole.score > 30, `hole ${h.hole.score}`);
+});

@@ -97,6 +97,7 @@
       display: block; font-family: var(--font-body), serif; font-size: 0.66rem;
       color: var(--brown-light); margin-top: 1px;
     }
+    .az-pp-dim { opacity: 0.45; }
     .az-rank-badge {
       display: inline-block; font-family: var(--font-body), serif; font-weight: 600;
       font-size: 0.82rem; padding: 2px 6px; border-radius: 2px; min-width: 28px;
@@ -394,7 +395,7 @@
   <script src="/shared-nav.js?v=20261122"></script>
   <script src="/shared-core.js?v=20261117"></script>
   <script src="/shared-utils.js?v=20261124"></script>
-  <script src="/league-engine.js?v=20261119"></script>
+  <script src="/league-engine.js?v=20261122"></script>
   <script src="/shared-auth.js?v=20261124"></script>
   <script>
   'use strict';
@@ -413,6 +414,7 @@
   let sortKey = 'overall';
   let sortDir = 1; // -1 = desc (highest value first), 1 = asc
   let hasIDP  = false;
+  let hasPower = false;   // Playoff Power column — set by azPlayoffPower()
   // Two independent axes: Dynasty/Redraft (keeper status) and Best Ball/Lineup
   // (start-your-lineup vs auto-optimal). Every league is exactly one of each —
   // e.g. a league can be Dynasty Best Ball or Redraft Best Ball. Only dynasty
@@ -475,8 +477,8 @@
   // Rebuilt after hasIDP is known. Includes:
   // team | record | all-play | [overall] | QB | RB | WR | TE | [DL] | [draft] | playoff | chevron
   function gridTpl() {
-    if (azNarrow()) return `minmax(0,1fr) 52px 112px 18px`;  // team | record | playoff | chevron
-    return `minmax(0,1fr) 56px 62px${isDynasty ? ' 68px' : ''} 58px 58px 58px 58px${hasIDP ? ' 74px' : ''}${isDynasty ? ' 64px' : ''} 140px 22px`;
+    if (azNarrow()) return `minmax(0,1fr) 52px 112px 18px`;  // team | record | playoff (+ power line) | chevron
+    return `minmax(0,1fr) 56px 62px${isDynasty ? ' 68px' : ''} 58px 58px 58px 58px${hasIDP ? ' 74px' : ''}${isDynasty ? ' 64px' : ''} 140px${hasPower ? ' 72px' : ''} 22px`;
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -510,6 +512,7 @@
     if (hasIDP) keys.push({ key: 'DL', label: 'DL/LB/DB' });
     if (isDynasty) keys.push({ key: 'draft', label: 'Draft' });
     keys.push({ key: 'chances', label: 'Playoff' });
+    if (hasPower) keys.push({ key: 'power', label: 'Playoff Power' });
     return keys;
   }
 
@@ -1063,6 +1066,15 @@
       }
     }
 
+    if (!isBigPool && !isPointsOnly) {
+      await azPlayoffPower(teams, {
+        weeks: playoffWeeksFor({ start: playoffWeekStart, playoffTeams,
+          roundType: leagueRes?.settings?.playoff_round_type ?? 0 }),
+        curWeek: nflRes?.week, season: nflSeason, scoring: scoringSettings, rp, players,
+        pidsOf: t => allRosters.find(r => r.roster_id === t.rosterId)?.players || [],
+      });
+    }
+
     // Re-value next-year picks off the original team's playoff odds. "Good team"
     // proxy: playoff odds normally, or top-3-points odds in a points-only league
     // (where #1 odds are tiny for everyone).
@@ -1086,6 +1098,39 @@
       numStartersPerTeam, is2TE, nextSeason,
       crCtx: { players, byName, fcMap, rosterPositions: rp, scoring: scoringSettings, season: nflSeason },
     };
+  }
+
+  // ── Playoff power ─────────────────────────────────────────────────────────────
+  // Projects every team's best lineup for the league's playoff weeks and scores
+  // it with playoffPowerScores() (league-engine.js). Teams still alive (playoff
+  // odds ≥ PP_ALIVE_MIN) also get a rank among themselves. Never throws, and
+  // never falls back to FantasyCalc values: no projections → no column.
+  async function azPlayoffPower(teams, { weeks, curWeek, season, scoring, rp, players, pidsOf }) {
+    try {
+      const ws = weeks.filter(w => w >= (curWeek || 0));
+      if (!ws.length || !teams.length) return;
+      const proj = await Promise.all(ws.map(w =>
+        fetch(`${API}/sleeper/projections/nfl/regular/${season}/${w}`)
+          .then(r => r.ok ? r.json() : {}).catch(() => ({}))));
+      const rows = teams.map(t => ({
+        rid: t.rosterId,
+        weeks: proj.map(pm => optimalLineupAndSigma(pidsOf(t), pm, scoring, rp, players)),
+      }));
+      const avg = rows.reduce((s, r) => s + r.weeks.reduce((a, w) => a + w.mu, 0), 0) / (rows.length * ws.length);
+      if (avg < 20) { console.warn('[Analyzer power] no playoff-week projections', { ws, avg }); return; }
+      const res = playoffPowerScores(rows);
+      for (const t of teams) {
+        const r = res[t.rosterId];
+        t.ppScore = r ? r.score : null; t.ppPpw = r ? r.ppw : null; t.ppRank = null;
+      }
+      const alive = teams.filter(t => t.ppScore != null && (t.playoffOdds == null || t.playoffOdds >= PP_ALIVE_MIN))
+        .sort((a, b) => b.ppScore - a.ppScore);
+      alive.forEach((t, i) => { t.ppRank = i + 1; t.ppOf = alive.length; });
+      window._azPpWeeks = ws;
+      hasPower = true;
+    } catch (e) {
+      console.warn('[Analyzer power] failed:', e);
+    }
   }
 
   // ── ESPN load ─────────────────────────────────────────────────────────────────
@@ -1283,6 +1328,17 @@
       }
     } catch (e) {
       console.warn('[Analyzer odds] ESPN simulation failed:', e);
+    }
+
+    {
+      const ss = espnRes?.settings?.scheduleSettings || {};
+      const regWeeks = ss.matchupPeriodCount ?? 14;
+      await azPlayoffPower(teams, {
+        weeks: playoffWeeksFor({ start: regWeeks + 1, playoffTeams: ss.playoffTeamCount ?? playoffTeams,
+          roundType: (ss.playoffMatchupPeriodLength ?? 1) > 1 ? 2 : 0 }),
+        curWeek: nflRes?.week, season: nflSeason, scoring: espnScoring,
+        rp: espnRosterPositions, players, pidsOf: t => t._sleeperPids || [],
+      });
     }
 
     return {
@@ -1500,9 +1556,10 @@
       return g ? ((w || 0) + (ti || 0) / 2) / g : -1;
     };
     const valOf = key => t =>
-      key === 'overall'   ? t.overall              :
+      key === 'overall'   ? t.overall + (t.draft || 0) :
       key === 'draft'     ? t.draft                :
       key === 'chances'   ? (t.playoffOdds ?? -1)  :
+      key === 'power'     ? (t.ppScore ?? -1)      :
       key === 'record'    ? winPct(t.wins, t.losses, t.ties) :
       key === 'allplay'   ? winPct(t.apW, t.apL, t.apT)      :
       (t.posValues[key] ?? 0);
@@ -1540,6 +1597,7 @@
           ...posCols.map(p => ({ key: p, label: p === 'DL' ? 'DL/LB/DB' : p })),
           ...(isDynasty ? [{ key: 'draft', label: 'Draft' }] : []),
           { key: 'chances',   label: isBigPool ? 'Exp Rec' : isPointsOnly ? 'Points' : 'Playoff' },
+          ...(hasPower ? [{ key: 'power', label: 'Playoff<br><span class="az-th-sub">power</span>' }] : []),
         ];
 
     const headerHtml = `<div class="az-table-header" style="grid-template-columns:${tpl};">
@@ -1573,6 +1631,15 @@
           const sub = col.key === 'allplay' ? `<span class="az-rec-sub">${pct}</span>` : '';
           return `<div class="az-rank-cell"><span class="az-rec-val">${rec}</span>${sub}</div>`;
         }
+        if (col.key === 'power') {
+          if (team.ppScore == null) return `<div class="az-rank-cell"><span class="az-rec-val">—</span></div>`;
+          const wks = window._azPpWeeks || [];
+          const span = wks.length ? (wks.length > 1 ? `wks ${wks[0]}–${wks[wks.length - 1]}` : `wk ${wks[0]}`) : '';
+          const tip = `${team.ppPpw.toFixed(1)} projected pts/wk · ${span}. Score = how far behind each week's best projected team, measured against weekly scoring swings; strongest team = 100`;
+          if (!team.ppRank) return `<div class="az-rank-cell az-pp-dim" title="${esc(tip)} · out of the hunt (<${Math.round(PP_ALIVE_MIN * 100)}% playoff odds)"><span class="az-rec-val">${team.ppScore}</span><span class="az-rec-sub">out</span></div>`;
+          const bg = rankColor(team.ppRank, team.ppOf);
+          return `<div class="az-rank-cell" title="${esc(tip)}"><span class="az-rank-badge" style="background:${bg};">${team.ppScore}</span><span class="az-rec-sub">#${team.ppRank} of ${team.ppOf}</span></div>`;
+        }
         if (col.key === 'chances') {
           if (isBigPool) {
             const ew  = team.expWins   ?? team.wins   ?? 0;
@@ -1605,11 +1672,15 @@
               const lpCls = lp >= 40 ? 'az-lastplace-hi' : lp >= 15 ? 'az-lastplace-mid' : 'az-lastplace-lo';
               lastLine = `<span class="az-bye-line ${lpCls}">${lp}% last</span>`;
             }
+            // Narrow screens have no room for a Playoff Power column — it rides here.
+            const powerLine = azNarrow() && team.ppScore != null
+              ? `<span class="az-bye-line${team.ppRank ? '' : ' az-pp-dim'}">power ${team.ppScore}${team.ppRank ? ` · #${team.ppRank}/${team.ppOf}` : ''}</span>` : '';
             return `<div class="az-rank-cell az-playoff-cell">
               <span class="az-chances-badge" style="color:${color};font-weight:${weight};">${label}</span>
               <div class="az-playoff-bar-wrap"><div class="az-playoff-bar-fill" style="width:${barPct}%;background:${color};"></div></div>
               ${byeLine}
               ${lastLine}
+              ${powerLine}
             </div>`;
           }
           const { label, cls } = team.playoffChances || { label: '—', cls: 'az-chances-nervy' };
