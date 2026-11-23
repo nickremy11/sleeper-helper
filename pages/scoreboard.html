@@ -171,7 +171,18 @@
 .lm-lu-soon .lm-lu-nm { font-style: italic; }
 .lm-lu-done .lm-lu-nm { color: var(--brown-light); }
 .lm-lu-bench { opacity: 0.45; }
-.lm-lu-inj { color: var(--c-red); font-weight: 600; }
+.lm-inj { flex-shrink: 0; font-family: var(--font-display), serif; font-size: 0.6rem; letter-spacing: 0.04em; line-height: 1; padding: 2px 3px 1px; border: 1.5px solid currentColor; border-radius: 3px; background: transparent; font-style: normal; font-weight: normal; cursor: help; }
+.lm-inj-q { color: var(--c-amber); }
+.lm-inj-d { color: var(--c-orange); }
+.lm-inj-o { color: var(--c-red); border-style: dashed; }
+.lm-lu-out .lm-lu-nm { text-decoration: line-through; text-decoration-color: rgba(var(--tint),0.35); color: var(--brown-light); }
+.lm-lu-swap .lm-lu-nm { color: var(--c-green); }
+.lm-swap { flex-shrink: 0; color: var(--c-green); font-weight: 700; font-size: 0.8rem; cursor: help; }
+.lm-opt-tag { font-family: var(--font-display), serif; font-size: 0.6rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold); border: 1px solid var(--gold); border-radius: 2px; padding: 0 3px; vertical-align: 1px; cursor: help; }
+.lm-live-n { color: var(--c-green); font-weight: 600; }
+.lm-v { opacity: 0.7; }
+.lm-key { margin-top: 6px; }
+.lm-key .lm-inj { display: inline-block; vertical-align: 1px; }
 .lm-lu-tot td { border-top: 1px solid var(--brown-mid); border-bottom: none; padding-top: 7px; }
 .lm-lu-tot .lm-lu-now { font-size: 1.05rem; font-weight: 700; }
 @keyframes lm-flash { from { background: rgba(127,208,127,0.28); } to { background: transparent; } }
@@ -285,8 +296,8 @@
 <script src="/shared-core.js?v=20261117"></script>
 <script src="/shared-utils.js?v=20261124"></script>
 <script src="/miracle.js?v=20261117"></script>
-<script src="/matchup-tracker.js?v=20261117"></script>
-<script src="/league-matchups.js?v=20261122"></script>
+<script src="/matchup-tracker.js?v=20261123"></script>
+<script src="/league-matchups.js?v=20261123"></script>
 <script>
 // Scoreboard — every head-to-head matchup this week, live: score now, projection
 // for what's left, win %, tiered Mortal Lock → Lost Cause. Split out of Root For Me,
@@ -559,7 +570,19 @@ const LM = {
   favErr: '',       // a failed favourites load/save, shown in the notes
   roots: {},        // {pid: {score, mine, theirs}} — Root For Me's score, lmRootScores()
   prevPts: {},      // {lineKey: pts} from the previous read, for the +x.x since-last-refresh marks
+  unavail: {},      // {lgId: Set(pid)} — Sleeper IR + taxi, never startable in an optimal lineup
+  oppMode: (() => { try { return localStorage.getItem('sb_opp_mode') === 'optimal' ? 'optimal' : 'current'; } catch { return 'current'; } })(),
 };
+
+// Opponent: Current = the lineup he has set; Optimal = the best one he could still
+// set by projections (locked players stay). Only the H2H opponent moves — my side,
+// and the median field, stay as set.
+function lmSetOppMode(mode) {
+  LM.oppMode = mode;
+  try { localStorage.setItem('sb_opp_mode', mode); } catch {}
+  lmBuild();
+  lmDraw();
+}
 
 // Every league, rebuilders included (the Role filter covers them).
 async function lmFetchAll(week, fresh = false) {
@@ -657,7 +680,9 @@ function lmBuild() {
     if (lg.settings?.type === 3) continue;   // guillotine: no opponent to be ahead of
     // A null matchup_id is a team with no game this week (points-only, playoff bye).
     if (!r.oppMatchup || r.myMatchup.matchup_id === null) { noOpp++; continue; }
-    const my = lmSide(r.myMatchup, r, fracs), opp = lmSide(r.oppMatchup, r, fracs);
+    const my = lmSide(r.myMatchup, r, fracs);
+    const opp = (LM.oppMode === 'optimal' && typeof lmOptimalSide === 'function'
+      && lmOptimalSide(r.oppMatchup, r, fracs, LM.unavail[lg.league_id])) || lmSide(r.oppMatchup, r, fracs);
     // Nobody's set a lineup yet (schedule posted, week not started).
     if (!my.proj && !opp.proj && !my.now && !opp.now) { noOpp++; continue; }
     const row = { lg, my, opp, oppRosterId: r.oppMatchup.roster_id, oppName: r.oppName || null, ...lmEvaluate(my, opp), medianP: null };
@@ -689,10 +714,17 @@ async function lmLoadNames() {
       const byUser = {};
       for (const u of users || []) byUser[u.user_id] = u.metadata?.team_name || u.display_name || null;
       const out = {};
-      for (const ro of rosters || []) out[ro.roster_id] = byUser[ro.owner_id] || null;
+      const unavail = new Set();
+      for (const ro of rosters || []) {
+        out[ro.roster_id] = byUser[ro.owner_id] || null;
+        for (const pid of [...(ro.reserve || []), ...(ro.taxi || [])]) unavail.add(pid);
+      }
       LM.names[lg.league_id] = out;
+      LM.unavail[lg.league_id] = unavail;
     } catch { /* the row just reads "vs opponent" */ }
   }));
+  // An optimal opponent built before IR / taxi were known may have started one.
+  if (LM.oppMode === 'optimal') lmBuild();
   lmDraw();
 }
 
@@ -714,6 +746,30 @@ function lmFiltered() {
   });
 }
 
+// "2 live · 5 to go" — live = on the field now, to go = game yet to kick off. Out
+// players are in neither. Falls back to the plain count on an older cached engine.
+function lmCounts(side) {
+  if (side.live == null) return `${side.left} left`;
+  if (!side.live && !side.toGo) return 'done';
+  return `${side.live ? `<span class="lm-live-n">${side.live} live</span>` : '0 live'} · ${side.toGo} to go`;
+}
+
+// Injury / status tag. Outlined (never filled), so it can't be mistaken for the
+// filled Root For Me number beside it, and coloured by severity so Q and O differ.
+const LM_INJ = {
+  QUESTIONABLE: ['Q', 'q'], Q: ['Q', 'q'], DAY_TO_DAY: ['DTD', 'q'],
+  DOUBTFUL: ['D', 'd'], D: ['D', 'd'],
+  OUT: ['O', 'o'], O: ['O', 'o'],
+  IR: ['IR', 'o'], INJURY_RESERVE: ['IR', 'o'], PUP: ['PUP', 'o'],
+  SUS: ['SUS', 'o'], SUSPENSION: ['SUS', 'o'], NA: ['NA', 'o'], DNR: ['DNR', 'o'], COV: ['COV', 'o'],
+};
+const LM_INJ_NAME = { q: 'Questionable', d: 'Doubtful', o: 'Out — not counted' };
+function lmInjTag(inj) {
+  const hit = LM_INJ[String(inj || '').toUpperCase()];
+  if (!hit) return '';
+  return `<span class="lm-inj lm-inj-${hit[1]}" title="${esc(String(inj))}${hit[1] === 'o' ? ' — not counted' : ''}">${hit[0]}</span>`;
+}
+
 const lmRec = (w, l, t) => `${w}–${l}${t ? `–${t}` : ''}`;
 const lmNum = n => (Math.round(n * 10) / 10).toFixed(1);
 
@@ -723,7 +779,7 @@ function lmRowHtml(r) {
   const opponent = r.oppName || LM.names[lg.league_id]?.[r.oppRosterId] || 'opponent';
   const pct = Math.round(r.p * 100);
   const pctLabel = r.final ? (r.mu > 0 ? 'Won' : r.mu < 0 ? 'Lost' : 'Tied') : (pct >= 100 ? '>99%' : pct <= 0 ? '<1%' : `${pct}%`);
-  const left = r.final ? 'Final' : `${my.left} left v ${opp.left}`;
+  const left = r.final ? 'Final' : `${lmCounts(my)} <span class="lm-v">v</span> ${lmCounts(opp)}`;
   const median = r.medianP == null ? ''
     : `<span class="lm-med ${r.medianP >= 0.5 ? 'mnm-good' : 'mnm-bad'}">Median ${Math.round(r.medianP * 100)}%</span>`;
   const open = LM.open.has(lg.league_id);
@@ -738,7 +794,7 @@ function lmRowHtml(r) {
     </div>
     <div class="mnm-bar"><span style="width:${(r.p * 100).toFixed(1)}%"></span></div>
     <div class="lm-sub">
-      <span class="lm-sub-opp">vs ${esc(opponent)} · ${left}</span>
+      <span class="lm-sub-opp">vs ${esc(opponent)}${opp.optimal ? ` <span class="lm-opt-tag" title="Opponent's best lineup by projections${opp.swaps ? ` — ${opp.swaps} change${opp.swaps !== 1 ? 's' : ''} from what he has set` : ' — already what he has set'}">optimal${opp.swaps ? ` +${opp.swaps}` : ''}</span>` : ''} · ${left}</span>
       ${median}
       ${r.final ? '' : `<span class="lm-proj">Proj ${lmNum(my.proj)} – ${lmNum(opp.proj)}</span>`}
     </div>
@@ -773,11 +829,12 @@ function lmSideRows(side) {
 
 function lmGameShort(team) {
   const g = team && S.nflGames.find(x => x.home === team || x.away === team);
-  if (!g) return { txt: team ? 'no game' : '', live: false, done: !!team };   // a bye is done for the week too
-  if (g.state === 'in') return { txt: `${+g.period > 4 ? 'OT' : `Q${g.period}`} ${g.clock || ''}`.trim(), live: true };
-  if (g.state === 'post') return { txt: 'Final', live: false, done: true };
+  if (!g) return { txt: team ? 'no game' : '', live: false, done: !!team, opp: '' };   // a bye is done for the week too
+  const opp = team === g.home ? `vs ${g.away}` : `@${g.home}`;
+  if (g.state === 'in') return { txt: `${+g.period > 4 ? 'OT' : `Q${g.period}`} ${g.clock || ''}`.trim(), live: true, opp };
+  if (g.state === 'post') return { txt: 'Final', live: false, done: true, opp };
   const k = new Date(g.kickoff);
-  return { txt: isNaN(k) ? '' : k.toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' }), live: false };
+  return { txt: isNaN(k) ? '' : k.toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' }), live: false, opp };
 }
 
 // Root For Me's score for him, the same number its game cards show: of the $ on
@@ -798,13 +855,17 @@ function lmDetailHtml(r, opponent) {
     const l = x.line;
     if (!l) return `<td${right ? ' class="lm-lu-r"' : ''}><div class="lm-lu-name" style="font-style:italic;color:var(--brown-light)">empty</div></td>`;
     const g = lmGameShort(l.team);
-    const inj = l.inj && !/^(active|healthy|act|normal)$/i.test(l.inj)
-      ? ` <span class="lm-lu-inj">${esc(String(l.inj).slice(0, 1).toUpperCase())}</span>` : '';
-    const sub = [l.pos, l.team, g.live ? `<b>${esc(g.txt)}</b>` : esc(g.txt)].filter(Boolean).join(' · ');
-    const cls = ['lm-lu-player', right ? 'lm-lu-r' : '', g.live ? 'lm-lu-live' : g.done ? 'lm-lu-done' : 'lm-lu-soon', x.bench ? 'lm-lu-bench' : ''].filter(Boolean).join(' ');
+    const inj = lmInjTag(l.inj);
+    const team = [l.team, g.opp].filter(Boolean).join(' ');
+    const sub = [l.pos, team, g.live ? `<b>${esc(g.txt)}</b>` : esc(g.txt)].filter(Boolean).join(' · ');
+    const cls = ['lm-lu-player', right ? 'lm-lu-r' : '', g.live ? 'lm-lu-live' : g.done ? 'lm-lu-done' : 'lm-lu-soon',
+      x.bench ? 'lm-lu-bench' : '', l.out ? 'lm-lu-out' : '', l.swapIn ? 'lm-lu-swap' : ''].filter(Boolean).join(' ');
     const chip = lmRootChip(l.pid);
-    const name = `<span class="lm-lu-nm" title="${esc(l.name || '')}">${esc(l.name || '—')}${inj}</span>`;
-    return `<td class="${cls}"><div class="lm-lu-name">${right ? chip + name : name + chip}</div><div class="lm-lu-sub">${sub}</div></td>`;
+    const swap = l.swapIn ? `<span class="lm-swap" title="Not in his lineup now — the optimal lineup starts him">↑</span>` : '';
+    const name = `<span class="lm-lu-nm" title="${esc(l.name || '')}">${esc(l.name || '—')}</span>`;
+    // Order out from the name: name, status, then the Root For Me number on the outside.
+    const parts = right ? chip + inj + swap + name : name + swap + inj + chip;
+    return `<td class="${cls}"><div class="lm-lu-name">${parts}</div><div class="lm-lu-sub">${sub}</div></td>`;
   };
   const ptsCell = (x, right) => {
     const l = x?.line;
@@ -822,16 +883,16 @@ function lmDetailHtml(r, opponent) {
     body += `<tr>${nameCell(a)}${ptsCell(a)}<td class="lm-lu-slot">${esc(slot)}</td>${ptsCell(b, true)}${nameCell(b, true)}</tr>`;
   }
   const tot = (s, right) => `<td class="lm-lu-pts${right ? ' r' : ''}"><span class="lm-lu-now">${lmNum(s.now)}</span>${r.final ? '' : `<div class="lm-lu-proj">proj ${lmNum(s.proj)}</div>`}</td>`;
-  const left = s => s.left ? `${s.left} still to play` : 'all played';
+  const left = s => lmCounts(s);
   body += `<tr class="lm-lu-tot"><td><div class="lm-lu-sub">${left(r.my)}</div></td>${tot(r.my)}<td class="lm-lu-slot">Total</td>${tot(r.opp, true)}<td class="lm-lu-r"><div class="lm-lu-sub">${left(r.opp)}</div></td></tr>`;
-  const at = S.at ? new Date(S.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
   return `<div class="lm-detail">
     <table class="lm-lu">
       <colgroup><col><col class="lm-lu-pts"><col class="lm-lu-slot"><col class="lm-lu-pts"><col></colgroup>
-      <thead><tr><th>Me</th><th></th><th></th><th></th><th class="lm-lu-r">${esc(opponent)}</th></tr></thead>
+      <thead><tr><th>Me</th><th></th><th></th><th></th><th class="lm-lu-r">${esc(opponent)}${r.opp.optimal ? ' · optimal' : ''}</th></tr></thead>
       <tbody>${body}</tbody>
     </table>
-    <div class="mnm-note" style="margin-top:6px">Points as of ${at}${r.my.bestBall ? ' · best ball: the dimmed players aren\'t in the projected lineup' : ''}. <b>Bold</b> = playing now, <i>italic</i> = still to play, plain = done for the week (game over or no game). Green +x.x = scored since the last refresh. Proj = now + projection for what's left of his game. The coloured number is his <a href="/rootforme">Root For Me</a> score across your contending leagues (100 = root hard for him, 0 = hard against).</div>
+    ${r.my.bestBall ? `<div class="mnm-note" style="margin-top:6px">Best ball: the dimmed players aren't in the projected lineup.</div>` : ''}
+    ${r.opp.optimal ? `<div class="mnm-note" style="margin-top:6px">${esc(opponent)} shown in his best lineup by projections${r.opp.swaps ? ` (↑ = not starting now)` : ' — what he already has set'}.</div>` : ''}
   </div>`;
 }
 
@@ -844,9 +905,13 @@ function lmDraw() {
       <span class="lm-filter-lbl">${f.lbl}</span>
       ${f.opts.map(([v, l]) => `<button class="lm-pill${LM.filter[f.key] === v ? ' active' : ''}" onclick="lmSetFilter('${f.key}','${v}')">${l}</button>`).join('')}
     </div>`).join('');
+  const oppPill = `<div class="lm-filter" title="Current = the lineup each opponent has set. Optimal = the best lineup he could still set by projections (players whose game has started stay put).">
+      <span class="lm-filter-lbl">Opponent</span>
+      ${[['current', 'Current'], ['optimal', 'Optimal']].map(([v, l]) => `<button class="lm-pill${LM.oppMode === v ? ' active' : ''}" onclick="lmSetOppMode('${v}')">${l}</button>`).join('')}
+    </div>`;
   const at = S.at ? new Date(S.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
   const bar = `<div class="lm-bar">
-      <div class="lm-filters">${pills}</div>
+      <div class="lm-filters">${pills}${oppPill}</div>
       <div class="lm-refresh">
         <span class="lm-at">Week ${LM.week} · as of ${at}</span>
         <button class="load-btn lm-refresh-btn" onclick="refreshScores()"${S.refreshing ? ' disabled' : ''}>${S.refreshing ? 'Refreshing…' : '↻ Refresh'}</button>
@@ -854,7 +919,8 @@ function lmDraw() {
     </div>`;
 
   const skips = [...LM.skips, ...S.espnSkips];
-  const notes = `<div class="mnm-note">${LM.favErr ? `<b class="mnm-bad">${esc(LM.favErr)}</b> ` : ''}${skips.length ? `Couldn't read: ${skips.map(x => `${esc(x.name)} (${esc(x.reason)})`).join(', ')}. ` : ''}${LM.noOpp ? `${LM.noOpp} league${LM.noOpp !== 1 ? 's have' : ' has'} no head-to-head game this week. ` : ''}Win % is the score now plus projections for what's left of each game. Click a matchup for both lineups; ☆ pins a league to the top. Scores update on Refresh (every 2 minutes with Auto on while a game is live); game clocks can lag up to 5 minutes.</div>`;
+  const notes = `<div class="mnm-note">${LM.favErr ? `<b class="mnm-bad">${esc(LM.favErr)}</b> ` : ''}${skips.length ? `Couldn't read: ${skips.map(x => `${esc(x.name)} (${esc(x.reason)})`).join(', ')}. ` : ''}${LM.noOpp ? `${LM.noOpp} league${LM.noOpp !== 1 ? 's have' : ' has'} no head-to-head game this week. ` : ''}Win % is the score now plus projections for what's left of each game. Click a matchup for both lineups; ☆ pins a league to the top. Scores update on Refresh (every 2 minutes with Auto on while a game is live); game clocks can lag up to 5 minutes.</div>
+    <div class="mnm-note lm-key"><b>Reading a lineup.</b> <b>Bold</b> name = playing now, <i>italic</i> = still to play, plain = done for the week (game over or no game). <span class="lm-live-n">Live</span> / to go = starters on the field now / yet to kick off. Green +x.x = scored since the last refresh. Proj = now + projection for what's left of his game. Status tags (outlined): ${lmInjTag('Questionable')} questionable, ${lmInjTag('Doubtful')} doubtful, ${lmInjTag('Out')} / ${lmInjTag('IR')} out — an Out player isn't counted in projections or the live / to go numbers. The filled number is his <a href="/rootforme">Root For Me</a> score across your contending leagues (100 = root hard for him, 0 = hard against).${LM.oppMode === 'optimal' ? ' Opponent: Optimal shows each opponent in the best lineup he could still set by projections (↑ = a player he isn\'t starting now); players whose game has started stay put.' : ''}</div>`;
 
   if (!S.mnmProj || !S.nflGames.length) {
     box.innerHTML = `<div class="mnm-card">${bar}<div class="err-state" style="margin-top:12px">${

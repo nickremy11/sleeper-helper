@@ -7,6 +7,7 @@ const LU = {
   lineups: [], week: 1,
   proj: {},                 // {pid: stats} — Sleeper weekly projections
   kick: {},                 // {nflTeam: kickoffISO} — ESPN scoreboard
+  opp: {},                  // {nflTeam: 'vs MIN' | '@DET'} — ESPN games, shown beside each player
   ranks: null,              // parsed weekly ranking sheet — see luParseRanksCsv
   byGameTime: true,         // order interchangeable slots so flex never locks earlier than a position slot
   faOn: true,               // free-agent watch (redraft only) — see luFaUpgrades
@@ -1260,6 +1261,7 @@ function luBodyRows(fix, mode) {
     }
     const pid  = mode === 'diff' ? pr : cur;
     const inj  = injuryBadge(S.players[pid]?.injury_status);
+    const opp  = luOppLabel(pid, fix);
     const lock = luLocked(pid);
     // Every current-mode row opens its own replacement list. Not offered on a
     // diff row: those rows are showing a proposal, and the slot indices there
@@ -1269,6 +1271,7 @@ function luBodyRows(fix, mode) {
     return `<div class="diff-row${click ? ' diff-click' : ''}${open ? ' slot-open' : ''}"${lock ? ' style="opacity:0.62;"' : ''}${click ? ` onclick="luToggleSlot(${idx},${i})"` : ''}>
       <span class="diff-slot">${esc(slot)}</span>
       <span style="color:var(--parchment);flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${lock ? '<span title="Game has started — this slot is locked" style="color:var(--brown-light);">🔒 </span>' : ''}${esc(luPlayerName(pid))}${inj ? ' ' + inj : ''}</span>
+      ${opp ? `<span class="diff-opp" title="This week's opponent">${esc(opp)}</span>` : ''}
       ${rankCells(pid)}
       <span style="flex:1;"></span>
       ${ppgCell(pid)}
@@ -1276,6 +1279,16 @@ function luBodyRows(fix, mode) {
       ${click ? `<span class="diff-caret" title="Show every player who could take this slot">${open ? '▾' : '▸'}</span>` : ''}
     </div>${open ? luSlotOptionsHtml(fix, idx, i) : ''}`;
   }).join('');
+}
+
+// This week's NFL opponent ('vs MIN' / '@DET'), or 'BYE' for a team with no game
+// once the schedule has loaded. ESPN rows can carry a team Sleeper doesn't
+// (LU_ESPN_TEAM), same as luGameTime.
+function luOppLabel(pid, fix) {
+  if (!pid || pid === '0' || !LU.opp || !Object.keys(LU.opp).length) return '';
+  const team = (typeof LU_ESPN_TEAM !== 'undefined' && LU_ESPN_TEAM[pid]) || S.players[pid]?.team || (S.players[pid]?.position === 'DEF' ? pid : null);
+  if (!team) return '';
+  return LU.opp[team] || 'BYE';
 }
 
 // ── Slot options: every replacement for one slot, inline on the card ─────────
@@ -2931,6 +2944,7 @@ async function luEnsureLineupData(force = false) {
     LU.lineups = LU._cache.lineups;
     LU.proj    = LU._cache.proj;
     LU.kick    = LU._cache.kick;
+    LU.opp     = LU._cache.opp || {};
     LU.week    = LU._cache.week;
     luLoadRankings(LU.week);
     await statsP;
@@ -3008,13 +3022,22 @@ async function luEnsureLineupData(force = false) {
     if (pr && typeof pr === 'object') LU.proj = pr;
   } catch(_) {}
 
-  // Kickoff times per NFL team (for game-time ordering).
+  // Kickoff times per NFL team (for game-time ordering), and who each team plays
+  // ({team: 'vs MIN' | '@DET'}, shown beside every player). Two reads, both
+  // KV-cached by the worker, fetched together.
   LU.kick = {};
-  try {
-    const kr = await fetch('/api/espn/scoreboard?week=' + w + '&season=' + (nflState.season), { credentials: 'include' })
-      .then(r => r.ok ? r.json() : {});
-    if (kr && typeof kr === 'object') LU.kick = kr;
-  } catch(_) {}
+  LU.opp = {};
+  const q = 'week=' + w + '&season=' + (nflState.season);
+  const [kr, gr] = await Promise.all([
+    fetch('/api/espn/scoreboard?' + q, { credentials: 'include' }).then(r => r.ok ? r.json() : {}).catch(() => ({})),
+    fetch('/api/espn/games?' + q).then(r => r.ok ? r.json() : []).catch(() => []),
+  ]);
+  if (kr && typeof kr === 'object') LU.kick = kr;
+  for (const g of (Array.isArray(gr) ? gr : [])) {
+    if (!g.home || !g.away) continue;
+    LU.opp[g.home] = 'vs ' + g.away;
+    LU.opp[g.away] = '@' + g.home;
+  }
 
   // Restore any uploaded rankings for this week.
   luLoadRankings(w);
@@ -3023,7 +3046,7 @@ async function luEnsureLineupData(force = false) {
 
   LU.lineups = lineups;
   LU.week    = w;
-  LU._cache  = { at: Date.now(), week: w, lineups, proj: LU.proj, kick: LU.kick };
+  LU._cache  = { at: Date.now(), week: w, lineups, proj: LU.proj, kick: LU.kick, opp: LU.opp };
   return lineups;
 }
 

@@ -40,19 +40,48 @@ function lmPhi(z) {
   return z >= 0 ? 1 - q : q;
 }
 
-// One starter. `f` is the fraction of his game left (mnmRemainingFrac). `out` only
-// bites before kickoff: projections lag a late scratch, but once he's played, his
-// points are his points.
-function lmLine({ pid, name, pts, proj, pos, f, out }) {
+// One starter. `f` is the fraction of his game left (mnmRemainingFrac); `live` is
+// whether that game is being played right now (falls back to 0 < f < 1). An `out`
+// player projects nothing more at any point — not playing is not playing, and a
+// projection lags a scratch — but points he has already scored are his.
+function lmLine({ pid, name, pts, proj, pos, f, out, live }) {
   const P = lmPos(pos);
   const now = pts || 0;
-  const expected = out && f >= 1 ? 0 : (proj || 0);
+  const expected = out ? 0 : (proj || 0);
   // A D/ST's score carries its points-allowed bucket, so it opens the game at a
   // shutout's bonus and gives it back. Adding its projection on top would double
   // count that, so it drifts from where it is toward its projection instead.
-  const rest = P === 'DEF' ? f * (expected - now) : f * expected;
+  // An Out D/ST isn't a thing, so `out` never reaches that branch in practice.
+  const rest = P === 'DEF' && !out ? f * (expected - now) : f * expected;
   const sd = expected > 0 ? Math.max((LM_POS_CV[P] ?? 0.50) * expected, LM_SD_FLOOR) * Math.sqrt(f) : 0;
-  return { pid, name, pos: P, pts: now, rest, sd, f, expFinal: now + rest, left: f > 0 && expected > 0 };
+  const isLive = live ?? (f > 0 && f < 1);
+  return {
+    pid, name, pos: P, pts: now, rest, sd, f, expFinal: now + rest, out: !!out,
+    live: !out && f > 0 && isLive,          // on the field now
+    toGo: !out && f > 0 && !isLive,         // game still to kick off
+    left: !out && f > 0 && expected > 0,
+  };
+}
+
+// The best lineup a manager could still set, by projected final. Locked players
+// (game kicked off) stay in their slot; every other slot is re-filled from the
+// unlocked starters + bench, narrowest slot first, which is exact because slot
+// eligibilities nest (QB ⊂ SF, RB ⊂ W/R ⊂ FLEX ⊂ SF). `slots` = [{elig, cur}],
+// `bench` = lines; each line carries `locked`. → one line (or null) per slot.
+function lmFillOptimal(slots, bench) {
+  const out = slots.map(s => (s.cur && s.cur.locked ? s.cur : null));
+  // A bench player only competes if he projects for something — filling an empty
+  // slot with a bye-week 0 changes nothing and reads as a move. The sort is stable
+  // and starters go in first, so a tie keeps the man already in the lineup.
+  const pool = [...slots.map(s => s.cur).filter(l => l && !l.locked), ...bench.filter(l => l && !l.locked && l.expFinal > 0)]
+    .sort((a, b) => b.expFinal - a.expFinal);
+  const open = slots.map((s, i) => i).filter(i => !out[i])
+    .sort((a, b) => slots[a].elig.length - slots[b].elig.length || a - b);
+  for (const i of open) {
+    const k = pool.findIndex(l => slots[i].elig.includes(l.pos));
+    if (k >= 0) out[i] = pool.splice(k, 1)[0];
+  }
+  return out;
 }
 
 // Best ball scores an optimal lineup re-picked after the fact, so the projection
@@ -84,6 +113,8 @@ function lmProjectSide({ lines, now, bestBall, rosterPositions }) {
     sd: Math.sqrt(counted.reduce((s, l) => s + l.sd * l.sd, 0)),
     maxSd: counted.reduce((m, l) => Math.max(m, l.sd), 0),
     left: counted.filter(l => l.left).length,
+    live: counted.filter(l => l.live).length,   // playing right now (Out players never count)
+    toGo: counted.filter(l => l.toGo).length,   // still to kick off
     done: lines.every(l => l.f <= 0),
     lines,      // every priced line, for the click-in lineup view
     counted,    // the lines the score is built from — all of them, or best ball's re-picked lineup
@@ -178,7 +209,7 @@ function lmRootScores(results, prefs) {
   return out;
 }
 
-const api = { LM_TIERS, lmPhi, lmLine, lmBestLineup, lmProjectSide, lmTier, lmEvaluate, lmMedianOdds, lmSummary, lmRootScores };
+const api = { LM_TIERS, lmPhi, lmLine, lmFillOptimal, lmBestLineup, lmProjectSide, lmTier, lmEvaluate, lmMedianOdds, lmSummary, lmRootScores };
 Object.assign(root, api);
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
