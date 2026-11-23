@@ -74,17 +74,33 @@ const PF = {
 };
 
 // ── Waivers state ─────────────────────────────────────────────────────────────
+// Mode / view / sources are remembered (localStorage wv_prefs_v2, wvSavePrefs).
+const WV_SAVED = (() => { try { return JSON.parse(localStorage.getItem('wv_prefs_v2')) || {}; } catch { return {}; } })();
 const WV = {
-  mode:               'dynasty', // 'dynasty' | 'redraft' | 'myranks'
+  mode:               WV_SAVED.mode === 'redraft' ? 'redraft' : 'dynasty',
+  views:              { dynasty: 'fc', redraft: 'trending', ...(WV_SAVED.views || {}) },  // see WV_VIEWS
   loaded:             false,
   fcMap:              {},
   rosteredByLeague:   {},  // {lgId: Set<pid>}
-  rows:               [],
-  redraftRankings:    [],  // [{name, pos, rank, posRank, tier, team, ppg, bye, pid}]
-  rankUnmatched:      0,   // rows in the uploaded sheet that resolved to no Sleeper id
+  rows:               [],  // FC Value table rows (dynasty)
+  // vs Rankings list, one per mode: src 'myranks' | 'csv'; setId = chosen My Ranks set.
+  // rows = [{name, pos, rank, posRank, tier, team, ppg, bye, pid}]
+  ranks: {
+    dynasty: { src: WV_SAVED.rankSrc?.dynasty || 'myranks', setId: WV_SAVED.mrSet?.dynasty || null, rows: [], unmatched: 0, label: null },
+    redraft: { src: WV_SAVED.rankSrc?.redraft || 'myranks', setId: WV_SAVED.mrSet?.redraft || null, rows: [], unmatched: 0, label: null },
+  },
+  mrSources:          null,  // My Ranks set list (mrbFetchSources), once per page
+  mrError:            null,
+  trend:              {},    // {adds_24|adds_48: {list:[{pid, signal}]} | {loading} | {error}} — Sleeper trending adds
+  trendHours:         WV_SAVED.trendHours === 48 ? 48 : 24,
+  trendAvailOnly:     WV_SAVED.trendAvailOnly !== false,
   myByLeague:         {},  // {lgId: Set<pid>} — my own roster, for the grid's green
-  gridLeagueId:       null,// redraft grid: the one league on screen (see wvGridHtml)
+  gridLeagueId:       null,// vs Rankings grid: the one league on screen (see wvGridHtml)
   gridFaOnly:         false,
+  rankLayout:         WV_SAVED.rankLayout === 'list' ? 'list' : 'grid',  // vs Rankings: 'grid' | 'list' (Top available)
+  listLeagueId:       '__all',  // Top available: one league id, or '__all' (WV_LIST_ALL)
+  listPos:            'ALL',
+  listShown:          50,
   expandedKey:        null,
   sortCol:            'adjVal',
   sortDir:            -1,
@@ -427,10 +443,10 @@ function viewBarHtml(group, active) {
   ).join('')}</nav>`;
 }
 
-// The ranks grid and the redraft waiver grid are the views that earn more than
-// the site's 900px column. Waivers is mode-dependent, so wvSetMode re-applies it.
+// The ranks grid and the waiver vs Rankings grid are the views that earn more than
+// the site's 900px column. Waivers is view-dependent, so wvSetMode / wvSetView re-apply it.
 function wvApplyWide(tab) {
-  const wide = tab === 'ranksgrid' || tab === 'roi' || (tab === 'waivers' && (WV.mode === 'redraft' || WV.mode === 'myranks'));
+  const wide = tab === 'ranksgrid' || tab === 'roi' || (tab === 'waivers' && wvView() === 'ranks' && WV.rankLayout === 'grid');
   document.querySelector('.main')?.classList.toggle('wide', wide);
 }
 

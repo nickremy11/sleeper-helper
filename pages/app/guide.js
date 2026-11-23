@@ -26,7 +26,7 @@ const GUIDE = [
     { name:'Players',          tab:'rostership', espn:true,
       desc:'How many of your leagues each of your players is on. Click a name to see who owns him in every league, with that team’s playoff odds and a side-by-side roster comparison — search reaches players you don’t own too.' },
     { name:'Waivers',          tab:'waivers',    espn:true,
-      desc:'Dynasty: the best free agents left across all your leagues by FantasyCalc value. Redraft: your uploaded ranking sheet as a grid for one league, with your players in green and free agents in yellow. vs My Ranks: any of your My Ranks tier boards as a grid over one league, overall or broken out by position.' },
+      desc:'Dynasty or redraft leagues, three ways to look. FC Value (dynasty): the best free agents left across your leagues by FantasyCalc value. Trending: Sleeper’s most-added players and how many of your leagues have each one free. vs Rankings: a My Ranks set or an uploaded CSV, either as a grid over one league (your players in green, free agents in yellow) or as the top ranked players still available, with season PPG and next week’s projection.' },
   ]},
   { title: 'Trades', note: 'Finding, weighing and sending trades.', items: [
     { name:'Open Trades',      tab:'trades',

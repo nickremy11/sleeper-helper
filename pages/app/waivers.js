@@ -1,22 +1,53 @@
 // Waivers tab
 
 // ── 3. Waivers ────────────────────────────────────────────────────────────────
+// Two modes (WV.mode — which leagues are scanned) × a few views each (WV.views):
+//   dynasty: fc (FantasyCalc value table) · trending · ranks
+//   redraft: trending · ranks
+// Every view reads the same per-league ownership (wvLoadLeagueRosters), loaded
+// once per mode; switching view never refetches rosters.
+
+const WV_VIEWS = {
+  dynasty: [['fc', 'FC Value'], ['trending', 'Trending'], ['ranks', 'vs Rankings']],
+  redraft: [['trending', 'Trending'], ['ranks', 'vs Rankings']],
+};
+const WV_PREFS_KEY = 'wv_prefs_v2';
+
+function wvView() {
+  const v = WV.views[WV.mode];
+  return WV_VIEWS[WV.mode].some(([k]) => k === v) ? v : WV_VIEWS[WV.mode][0][0];
+}
+// The ranking list behind the vs Rankings view — one per mode, since a dynasty
+// board and a redraft board are different lists.
+function wvRanks() { return WV.ranks[WV.mode]; }
+
+function wvSavePrefs() {
+  try {
+    localStorage.setItem(WV_PREFS_KEY, JSON.stringify({
+      mode: WV.mode, views: WV.views, trendHours: WV.trendHours,
+      trendAvailOnly: WV.trendAvailOnly, rankLayout: WV.rankLayout,
+      rankSrc: { dynasty: WV.ranks.dynasty.src, redraft: WV.ranks.redraft.src },
+      mrSet:   { dynasty: WV.ranks.dynasty.setId, redraft: WV.ranks.redraft.setId },
+    }));
+  } catch {}
+}
+
+const WV_HINT = {
+  'dynasty:fc':       'Dynasty leagues · free agents with FC value ≥ 100 (TE ×2)',
+  'dynasty:trending': 'Dynasty leagues · Sleeper’s most-added players',
+  'dynasty:ranks':    'Your ranking list against your dynasty leagues · as a grid over one league, or the top ranked players still available',
+  'redraft:trending': 'Redraft leagues · Sleeper’s most-added players · guillotine leagues excluded',
+  'redraft:ranks':    'Your ranking list against your redraft leagues · as a grid over one league, or the top ranked players still available · guillotine leagues excluded',
+};
 
 function renderWaivers() {
   const isDyn = WV.mode === 'dynasty';
-  const isMR  = WV.mode === 'myranks';
-  const uploadSection = (!isDyn && !isMR) ? `
-    <div class="wv-upload-row">
-      <span class="filter-lbl-rs">Rankings CSV</span>
-      <input type="file" id="wv-file" accept=".csv,.txt" class="wv-file-input" onchange="wvUploadRankings(this)" />
-      ${WV.redraftRankings.length
-        ? `<span class="setup-status ok" style="margin:0;">${WV.redraftRankings.length} players loaded${WV.rankUnmatched ? ` · ${WV.rankUnmatched} unmatched` : ''}</span>`
-        : `<span style="font-family:var(--font-body),serif;font-size:0.82rem;font-style:italic;color:var(--brown-light);">CSV with a Player column (Position / Overall / Team read if present), or one name per line</span>`}
-    </div>` : '';
+  const view  = wvView();
+  const msg   = s => `<span style="font-family:var(--font-body),serif;font-size:0.82rem;font-style:italic;color:var(--brown-light);">${s}</span>`;
 
   // Loads by itself on arrival (and after a mode switch) — the button is for
   // re-reading later. Flagged before the paint so it shows the loading state.
-  const autoLoad = !isMR && !WV.loaded && !WV.loading;
+  const autoLoad = !WV.loaded && !WV.loading;
   if (autoLoad) WV.loading = true;
 
   setC(`<div>
@@ -26,82 +57,285 @@ function renderWaivers() {
     <div class="wv-mode-bar">
       <span class="filter-lbl-rs">Mode</span>
       <button class="pos-pill${isDyn?' active':''}" onclick="wvSetMode('dynasty')">Dynasty</button>
-      <button class="pos-pill${WV.mode==='redraft'?' active':''}" onclick="wvSetMode('redraft')">Redraft</button>
-      <button class="pos-pill${isMR?' active':''}" onclick="wvSetMode('myranks')">vs My Ranks</button>
-      <span style="font-family:var(--font-body),serif;font-size:0.82rem;font-style:italic;color:var(--brown-light);margin-left:4px;">
-        ${isDyn ? 'Scans dynasty leagues · FC value ≥ 100 (TE ×2)'
-        : isMR  ? 'A My Ranks set as a grid, one league at a time · green is your roster, yellow is a free agent'
-        :         'Your ranking sheet as a grid, one redraft league at a time · guillotine leagues excluded'}
-      </span>
+      <button class="pos-pill${!isDyn?' active':''}" onclick="wvSetMode('redraft')">Redraft</button>
+      <span class="filter-lbl-rs" style="margin-left:14px;">View</span>
+      ${WV_VIEWS[WV.mode].map(([k, label]) =>
+        `<button class="pos-pill${view === k ? ' active' : ''}" onclick="wvSetView('${k}')">${label}</button>`).join('')}
     </div>
-    ${uploadSection}
-    ${isMR ? '<div id="mrg-root"></div>' : `
+    <div style="margin:-8px 0 14px;">${msg(WV_HINT[WV.mode + ':' + view] || '')}</div>
+    ${view === 'ranks' ? `<div id="wv-src-row">${wvRankSourceHtml()}</div>` : ''}
+    ${view === 'trending' ? wvTrendControlsHtml() : ''}
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
       <button class="setup-btn" id="wv-load-btn" onclick="loadWaiverData()" style="height:32px;" ${WV.loading ? 'disabled' : ''}>${WV.loading ? 'Loading…' : WV.loaded ? '↻ Refresh' : 'Load'}</button>
       <span class="setup-status" id="wv-load-status" style="margin:0;"></span>
       ${WV.loaded && WV.skippedCount > 0 ? `<span class="setup-status" style="margin:0;font-style:italic;">— ${WV.skippedCount} league${WV.skippedCount > 1 ? 's' : ''} skipped (draft not yet complete)</span>` : ''}
     </div>
     <div id="wv-table-wrap">
-      ${WV.loaded ? wvRenderTable() : WV.loading ? loading(isDyn ? 'Scanning leagues for available players' : 'Loading rosters') : `<div class="empty-state"><p>${isDyn ? 'Click Load to scan all leagues for available players' : 'Click Load to pull rosters, then pick a league'}</p></div>`}
-    </div>`}
+      ${WV.loaded ? wvRenderTable() : WV.loading ? loading(isDyn ? 'Scanning dynasty leagues' : 'Loading redraft rosters') : `<div class="empty-state"><p>Click Load to pull rosters</p></div>`}
+    </div>
   </div>`);
 
-  // The My Ranks grid loads itself (rankings, rosters, the lot) — there's no
-  // "Load Waivers" step to press. Re-entering the tab redraws what's already in
-  // MRG rather than re-fetching a ranking set that hasn't changed.
   if (autoLoad) loadWaiverData();
-
-  if (isMR) {
-    // Same guard as the analyzer's: without shared-utils.js every reference
-    // here throws and the mode renders as an empty panel with no explanation.
-    const root = document.getElementById('mrg-root');
-    if (typeof mrgInit !== 'function' || typeof MRG === 'undefined') {
-      if (root) root.innerHTML = '<div class="err-state">The ranks grid could not start:'
-        + ' <code>/shared-utils.js</code> is missing or out of date. Hard-refresh this page'
-        + ' (⌘⇧R / Ctrl-F5); if it persists, that file needs redeploying.</div>';
-      return;
-    }
-    try {
-      if (MRG.rows.length && MRG.sources) mrgSetLeague(MRG.leagueId);
-      else mrgOpenFromWaivers();
-    } catch (e) {
-      if (root) root.innerHTML = errHtml(e);
-    }
-  }
+  if (view === 'trending') wvEnsureTrend();
+  if (view === 'ranks') wvEnsureRankSource();
 }
 
-// index.html has every piece of context the grid would otherwise fetch for
-// itself — player map, name index, FC values, identity — so hand them over.
-function mrgOpenFromWaivers() {
-  const leagues = S.leagues.map(lg => ({
-    id: lg.league_id, name: lg.name || lg.league_id, espn: lg.source === 'espn',
-    // Drives the grid's Auto consensus pick (FantasyCalc vs FantasyPros ROS).
-    // rsLeagueCategory is this app's one definition of the split, so use it
-    // rather than re-reading settings.type here.
-    dynasty: rsLeagueCategory(lg.league_id) === 'dynasty',
-  }));
-  mrgInit({
-    mount: 'mrg-root',
-    apiBase: '/api',
-    wideEl: '.main', wideClass: 'wide',
-    leagues,
-    leagueId: leagues.some(l => l.id === MRG.leagueId) ? MRG.leagueId : (leagues[0]?.id || null),
-    // Empty is not "loaded" — passing {} would make the grid skip its own fetch
-    // and then match nothing.
-    players: Object.keys(S.players || {}).length ? S.players : null,
-    byName:  Object.keys(S._playersByName || {}).length ? S._playersByName : null,
-    fcMap:   Object.keys(RS.fcMap || {}).length ? RS.fcMap : null,
-    sleeperUserId: S.userId || null,
-    swid:    S.espnSettings?.swid || null,
-    season:  S.nflState?.season || null,
-    // Scoring this page already holds — Sleeper league objects, and ESPN's
-    // mSettings parsed at load (_espnScoring). Anything missing the grid fetches.
-    scoringFor: lgId => {
-      const d = S.leagueDetails[lgId];
-      return d?.source === 'espn' ? d._espnScoring : d?.scoring_settings;
-    },
-    ...(_seasonStats && Object.keys(_seasonStats).length ? { stats: _seasonStats } : {}),
+function wvRedrawBody() {
+  const wrap = document.getElementById('wv-table-wrap');
+  if (wrap && WV.loaded) wrap.innerHTML = wvRenderTable();
+}
+
+function wvSetView(v) {
+  if (wvView() === v) return;
+  WV.views[WV.mode] = v;
+  WV.expandedKey = null;
+  wvSavePrefs();
+  wvApplyWide('waivers');
+  renderWaivers();
+}
+
+// ── Trending view ────────────────────────────────────────────────────────────
+// Sleeper's most-added players across every Sleeper league
+// (/players/nfl/trending/add), over the last 24 or 48 hours. Each player then
+// carries how many of MY leagues (this mode) he's free in.
+
+const WV_TREND_LIMIT = 100;   // how many signals are pulled
+const WV_TREND_SHOW  = 60;    // how many rows render after the availability filter
+
+function wvTrendKey() { return 'adds_' + WV.trendHours; }
+
+function wvTrendControlsHtml() {
+  const pill = (on, fn, label) => `<button class="pos-pill${on ? ' active' : ''}" onclick="${fn}">${label}</button>`;
+  return `<div class="wv-mode-bar" style="margin-top:-4px;">
+      <span class="filter-lbl-rs">Window</span>
+        ${pill(WV.trendHours === 24, "wvSetTrend('hours',24)", '24h')}
+        ${pill(WV.trendHours === 48, "wvSetTrend('hours',48)", '48h')}
+      <span style="width:14px;"></span>
+      ${pill(WV.trendAvailOnly, "wvSetTrend('avail')", '◎ Available somewhere only')}
+    </div>`;
+}
+
+function wvSetTrend(what, val) {
+  if (what === 'hours') WV.trendHours = val;
+  else if (what === 'avail') WV.trendAvailOnly = !WV.trendAvailOnly;
+  WV.expandedKey = null;
+  wvSavePrefs();
+  renderWaivers();
+}
+
+// Fetches the current signal once per key per page load; a failure is stored
+// so the table can say so (the button redraw retries).
+async function wvEnsureTrend(force) {
+  const key = wvTrendKey();
+  const have = WV.trend[key];
+  if (have && !force && !have.error) return;
+  if (have?.loading) return;
+  WV.trend[key] = { loading: true };
+  try {
+    const res = await api(`/players/nfl/trending/add?lookback_hours=${WV.trendHours}&limit=${WV_TREND_LIMIT}`);
+    if (!Array.isArray(res)) throw new Error('Sleeper trending unavailable');
+    WV.trend[key] = { list: res.map(x => ({ pid: String(x.player_id), signal: x.count })) };
+  } catch (e) {
+    WV.trend[key] = { error: e.message || String(e) };
+  }
+  if (S.tab === 'waivers' && wvView() === 'trending' && wvTrendKey() === key) wvRedrawBody();
+}
+
+// {lgId, lgName} for every league of this mode where nobody rosters him, plus
+// how many I own him in. Leagues whose rosters failed to load count as neither.
+function wvAvailability(pid) {
+  const leagues = [];
+  let mine = 0;
+  for (const lg of wvLeagues()) {
+    const owned = WV.rosteredByLeague[lg.league_id];
+    if (!owned) continue;
+    if (WV.myByLeague[lg.league_id]?.has(pid)) mine++;
+    else if (!owned.has(pid)) leagues.push({ lgId: lg.league_id, lgName: lg.name || lg.league_id });
+  }
+  return { leagues, mine };
+}
+
+function wvTrendHtml() {
+  const key = wvTrendKey();
+  const t = WV.trend[key];
+  if (!t || t.loading) return loading('Loading Sleeper trending adds');
+  if (t.error) return `<div class="err-state">${esc(t.error)} — <a href="#" onclick="wvEnsureTrend(true);return false;">retry</a></div>`;
+
+  const ss = PPG_PPR_SCORING;
+  const all = [];
+  for (const [i, x] of t.list.entries()) {
+    const p = S.players[x.pid];
+    if (!p) continue;
+    const pos = crNormPos(p.position) || luNormPos(p.position) || p.position || '';
+    // Dynasty leagues rarely start a K or D/ST, and their adds are week-to-week streaming.
+    if (WV.mode === 'dynasty' && (pos === 'K' || pos === 'DEF')) continue;
+    const av = wvAvailability(x.pid);
+    const line = WV.weekProj[x.pid];
+    all.push({
+      pid: x.pid, trendRank: i + 1, name: p.full_name || sleeperName(p) || x.pid, pos, team: p.team || 'FA',
+      signal: x.signal, fcVal: WV.fcMap[x.pid] ?? null,
+      availCount: av.leagues.length, leagues: av.leagues, mine: av.mine,
+      seasonPpg: playerSeasonPpg(x.pid, ss), weekProj: line ? computeProjPts(line, ss) : null,
+    });
+  }
+  const rows = (WV.trendAvailOnly ? all.filter(r => r.availCount > 0) : all).slice(0, WV_TREND_SHOW);
+
+  const signalLabel = `Adds ${WV.trendHours}h`;
+  const note = `Adds across every Sleeper league in the last ${WV.trendHours} hours, not just yours.`;
+  const hidden = all.length - rows.length;
+
+  if (!rows.length) return `<p class="wv-note">${note}</p><div class="empty-state"><p>${WV.trendAvailOnly ? 'None of these players is free in any of your leagues' : 'Nothing trending right now'}</p></div>`;
+
+  const cols = [
+    { key: 'trendRank', label: '#' },
+    { key: 'name', label: 'Player' },
+    { key: 'pos', label: 'Pos' },
+    { key: 'signal', label: signalLabel, title: note },
+    ...(WV.mode === 'dynasty' ? [{ key: 'fcVal', label: 'FC Value' }] : []),
+    { key: 'availCount', label: '# Available', title: 'How many of your leagues in this mode have him on waivers' },
+    { key: 'mine', label: 'Mine', title: 'How many of your leagues in this mode you already roster him in' },
+    { key: 'seasonPpg', label: 'PPG', title: 'Season-to-date points per game played — Sleeper default PPR' },
+    { key: 'weekProj', label: WV.projWeek ? `Wk ${WV.projWeek} Proj` : 'Proj', title: 'Sleeper projection — Sleeper default PPR' },
+  ];
+  if (!cols.some(c => c.key === WV.sortCol)) { WV.sortCol = 'trendRank'; WV.sortDir = 1; }
+  const sorted = wvSortRows(rows);
+  const num = (v, dp = 1) => `<td class="wv-num">${v != null ? (dp ? v.toFixed(dp) : v.toLocaleString()) : '<span style="color:var(--brown-light);">—</span>'}</td>`;
+
+  const tbody = sorted.map(r => {
+    const sig = r.signal.toLocaleString();
+    const cells = `<td class="wv-num">${r.trendRank}</td><td>${wvNameCell(r)}</td><td><span class="rs-pos rs-pos-${esc(r.pos)}">${esc(r.pos)}</span></td>`
+      + `<td class="wv-num" style="color:var(--c-green);">${sig}</td>`
+      + (WV.mode === 'dynasty' ? num(r.fcVal, 0) : '')
+      + `<td class="wv-num">${r.availCount}</td><td class="wv-num">${r.mine || ''}</td>`
+      + num(r.seasonPpg) + num(r.weekProj);
+    return `<tr>${cells}</tr>` + wvExpandRow(r, cols.length);
+  }).join('');
+
+  return `<p class="wv-note">${note}${hidden > 0 && WV.trendAvailOnly ? ` ${hidden} rostered everywhere hidden.` : ''}</p>
+    <div style="overflow-x:auto;"><table class="rs-table">
+    <thead><tr>${cols.map(wvTh).join('')}</tr></thead><tbody>${tbody}</tbody></table></div>`;
+}
+
+// ── Shared table pieces (FC Value + Trending) ────────────────────────────────
+function wvTh(c) {
+  const sorted = WV.sortCol === c.key;
+  const arr = sorted ? (WV.sortDir > 0 ? '▲' : '▼') : '⇅';
+  return `<th onclick="wvSort('${c.key}')" class="${sorted ? 'rs-sorted' : ''}"${c.title ? ` title="${esc(c.title)}"` : ''}>${esc(c.label)}<span class="rs-arr">${arr}</span></th>`;
+}
+function wvSortRows(rows) {
+  return [...rows].sort((a, b) => {
+    const av = a[WV.sortCol], bv = b[WV.sortCol];
+    if (typeof av === 'string') return WV.sortDir * av.localeCompare(bv ?? '');
+    // Missing numbers sink in both directions.
+    if (av == null || bv == null) return (av == null) - (bv == null);
+    return WV.sortDir * (av - bv);
   });
+}
+function wvNameCell(row) {
+  const isExp = WV.expandedKey === row.pid;
+  const team = `<span style="font-family:var(--font-display),serif;font-size:0.61rem;letter-spacing:0.1em;color:var(--brown-light);margin-left:5px;">${esc(row.team)}</span>`;
+  return `<button class="rs-name-btn${isExp ? ' rs-expanded' : ''}" onclick="wvToggle(${jsArg(row.pid)})">${esc(row.name)}${team} <span class="rs-chevron">▾</span></button>`;
+}
+function wvExpandRow(row, colSpan) {
+  if (WV.expandedKey !== row.pid) return '';
+  return `<tr class="rs-expand-row"><td colspan="${colSpan}">
+      <div class="rs-expand-inner">
+        <div class="rs-expand-title">Available In</div>
+        <div class="rs-expand-leagues">${row.leagues.length
+          ? row.leagues.map(l => `<span class="rs-expand-tag">${esc(l.lgName)}</span>`).join('')
+          : '<span style="font-style:italic;color:var(--brown-light);">rostered in every league</span>'}</div>
+      </div>
+    </td></tr>`;
+}
+
+// ── vs Rankings: where the list comes from ───────────────────────────────────
+// A CSV upload or one of your My Ranks sets — both become the same flat
+// [{name, pos, rank, posRank, tier, team, pid}] list the grid lays out.
+
+function wvRankSourceHtml() {
+  const R = wvRanks();
+  const pill = (k, label) => `<button class="pos-pill${R.src === k ? ' active' : ''}" onclick="wvSetRankSrc('${k}')">${label}</button>`;
+  const status = R.rows.length
+    ? `<span class="setup-status ok" style="margin:0;">${R.rows.length} players · ${esc(R.label || '')}${R.unmatched ? ` · ${R.unmatched} unmatched` : ''}</span>`
+    : '';
+  let pick;
+  if (R.src === 'csv') {
+    pick = `<input type="file" id="wv-file" accept=".csv,.txt" class="wv-file-input" onchange="wvUploadRankings(this)" />
+      ${R.rows.length && R.label ? '' : `<span style="font-family:var(--font-body),serif;font-size:0.82rem;font-style:italic;color:var(--brown-light);">CSV with a Player column (Position / Overall / Team / Tier read if present), or one name per line</span>`}`;
+  } else if (!S.auth) {
+    pick = `<span style="font-style:italic;color:var(--brown-light);font-size:0.85rem;">Sign in to use your My Ranks sets</span>`;
+  } else if (WV.mrError) {
+    pick = `<span style="color:var(--c-red);font-size:0.85rem;">${esc(WV.mrError)}</span>`;
+  } else if (!WV.mrSources) {
+    pick = `<span style="font-style:italic;color:var(--brown-light);font-size:0.85rem;">Loading your sets…</span>`;
+  } else if (!WV.mrSources.length) {
+    pick = `<span style="font-size:0.85rem;">No ranking sets yet — build one at <a href="https://myranks.ffhistorian.com" target="_blank" rel="noopener">My Ranks</a></span>`;
+  } else {
+    pick = `<select onchange="wvPickMyRanks(this.value)" style="max-width:300px;">
+        <option value="">Choose a set…</option>
+        ${WV.mrSources.map(s => `<option value="${esc(s.id)}"${s.id === R.setId ? ' selected' : ''}>${esc(s.label)}</option>`).join('')}
+      </select>${R.loading ? ' <span style="font-style:italic;color:var(--brown-light);font-size:0.85rem;">loading…</span>' : ''}`;
+  }
+  return `<div class="wv-upload-row">
+      <span class="filter-lbl-rs">Rankings</span>${pill('myranks', 'My Ranks')}${pill('csv', 'CSV')}
+      <span style="width:6px;"></span>${pick} ${status}
+    </div>`;
+}
+
+function wvRedrawSource() {
+  const el = document.getElementById('wv-src-row');
+  if (el) el.innerHTML = wvRankSourceHtml();
+}
+
+function wvSetRankSrc(src) {
+  const R = wvRanks();
+  if (R.src === src) return;
+  // The list on screen belongs to the source that made it.
+  Object.assign(R, { src, rows: [], unmatched: 0, label: null });
+  wvSavePrefs();
+  renderWaivers();
+}
+
+// Loads the set list (once), then the remembered set for this mode if any.
+async function wvEnsureRankSource() {
+  const R = wvRanks();
+  if (R.src !== 'myranks' || !S.auth) return;
+  if (!WV.mrSources && !WV.mrLoading) {
+    WV.mrLoading = true;
+    try { WV.mrSources = await mrbFetchSources(); WV.mrError = null; }
+    catch (e) { WV.mrError = e.message || String(e); }
+    WV.mrLoading = false;
+    if (S.tab === 'waivers') wvRedrawSource();
+  }
+  if (WV.mrSources && R.setId && !R.rows.length && !R.loading
+      && WV.mrSources.some(s => s.id === R.setId)) wvPickMyRanks(R.setId);
+}
+
+async function wvPickMyRanks(id) {
+  const mode = WV.mode, R = WV.ranks[mode];
+  R.setId = id || null;
+  wvSavePrefs();
+  if (!id) { Object.assign(R, { rows: [], unmatched: 0, label: null }); wvRedrawSource(); wvRedrawBody(); return; }
+  R.loading = true; wvRedrawSource();
+  try {
+    await loadPlayers();
+    const raw = await mrbFetchRanksFor(id, WV.mrSources);
+    if (R.setId !== id) return;   // picked another set meanwhile
+    // The one ordering rule for a My Ranks set (tier → FantasyCalc → name),
+    // shared with the badges, so a set reads the same everywhere.
+    const ranked = mrbRankRows(raw, { players: S.players, byName: S._playersByName, fcMap: RS.fcMap || WV.fcMap });
+    R.rows = ranked.map(r => ({
+      name: r.name, pos: r.pos || '', rank: r.overall, posRank: r.posRank,
+      tier: r.tier || null, team: r.team || '', pid: r.pid ? String(r.pid) : null, ppg: null, bye: '',
+    }));
+    R.unmatched = ranked.filter(r => !r.pid).length;
+    R.label = WV.mrSources.find(s => s.id === id)?.label || 'My Ranks';
+  } catch (e) {
+    Object.assign(R, { rows: [], unmatched: 0, label: null });
+    WV.mrError = e.message || String(e);
+  }
+  R.loading = false;
+  if (S.tab === 'waivers' && WV.mode === mode) { wvRedrawSource(); wvRedrawBody(); }
 }
 
 // Leagues this tab scans. Guillotine leagues are Sleeper type 3, which
@@ -126,8 +360,8 @@ async function loadWaiverData() {
     if (statEl) statEl.textContent = 'Loading players…';
     await loadPlayers();
 
-    // Upcoming-week projections for the dynasty table — overlaps the fetches below.
-    const projP = WV.mode === 'dynasty' ? wvLoadWeekProj() : null;
+    // Upcoming-week projections for the FC and Trending tables — overlaps the fetches below.
+    const projP = wvLoadWeekProj();
 
     // FC values — reuse RS.fcMap if Rostership already fetched it
     if (Object.keys(RS.fcMap).length > 0) {
@@ -187,11 +421,13 @@ async function loadWaiverData() {
     await statsP;
     await projP;
 
-    // Redraft renders one league at a time (wvGridHtml); dynasty stays a
-    // cross-league table and needs the row build.
+    // The FC Value table is cross-league and needs the row build; the grid
+    // renders one league at a time and keeps its league if it's still loaded.
     if (seq !== WV.loadSeq) return;
     if (WV.mode === 'dynasty') wvBuildRows();
-    else if (!eligible.some(lg => lg.league_id === WV.gridLeagueId)) WV.gridLeagueId = eligible[0]?.league_id || null;
+    if (!eligible.some(lg => lg.league_id === WV.gridLeagueId)) WV.gridLeagueId = eligible[0]?.league_id || null;
+    // Refresh re-reads the trending signal too.
+    if (wvView() === 'trending' && WV.loaded) wvEnsureTrend(true);
     WV.loaded = true;
     WV.loading = false;
     WV.skippedCount = skipped;
@@ -235,55 +471,139 @@ async function wvLoadLeagueRosters(lg) {
   WV.myByLeague[lg.league_id]       = res && res.mine;
 }
 
+// Dynasty FC Value table: every player FantasyCalc values ≥ 100 (TE ×2) who is
+// free in at least one of this mode's leagues.
 function wvBuildRows() {
   const targetLeagues = wvLeagues();
+  const rows = [];
+  for (const [pid, player] of Object.entries(S.players)) {
+    const pos = crNormPos(player.position);
+    if (!pos) continue;
+    const fcVal  = WV.fcMap[pid] ?? 0;
+    const adjVal = pos === 'TE' ? fcVal * 2 : fcVal;
+    if (adjVal < 100) continue;
 
-  if (WV.mode === 'dynasty') {
-    const rows = [];
-    for (const [pid, player] of Object.entries(S.players)) {
-      const pos = crNormPos(player.position);
-      if (!pos) continue;
-      const fcVal  = WV.fcMap[pid] ?? 0;
-      const adjVal = pos === 'TE' ? fcVal * 2 : fcVal;
-      if (adjVal < 100) continue;
-
-      const availLeagues = [];
-      for (const lg of targetLeagues) {
-        const rostered = WV.rosteredByLeague[lg.league_id];
-        if (rostered && !rostered.has(pid)) availLeagues.push({ lgId: lg.league_id, lgName: lg.name || lg.league_id });
-      }
-      if (!availLeagues.length) continue;
-
-      rows.push({ pid, name: player.full_name || pid, pos, team: player.team || 'FA', fcVal, adjVal, availCount: availLeagues.length, leagues: availLeagues });
+    const availLeagues = [];
+    for (const lg of targetLeagues) {
+      const rostered = WV.rosteredByLeague[lg.league_id];
+      if (rostered && !rostered.has(pid)) availLeagues.push({ lgId: lg.league_id, lgName: lg.name || lg.league_id });
     }
-    rows.sort((a, b) => b.adjVal - a.adjVal);
-    WV.rows    = rows;
-    WV.sortCol = 'adjVal';
-    WV.sortDir = -1;
-  } else {
-    // Redraft: use uploaded rankings, filter to available players
-    const rows = [];
-    for (const rank of WV.redraftRankings) {
-      if (!rank.pid) continue;
-      const player = S.players[rank.pid];
-      if (!player) continue;
+    if (!availLeagues.length) continue;
 
-      const availLeagues = [];
-      for (const lg of targetLeagues) {
-        const rostered = WV.rosteredByLeague[lg.league_id];
-        if (rostered && !rostered.has(rank.pid)) availLeagues.push({ lgId: lg.league_id, lgName: lg.name || lg.league_id });
-      }
-      if (!availLeagues.length) continue;
-
-      rows.push({ pid: rank.pid, name: player.full_name || rank.name, pos: crNormPos(player.position) || rank.pos, team: player.team || 'FA', rank: rank.rank, fcVal: WV.fcMap[rank.pid] ?? 0, adjVal: WV.fcMap[rank.pid] ?? 0, availCount: availLeagues.length, leagues: availLeagues });
-    }
-    WV.rows    = rows;
-    WV.sortCol = 'rank';
-    WV.sortDir = 1;
+    rows.push({ pid, name: player.full_name || pid, pos, team: player.team || 'FA', fcVal, adjVal, availCount: availLeagues.length, leagues: availLeagues });
   }
+  WV.rows = rows;
 }
 
-// ── Redraft waiver grid ──────────────────────────────────────────────────────
+// ── vs Rankings: Grid | Top available ────────────────────────────────────────
+// Two layouts of the same ranking list. Grid = the whole list over one league,
+// ownership painted on. Top available = only the free agents, in the list's
+// order, with season PPG and next week's projection — one league, or every
+// league of this mode at once (then with a # Available count).
+
+const WV_LIST_PAGE = 50;
+const WV_LIST_ALL  = '__all';
+const WV_LIST_POS  = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
+
+function wvSetRankLayout(l) {
+  if (WV.rankLayout === l) return;
+  WV.rankLayout = l;
+  WV.expandedKey = null;
+  wvSavePrefs();
+  wvApplyWide('waivers');
+  wvRedrawBody();
+}
+function wvSetListLeague(v) { WV.listLeagueId = v || WV_LIST_ALL; WV.listShown = WV_LIST_PAGE; WV.expandedKey = null; wvRedrawBody(); }
+function wvSetListPos(p)    { WV.listPos = p; WV.listShown = WV_LIST_PAGE; wvRedrawBody(); }
+function wvListMore()       { WV.listShown += WV_LIST_PAGE; wvRedrawBody(); }
+
+function wvRanksHtml() {
+  const pill = (k, label) => `<button class="pos-pill${WV.rankLayout === k ? ' active' : ''}" onclick="wvSetRankLayout('${k}')">${label}</button>`;
+  const bar = `<div class="wv-mode-bar" style="margin-bottom:12px;"><span class="filter-lbl-rs">Layout</span>${pill('grid', 'Grid')}${pill('list', 'Top available')}</div>`;
+  return bar + (WV.rankLayout === 'list' ? wvRankListHtml() : wvGridHtml());
+}
+
+function wvRankListHtml() {
+  const ranks = wvRanks().rows;
+  if (!ranks.length) return `<div class="empty-state"><p>${wvRanks().src === 'csv' ? 'Upload a rankings CSV above' : 'Pick one of your My Ranks sets above'}</p></div>`;
+  const leagues = wvLeagues().filter(lg => WV.rosteredByLeague[lg.league_id] !== undefined);
+  if (!leagues.length) return `<div class="empty-state"><p>No ${WV.mode} leagues loaded — every one was skipped or failed to load</p></div>`;
+
+  const all  = WV.listLeagueId === WV_LIST_ALL || !leagues.some(lg => lg.league_id === WV.listLeagueId);
+  const lgId = all ? null : WV.listLeagueId;
+  // One league: its own scoring. Every league: Sleeper's stock PPR, labelled.
+  const lgSs = lgId ? wvLeagueScoring(lgId) : null;
+  const ss   = lgSs || PPG_PPR_SCORING;
+  const ssLabel = lgSs ? 'this league’s scoring' : 'Sleeper default PPR';
+  const owned = lgId ? WV.rosteredByLeague[lgId] : null;
+
+  const rows = [];
+  const posN = {};   // positional rank from list order, when the list carries none
+  for (const r of ranks) {
+    const p = r.pid ? S.players[String(r.pid)] : null;
+    const pos = luNormPos(String(r.pos || '').replace(/[^A-Za-z]/g, '')) || luNormPos(p?.position) || crNormPos(p?.position) || r.pos || '';
+    const posRank = r.posRank ?? (posN[pos] = (posN[pos] || 0) + 1);
+    if (!r.pid) continue;
+    const pid = String(r.pid);
+    if (WV.listPos !== 'ALL' && pos !== WV.listPos) continue;
+    let leagues;
+    if (lgId) {
+      if (!owned || owned.has(pid)) continue;
+      leagues = [];
+    } else {
+      leagues = wvAvailability(pid).leagues;
+      if (!leagues.length) continue;
+    }
+    const line = WV.weekProj[pid];
+    rows.push({
+      pid, rank: r.rank, posRank, tier: r.tier ?? null,
+      name: p?.full_name || r.name, pos, team: p?.team || r.team || 'FA',
+      availCount: leagues.length, leagues,
+      seasonPpg: playerSeasonPpg(pid, ss), weekProj: line ? computeProjPts(line, ss) : null,
+    });
+  }
+
+  const leagueSel = `<select onchange="wvSetListLeague(this.value)" style="max-width:300px;">
+      <option value="${WV_LIST_ALL}"${all ? ' selected' : ''}>All ${WV.mode} leagues (${leagues.length})</option>
+      ${leagues.map(lg => `<option value="${esc(lg.league_id)}"${lg.league_id === lgId ? ' selected' : ''}>${esc(lg.name || lg.league_id)}${lg.source === 'espn' ? ' (ESPN)' : ''}</option>`).join('')}
+    </select>`;
+  const posPills = WV_LIST_POS.map(k => `<button class="pos-pill${WV.listPos === k ? ' active' : ''}" onclick="wvSetListPos('${k}')">${k === 'ALL' ? 'All' : k === 'DEF' ? 'D/ST' : k}</button>`).join('');
+  const controls = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+      <span style="font-size:0.65rem;color:var(--brown-light);">League:</span>${leagueSel}
+      <span style="width:8px;"></span>${posPills}
+    </div>`;
+  const note = `<p class="wv-note">${rows.length} ranked player${rows.length === 1 ? '' : 's'} free${all ? ' in at least one league' : ' in this league'}${lgId && !owned ? ' — rosters didn’t load for this league' : ''}. PPG and projection use ${ssLabel}.</p>`;
+  if (!rows.length) return controls + note;
+
+  const cols = [
+    { key: 'rank', label: 'Rank' },
+    { key: 'name', label: 'Player' },
+    { key: 'pos', label: 'Pos' },
+    { key: 'posRank', label: 'Pos Rk' },
+    { key: 'tier', label: 'Tier' },
+    ...(all ? [{ key: 'availCount', label: '# Available', title: 'How many of your leagues in this mode have him on waivers' }] : []),
+    { key: 'seasonPpg', label: 'PPG', title: 'Season-to-date points per game played — ' + ssLabel },
+    { key: 'weekProj', label: WV.projWeek ? `Wk ${WV.projWeek} Proj` : 'Proj', title: 'Sleeper projection for the upcoming week — ' + ssLabel },
+  ];
+  if (!cols.some(c => c.key === WV.sortCol)) { WV.sortCol = 'rank'; WV.sortDir = 1; }
+  const shown = wvSortRows(rows).slice(0, WV.listShown);
+  const num = (v, dp = 1) => `<td class="wv-num">${v != null && v !== '' ? (dp ? Number(v).toFixed(dp) : esc(String(v))) : '<span style="color:var(--brown-light);">—</span>'}</td>`;
+
+  const tbody = shown.map(r => {
+    const name = all ? wvNameCell(r)
+      : `<span style="font-family:var(--font-body),serif;">${esc(r.name)}</span><span style="font-family:var(--font-display),serif;font-size:0.61rem;letter-spacing:0.1em;color:var(--brown-light);margin-left:5px;">${esc(r.team)}</span>`;
+    return `<tr>${num(r.rank, 0)}<td>${name}</td><td><span class="rs-pos rs-pos-${esc(r.pos)}">${esc(r.pos)}</span></td>`
+      + num(r.posRank, 0) + num(r.tier, 0)
+      + (all ? `<td class="wv-num">${r.availCount}</td>` : '')
+      + num(r.seasonPpg) + num(r.weekProj) + `</tr>` + (all ? wvExpandRow(r, cols.length) : '');
+  }).join('');
+
+  return controls + note + `<div style="overflow-x:auto;"><table class="rs-table">
+      <thead><tr>${cols.map(wvTh).join('')}</tr></thead><tbody>${tbody}</tbody></table></div>`
+    + (rows.length > shown.length ? `<div style="text-align:center;margin-top:10px;"><button class="setup-btn" onclick="wvListMore()">Show ${Math.min(WV_LIST_PAGE, rows.length - shown.length)} more</button></div>` : '');
+}
+
+// ── vs Rankings grid ──────────────────────────────────────────────────────
 // One league at a time, laid out like the Weekly Ranks Grid (and reusing its
 // .rg-* CSS): the uploaded sheet as side-by-side positional columns, banded by
 // tier, with ownership painted on top. The cross-league table this replaced
@@ -293,11 +613,11 @@ function wvBuildRows() {
 const WV_GRID_COLS = [['QB','QB'], ['RB','RB', true], ['WR','WR', true], ['TE','TE'], ['DEF','D/ST'], ['K','K']];
 const WV_SPLIT_MIN = 40;   // same threshold as the ranks grid — below it a split is two stubs
 
-// The sheet is ONE flat overall list, so the columns are re-cut from it by
-// position, keeping the sheet's own order within each.
+// The list is ONE flat overall list, so the columns are re-cut from it by
+// position, keeping the list's own order within each.
 function wvGridCols() {
   const cols = {};
-  for (const r of WV.redraftRankings) {
+  for (const r of wvRanks().rows) {
     const raw = (r.pos || '').replace(/[^A-Za-z]/g, '');
     const pos = luNormPos(raw) || luNormPos(S.players[r.pid]?.position);
     if (!pos) continue;
@@ -342,20 +662,19 @@ function wvUnrankedHtml(mine, inGrid, ppg) {
 
 function wvSetGridLeague(v) {
   WV.gridLeagueId = v || null;
-  const wrap = document.getElementById('wv-table-wrap');
-  if (wrap) wrap.innerHTML = wvRenderTable();
+  wvRedrawBody();
 }
 function wvToggleFaOnly() {
   WV.gridFaOnly = !WV.gridFaOnly;
-  const wrap = document.getElementById('wv-table-wrap');
-  if (wrap) wrap.innerHTML = wvRenderTable();
+  wvRedrawBody();
 }
 
 function wvGridHtml() {
-  if (!WV.redraftRankings.length) return `<div class="empty-state"><p>Upload a rankings CSV first, then reload</p></div>`;
+  const ranks = wvRanks().rows;
+  if (!ranks.length) return `<div class="empty-state"><p>${wvRanks().src === 'csv' ? 'Upload a rankings CSV above' : 'Pick one of your My Ranks sets above'}</p></div>`;
 
   const leagues = wvLeagues().filter(lg => WV.rosteredByLeague[lg.league_id] !== undefined);
-  if (!leagues.length) return `<div class="empty-state"><p>No redraft leagues loaded — every one was skipped or failed to load</p></div>`;
+  if (!leagues.length) return `<div class="empty-state"><p>No ${WV.mode} leagues loaded — every one was skipped or failed to load</p></div>`;
 
   const lgId  = leagues.some(lg => lg.league_id === WV.gridLeagueId) ? WV.gridLeagueId : leagues[0].league_id;
   const owned = WV.rosteredByLeague[lgId] || null;   // null = rosters didn't load; see wvLoadLeagueRosters
@@ -365,7 +684,7 @@ function wvGridHtml() {
 
   const cols    = wvGridCols();
   const present = WV_GRID_COLS.filter(([k]) => (cols[k] || []).length);
-  if (!present.length) return `<div class="empty-state"><p>None of the ${WV.redraftRankings.length} ranked rows carry a position this grid lays out (QB/RB/WR/TE/D-ST/K)</p></div>`;
+  if (!present.length) return `<div class="empty-state"><p>None of the ${ranks.length} ranked rows carry a position this grid lays out (QB/RB/WR/TE/D-ST/K)</p></div>`;
 
   // A row's state. Unmatched rows (no Sleeper id) can't be placed on either side
   // of the ownership line, so they stay unpainted rather than guessing.
@@ -377,7 +696,7 @@ function wvGridHtml() {
   };
 
   let faCount = 0;
-  for (const r of WV.redraftRankings) if (state(r) === 'fa') faCount++;
+  for (const r of ranks) if (state(r) === 'fa') faCount++;
 
   const leagueSel = `<select onchange="wvSetGridLeague(this.value)" style="max-width:280px;">
       ${leagues.map(lg => `<option value="${esc(lg.league_id)}" ${lg.league_id === lgId ? 'selected' : ''}>${esc(lg.name || lg.league_id)}${lg.source === 'espn' ? ' (ESPN)' : ''}</option>`).join('')}
@@ -464,8 +783,11 @@ function wvGridHtml() {
 }
 
 function wvRenderTable() {
-  if (WV.mode !== 'dynasty') return wvGridHtml();
+  const view = wvView();
+  if (view === 'ranks') return wvRanksHtml();
+  if (view === 'trending') return wvTrendHtml();
   if (!WV.rows.length) return `<div class="empty-state"><p>No available players found above value threshold (100)</p></div>`;
+  if (!['name','pos','adjVal','availCount','seasonPpg','weekProj'].includes(WV.sortCol)) { WV.sortCol = 'adjVal'; WV.sortDir = -1; }
 
   const isDyn = true;
   // Season PPG + next week's projection, both scored with Sleeper's stock PPR
@@ -541,16 +863,14 @@ function wvSort(col) {
     WV.sortDir *= -1;
   } else {
     WV.sortCol = col;
-    WV.sortDir = (col === 'rank' || col === 'name' || col === 'pos' || col === 'team') ? 1 : -1;
+    WV.sortDir = (col === 'trendRank' || col === 'rank' || col === 'posRank' || col === 'tier' || col === 'name' || col === 'pos' || col === 'team') ? 1 : -1;
   }
-  const wrap = document.getElementById('wv-table-wrap');
-  if (wrap) wrap.innerHTML = wvRenderTable();
+  wvRedrawBody();
 }
 
 function wvToggle(pid) {
   WV.expandedKey = WV.expandedKey === pid ? null : pid;
-  const wrap = document.getElementById('wv-table-wrap');
-  if (wrap) wrap.innerHTML = wvRenderTable();
+  wvRedrawBody();
 }
 
 function wvSetMode(mode) {
@@ -561,6 +881,7 @@ function wvSetMode(mode) {
   WV.loadSeq = (WV.loadSeq || 0) + 1;   // orphan any load still running for the old mode
   WV.rows    = [];
   WV.expandedKey = null;
+  wvSavePrefs();
   wvApplyWide('waivers');
   renderWaivers();
 }
@@ -575,7 +896,7 @@ const WV_RANK_COLS = {
   pos:  ['POSITION', 'POS'],
   rank: ['OVERALL', 'OVERALL RANK', 'RANK', 'RK', '#'],
   team: ['TEAM', 'NFL TEAM', 'TM'],
-  // Read when present, all optional — they only decorate the redraft grid.
+  // Read when present, all optional — they only decorate the grid.
   posRank: ['POSITIONAL RANK', 'POS RANK', 'POSITION RANK'],
   tier: ['TIER'],
   ppg:  ['PPG', 'POINTS PER GAME'],
@@ -627,9 +948,8 @@ async function wvUploadRankings(input) {
     autoRank++;
   }
 
-  WV.redraftRankings = rankings;
-  WV.rankUnmatched   = unmatched;
-  WV.loaded = false;
-  WV.rows   = [];
-  renderWaivers();
+  const R = wvRanks();
+  Object.assign(R, { rows: rankings, unmatched, label: file.name });
+  wvRedrawSource();
+  wvRedrawBody();
 }
