@@ -118,6 +118,7 @@
       min-height: 190px; box-sizing: border-box;
     }
     .ta-summary-side { flex: 1 1 200px; min-width: 180px; }
+    .ta-sum-mode { flex: 0 0 100%; display: flex; justify-content: flex-end; gap: 6px; margin-bottom: -6px; }
     .ta-summary-team-lbl {
       font-family: var(--font-display), serif; font-size: 0.62rem; letter-spacing: 0.14em;
       text-transform: uppercase; margin-bottom: 8px;
@@ -369,6 +370,37 @@
   const SIDE_CLS    = ['a', 'b', 'c'];
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
+
+  // ── Playoff Power (the League Analyzer's column, before → after a trade) ──────
+  // Same score: playoffPowerScores() in league-engine.js over each roster's best
+  // projected lineup in the league's playoff weeks. Relative to the league (top
+  // team = 100), so the "after" run rescores every team on the traded rosters.
+  async function taLoadPlayoffPower({ weeks, curWeek, season }) {
+    const ws = (weeks || []).filter(w => w >= (curWeek || 0));
+    if (!ws.length) return null;
+    const proj = await Promise.all(ws.map(w =>
+      fetch(`${API}/sleeper/projections/nfl/regular/${season}/${w}`)
+        .then(r => r.ok ? r.json() : {}).catch(() => ({}))));
+    return { weeks: ws, proj };
+  }
+  function taRosterPids(t) {
+    if (t._sleeperPids) return t._sleeperPids;
+    return _rawData.allRosters?.find(r => r.roster_id === t.rosterId)?.players || t.playerList.map(p => p.pid);
+  }
+  // pidsByRid: { rosterId: [pid] } → { rosterId: {score, ppw} } or null (no projections)
+  function taPowerScores(pidsByRid, pp) {
+    const { scoringSettings, rp, players } = _rawData;
+    const rows = Object.entries(pidsByRid).map(([rid, pids]) => ({
+      rid, weeks: pp.proj.map(pm => optimalLineupAndSigma(pids, pm, scoringSettings, rp, players)),
+    }));
+    if (!rows.length) return null;
+    const avg = rows.reduce((s, r) => s + r.weeks.reduce((a, w) => a + w.mu, 0), 0) / (rows.length * pp.weeks.length);
+    return avg < 20 ? null : playoffPowerScores(rows);
+  }
+  function fmtPower(v) {
+    if (v == null) return { label: '—', color: 'var(--brown-light)', weight: '400' };
+    return { label: String(v), color: v >= 70 ? 'var(--c-green)' : v >= 30 ? 'var(--gold-light)' : 'var(--c-red)', weight: '700' };
+  }
 
   function fmtOdds(p) {
     if (p == null)   return { label: '—',    color: 'var(--brown-light)', weight: '400' };
@@ -679,7 +711,11 @@
       rp, scoringSettings,
       leagueUsers: usersRes || [],   // raw /users rows — the trade DM embeds them
     };
-    _simData = { matchupsByWeek, futureWeeks, projectionsByWeek, muMap, sigmaMap, useFc, median: isMedian };
+    const pp = isPointsOnly ? null : await taLoadPlayoffPower({
+      weeks: playoffWeeksFor({ start: playoffWeekStart, playoffTeams, roundType: leagueRes?.settings?.playoff_round_type ?? 0 }),
+      curWeek: nflRes?.week, season: nflSeason,
+    });
+    _simData = { matchupsByWeek, futureWeeks, projectionsByWeek, muMap, sigmaMap, useFc, median: isMedian, pp };
   }
 
   // ── ESPN load ────────────────────────────────────────────────────────────────
@@ -837,7 +873,13 @@
       players, byName, fcMap, rp, scoringSettings,
       espnTeamById,
     };
-    _simData = { matchupsByWeek, futureWeeks, projectionsByWeek, muMap, sigmaMap, useFc };
+    const ss = espnRes?.settings?.scheduleSettings || {};
+    const pp = await taLoadPlayoffPower({
+      weeks: playoffWeeksFor({ start: (ss.matchupPeriodCount ?? 14) + 1, playoffTeams: ss.playoffTeamCount ?? playoffTeams,
+        roundType: (ss.playoffMatchupPeriodLength ?? 1) > 1 ? 2 : 0 }),
+      curWeek: nflRes?.week, season: nflSeason,
+    });
+    _simData = { matchupsByWeek, futureWeeks, projectionsByWeek, muMap, sigmaMap, useFc, pp };
   }
 
   // ── Trade analysis ──────────────────────────────────────────────────────────
@@ -916,6 +958,24 @@
       afterOddsMap = after.odds; afterByeMap = after.bye || {}; afterLastMap = after.lastPf;
     }
 
+    // Playoff Power before → after: every team rescored, since the score is
+    // relative to the league's strongest playoff roster.
+    let powerBefore = null, powerAfter = null;
+    if (_simData.pp) {
+      const beforePids = Object.fromEntries(teams.map(t => [t.rosterId, [...taRosterPids(t)]]));
+      const afterPids  = Object.fromEntries(Object.entries(beforePids).map(([k, v]) => [k, [...v]]));
+      _teamIds.forEach((rid, sideIdx) => {
+        for (const [key, destRid] of _routes[sideIdx]) {
+          if (!key.startsWith('p:') || !afterPids[rid] || !afterPids[destRid]) continue;
+          const pid = key.slice(2);
+          afterPids[rid] = afterPids[rid].filter(x => String(x) !== pid);
+          afterPids[destRid].push(pid);
+        }
+      });
+      powerBefore = taPowerScores(beforePids, _simData.pp);
+      powerAfter  = powerBefore && taPowerScores(afterPids, _simData.pp);
+    }
+
     const projMap   = futureWeeks.length > 0 ? (projectionsByWeek[futureWeeks[0]] || {}) : {};
     const lineupFc  = useFc || futureWeeks.length === 0;
 
@@ -930,6 +990,8 @@
         afterBye:    futureWeeks.length > 0 ? (afterByeMap[rid] ?? null) : null,
         beforeLast:   orig?.lastPlaceOdds ?? null,
         afterLast:    futureWeeks.length > 0 ? (afterLastMap[rid] ?? null) : null,
+        beforePower:  powerBefore?.[rid]?.score ?? null,
+        afterPower:   powerAfter?.[rid]?.score ?? null,
         lineupBefore: buildOptimalLineup(orig.playerList.map(p => p.pid),  fcMap, projMap, lineupFc, scoringSettings, rp, players),
         lineupAfter:  buildOptimalLineup(cTeam.playerList.map(p => p.pid), fcMap, projMap, lineupFc, scoringSettings, rp, players),
       };
@@ -1021,8 +1083,26 @@
 
   // ── Trade summary visual ────────────────────────────────────────────────────
 
+  // What the summary box totals: season PPG or FantasyCalc value (dynasty value
+  // in a dynasty league, redraft value otherwise). Per league format, so a
+  // redraft choice never flips dynasty. Display only — the rank table, balance
+  // and sim below always read FC.
+  const taSumModeKey = () => `ta_sum_mode_${_rawData?.category === 'dynasty' ? 'dynasty' : 'redraft'}`;
+  function taSumMode() {
+    let m = null;
+    try { m = localStorage.getItem(taSumModeKey()); } catch {}
+    return m === 'ppg' || m === 'fc' ? m : (_rawData?.category === 'dynasty' ? 'fc' : 'ppg');
+  }
+  window.taSetSumMode = function (m) {
+    try { localStorage.setItem(taSumModeKey(), m); } catch {}
+    taRedraw();
+  };
+
   function renderTradeSummary() {
     const { teams } = _rawData;
+    const mode  = taSumMode();
+    const fcLbl = _rawData.category === 'dynasty' ? 'FC dynasty' : 'FC redraft';
+    const ppgOf = a => (a.pid && a.pos !== 'DEVY' ? taPpg(a)?.ppg : null);
     const sides = _teamIds.map(rid => teams.find(t => t.rosterId === rid));
     if (sides.length < 2 || sides.some(s => !s)) return '';
 
@@ -1043,7 +1123,9 @@
           <span class="rs-pos ${cls}" style="font-size:0.60rem;">${pos}</span>
           <span class="ta-summary-player">${esc(a.pid ? a.name : a.label)}</span>
           ${destName && sides.length > 2 ? `<span class="ta-summary-dest">→ ${destName}</span>` : ''}
-          <span class="ta-summary-val">${a.val > 0 ? Number(Math.round(a.val)).toLocaleString() : '—'}</span>
+          <span class="ta-summary-val">${mode === 'ppg'
+            ? (ppgOf(a) != null ? ppgOf(a).toFixed(1) : (a.pid ? (_seasonStats ? '—' : '…') : 'pick'))
+            : (a.val > 0 ? Number(Math.round(a.val)).toLocaleString() : '—')}</span>
         </div>`;
       }).join('');
     };
@@ -1051,10 +1133,15 @@
     const boxes = sides.map((team, sideIdx) => {
       const items = getSelAssets(team, sideIdx);
       const val = items.reduce((s, a) => s + (a.val || 0), 0);
+      const ppg = items.reduce((s, a) => s + (ppgOf(a) || 0), 0);
+      const picks = items.filter(a => !a.pid).length;
+      const total = mode === 'ppg'
+        ? `~${ppg.toFixed(1)} PPG combined${picks ? ` + ${picks} pick${picks > 1 ? 's' : ''}` : ''}`
+        : `~${Number(Math.round(val)).toLocaleString()} ${fcLbl} value`;
       return `<div class="ta-summary-side">
         <div class="ta-summary-team-lbl" style="color:${SIDE_COLORS[sideIdx]};">${esc(displayName(team))} gives</div>
         ${renderItems(sideIdx, items)}
-        ${items.length ? `<div class="ta-summary-total">~${Number(Math.round(val)).toLocaleString()} value</div>` : ''}
+        ${items.length ? `<div class="ta-summary-total">${total}</div>` : ''}
       </div>`;
     });
 
@@ -1064,7 +1151,12 @@
       parts.push(b);
     });
 
-    return `<div class="ta-summary-box">${parts.join('')}</div>`;
+    const pill = (m, lbl, tip) => `<button class="ta-dest-pill${mode === m ? ' active' : ''}" title="${tip}" onclick="taSetSumMode('${m}')">${lbl}</button>`;
+    const modeBar = `<div class="ta-sum-mode">
+      ${pill('ppg', 'PPG', 'Season-to-date points per game, in this league’s scoring')}
+      ${pill('fc', fcLbl, `FantasyCalc ${_rawData.category === 'dynasty' ? 'dynasty' : 'redraft'} trade value`)}
+    </div>`;
+    return `<div class="ta-summary-box">${modeBar}${parts.join('')}</div>`;
   }
 
   // ── League picker ──────────────────────────────────────────────────────────
@@ -1302,14 +1394,19 @@
 
     const hasAssets = _routes.some(r => r.size > 0);
 
+    // Follows the summary box's PPG / FC toggle (taSumMode).
+    const sumPpg = taSumMode() === 'ppg';
     const valBySide = sides.map((team, sideIdx) =>
       [...team.playerList, ...team.pickList]
         .filter(a => _routes[sideIdx].has(a.pid ? playerKey(a) : pickKey(a)))
-        .reduce((s, a) => s + (a.val || 0), 0)
+        .reduce((s, a) => s + (sumPpg
+          ? (a.pid && a.pos !== 'DEVY' ? (taPpg(a)?.ppg || 0) : 0)
+          : (a.val || 0)), 0)
     );
+    const fmtSide = v => sumPpg ? `${v.toFixed(1)} PPG` : Number(Math.round(v)).toLocaleString();
 
     const noteHtml = hasAssets
-      ? `<span class="ta-btn-note">${sides.map((t, i) => `${esc(displayName(t))} ~${Number(Math.round(valBySide[i])).toLocaleString()}`).join(' ↔ ')}</span>`
+      ? `<span class="ta-btn-note">${sides.map((t, i) => `${esc(displayName(t))} ~${fmtSide(valBySide[i])}`).join(' ↔ ')}</span>`
       : `<span class="ta-btn-note">Check players and picks below</span>`;
 
     const addTeamHtml = _teamIds.length < 3 ? `
@@ -1742,6 +1839,30 @@
       </div>`;
     }
 
+    // Playoff Power row: a 0-100 score, so the delta is in points, not pp.
+    function powerRow(pt) {
+      if (pt.beforePower == null) return '';
+      const b = pt.beforePower, a = pt.afterPower ?? b;
+      const bF = fmtPower(b), aF = fmtPower(a), delta = a - b;
+      const dCls = delta > 0 ? 'ta-delta-up-txt' : delta < 0 ? 'ta-delta-dn-txt' : 'ta-delta-flat-txt';
+      const dStr = delta > 0 ? `+${delta}` : delta < 0 ? `${delta}` : '±0';
+      const wks = _simData.pp?.weeks || [];
+      const span = wks.length > 1 ? `wks ${wks[0]}–${wks[wks.length - 1]}` : `wk ${wks[0]}`;
+      return `<div class="ta-odds-metric" title="Playoff Power: how this roster projects in the league's playoff weeks (${span}) against each week's best team — strongest team = 100. Every team is rescored after the trade.">
+        <div class="ta-odds-metric-lbl">Playoff Power</div>
+        <div class="ta-odds-metric-val">
+          <span style="color:${bF.color};">${bF.label}</span>
+          <span class="ta-rank-arrow">→</span>
+          <span style="color:${aF.color};font-weight:${aF.weight};">${aF.label}</span>
+          <span class="${dCls}" style="font-size:0.72rem;">${dStr}</span>
+        </div>
+        <div class="ta-odds-bar-wrap">
+          <div class="ta-odds-bar-behind" style="width:${b}%;background:${bF.color};"></div>
+          <div class="ta-odds-bar-front"  style="width:${a}%;background:${aF.color};"></div>
+        </div>
+      </div>`;
+    }
+
     // One card per team, with playoff / bye / last-place odds stacked as rows —
     // keeps everything about a single team's roster together in one place.
     function teamOddsCard(name, teamColor, label, pt) {
@@ -1749,7 +1870,8 @@
         return `<div class="ta-odds-card">
           <div class="ta-odds-lbl">${label}</div>
           <div class="ta-odds-team" style="color:${teamColor};">${name}</div>
-          <div style="font-family:var(--font-body),serif;font-size:0.85rem;color:var(--brown-light);font-style:italic;">Season complete — standings are locked</div>
+          <div style="font-family:var(--font-body),serif;font-size:0.85rem;color:var(--brown-light);font-style:italic;">Regular season complete — standings are locked</div>
+          ${powerRow(pt)}
         </div>`;
       }
       return `<div class="ta-odds-card">
@@ -1758,6 +1880,7 @@
         ${metricRow(isPointsOnly ? 'Most Points Odds' : 'Playoff Odds',     pt.beforeOdds, pt.afterOdds, fmtOdds,     false)}
         ${metricRow(isPointsOnly ? 'Top 3 Points Odds' : 'Bye Odds', pt.beforeBye, pt.afterBye, fmtOdds,     false)}
         ${metricRow('Last Place Odds',  pt.beforeLast, pt.afterLast, fmtLastOdds, true)}
+        ${powerRow(pt)}
       </div>`;
     }
 
