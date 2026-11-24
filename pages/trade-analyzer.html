@@ -704,7 +704,7 @@
     revaluePicksByOdds(teams, isPointsOnly ? (simRes.bye || {}) : simRes.odds, { nextSeason, ridToSlot, numTeams, fcPickMap });
 
     _rawData = {
-      teams: simTeams, lgName, category, season: nflSeason,
+      teams: simTeams, lgName, category, dynasty: isDynasty, season: nflSeason,
       formatFlags: buildFormatFlags(leagueRes || {}),
       numTeams, playoffTeams, hasIDP,
       allRosters, tradedPicks, players, byName, fcMap, fcPickMap, ridToSlot, numRounds,
@@ -1022,7 +1022,7 @@
   // on different boards (mrbSourceKey in shared-utils.js).
   function taMrbCtx() {
     const d = _rawData || {};
-    return { dynasty: d.category === 'dynasty', players: d.players, byName: d.byName, fcMap: d.fcMap };
+    return { dynasty: !!d.dynasty, players: d.players, byName: d.byName, fcMap: d.fcMap };
   }
 
   async function taLoadMyRanks() {
@@ -1087,11 +1087,13 @@
   // in a dynasty league, redraft value otherwise). Per league format, so a
   // redraft choice never flips dynasty. Display only — the rank table, balance
   // and sim below always read FC.
-  const taSumModeKey = () => `ta_sum_mode_${_rawData?.category === 'dynasty' ? 'dynasty' : 'redraft'}`;
+  // Keyed on the league's FC source, not `category` — a dynasty best-ball league
+  // is category 'bestball' but its FantasyCalc values are dynasty values.
+  const taSumModeKey = () => `ta_sum_mode_${_rawData?.dynasty ? 'dynasty' : 'redraft'}`;
   function taSumMode() {
     let m = null;
     try { m = localStorage.getItem(taSumModeKey()); } catch {}
-    return m === 'ppg' || m === 'fc' ? m : (_rawData?.category === 'dynasty' ? 'fc' : 'ppg');
+    return m === 'ppg' || m === 'fc' ? m : (_rawData?.dynasty ? 'fc' : 'ppg');
   }
   window.taSetSumMode = function (m) {
     try { localStorage.setItem(taSumModeKey(), m); } catch {}
@@ -1101,7 +1103,7 @@
   function renderTradeSummary() {
     const { teams } = _rawData;
     const mode  = taSumMode();
-    const fcLbl = _rawData.category === 'dynasty' ? 'FC dynasty' : 'FC redraft';
+    const fcLbl = _rawData.dynasty ? 'FC dynasty' : 'FC redraft';
     const ppgOf = a => (a.pid && a.pos !== 'DEVY' ? taPpg(a)?.ppg : null);
     const sides = _teamIds.map(rid => teams.find(t => t.rosterId === rid));
     if (sides.length < 2 || sides.some(s => !s)) return '';
@@ -1154,7 +1156,7 @@
     const pill = (m, lbl, tip) => `<button class="ta-dest-pill${mode === m ? ' active' : ''}" title="${tip}" onclick="taSetSumMode('${m}')">${lbl}</button>`;
     const modeBar = `<div class="ta-sum-mode">
       ${pill('ppg', 'PPG', 'Season-to-date points per game, in this league’s scoring')}
-      ${pill('fc', fcLbl, `FantasyCalc ${_rawData.category === 'dynasty' ? 'dynasty' : 'redraft'} trade value`)}
+      ${pill('fc', fcLbl, `FantasyCalc ${_rawData.dynasty ? 'dynasty' : 'redraft'} trade value`)}
     </div>`;
     return `<div class="ta-summary-box">${modeBar}${parts.join('')}</div>`;
   }
