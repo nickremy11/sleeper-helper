@@ -1531,14 +1531,17 @@ async function applyLineup(idx) {
   const box   = document.getElementById('lc-opt-' + idx);
   const setMsg = (c, t) => { if (box) box.innerHTML = `<div style="padding:6px 16px;font-size:0.65rem;color:${c};">${t}</div>`; };
   setMsg('var(--brown-light)', 'applying…');
+  fix._applyErr = null;   // why the last write failed — Apply all lists it
   try {
     const ok = await luPutStarters(fix, prop);
     const body = document.getElementById('lc-body-' + idx); if (body) body.innerHTML = luBodyRows(fix, 'current');
     const meta = document.getElementById('lc-meta-' + idx); if (meta) meta.outerHTML = luSummaryMeta(fix, idx);
+    if (!ok) fix._applyErr = 'saved, but Sleeper returned a different lineup';
     setMsg(ok ? 'var(--c-green)' : 'var(--c-amber)', ok ? '✓ lineup set' : '⚠ saved but Sleeper returned a different lineup');
     return ok;
   } catch (e) {
-    setMsg('var(--c-red)', '✗ ' + (e.message || 'failed'));
+    fix._applyErr = e.message || 'failed';
+    setMsg('var(--c-red)', '✗ ' + esc(fix._applyErr));
     return false;
   }
 }
@@ -1579,14 +1582,29 @@ async function applyAll() {
   });
   const label = src === 'ranks' ? 'ranking sheet' : 'projections';
   if (!targets.length) { setS('var(--c-green)', `All lineups already optimal by ${label}`); return; }
-  let done = 0, fail = 0;
+  let done = 0;
+  const failed = [];
   for (const { fix, idx } of targets) {
     fix._shown = src;
-    setS('var(--brown-light)', `Applying ${done + fail + 1}/${targets.length} (${label})…`);
+    setS('var(--brown-light)', `Applying ${done + failed.length + 1}/${targets.length} (${label})…`);
     const ok = await applyLineup(idx);
-    if (ok) done++; else fail++;
+    if (ok) done++; else failed.push({ fix, idx });
   }
-  setS(fail ? 'var(--c-amber)' : 'var(--c-green)', `Applied ${done} lineup${done !== 1 ? 's' : ''} by ${label}${fail ? `, ${fail} failed` : ''}`);
+  setS(failed.length ? 'var(--c-amber)' : 'var(--c-green)', `Applied ${done} lineup${done !== 1 ? 's' : ''} by ${label}${failed.length ? `, ${failed.length} failed:` : ''}`);
+  // Name every league that failed, with Sleeper's reason, each a link to its card —
+  // otherwise "3 failed" means scrolling 70 cards for the amber ones.
+  if (failed.length && status) {
+    status.insertAdjacentHTML('beforeend', `<ul class="lu-fail-list">${failed.map(({ fix, idx }) =>
+      `<li><a href="#lc-${idx}" onclick="event.preventDefault();luGoToCard(${idx})">${esc(fix.leagueName)}</a> — ${esc(fix._applyErr || 'failed')}</li>`).join('')}</ul>`);
+  }
+}
+
+// Open a lineup card and scroll it into view (the Apply all failure list).
+function luGoToCard(idx) {
+  const d = document.getElementById('lc-' + idx);
+  if (!d) return;
+  d.open = true;
+  d.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function toggleCollapseAll() {
