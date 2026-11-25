@@ -97,6 +97,76 @@ function sleeperMaxPf(roster) {
   return whole ? whole + (roster.settings.ppts_decimal || 0) / 100 : null;
 }
 
+// ── Playoff rules: tiebreaker + who gets in ─────────────────────────────────
+//
+// rules = { tiebreak: 'pf' | 'h2h', format: 'top' | 'div' | 'pf' }
+//   tiebreak 'pf'  — equal records split on points for (the old, only behaviour)
+//   tiebreak 'h2h' — head-to-head wins among the tied teams first, then points for
+//   format 'top'   — the best N records
+//   format 'div'   — every division winner, then the best remaining records
+//                    (falls back to 'top' when the league has no divisions)
+//   format 'pf'    — the best N-1 records, then the most points of everyone left
+//   divSeed 'top'  — under 'div', division winners take the top seeds (and byes)
+//   divSeed 'record' — under 'div', winners only get in; everyone is seeded by record
+// h2h(a, b) = games a has won against b (a tie counts ½). division = {rid: div}.
+const PLAYOFF_RULES_DEFAULT = { tiebreak: 'pf', format: 'top', divSeed: 'top' };
+
+// Record order: wins, then the tiebreaker. Returns roster ids, best first.
+function recordOrder(ids, wins, pts, rules, h2h) {
+  const byPf = (a, b) => (pts[b] || 0) - (pts[a] || 0);
+  const sorted = ids.slice().sort((a, b) => ((wins[b] || 0) - (wins[a] || 0)) || byPf(a, b));
+  if (rules?.tiebreak !== 'h2h' || !h2h) return sorted;
+  // Re-order each block of equal wins by H2H wins against the rest of the block.
+  const out = [];
+  for (let i = 0; i < sorted.length;) {
+    let j = i + 1;
+    while (j < sorted.length && (wins[sorted[j]] || 0) === (wins[sorted[i]] || 0)) j++;
+    const block = sorted.slice(i, j);
+    if (block.length > 1) {
+      const hw = {};
+      for (const a of block) hw[a] = block.reduce((s, b) => s + (a === b ? 0 : h2h(a, b)), 0);
+      block.sort((a, b) => (hw[b] - hw[a]) || byPf(a, b));
+    }
+    out.push(...block);
+    i = j;
+  }
+  return out;
+}
+
+// Playoff seeds under `rules`: {seeds: [rid…] (length ≤ playoffTeams), order}.
+// Byes go to the first seeds, so division winners take them under 'div' unless
+// rules.divSeed is 'record'.
+function playoffSeeds(ids, wins, pts, playoffTeams, rules = PLAYOFF_RULES_DEFAULT, h2h = null, division = null) {
+  const order = recordOrder(ids, wins, pts, rules, h2h);
+  const n = Math.min(playoffTeams, order.length);
+  const fmt = rules?.format || 'top';
+  if (fmt === 'pf' && n > 1) {
+    const seeds = order.slice(0, n - 1);
+    const rest  = order.slice(n - 1).sort((a, b) => (pts[b] || 0) - (pts[a] || 0));
+    seeds.push(rest[0]);
+    return { seeds, order };
+  }
+  if (fmt === 'div' && division) {
+    const seen = new Set(), winners = [];
+    for (const rid of order) {
+      const dv = division[rid];
+      if (dv == null || seen.has(dv)) continue;
+      seen.add(dv); winners.push(rid);
+    }
+    if (seen.size > 1) {
+      const w = winners.slice(0, n);
+      const wSet = new Set(w);
+      const seeds = w.concat(order.filter(r => !wSet.has(r)).slice(0, n - w.length));
+      if (rules.divSeed === 'record') {
+        const rank = new Map(order.map((r, i) => [r, i]));
+        seeds.sort((a, b) => rank.get(a) - rank.get(b));
+      }
+      return { seeds, order };
+    }
+  }
+  return { seeds: order.slice(0, n), order };
+}
+
 // Starts every team from its banked wins / PF / Max PF and plays out futureWeeks.
 // Teams are {rosterId, wins, fpts, maxPf?}. Scores are drawn around each roster's
 // optimal lineup, so the simulated points add directly to Max PF.
@@ -107,6 +177,9 @@ function sleeperMaxPf(roster) {
 // opts.pointsOnly: rank by total points instead of record. `odds` is then "finishes
 // #1 in points", `bye` is "finishes top 3" and `lastPf` is fewest points scored.
 //
+// opts.rules / opts.h2h / opts.division: see playoffSeeds. opts.h2h is the
+// banked {a: {b: wins}}; simulated games are added on top per sim.
+//
 // Returns per-roster fractions {odds, bye, lastPf}; bye is null when the bracket
 // has no byes.
 function runSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, playoffTeams, opts = {}, N = 5000) {
@@ -114,11 +187,16 @@ function runSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, play
   const median     = !!opts.median;
   const seedSlots  = pointsOnly ? 1 : playoffTeams;
   const byeSlots   = pointsOnly ? POINTS_ONLY_TOP_COUNT : bracketByeSlots(playoffTeams);
+  const rules      = opts.rules || PLAYOFF_RULES_DEFAULT;
+  const useH2h     = !pointsOnly && rules.tiebreak === 'h2h';
+  const bankedH2h  = opts.h2h || {};
+  const ids        = teams.map(t => t.rosterId);
   const count = {}, countBye = {}, countLast = {};
   for (const t of teams) { count[t.rosterId] = 0; countBye[t.rosterId] = 0; countLast[t.rosterId] = 0; }
 
   for (let sim = 0; sim < N; sim++) {
     const wins = {}, pts = {}, maxPf = {};
+    const simH2h = useH2h ? {} : null;
     for (const t of teams) { wins[t.rosterId] = t.wins; pts[t.rosterId] = t.fpts; maxPf[t.rosterId] = t.maxPf ?? t.fpts; }
 
     for (const week of futureWeeks) {
@@ -137,8 +215,14 @@ function runSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, play
         pts[b.roster_id]   = (pts[b.roster_id]   || 0) + sB;
         maxPf[a.roster_id] = (maxPf[a.roster_id] || 0) + sA;
         maxPf[b.roster_id] = (maxPf[b.roster_id] || 0) + sB;
-        if      (sA > sB) wins[a.roster_id] = (wins[a.roster_id] || 0) + 1;
-        else if (sB > sA) wins[b.roster_id] = (wins[b.roster_id] || 0) + 1;
+        const winner = sA > sB ? a.roster_id : sB > sA ? b.roster_id : null;
+        if (winner != null) {
+          wins[winner] = (wins[winner] || 0) + 1;
+          if (simH2h) {
+            const k = winner + '_' + (winner === a.roster_id ? b.roster_id : a.roster_id);
+            simH2h[k] = (simH2h[k] || 0) + 1;
+          }
+        }
         weekScores.push([a.roster_id, sA], [b.roster_id, sB]);
       }
       if (median && weekScores.length > 1) {
@@ -147,13 +231,16 @@ function runSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, play
       }
     }
 
-    const ranked = teams.slice().sort((a, b) => {
-      if (pointsOnly) return (pts[b.rosterId] || 0) - (pts[a.rosterId] || 0);
-      const wd = (wins[b.rosterId] || 0) - (wins[a.rosterId] || 0);
-      return wd !== 0 ? wd : (pts[b.rosterId] || 0) - (pts[a.rosterId] || 0);
-    });
-    for (let i = 0; i < Math.min(seedSlots, ranked.length); i++) count[ranked[i].rosterId]++;
-    for (let i = 0; i < Math.min(byeSlots, ranked.length); i++) countBye[ranked[i].rosterId]++;
+    if (pointsOnly) {
+      const ranked = ids.slice().sort((a, b) => (pts[b] || 0) - (pts[a] || 0));
+      for (let i = 0; i < Math.min(seedSlots, ranked.length); i++) count[ranked[i]]++;
+      for (let i = 0; i < Math.min(byeSlots, ranked.length); i++) countBye[ranked[i]]++;
+    } else {
+      const h2h = useH2h ? (x, y) => (bankedH2h[x]?.[y] || 0) + (simH2h[x + '_' + y] || 0) : null;
+      const { seeds } = playoffSeeds(ids, wins, pts, playoffTeams, rules, h2h, opts.division);
+      for (const rid of seeds) count[rid]++;
+      for (let i = 0; i < Math.min(byeSlots, seeds.length); i++) countBye[seeds[i]]++;
+    }
 
     const lastBy = pointsOnly ? pts : maxPf;
     let last = teams[0];
@@ -175,7 +262,18 @@ function finalStandingOdds(teams, playoffTeams, opts = {}) {
   const pointsOnly = !!opts.pointsOnly;
   const seedSlots  = pointsOnly ? 1 : playoffTeams;
   const byeSlots   = pointsOnly ? POINTS_ONLY_TOP_COUNT : bracketByeSlots(playoffTeams);
-  const ranked = [...teams].sort((a, b) => pointsOnly ? b.fpts - a.fpts : (b.wins - a.wins) || (b.fpts - a.fpts));
+  let ranked;
+  if (pointsOnly) ranked = [...teams].sort((a, b) => b.fpts - a.fpts);
+  else {
+    const wins = {}, pts = {}, byId = {};
+    for (const t of teams) { wins[t.rosterId] = t.wins; pts[t.rosterId] = t.fpts; byId[t.rosterId] = t; }
+    const banked = opts.h2h || {};
+    const h2h = (x, y) => banked[x]?.[y] || 0;
+    const { seeds, order } = playoffSeeds(teams.map(t => t.rosterId), wins, pts, playoffTeams,
+      opts.rules || PLAYOFF_RULES_DEFAULT, h2h, opts.division);
+    const seedSet = new Set(seeds);
+    ranked = seeds.concat(order.filter(r => !seedSet.has(r))).map(r => byId[r]);
+  }
   const lastVal = t => pointsOnly ? t.fpts : (t.maxPf ?? t.fpts);
   const low = Math.min(...teams.map(lastVal));
   const lastTeams = teams.filter(t => lastVal(t) === low);

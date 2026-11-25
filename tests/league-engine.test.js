@@ -11,7 +11,7 @@ const pages = path.join(__dirname, '..', 'pages');
 const src = ['shared-core.js', 'shared-utils.js', 'league-engine.js'].map(f => fs.readFileSync(path.join(pages, f), 'utf8')).join('\n');
 const ctx = { console, URLSearchParams, location: { hostname: 'helper.ffhistorian.com' }, window: { addEventListener() {} } };
 vm.createContext(ctx);
-const E = vm.runInContext(`${src}\n;({ SLOT_ELIG, optimalLineupAndSigma, pickOptimalLineup, bracketByeSlots, runSimulation, finalStandingOdds, sleeperMaxPf, ownedPicks, rosterOwnerNames, getPickValue, buildPickValueMap, fcTeMult, fcApplyTeMult, teSlotCount, ESPN_POS_MAP, crNormPos, normName, csvTable, espnMyTeam, espnSlotList })`, ctx);
+const E = vm.runInContext(`${src}\n;({ SLOT_ELIG, optimalLineupAndSigma, pickOptimalLineup, bracketByeSlots, runSimulation, finalStandingOdds, playoffSeeds, sleeperMaxPf, ownedPicks, rosterOwnerNames, getPickValue, buildPickValueMap, fcTeMult, fcApplyTeMult, teSlotCount, ESPN_POS_MAP, crNormPos, normName, csvTable, espnMyTeam, espnSlotList })`, ctx);
 
 const plain = v => JSON.parse(JSON.stringify(v));
 
@@ -69,6 +69,43 @@ test('final standings use the same bracket and Max PF rules', () => {
   assert.deepStrictEqual(r.odds, { 1: 1, 2: 1, 3: 1, 4: 0 });
   assert.deepStrictEqual(r.bye, { 1: 1, 2: 0, 3: 0, 4: 0 });
   assert.deepStrictEqual(r.lastPf, { 1: 0, 2: 1, 3: 0, 4: 0 });
+});
+
+test('playoff rules: H2H tiebreak, division winners, last spot on points', () => {
+  // 1: 9-x, 2/3/4 tied at 7 wins (PF order 2 > 3 > 4), 5: 6 wins with the most PF, 6: 4 wins.
+  const ids = [1, 2, 3, 4, 5, 6];
+  const wins = { 1: 9, 2: 7, 3: 7, 4: 7, 5: 6, 6: 4 };
+  const pts  = { 1: 1500, 2: 1400, 3: 1300, 4: 1200, 5: 1600, 6: 1100 };
+  const h2h  = (a, b) => ({ '4_2': 1, '4_3': 1, '3_2': 1 })[a + '_' + b] || 0;
+  const seeds = (rules, h, div) => plain(E.playoffSeeds(ids, wins, pts, 4, rules, h, div).seeds);
+
+  assert.deepStrictEqual(seeds({ tiebreak: 'pf', format: 'top' }), [1, 2, 3, 4]);
+  assert.deepStrictEqual(seeds({ tiebreak: 'h2h', format: 'top' }, h2h), [1, 4, 3, 2]);
+  // Last spot to the most PF among everyone not in the top 3 records.
+  assert.deepStrictEqual(seeds({ tiebreak: 'pf', format: 'pf' }), [1, 2, 3, 5]);
+  // Divisions {1,2,3} and {4,5,6}: 4 wins its division and is seeded 2nd (gets a bye first).
+  const div = { 1: 'A', 2: 'A', 3: 'A', 4: 'B', 5: 'B', 6: 'B' };
+  assert.deepStrictEqual(seeds({ tiebreak: 'pf', format: 'div' }, null, div), [1, 4, 2, 3]);
+  // 6 wins division C over nobody: a 4-win division winner still gets in.
+  const div3 = { 1: 'A', 2: 'A', 3: 'B', 4: 'B', 5: 'A', 6: 'C' };
+  assert.deepStrictEqual(seeds({ tiebreak: 'pf', format: 'div' }, null, div3), [1, 3, 6, 2]);
+  // divSeed 'record': 6 still gets in, but is seeded by record (last).
+  assert.deepStrictEqual(seeds({ tiebreak: 'pf', format: 'div', divSeed: 'record' }, null, div3), [1, 2, 3, 6]);
+  assert.deepStrictEqual(seeds({ tiebreak: 'pf', format: 'div', divSeed: 'record' }, null, div), [1, 2, 3, 4]);
+  // No divisions → top records.
+  assert.deepStrictEqual(seeds({ tiebreak: 'pf', format: 'div' }, null, null), [1, 2, 3, 4]);
+});
+
+test('final standings + sim apply the playoff rules', () => {
+  const teams = [
+    { rosterId: 1, wins: 9, fpts: 200 }, { rosterId: 2, wins: 8, fpts: 150 },
+    { rosterId: 3, wins: 5, fpts: 100 }, { rosterId: 4, wins: 2, fpts: 400 },
+  ];
+  const r = plain(E.finalStandingOdds(teams, 3, { rules: { tiebreak: 'pf', format: 'pf' } }));
+  assert.deepStrictEqual(r.odds, { 1: 1, 2: 1, 3: 0, 4: 1 });
+  // Sim, top-N-1 + PF: still exactly playoffTeams teams in per sim.
+  const s = miniLeague(6, { rules: { tiebreak: 'h2h', format: 'pf' }, h2h: {} });
+  assert.ok(Math.abs(Object.values(s.odds).reduce((a, b) => a + b, 0) - 6) < 1e-9);
 });
 
 test('sleeperMaxPf reads ppts + decimal, null before anything is scored', () => {
