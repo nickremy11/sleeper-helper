@@ -78,7 +78,9 @@ async function dashLineups(regular) {
     const list = [...bad, ...warn].slice(0, 6).map(r =>
       dashLine(`<span class="dash-lg">${esc(r.fix.leagueName)}</span><span class="dash-badge ${r.s.level}">${esc(r.s.label)}</span>${r.s.detail ? `<span class="dash-sub">${esc(r.s.detail)}</span>` : ''}`));
     const more = bad.length + warn.length > 6 ? dashLine(`+ ${bad.length + warn.length - 6} more`, 'dim') : '';
-    fill(stat + (list.length ? list.join('') + more : dashLine('Every lineup is set. ✓', 'good')));
+    const chopped = (LU.chopped || []).length
+      ? dashLine(`🪓 Chopped from ${LU.chopped.map(c => esc(c.leagueName)).join(', ')} — not counted`, 'dim') : '';
+    fill(stat + (list.length ? list.join('') + more : dashLine('Every lineup is set. ✓', 'good')) + chopped);
   } catch (e) { fill(dashLine('Couldn’t load lineups: ' + esc(e.message), 'bad')); }
 }
 

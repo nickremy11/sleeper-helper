@@ -14,7 +14,8 @@ const LU = {
   weekOverride: null,       // {from, to} — self-expiring manual week, see luWeekFor
   openSlot: null,           // {leagueId, slotIdx} — the one row showing its replacement options
   allSrc: null,             // 'projections' | 'ranks' — last "Optimize all", what "Apply all" writes
-  _cache: null,             // { at, week, lineups, proj, kick } — see LU_CACHE_TTL
+  chopped: [],              // [{leagueName, leagueId, week}] — guillotine leagues I've been cut from, see luChoppedHtml
+  _cache: null,             // { at, week, lineups, proj, kick, chopped } — see LU_CACHE_TTL
 };
 try { LU.faOn = localStorage.getItem('lu_fa_watch') !== '0'; } catch(_) {}
 try { LU.weekOverride = JSON.parse(localStorage.getItem('lu_week_override') || 'null'); } catch(_) {}
@@ -2411,6 +2412,15 @@ function luRefreshCardsInPlace() {
   if (counts) counts.outerHTML = luCountsHtml();
 }
 
+// One quiet line naming the guillotine leagues I've been chopped from — they have
+// no card and count toward nothing, but a league silently vanishing from the list
+// would read as a load failure.
+function luChoppedHtml() {
+  if (!LU.chopped?.length) return '';
+  const list = LU.chopped.map(c => `${esc(c.leagueName)} <span style="opacity:0.7;">(week ${c.week})</span>`).join(' · ');
+  return `<div class="lu-chopped" style="font-size:0.7rem;color:var(--brown-light);margin:-6px 0 12px;">🪓 Chopped — no lineup to set: ${list}</div>`;
+}
+
 // The three status counts beside the page title. Same statuses as the card
 // badges, so the numbers always add up to the cards below.
 function luCountsHtml() {
@@ -2942,6 +2952,7 @@ async function luEnsureLineupData(force = false) {
 
   if (!force && luCacheFresh()) {
     LU.lineups = LU._cache.lineups;
+    LU.chopped = LU._cache.chopped || [];
     LU.proj    = LU._cache.proj;
     LU.kick    = LU._cache.kick;
     LU.opp     = LU._cache.opp || {};
@@ -2965,6 +2976,7 @@ async function luEnsureLineupData(force = false) {
 
   // Per-league fetches run in parallel — done sequentially this loop was the
   // main source of the delay (2 round-trips × every league, one after another).
+  const chopped = [];
   const settled = await Promise.all(S.leagues.map(async (lg) => {
     try {
       if (lg.source === 'espn') return await luLoadEspnLineup(lg, w);
@@ -2975,6 +2987,14 @@ async function luEnsureLineupData(force = false) {
       const rosters = await api('/league/' + lg.league_id + '/rosters');
       const mine    = (rosters || []).find(r => r.owner_id === S.userId);
       if (!mine) return null;
+      // Guillotine: once I'm chopped Sleeper empties my roster and stamps
+      // settings.eliminated with the week I was cut (checked on live leagues,
+      // Nov 2026). The lineup is permanently empty, so it isn't a fixture at all —
+      // otherwise every card, count and Home summary reads "Action needed".
+      if (mine.settings?.eliminated) {
+        chopped.push({ leagueName: lg.name, leagueId: lg.league_id, week: mine.settings.eliminated });
+        return null;
+      }
 
       // Every player owned by anyone in the league — the complement is the free
       // agent pool, which the redraft FA watch scans. Costs nothing: /rosters is
@@ -3045,8 +3065,9 @@ async function luEnsureLineupData(force = false) {
   await statsP;
 
   LU.lineups = lineups;
+  LU.chopped = chopped.sort((a, b) => a.week - b.week);
   LU.week    = w;
-  LU._cache  = { at: Date.now(), week: w, lineups, proj: LU.proj, kick: LU.kick, opp: LU.opp };
+  LU._cache  = { at: Date.now(), week: w, lineups, proj: LU.proj, kick: LU.kick, opp: LU.opp, chopped: LU.chopped };
   return lineups;
 }
 
@@ -3150,6 +3171,7 @@ function luRenderLineupCards() {
         ${toolbar}
         ${refreshBar}
       </div>
+      ${luChoppedHtml()}
       ${luSwapBarHtml()}
       <div id="lu-cards" class="lu-cards">${cardsHtml}</div>
     </div>`);

@@ -626,10 +626,8 @@ async function lsLoadProjData() {
 // per team per remaining week, cut the lowest, repeat; tally outcomes over
 // GZ_SIM_N trials.
 //
-// NOTE: "alive" detection (lsGzIsAlive) is a best guess made before any real
-// elimination has happened this season (Sleeper is believed to empty a cut
-// team's roster rather than remove it from /rosters, but that's unconfirmed).
-// Re-verify against real data once Week 1 resolves and the first team is cut.
+// "Alive" (lsGzIsAlive) reads Sleeper's settings.eliminated: a cut team stays in
+// /rosters with its roster emptied and that flag set to the week it was chopped.
 function lsIsGuillotine(lgId) {
   return S.leagueDetails[lgId]?.settings?.type === 3;
 }
@@ -641,7 +639,11 @@ const GZ_SIM_N            = 5000;
 const GZ_DEFAULT_SIGMA_CV = 0.30; // weekly score stdev as a fraction of mean, until real weeks narrow it
 const GZ_FAAB_COEF        = 0.20; // how strongly relative FAAB reserve nudges projected mean — kept small & bounded
 
+// Sleeper stamps a cut team's roster with settings.eliminated (the week it was
+// chopped) and empties it — confirmed on live leagues, Nov 2026. The flag is the
+// real answer; an empty roster stays as the fallback.
 function lsGzIsAlive(roster) {
+  if (roster?.settings?.eliminated) return false;
   return !!(roster?.players && roster.players.length > 0);
 }
 
