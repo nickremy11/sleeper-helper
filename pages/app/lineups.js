@@ -1262,7 +1262,6 @@ function luBodyRows(fix, mode) {
     }
     const pid  = mode === 'diff' ? pr : cur;
     const inj  = injuryBadge(S.players[pid]?.injury_status);
-    const opp  = luOppLabel(pid, fix);
     const lock = luLocked(pid);
     // Every current-mode row opens its own replacement list. Not offered on a
     // diff row: those rows are showing a proposal, and the slot indices there
@@ -1272,7 +1271,7 @@ function luBodyRows(fix, mode) {
     return `<div class="diff-row${click ? ' diff-click' : ''}${open ? ' slot-open' : ''}"${lock ? ' style="opacity:0.62;"' : ''}${click ? ` onclick="luToggleSlot(${idx},${i})"` : ''}>
       <span class="diff-slot">${esc(slot)}</span>
       <span style="color:var(--parchment);flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${lock ? '<span title="Game has started — this slot is locked" style="color:var(--brown-light);">🔒 </span>' : ''}${esc(luPlayerName(pid))}${inj ? ' ' + inj : ''}</span>
-      ${opp ? `<span class="diff-opp" title="This week's opponent">${esc(opp)}</span>` : ''}
+      ${luGameBits(pid, fix)}
       ${rankCells(pid)}
       <span style="flex:1;"></span>
       ${ppgCell(pid)}
@@ -1280,6 +1279,29 @@ function luBodyRows(fix, mode) {
       ${click ? `<span class="diff-caret" title="Show every player who could take this slot">${open ? '▾' : '▸'}</span>` : ''}
     </div>${open ? luSlotOptionsHtml(fix, idx, i) : ''}`;
   }).join('');
+}
+
+// When his game is: kickoff ('Sun 1:00 PM'), the live quarter and clock, or
+// 'Final' — the Scoreboard's lmGameShort format. Read off the same
+// /api/espn/games rows as the opponent (cached with the lineups, 5 min).
+function luGameLabel(pid) {
+  if (!pid || pid === '0' || !LU.games) return null;
+  const team = (typeof LU_ESPN_TEAM !== 'undefined' && LU_ESPN_TEAM[pid]) || S.players[pid]?.team || (S.players[pid]?.position === 'DEF' ? pid : null);
+  const g = team && LU.games[team];
+  if (!g) return null;
+  if (g.state === 'in') return { txt: `${+g.period > 4 ? 'OT' : 'Q' + g.period} ${g.clock || ''}`.trim(), live: true };
+  if (g.state === 'post') return { txt: 'Final', done: true };
+  const k = new Date(g.kickoff || LU.kick?.[team]);
+  return isNaN(k) ? null : { txt: k.toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' }) };
+}
+
+// Opponent + game time as two small spans — one markup for the lineup rows and
+// every replacement-option row (slot options, Injury Swap, the ranks-grid chooser).
+function luGameBits(pid, fix) {
+  const opp = luOppLabel(pid, fix);
+  const gl  = luGameLabel(pid);
+  return (opp ? `<span class="diff-opp" title="This week's opponent">${esc(opp)}</span>` : '')
+       + (gl ? `<span class="diff-gtime${gl.live ? ' live' : ''}${gl.done ? ' done' : ''}" title="${gl.live ? 'In progress' : gl.done ? 'Game over' : 'Kickoff'}">${esc(gl.txt)}</span>` : '');
 }
 
 // This week's NFL opponent ('vs MIN' / '@DET'), or 'BYE' for a team with no game
@@ -1324,7 +1346,7 @@ function luOptRow(fix, pid, opts = {}) {
   const inj  = injuryBadge(p.injury_status);
   const lbl  = lswRankLabel(pid, opts.landSlot, !!opts.mixed, pc);
   return `<div class="lc-opt${opts.cls || ''}"${opts.attrs || ''}>
-      <span class="lc-opt-name">${opts.tag || ''}${esc(luPlayerName(pid))}${inj ? ' ' + inj : ''}${opts.via || ''}</span>
+      <span class="lc-opt-name">${opts.tag || ''}${esc(luPlayerName(pid))}${inj ? ' ' + inj : ''}${(g => g ? ' <span class="lc-opt-game">' + g + '</span>' : '')(luGameBits(pid, fix))}${opts.via || ''}</span>
       <span class="lc-opt-pos">${esc(luNormPos(p.position) || '')}${p.team ? ' ' + esc(p.team) : ''}</span>
       <span class="lc-opt-rank" style="${lbl ? '' : 'color:var(--brown-mid);'}">${lbl ? esc(lbl) : '—'}</span>
       <span class="lc-opt-num" style="color:var(--parchment);"${ppg === null ? '' : ` title="${ppg.toFixed(1)} over ${gp} game${gp === 1 ? '' : 's'} played"`}>${ppg === null ? '–' : ppg.toFixed(1)}</span>
@@ -2974,6 +2996,7 @@ async function luEnsureLineupData(force = false) {
     LU.proj    = LU._cache.proj;
     LU.kick    = LU._cache.kick;
     LU.opp     = LU._cache.opp || {};
+    LU.games   = LU._cache.games || {};
     LU.week    = LU._cache.week;
     luLoadRankings(LU.week);
     await statsP;
@@ -3065,6 +3088,7 @@ async function luEnsureLineupData(force = false) {
   // KV-cached by the worker, fetched together.
   LU.kick = {};
   LU.opp = {};
+  LU.games = {};   // {team: game row} — kickoff / state / clock for luGameLabel
   const q = 'week=' + w + '&season=' + (nflState.season);
   const [kr, gr] = await Promise.all([
     fetch('/api/espn/scoreboard?' + q, { credentials: 'include' }).then(r => r.ok ? r.json() : {}).catch(() => ({})),
@@ -3075,6 +3099,7 @@ async function luEnsureLineupData(force = false) {
     if (!g.home || !g.away) continue;
     LU.opp[g.home] = 'vs ' + g.away;
     LU.opp[g.away] = '@' + g.home;
+    LU.games[g.home] = LU.games[g.away] = g;
   }
 
   // Restore any uploaded rankings for this week.
@@ -3085,7 +3110,7 @@ async function luEnsureLineupData(force = false) {
   LU.lineups = lineups;
   LU.chopped = chopped.sort((a, b) => a.week - b.week);
   LU.week    = w;
-  LU._cache  = { at: Date.now(), week: w, lineups, proj: LU.proj, kick: LU.kick, opp: LU.opp, chopped: LU.chopped };
+  LU._cache  = { at: Date.now(), week: w, lineups, proj: LU.proj, kick: LU.kick, opp: LU.opp, games: LU.games, chopped: LU.chopped };
   return lineups;
 }
 

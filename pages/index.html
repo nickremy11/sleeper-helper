@@ -236,6 +236,10 @@ footer a:hover { color: var(--gold); }
    in their own right-aligned columns, so they read as part of the player. */
 .diff-rank { font-size: 0.82rem; flex-shrink: 0; color: var(--gold-light); }
 .diff-opp { font-size: 0.75rem; flex-shrink: 0; color: var(--brown-light); white-space: nowrap; letter-spacing: 0.02em; }
+.diff-gtime { font-size: 0.7rem; flex-shrink: 0; color: var(--brown-light); white-space: nowrap; opacity: 0.85; }
+.diff-gtime.live { color: var(--c-green); font-weight: 700; opacity: 1; }
+.diff-gtime.done { opacity: 0.6; }
+@media (max-width: 560px) { .diff-gtime:not(.live) { display: none; } }
 .diff-rank.diff-flex { color: var(--gold-light); }
 .diff-rank.diff-none { color: var(--brown-mid); }
 /* Projection keeps its right-aligned column, but shares the ranks' size+colour
@@ -298,6 +302,7 @@ footer a:hover { color: var(--gold); }
 .lc-opt.cur { background: rgba(95,174,95,0.10); }
 .lc-opt:not(.hdr):not(.cur):hover { background: rgba(212,175,55,0.08); }
 .lc-opt-name { color: var(--parchment); flex: 1; min-width: 0; }
+.lc-opt-game { display: inline-flex; gap: 6px; margin-left: 6px; vertical-align: baseline; }
 .lc-opt-pos { color: var(--brown-light); font-size: 0.65rem; width: 54px; flex-shrink: 0; }
 .lc-opt-num { font-size: 0.72rem; width: 46px; text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .lc-opt-rank { color: var(--gold-light); font-weight: 700; font-size: 0.76rem; width: 56px; text-align: right; flex-shrink: 0; }
