@@ -28,6 +28,8 @@ const NAME_ALIASES = {
   'nicolas singleton': 'nick singleton',   // devy sheet spelling
 
   'bam knight': 'zonovan knight',
+  'andres borregales': 'andy borregales',     // ESPN / ranking sheets use his full first name
+  'jacory croskey merr': 'jacory croskey merritt',   // ranking-sheet image cuts the name off
 };
 
 // Normalize a player name for matching across sources: lowercase, accents folded,
