@@ -305,10 +305,10 @@ function rgDraw() {
       <span style="width:1px;height:18px;background:var(--brown-mid);"></span>
       <span style="font-size:0.65rem;color:var(--brown-light);">Highlight:</span>${modePills}
       <span style="flex:1;"></span>
-      <span style="font-size:0.6rem;color:var(--brown-light);display:flex;gap:12px;align-items:center;">
-        <span><span style="display:inline-block;width:9px;height:9px;background:rgba(95,174,95,0.6);border-left:3px solid var(--c-green);margin-right:4px;"></span>starting</span>
-        <span><span style="display:inline-block;width:9px;height:9px;background:rgba(192,80,77,0.6);border-left:3px solid #a8321f;margin-right:4px;"></span>rostered, benched</span>
-        <span><span style="display:inline-block;width:9px;height:9px;background:rgba(235,195,55,0.75);border-left:3px solid #d6a82a;margin-right:4px;"></span>free agent</span>
+      <span class="rg-legend">
+        <span><i class="rg-sw-on"></i>starting</span>
+        <span><i class="rg-sw-off"></i>rostered, benched</span>
+        <span><i class="rg-sw-fa"></i>free agent</span>
       </span>
     </div>`;
 

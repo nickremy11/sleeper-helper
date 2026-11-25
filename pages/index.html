@@ -474,11 +474,19 @@ footer a:hover { color: var(--gold); }
 .rg-un-p em::before { content: '('; }
 .rg-un-p em::after  { content: ')'; }
 .rg-un-sep { color: var(--brown-light); }
-/* Waiver grid only. Owned-by-someone-else is the majority state, so it recedes
-   rather than getting a colour of its own — the point of the view is that the
-   yellow and green rows are the only ones that pop. Unmatched rows can't be
-   placed on either side of the ownership line, so they're marked, not painted. */
-.wv-taken { opacity: 0.4; }
+/* Waiver grid: a player another team owns is a plain cell, same as an
+   unhighlighted row on the Lineups ranks grid. It used to be faded to 40%,
+   which left most of the board too low-contrast to read in either theme. */
+/* The colour key above both ranks grids — boxed so it reads as a legend. */
+.rg-legend { display: inline-flex; gap: 14px; align-items: center; flex-wrap: wrap; padding: 6px 12px;
+             background: var(--card); border: 1px solid var(--edge); border-radius: 6px;
+             font-family: var(--font-body), serif; font-size: 0.74rem; color: var(--card-text); }
+.rg-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.rg-legend i { display: inline-block; width: 13px; height: 13px; border-radius: 2px; }
+.rg-sw-on  { background: rgba(95,174,95,0.6);  border-left: 3px solid var(--c-green); }
+.rg-sw-off { background: rgba(192,80,77,0.6);  border-left: 3px solid #a8321f; }
+.rg-sw-fa  { background: rgba(235,195,55,0.75); border-left: 3px solid #d6a82a; }
+.rg-sw-plain { background: var(--card); border: 1px solid var(--card-muted); }
 /* Per-league season PPG on a waiver-grid cell, shown only while the column is
    wide enough to keep the name readable. A container query on the cell itself,
    so it follows the real track width — splits, the responsive 4/2-column

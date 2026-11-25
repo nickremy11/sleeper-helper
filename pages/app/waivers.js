@@ -711,10 +711,10 @@ function wvGridHtml() {
       <span style="font-size:0.6rem;color:var(--gold-light);">${faCount} ranked free agent${faCount === 1 ? '' : 's'}</span>
       ${note}
       <span style="flex:1;"></span>
-      <span style="font-size:0.6rem;color:var(--brown-light);display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
-        <span><span style="display:inline-block;width:9px;height:9px;background:rgba(95,174,95,0.6);border-left:3px solid var(--c-green);margin-right:4px;"></span>my roster</span>
-        <span><span style="display:inline-block;width:9px;height:9px;background:rgba(235,195,55,0.75);border-left:3px solid #d6a82a;margin-right:4px;"></span>free agent</span>
-        <span><span style="display:inline-block;width:9px;height:9px;background:var(--brown-dark);border:1px solid var(--brown-mid);margin-right:4px;opacity:0.45;"></span>rostered elsewhere</span>
+      <span class="rg-legend">
+        <span><i class="rg-sw-on"></i>my roster</span>
+        <span><i class="rg-sw-fa"></i>free agent</span>
+        <span><i class="rg-sw-plain"></i>rostered elsewhere</span>
       </span>
     </div>`;
 
