@@ -44,18 +44,6 @@ const LS = {
   sortCol:    null, // null = the order Sleeper lists your leagues in (ESPN appended)
   sortDir:    1,    // 1 = the column's natural direction (A-Z / best first), -1 = reversed
   recap: { week: null, fmt: 'all', role: 'all', lineup: 'all' },  // Weekly Recap — week null = latest completed
-  // Playoff rules for the odds sim, every league (league-engine.js playoffSeeds).
-  // localStorage.ls_playoff_rules; default = points-for tiebreak, top N records.
-  playoffRules: (() => {
-    try {
-      const r = JSON.parse(localStorage.getItem('ls_playoff_rules') || 'null') || {};
-      return {
-        tiebreak: ['pf', 'h2h'].includes(r.tiebreak) ? r.tiebreak : 'pf',
-        format:   ['top', 'div', 'pf'].includes(r.format) ? r.format : 'top',
-        divSeed:  ['top', 'record'].includes(r.divSeed) ? r.divSeed : 'top',
-      };
-    } catch (_) { return { tiebreak: 'pf', format: 'top', divSeed: 'top' }; }
-  })(),
   filter:     'all', // 'all' | 'contenders' | 'rebuilders'
   search:     '',
   oddsLoaded:  false,

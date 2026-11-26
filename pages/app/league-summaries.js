@@ -83,12 +83,6 @@ async function lsLoadData() {
         for (const s of Object.values(rosterStats)) s.maxPf = s.fpts;
       }
       const median = detail?.settings?.league_average_match === 1;
-      // Divisions only count when the league has 2+ of them and every roster has one.
-      let division = null;
-      if ((detail?.settings?.divisions || 0) > 1 && rosters.every(r => r.settings?.division)) {
-        division = {};
-        for (const r of rosters) division[r.roster_id] = r.settings.division;
-      }
       const played = (mine.settings?.wins || 0) + (mine.settings?.losses || 0) + (mine.settings?.ties || 0);
       LS.leagueData[lg.league_id] = {
         standing, numTeams, playoffTeams,
@@ -97,7 +91,7 @@ async function lsLoadData() {
         myRosterId: mine.roster_id,
         apWins: null, apLosses: null,
         rosterPlayers, rosterStats, rosterOwners,
-        median, division, h2h: {},
+        median,
         // Weeks already in the records — derived from the records themselves, not
         // the NFL calendar, so the sim can never re-simulate (or skip) a week that
         // Sleeper has or hasn't processed yet. A median league plays 2 games a week.
@@ -177,16 +171,10 @@ async function lsLoadEspnLeague(lg) {
       };
     }
 
-    let division = null;
-    if (new Set(teams.map(t => t.divisionId).filter(v => v != null)).size > 1) {
-      division = {};
-      for (const t of teams) division[t.id] = t.divisionId;
-    }
     const rec      = myTeam.record?.overall || {};
     const banked   = (rec.wins || 0) + (rec.losses || 0) + (rec.ties || 0);
     const schedule = d.schedule || [];
     const weekly   = {};
-    const h2h      = {};
     for (let w = 1; w <= banked; w++) {
       const rows = [];
       for (const m of schedule) {
@@ -197,7 +185,6 @@ async function lsLoadEspnLeague(lg) {
       }
       const res = lsWeekResult(rows, myTeam.id, false);
       if (res) weekly[w] = res;
-      lsAddH2h(h2h, rows);
     }
 
     LS.leagueData[lg.league_id] = {
@@ -207,7 +194,7 @@ async function lsLoadEspnLeague(lg) {
       myRosterId: myTeam.id,
       apWins: null, apLosses: null,
       rosterPlayers, rosterStats, rosterNames,
-      median: false, banked, weekly, division, h2h,
+      median: false, banked, weekly,
       _espn: { id: espnId, settings: d.settings, schedule },
     };
     lsApplyApTotals(LS.leagueData[lg.league_id]);
@@ -247,46 +234,8 @@ async function lsLoadWeekly(lgId, d) {
     const rows = r.value.map(m => ({ rid: m.roster_id, mid: m.matchup_id ?? null, pts: m.points || 0 }));
     const g = lsWeekResult(rows, d.myRosterId, d.median);
     if (g) weekly[i + 1] = g;
-    lsAddH2h(d.h2h || (d.h2h = {}), rows);
   });
   return weekly;
-}
-
-// Banked head-to-head, for the H2H tiebreaker: h2h[a][b] = games a beat b
-// (a tie is ½ each). H2H games only — a median win isn't against anyone.
-// A week not fully scored (a 0 on either side) is skipped.
-function lsAddH2h(h2h, rows) {
-  const byMid = {};
-  for (const r of rows) if (r.mid != null) (byMid[r.mid] = byMid[r.mid] || []).push(r);
-  for (const pair of Object.values(byMid)) {
-    if (pair.length !== 2) continue;
-    const [a, b] = pair;
-    if (!(a.pts > 0) || !(b.pts > 0)) continue;
-    const add = (x, y, v) => { (h2h[x] = h2h[x] || {})[y] = (h2h[x][y] || 0) + v; };
-    if (a.pts > b.pts) add(a.rid, b.rid, 1);
-    else if (b.pts > a.pts) add(b.rid, a.rid, 1);
-    else { add(a.rid, b.rid, 0.5); add(b.rid, a.rid, 0.5); }
-  }
-}
-
-// What the sim needs to apply LS.playoffRules to this league.
-function lsSimOpts(d) {
-  return { median: d.median, rules: LS.playoffRules, h2h: d.h2h || {}, division: d.division || null };
-}
-
-// Toggling a rule re-runs the odds. Each rule set has its own cache entry, so
-// flipping back to one already run this session is instant.
-function lsSetPlayoffRule(key, val) {
-  if (LS.playoffRules[key] === val) return;
-  LS.playoffRules = { ...LS.playoffRules, [key]: val };
-  try { localStorage.setItem('ls_playoff_rules', JSON.stringify(LS.playoffRules)); } catch (_) {}
-  for (const d of Object.values(LS.leagueData)) {
-    for (const k of ['playoffOdds', 'byeOdds', 'lastPfOdds', 'allPlayoffOdds', 'allByeOdds', 'allLastPfOdds', 'playoffOddsError']) delete d[k];
-  }
-  LS._oddsUseCache = true;
-  if (LS.oddsLoading) LS._oddsRerun = true;
-  else lsSimulateAllLeagues();
-  lsDrawTable();
 }
 
 function lsApplyApTotals(d) {
@@ -311,36 +260,25 @@ async function lsFetchEspnScheduleByWeek(espnLeagueId, weeks) {
 // can read them without a live simulation.
 function lsFinalStandings(d) {
   const teams = Object.entries(d.rosterStats || {}).map(([rid, s]) => ({ rosterId: Number(rid), ...s }));
-  return finalStandingOdds(teams, d.playoffTeams, lsSimOpts(d));
+  return finalStandingOdds(teams, d.playoffTeams);
 }
 
-// Clinched outright: fewer than `spots` teams can still finish ahead of me
-// even if they win out. A rival who could only TIE me still counts against
-// me — the tiebreaker isn't guaranteed either way. LS.playoffRules:
-// 'pf' format → the last seed goes on points, so only N-1 spots are on record;
-// 'div' format → a division winner from a division with nobody able to catch me
-// can still be seeded ahead of me, so each such division costs a spot.
-function lsClinched(d, regularSeasonWeeks, spots = d.playoffTeams, byeTest = false) {
-  const fmt = LS.playoffRules.format;
-  if (fmt === 'pf' && !byeTest && spots === d.playoffTeams) spots -= 1;
+// Clinched outright: fewer than `playoffTeams` rivals can still reach my win
+// total even by winning out. A rival who could only TIE me still counts against
+// me — ties break on points, which isn't guaranteed.
+function lsClinched(d, regularSeasonWeeks, spots = d.playoffTeams) {
   if (!(spots > 0)) return false;
   const me = d.rosterStats?.[d.myRosterId];
   if (!me) return false;
   const left = Math.max(0, regularSeasonWeeks - d.banked) * (d.median ? 2 : 1);
   const catchers = Object.entries(d.rosterStats)
-    .filter(([rid, s]) => Number(rid) !== d.myRosterId && s.wins + left >= me.wins);
-  let ahead = catchers.length;
-  if (fmt === 'div' && d.division) {
-    const myDiv = d.division[d.myRosterId];
-    const caught = new Set(catchers.map(([rid]) => d.division[rid]));
-    for (const dv of new Set(Object.values(d.division))) if (dv !== myDiv && !caught.has(dv)) ahead++;
-  }
-  return ahead < spots;
+    .filter(([rid, s]) => Number(rid) !== d.myRosterId && s.wins + left >= me.wins).length;
+  return catchers < spots;
 }
 
 // Same test against the bracket's bye slots (none → never clinched).
 function lsClinchedBye(d, regularSeasonWeeks) {
-  return lsClinched(d, regularSeasonWeeks, bracketByeSlots(d.playoffTeams) || 0, true);
+  return lsClinched(d, regularSeasonWeeks, bracketByeSlots(d.playoffTeams) || 0);
 }
 
 // Writes a sim result onto the league entry (mine + every roster).
@@ -357,10 +295,7 @@ function lsApplyOdds(d, res) {
 // instead of serving last week's odds for up to 24h.
 function lsOddsCacheKey(lg, d, detail) {
   const season = S.nflState?.season || String(new Date().getFullYear());
-  const r = LS.playoffRules;
-  const rules = r.tiebreak === 'pf' && r.format === 'top' ? ''
-    : `_r${r.tiebreak}-${r.format}${r.format === 'div' && r.divSeed === 'record' ? '-rec' : ''}`;
-  return `ls_odds_v3_${lg.league_id}_${season}_b${d.banked ?? 0}_w${lsRegularSeasonWeeks(lg, d, detail)}${rules}`;
+  return `ls_odds_v3_${lg.league_id}_${season}_b${d.banked ?? 0}_w${lsRegularSeasonWeeks(lg, d, detail)}`;
 }
 
 // Regular-season-length lookup shared by lsRestoreOddsCache/lsSimulateAllLeagues —
@@ -528,10 +463,9 @@ async function lsSimulateAllLeagues() {
           lgId, name: lg.name, regularSeasonWeeks, median: d.median,
           bankedWeeks: d.banked, futureWeeks,
           playoffTeams: d.playoffTeams, numTeams: d.numTeams, teams: teams.length,
-          rules: LS.playoffRules, divisions: d.division ? new Set(Object.values(d.division)).size : 0,
         });
 
-        const res = runSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, d.playoffTeams, lsSimOpts(d));
+        const res = runSimulation(teams, matchupsByWeek, muMap, sigmaMap, futureWeeks, d.playoffTeams, { median: d.median });
         lsApplyOdds(d, res);
         delete d.playoffOddsError;
 
@@ -1121,36 +1055,11 @@ function lsRecapHtml() {
     oddsNote = `Outlook as of the end of Week ${W}: banked records + a simulated rest of season.`;
   }
 
-  // Playoff rules — every league's odds, the table's included, follow these.
-  const PR = LS.playoffRules;
-  const prPill = (key, v, l, title = '') => `<button class="ls-mode-pill${PR[key] === v ? ' active' : ''}" onclick="lsSetPlayoffRule('${key}','${v}')"${title ? ` title="${title}"` : ''}>${l}</button>`;
-  const nDiv = pool.filter(lg => LS.leagueData[lg.league_id].division).length;
-  const rules = `<div class="rc-controls">
-    <div class="ls-mode-bar" style="flex-wrap:wrap;">
-      <span class="ls-mode-label">Tiebreaker</span>
-      ${prPill('tiebreak', 'pf', 'Points For')}
-      ${prPill('tiebreak', 'h2h', 'H2H, then PF', 'Head-to-head wins among the tied teams, then points for')}
-    </div>
-    <div class="ls-mode-bar" style="flex-wrap:wrap;">
-      <span class="ls-mode-label">Playoff Spots</span>
-      ${prPill('format', 'top', `Top Records`, 'The best N records, N = each league’s playoff teams')}
-      ${prPill('format', 'div', 'Division Winners + Records', 'Every division winner, then the best remaining records. Leagues without divisions use Top Records')}
-      ${prPill('format', 'pf', 'Top N−1 + Most PF', 'The best N−1 records, then the most points for among everyone left')}
-    </div>
-    ${PR.format === 'div' ? `<div class="ls-mode-bar" style="flex-wrap:wrap;">
-      <span class="ls-mode-label">Division Winners</span>
-      ${prPill('divSeed', 'top', 'Top Seeds', 'Division winners take the top seeds (and any byes), whatever their record')}
-      ${prPill('divSeed', 'record', 'Just Get In', 'Division winners are guaranteed a spot, but every team is seeded by record')}
-    </div>` : ''}
-    ${PR.format === 'div' ? `<div class="rc-sub" style="align-self:center;">${nDiv} of ${pool.length} league${pool.length === 1 ? ' has' : 's have'} divisions; the rest use Top Records.</div>` : ''}
-  </div>`;
-
   const weekly = lsRecapTally(leagues, W, false, snaps);
   const cum    = lsRecapTally(leagues, W, true, snaps);
   return `<div class="rc-wrap">
     ${head}
     <div class="rc-controls">${controls}</div>
-    ${rules}
     <div class="rc-weeks"><span class="ls-mode-label">Week</span>${weeks}</div>
     <div class="rc-cards">
       ${lsRecapCard(weekly, { kicker: `Week ${W} Dispatch`, scope, cumulative: false, oddsNote })}
