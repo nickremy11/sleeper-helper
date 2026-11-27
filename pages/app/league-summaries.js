@@ -117,10 +117,10 @@ async function lsLoadData(opts = {}) {
   if (opts.only) { lsRecapSnapshot(); return; }
   const tried = new Set();
   for (;;) {
-    const late = S.leagues.filter(lg => (lg.source === 'espn' || lg.source === 'mfl') && !LS.leagueData[lg.league_id] && !tried.has(lg.league_id));
+    const late = S.leagues.filter(lg => ['espn', 'mfl', 'yahoo'].includes(lg.source) && !LS.leagueData[lg.league_id] && !tried.has(lg.league_id));
     if (!late.length) break;
     late.forEach(lg => tried.add(lg.league_id));
-    const lateMfl = late.filter(lg => lg.source === 'mfl').map(lg => lg.league_id);
+    const lateMfl = late.filter(lg => lg.source === 'mfl' || lg.source === 'yahoo').map(lg => lg.league_id);
     await Promise.all([...late.filter(lg => lg.source === 'espn').map(lsLoadEspnLeague),
                        lateMfl.length ? lsLoadData({ only: lateMfl }) : null]);
   }

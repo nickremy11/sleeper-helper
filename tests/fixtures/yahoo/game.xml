@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<fantasy_content xml:lang="en-US" yahoo:uri="https://fantasysports.yahooapis.com/fantasy/v2/game/nfl" xmlns:yahoo="http://www.yahooapis.com/v1/base.rng" time="30.575037002563ms" copyright="Data provided by Yahoo! and STATS, LLC" xmlns="https://fantasysports.yahooapis.com/fantasy/v2/base.rng">
+ <game>
+  <game_key>399</game_key>
+  <game_id>399</game_id>
+  <name>Football</name>
+  <code>nfl</code>
+  <type>full</type>
+  <url>https://football.fantasysports.yahoo.com/f1</url>
+  <season>2020</season>
+  <is_registration_over>0</is_registration_over>
+  <is_game_over>0</is_game_over>
+  <is_offseason>0</is_offseason>
+ </game>
+</fantasy_content>

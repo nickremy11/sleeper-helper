@@ -22,16 +22,17 @@ async function loadEspnLeagues() {
   ]);
 }
 
-// MFL leagues: the worker serves them in Sleeper's shapes under the normal
+// MFL and Yahoo leagues: the worker serves them in Sleeper's shapes under the normal
 // /sleeper/league/mfl_… paths, so after this they read like Sleeper leagues.
 async function loadMflLeaguesLite() {
   try {
-    const list = await shMflLeagueList(S.season);
-    await Promise.all(list.map(async l => {
+    const [mfl, yahoo] = await Promise.all([shMflLeagueList(S.season), shYahooLeagueList(S.season)]);
+    await Promise.all([...mfl.map(l => [l, 'mfl']), ...yahoo.map(l => [l, 'yahoo'])].map(async ([l, src]) => {
       if (S.leagues.some(x => x.league_id === l.league_id)) return;
       const lg = await fetch(`${API}/sleeper/league/${l.league_id}`, { credentials: 'include' }).then(r => r.ok ? r.json() : null).catch(() => null);
-      if (lg?.league_id) S.leagues.push({ ...lg, source: 'mfl' });
+      if (lg?.league_id) S.leagues.push({ ...lg, source: src });
     }));
+    if (yahoo.length) shYahooAttribution();
   } catch {}
 }
 

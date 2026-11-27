@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<fantasy_content xml:lang="en-US" yahoo:uri="https://fantasyspots.yahooapis.com/fantasy/v2/league/390.l.1000" time="19.485950469971ms" copyright="Data provided by Yahoo! and STATS, LLC" refresh_rate="60" xmlns:yahoo="http://www.yahooapis.com/v1/base.rng" xmlns="http://fantasysports.yahooapis.com/fantasy/v2/base.rng">
+ <league>
+  <league_key>390.l.1000</league_key>
+  <league_id>1000</league_id>
+  <name>Yahoo Public 1000</name>
+  <url>https://football.fantasysports.yahoo.com/2019/f1/1000</url>
+  <logo_url>https://s.yimg.com/cv/api/default/20180206/default-league-logo@2x.png</logo_url>
+  <draft_status>postdraft</draft_status>
+  <num_teams>10</num_teams>
+  <edit_key>16</edit_key>
+  <weekly_deadline/>
+  <league_update_timestamp>1577869389</league_update_timestamp>
+  <scoring_type>head</scoring_type>
+  <league_type>public</league_type>
+  <renew/>
+  <renewed/>
+  <allow_add_to_dl_extra_pos>0</allow_add_to_dl_extra_pos>
+  <is_pro_league>0</is_pro_league>
+  <is_cash_league>0</is_cash_league>
+  <current_week>16</current_week>
+  <start_week>1</start_week>
+  <start_date>2019-09-05</start_date>
+  <end_week>16</end_week>
+  <end_date>2019-12-23</end_date>
+  <is_finished>1</is_finished>
+  <game_code>nfl</game_code>
+  <season>2019</season>
+ </league>
+</fantasy_content>

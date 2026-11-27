@@ -362,3 +362,16 @@ CREATE TABLE IF NOT EXISTS mfl_settings (
   hidden     TEXT    NOT NULL DEFAULT '[]',  -- league ids the user switched off
   updated_at INTEGER
 );
+
+-- ── Yahoo Fantasy connection (src/yahoo.js) ───────────────────────────────────
+-- refresh = Yahoo's OAuth refresh token, sealed with TOKEN_ENCRYPTION_KEY
+-- (enc:v1:…); access tokens live in KV only. leagues = the last discovery:
+-- [{id, season, game_id, league_key, name, url, num_teams, team_id, team_name}].
+CREATE TABLE IF NOT EXISTS yahoo_settings (
+  user_id    TEXT    PRIMARY KEY,
+  guid       TEXT,
+  refresh    TEXT,
+  leagues    TEXT    NOT NULL DEFAULT '[]',
+  hidden     TEXT    NOT NULL DEFAULT '[]',
+  updated_at INTEGER
+);

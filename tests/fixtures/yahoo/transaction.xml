@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<fantasy_content xml:lang="en-US" yahoo:uri="https://fantasysports.yahooapis.com/fantasy/v2/transaction/390.l.1000.tr.2" time="38.97500038147ms" copyright="Data provided by Yahoo! and STATS, LLC" refresh_rate="60" xmlns:yahoo="http://www.yahooapis.com/v1/base.rng" xmlns="http://fantasysports.yahooapis.com/fantasy/v2/base.rng">
+ <transaction>
+  <transaction_key>390.l.1000.tr.2</transaction_key>
+  <transaction_id>2</transaction_id>
+  <type>add/drop</type>
+  <status>successful</status>
+  <timestamp>1564988958</timestamp>
+  <players count="2">
+   <player>
+    <player_key>390.p.6762</player_key>
+    <player_id>6762</player_id>
+    <name>
+     <full>Larry Fitzgerald</full>
+     <first>Larry</first>
+     <last>Fitzgerald</last>
+     <ascii_first>Larry</ascii_first>
+     <ascii_last>Fitzgerald</ascii_last>
+    </name>
+    <editorial_team_abbr>Ari</editorial_team_abbr>
+    <display_position>WR</display_position>
+    <position_type>O</position_type>
+    <transaction_data>
+     <type>add</type>
+     <source_type>waivers</source_type>
+     <destination_type>team</destination_type>
+     <destination_team_key>390.l.1000.t.1</destination_team_key>
+     <destination_team_name>marky's Bold Team</destination_team_name>
+    </transaction_data>
+   </player>
+   <player>
+    <player_key>390.p.8447</player_key>
+    <player_id>8447</player_id>
+    <name>
+     <full>Mason Crosby</full>
+     <first>Mason</first>
+     <last>Crosby</last>
+     <ascii_first>Mason</ascii_first>
+     <ascii_last>Crosby</ascii_last>
+    </name>
+    <editorial_team_abbr>GB</editorial_team_abbr>
+    <display_position>K</display_position>
+    <position_type>K</position_type>
+    <transaction_data>
+     <type>drop</type>
+     <source_type>team</source_type>
+     <source_team_key>390.l.1000.t.1</source_team_key>
+     <source_team_name>marky's Bold Team</source_team_name>
+     <destination_type>waivers</destination_type>
+    </transaction_data>
+   </player>
+  </players>
+ </transaction>
+</fantasy_content>

@@ -212,6 +212,7 @@ async function deleteUserAccount(userId, env) {
     env.DB.prepare('DELETE FROM scoreboard_favorites WHERE user_id = ?').bind(userId),
     env.DB.prepare('DELETE FROM espn_settings WHERE user_id = ?').bind(userId),
     env.DB.prepare('DELETE FROM mfl_settings WHERE user_id = ?').bind(userId),
+    env.DB.prepare('DELETE FROM yahoo_settings WHERE user_id = ?').bind(userId),
     env.DB.prepare('DELETE FROM roi_seasons WHERE user_id = ?').bind(userId),
     env.DB.prepare('DELETE FROM roi_leagues WHERE user_id = ?').bind(userId),
     env.DB.prepare('DELETE FROM user_rankings WHERE user_id = ?').bind(userId),

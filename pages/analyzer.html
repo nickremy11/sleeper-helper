@@ -393,7 +393,7 @@
   </div>
 
   <script src="/shared-nav.js?v=20261122"></script>
-  <script src="/shared-core.js?v=20261129"></script>
+  <script src="/shared-core.js?v=20261130"></script>
   <script src="/shared-utils.js?v=20261129"></script>
   <script src="/league-engine.js?v=20261127"></script>
   <script src="/shared-auth.js?v=20261124"></script>
@@ -408,6 +408,8 @@
   const API = SH_API;
 
   const lgId      = new URLSearchParams(window.location.search).get('league') || '';
+  // Yahoo's API terms ask for attribution wherever its data shows.
+  if (/^yh_/.test(lgId)) window.addEventListener('load', () => shYahooAttribution());
   const isEspn    = lgId.startsWith('espn_');
   const espnNumId = isEspn ? lgId.replace('espn_', '') : null;
 
@@ -2383,6 +2385,7 @@
     } catch (e) { errs.push('ESPN: ' + (e.message || e)); }
     // MFL leagues (served in Sleeper's shapes, so the Sleeper loader opens them).
     for (const lg of await shMflLeagueList()) found.push({ id: lg.league_id, name: lg.name, mfl: true });
+    for (const lg of await shYahooLeagueList()) found.push({ id: lg.league_id, name: lg.name, yahoo: true });
 
     _switcherLeagues = found;
     _switcherErr     = errs.join(' · ');
@@ -2405,7 +2408,8 @@
     }
     list.innerHTML = errLine + filtered.map(lg => {
       const cur = lg.id === lgId;
-      const tag = lg.espn ? '<span class="az-switcher-tag">ESPN</span>' : lg.mfl ? '<span class="az-switcher-tag">MFL</span>' : '';
+      const tag = lg.espn ? '<span class="az-switcher-tag">ESPN</span>' : lg.mfl ? '<span class="az-switcher-tag">MFL</span>'
+                : lg.yahoo ? '<span class="az-switcher-tag">Yahoo</span>' : '';
       return `<a class="az-switcher-item${cur ? ' current' : ''}" href="/analyzer?league=${encodeURIComponent(lg.id)}">${esc(lg.name)}${tag}</a>`;
     }).join('');
   }

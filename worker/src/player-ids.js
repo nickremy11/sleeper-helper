@@ -148,6 +148,80 @@ export async function rebuildPlayerIds(env) {
   return out.stats;
 }
 
+// ── Yahoo ────────────────────────────────────────────────────────────────────
+// Yahoo publishes no player database without a user token, and Sleeper's own
+// yahoo_id is stale (23% of active players, measured 2026-11-26). So: Sleeper's
+// yahoo_id + DynastyProcess's id table (62%) give the id map, and a Sleeper
+// name index ("name|POS" → [[sid, team]]) catches the rest at read time — the
+// same name + position (+ team to break a tie) match ESPN has always used.
+export const YIDX_KEY = 'pidx:yahoo:v1';
+const DP_IDS_URL = 'https://github.com/dynastyprocess/data/raw/master/files/db_playerids.csv';
+const NAME_POS = { QB: 'QB', RB: 'RB', WR: 'WR', TE: 'TE', K: 'K', DL: 'DL', DE: 'DL', DT: 'DL', LB: 'LB', DB: 'DB', CB: 'DB', S: 'DB', SS: 'DB', FS: 'DB' };
+
+export function sleeperNameIndex(sleeper) {
+  const out = {};
+  for (const [id, p] of Object.entries(sleeper || {})) {
+    if (p.position === 'DEF') continue;
+    const pos = NAME_POS[p.position] || (p.fantasy_positions || []).map(x => NAME_POS[x]).find(Boolean);
+    if (!pos) continue;
+    const nm = normPlayerName(p.full_name || `${p.first_name || ''} ${p.last_name || ''}`);
+    if (!nm) continue;
+    (out[`${nm}|${pos}`] ||= []).push([id, p.team || null]);
+  }
+  return out;
+}
+
+function csvLines(text) {
+  const rows = []; let row = [], cur = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
+    else if (c === '"') q = true;
+    else if (c === ',') { row.push(cur); cur = ''; }
+    else if (c === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; }
+    else if (c !== '\r') cur += c;
+  }
+  if (cur || row.length) { row.push(cur); rows.push(row); }
+  return rows;
+}
+
+// Pure: {yahooId: sleeperId} from Sleeper's yahoo_id, then DynastyProcess rows.
+export function buildYahooIdMap(sleeper, dpCsv, overrides = []) {
+  const map = {};
+  for (const [id, p] of Object.entries(sleeper || {})) if (p?.yahoo_id) map[String(p.yahoo_id)] = id;
+  const rows = dpCsv ? csvLines(dpCsv) : [];
+  const h = rows[0] || [];
+  const yi = h.indexOf('yahoo_id'), si = h.indexOf('sleeper_id');
+  if (yi >= 0 && si >= 0) for (const r of rows.slice(1)) {
+    const y = r[yi], s = r[si];
+    if (y && s && y !== 'NA' && s !== 'NA' && sleeper?.[s] && !map[y]) map[y] = s;
+  }
+  for (const o of overrides) if (o.platform === 'yahoo') { if (o.sleeper_id) map[String(o.ext_id)] = String(o.sleeper_id); else delete map[String(o.ext_id)]; }
+  return map;
+}
+
+export async function rebuildYahooIds(env) {
+  const [sleeper, dp, ovr] = await Promise.all([
+    loadSleeperPlayers(env),
+    fetch(DP_IDS_URL).then(r => (r.ok ? r.text() : '')).catch(() => ''),
+    env.DB.prepare("SELECT platform, ext_id, sleeper_id FROM player_id_overrides WHERE platform = 'yahoo'").all().then(r => r.results || []).catch(() => []),
+  ]);
+  const yahoo = buildYahooIdMap(sleeper, dp, ovr);
+  const names = sleeperNameIndex(sleeper);
+  const snap = { built: Date.now(), yahoo, names, stats: { ids: Object.keys(yahoo).length, dp: !!dp } };
+  await env.SLEEPER_KV.put(YIDX_KEY, JSON.stringify(snap), { expirationTtl: PIDX_TTL });
+  return snap.stats;
+}
+
+let _yInflight = null;
+export async function getYahooIdx(env) {
+  const snap = await env.SLEEPER_KV.get(YIDX_KEY, 'json').catch(() => null);
+  if (snap?.names) return snap;
+  if (!_yInflight) _yInflight = rebuildYahooIds(env).finally(() => { _yInflight = null; });
+  await _yInflight;
+  return (await env.SLEEPER_KV.get(YIDX_KEY, 'json')) || { yahoo: {}, names: {} };
+}
+
 // What the MFL adapter reads. Builds on first use when the snapshot is missing.
 let _inflight = null;
 export async function getPlayerIdx(env) {

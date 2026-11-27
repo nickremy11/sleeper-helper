@@ -283,8 +283,8 @@ async function loadUser() {
     // Load ESPN leagues (non-blocking — they append to S.leagues after Sleeper leagues).
     // The promise is kept so a loader that snapshots S.leagues and caches the
     // result (luEnsureLineupData) can wait for them instead of caching without them.
-    // MFL leagues load the same way, after ESPN's (see loadMflLeagues).
-    S.espnReady = Promise.all([loadEspnLeagues(season), loadMflLeagues(season)]);
+    // MFL and Yahoo leagues load the same way, alongside ESPN's (see loadPlatformLeagues).
+    S.espnReady = Promise.all([loadEspnLeagues(season), loadPlatformLeagues('mfl', season), loadPlatformLeagues('yahoo', season)]);
     // Whatever tab the URL names (it tracks every switch, so this is also the
     // tab the user was on before a refresh).
     sw(new URLSearchParams(location.search).get('tab') || S.tab, { history: 'replace' });
@@ -349,33 +349,36 @@ async function loadEspnLeagues(season) {
   } catch {}
 }
 
-// ── MFL leagues ───────────────────────────────────────────────────────────────
-// The worker serves an MFL league in Sleeper's shapes, players already in Sleeper
-// ids, under the normal /api/sleeper/league/mfl_{year}_{id}/… paths (worker
-// src/mfl.js) — so once a league is in S.leagues every read-only tool reads it
-// like a Sleeper league. `source: 'mfl'` is what keeps the write tools (lineup
-// Apply, trades, mass offers) and Sleeper-account tools away from it.
-async function loadMflLeagues(season) {
+// ── MFL + Yahoo leagues ───────────────────────────────────────────────────────
+// The worker serves an MFL or Yahoo league in Sleeper's shapes, players already
+// in Sleeper ids, under the normal /api/sleeper/league/{mfl_…|yh_…}/… paths
+// (worker src/mfl.js, src/yahoo.js) — so once a league is in S.leagues every
+// read-only tool reads it like a Sleeper league. `source: 'mfl' | 'yahoo'` is
+// what keeps the write tools (lineup Apply, trades, mass offers) and
+// Sleeper-account tools away from it.
+const PLATFORM_NAMES = { sleeper: 'Sleeper', espn: 'ESPN', mfl: 'MFL', yahoo: 'Yahoo' };
+async function loadPlatformLeagues(src, season) {
   if (!S.auth) return;
   try {
-    const r = await fetch('/api/mfl/leagues?season=' + encodeURIComponent(season), { credentials: 'include' });
+    const r = await fetch(`/api/${src}/leagues?season=${encodeURIComponent(season)}`, { credentials: 'include' });
     if (!r.ok) return;
     const d = await r.json();
-    S.mflErrors = d.errors || [];
+    (S.platformErrors ||= {})[src] = d.errors || [];
     const added = [];
     for (const lg of d.leagues || []) {
       if (S.leagues.some(l => l.league_id === lg.league_id)) continue;
-      const entry = { ...lg, source: 'mfl' };
+      const entry = { ...lg, source: src };
       S.leagues.push(entry);
       S.leagueDetails[lg.league_id] = entry;
       RS.prefs[lg.league_id] = RS._storedPrefs?.[lg.league_id] ?? null;
       added.push(entry);
     }
     if (!added.length) return;
+    if (src === 'yahoo') shYahooAttribution();
     const st = document.getElementById('u-status');
     if (st && st.className.includes('ok')) {
       const n = c => S.leagues.filter(l => (l.source || 'sleeper') === c).length;
-      const parts = [['sleeper', 'Sleeper'], ['espn', 'ESPN'], ['mfl', 'MFL']].filter(([c]) => n(c)).map(([c, t]) => `${n(c)} ${t}`);
+      const parts = Object.keys(PLATFORM_NAMES).filter(c => n(c)).map(c => `${n(c)} ${PLATFORM_NAMES[c]}`);
       st.textContent = st.textContent.replace(/^[\d\s+A-Za-z]*? leagues/, parts.join(' + ') + ' leagues');
     }
     if (S.tab === 'rostership' && RS.selectedLeagues !== null) {
@@ -398,11 +401,10 @@ async function loadMflLeagues(season) {
   } catch {}
 }
 
-// Lineups this app reads but doesn't write back: ESPN, and MFL until its writes
-// are built. The platform name is what the card tells you to go set it in.
-function luReadOnly(fix) { return !!(fix?._espn || fix?._mfl); }
-function luPlatform(fix) { return fix?._espn ? 'ESPN' : fix?._mfl ? 'MFL' : 'Sleeper'; }
-const isMfl = lgOrId => (typeof lgOrId === 'string' ? /^mfl_/.test(lgOrId) : lgOrId?.source === 'mfl');
+// Lineups this app reads but doesn't write back: ESPN, Yahoo (its API is
+// read-only), and MFL until its writes are built. The platform name is what the card tells you to go set it in.
+function luReadOnly(fix) { return !!(fix?._espn || fix?._mfl || fix?._yahoo); }
+function luPlatform(fix) { return fix?._espn ? 'ESPN' : fix?._mfl ? 'MFL' : fix?._yahoo ? 'Yahoo' : 'Sleeper'; }
 
 async function loadOneEspnLeague(leagueId, season) {
   try {

@@ -3074,7 +3074,7 @@ async function luEnsureLineupData(force = false) {
         rostered: Object.keys(owned).length >= (rosters || []).length * 8 / copies ? rostered : null,
         _redraft: rsLeagueCategory(lg.league_id) === 'redraft',
         _pts: weekPts,             // {pid: points scored this week} — see luActualPts
-        ...(lg.source === 'mfl' ? { _mfl: true } : {}),   // read-only for now — see luReadOnly
+        ...(lg.source === 'mfl' ? { _mfl: true } : lg.source === 'yahoo' ? { _yahoo: true } : {}),   // read-only — see luReadOnly
       };
     } catch(_) { return null; }
   }));

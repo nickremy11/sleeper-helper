@@ -22,6 +22,7 @@
  * set one any time with Forgot password.
  */
 import { createSession, randomHex, notifyAdmin, OAUTH_NO_PASSWORD } from './auth.js';
+import { handleYahooAuth } from './yahoo.js';
 
 const SITE        = 'https://ffhistorian.com';
 const CALLBACK    = `${SITE}/auth/google/callback`;
@@ -167,6 +168,8 @@ export async function handleOAuth(request, env, url) {
     });
   }
   if (request.method !== 'GET') return new Response('Method not allowed', { status: 405 });
+  // Connecting Yahoo Fantasy to an existing account (not a sign-in) — yahoo.js.
+  if (p.startsWith('/yahoo/')) return (await handleYahooAuth(request, env, url, p)) || new Response('Not found', { status: 404 });
   if (p === '/google/start')    return googleStart(env, url);
   if (p === '/google/callback') return googleCallback(env, url);
   return new Response('Not found', { status: 404 });

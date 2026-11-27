@@ -46,6 +46,7 @@
  *   PUT/DELETE /api/eliteffl/keeper-options/:id → edit/remove one row (admin only)
  *   data.ffhistorian.com/*        → Site Lead stats explorer (page + /api/data/*), see src/data.js
  *   *    /api/mfl/*               → MyFantasyLeague: connect, discover, leagues in Sleeper's shapes — mfl.js
+ *   *    /api/yahoo/*             → Yahoo Fantasy (read-only): settings, discover, leagues in Sleeper's shapes — yahoo.js
  *   *    /api/player-ids*         → player-id crosswalk stats / unmatched / overrides — player-ids.js
  *   POST /api/dispersal           → create dispersal room
  *   *    /api/dispersal/:id/*     → forward to DispersalRoom Durable Object
@@ -69,7 +70,8 @@ import { handleMadden } from './madden.js';
 import { handleOAuth } from './oauth.js';
 import { handleFeedback } from './feedback.js';
 import { handleMfl, isMflSleeperPath, handleMflViaSleeper } from './mfl.js';
-import { rebuildPlayerIds, PIDX_KEY } from './player-ids.js';
+import { handleYahoo, isYahooSleeperPath } from './yahoo.js';
+import { rebuildPlayerIds, rebuildYahooIds, PIDX_KEY } from './player-ids.js';
 import { parseRankLines } from './ranks-image.js';
 import { getCors, CORS, cacheFor, jsonBody, kvCachedJson } from './http.js';
 
@@ -114,6 +116,8 @@ export default {
     // Player-id crosswalk (MFL → Sleeper), rebuilt daily — see player-ids.js.
     ctx.waitUntil(rebuildPlayerIds(env).then(s => console.log('[player ids]', JSON.stringify(s)))
       .catch(e => console.error('[player ids] failed:', e.message)));
+    ctx.waitUntil(rebuildYahooIds(env).then(s => console.log('[yahoo ids]', JSON.stringify(s)))
+      .catch(e => console.error('[yahoo ids] failed:', e.message)));
   },
 
   async fetch(request, env, ctx) {
@@ -160,6 +164,7 @@ export default {
 
     if (url.pathname.startsWith('/api/sleeper/') && request.method === 'GET') {
       if (isMflSleeperPath(url.pathname)) return handleMflViaSleeper(request, env, url);
+      if (isYahooSleeperPath(url.pathname)) return handleYahoo(request, env, url);
       return handleProxy(url, env);
     }
 
@@ -205,6 +210,10 @@ export default {
 
     if (url.pathname.startsWith('/api/mfl/')) {
       return handleMfl(request, env, url);
+    }
+
+    if (url.pathname.startsWith('/api/yahoo/')) {
+      return handleYahoo(request, env, url);
     }
 
     if (url.pathname.startsWith('/api/player-ids')) {

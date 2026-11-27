@@ -22,6 +22,32 @@ async function shMflLeagueList(season) {
   } catch { return []; }
 }
 
+// The same for Yahoo (no Yahoo reads — the saved list from the last discovery).
+async function shYahooLeagueList(season) {
+  try {
+    const r = await fetch(`${SH_API}/yahoo/settings`, { credentials: 'include' });
+    if (!r.ok) return [];
+    const d = await r.json();
+    if (!d.connected) return [];
+    const hidden = new Set(d.hidden || []);
+    const yr = parseInt(season, 10) || Math.max(0, ...(d.leagues || []).map(l => +l.season));
+    return (d.leagues || []).filter(l => +l.season === yr && !hidden.has(`${l.season}_${l.id}`))
+      .map(l => ({ league_id: `yh_${l.season}_${l.id}`, name: l.name || `Yahoo ${l.id}` }));
+  } catch { return []; }
+}
+
+// Yahoo's API terms: any page showing Yahoo data says "Fantasy data provided by
+// Yahoo Fantasy" and links back. Call it whenever Yahoo data lands on a page; it
+// adds the line once, at the bottom of the page.
+function shYahooAttribution() {
+  if (document.getElementById('sh-yahoo-attr')) return;
+  const el = document.createElement('div');
+  el.id = 'sh-yahoo-attr';
+  el.style.cssText = 'text-align:center;font-size:0.7rem;padding:14px 16px 22px;color:var(--brown-light,#6b6b6b);';
+  el.innerHTML = 'Fantasy data provided by <a href="https://football.fantasysports.yahoo.com/" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">Yahoo Fantasy</a>';
+  document.body.appendChild(el);
+}
+
 function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
