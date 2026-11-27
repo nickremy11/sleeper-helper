@@ -57,6 +57,7 @@
  */
 
 export { DispersalRoom } from './dispersal.js';
+export { EspnCookies } from './espn-cookies.js';
 import { handleAuth, getAuthUser, decryptStoredToken, sealSecret, openSecret, encryptLegacyEspnRows } from './auth.js';
 import { handleDataSite } from './data.js';
 import { handleEliteFFL, syncEliteFFL } from './eliteffl.js';
