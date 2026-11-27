@@ -30,11 +30,12 @@ import { getCors } from './http.js';
 import { getPlayerIdx, mflUserAgent, mflSeasonYear } from './player-ids.js';
 import {
   arr, mflLeague, mflUsers, mflRosters, mflMatchups, mflLineups, mflTradedPicks, mflDraft, mflDraftPicks,
-  mflWinnersBracket, mflHistoryIds, mflStartersToSlots, mainBracket,
+  mflWinnersBracket, mflHistoryIds, mflStartersToSlots, mainBracket, mflTrades, mflSeasonKeys,
 } from './mfl-shape.js';
 
 const API_HOST = 'https://api.myfantasyleague.com';
 const TTL = {
+  transactions: 1800, transactionsPast: 30 * 86400,
   league: 6 * 3600, rules: 6 * 3600, playoffBrackets: 6 * 3600, playoffBracket: 600, futureDraftPicks: 1800,
   rosters: 600, leagueStandings: 600, schedule: 3600, weeklyResults: 300, weeklyResultsPast: 7 * 86400,
   liveScoring: 60, draftResults: 600, draftResultsPast: 7 * 86400, status: 600, myleagues: 3600, players: 86400,
@@ -112,16 +113,23 @@ async function sleeperIdFor(env, user) {
 }
 
 async function leagueCtx(env, request, key) {
+  const user = await getAuthUser(request, env).catch(() => null);
+  return leagueCtxFor(env, user, key);
+}
+
+// `anyLeague`: use the user's cookie for any league, not only ones on their saved
+// list — the Record Book reads every past season of a league (each with its own
+// MFL id) with the opener's cookie, and MFL itself decides what that cookie sees.
+async function leagueCtxFor(env, user, key, { anyLeague = false } = {}) {
   const k = parseMflKey(key);
   if (!k) throw new MflError('Bad MFL league id', 400);
-  const user = await getAuthUser(request, env).catch(() => null);
   const row = await userRow(env, user);
   const leagues = row ? JSON.parse(row.leagues || '[]') : [];
   const entry = leagues.find(l => String(l.id) === k.lid && +l.year === k.year)
              || leagues.find(l => String(l.id) === k.lid);
-  const cookie = entry && row?.cookie ? await openSecret(row.cookie, env).catch(() => '') : '';
+  const cookie = (entry || anyLeague) && row?.cookie ? await openSecret(row.cookie, env).catch(() => '') : '';
   const host = entry?.host || (await env.SLEEPER_KV.get(`mfl:host:${k.year}:${k.lid}`)) || null;
-  return { ...k, key, cookie: cookie || null, member: !!cookie, mine: entry?.franchise_id || null, host, user };
+  return { ...k, key, cookie: cookie || null, member: !!cookie, mine: anyLeague ? null : entry?.franchise_id || null, host, user };
 }
 
 // One export, KV-cached. Cookie reads and open reads never share a cache entry.
@@ -172,11 +180,16 @@ async function playerIdx(env) {
 // The current season's pieces every resource needs.
 async function leagueBase(env, ctx) {
   const status = await mflStatus(env, mflSeasonYear()).catch(() => ({}));
+  // A finished season doesn't change. `lite` (the Record Book's past seasons) skips
+  // what its pages never read — scoring rules and the future-pick list — so a
+  // league's 20-odd past seasons cost MFL two fewer reads each.
+  const done = pastYear(ctx);
+  const skip = ctx.lite && done;
   const [league, rules, brackets, futurePicks] = await Promise.all([
-    cachedExport(env, ctx, 'league', {}, TTL.league),
-    cachedExport(env, ctx, 'rules', {}, TTL.rules),
-    cachedExport(env, ctx, 'playoffBrackets', {}, TTL.playoffBrackets).catch(() => null),
-    cachedExport(env, ctx, 'futureDraftPicks', {}, TTL.futureDraftPicks).catch(() => null),
+    cachedExport(env, ctx, 'league', {}, done ? TTL.weeklyResultsPast : TTL.league),
+    skip ? null : cachedExport(env, ctx, 'rules', {}, done ? TTL.weeklyResultsPast : TTL.rules),
+    cachedExport(env, ctx, 'playoffBrackets', {}, done ? TTL.weeklyResultsPast : TTL.playoffBrackets).catch(() => null),
+    skip ? null : cachedExport(env, ctx, 'futureDraftPicks', {}, TTL.futureDraftPicks).catch(() => null),
   ]);
   const hist = mflHistoryIds(league);
   const lg = mflLeague({ year: ctx.year, lid: ctx.lid, league, rules, brackets, futurePicks, status, prevId: hist[ctx.year - 1] || null });
@@ -218,6 +231,8 @@ async function resource(env, ctx, res, arg, me) {
   if (res === 'matchups') {
     const w = parseInt(arg, 10);
     if (!(w >= 1 && w <= 22)) throw new MflError('Invalid week', 400);
+    // MFL answers a week past the season's end with its last week — no such week.
+    if (w > (parseInt(league?.league?.endWeek, 10) || 17)) return [];
     const done = parseInt(status?.weeks?.CompletedWeek, 10) || 0;
     const past = pastYear(ctx) || w <= done;
     if (past) {
@@ -256,7 +271,12 @@ async function draftResource(env, ctx, res) {
     return mflDraft({ year: ctx.year, lid: ctx.lid, draftResults: dr, nTeams: base.lg.total_rosters });
   }
   if (res === 'picks') {
-    const mplayers = await mflPlayerNames(env, ctx.year);
+    // MFL's own names only when a pick isn't in the crosswalk (old seasons) — the
+    // player list is MFL's heaviest export.
+    const unmatched = arr(arr(dr?.draftResults?.draftUnit)[0]?.draftPick).some(p => p.player && !idx.mfl[p.player]);
+    const mplayers = unmatched
+      ? await mflPlayerNames(env, ctx.year).catch(e => { if (ctx.lite) throw e; return {}; })   // Record Book: don't archive nameless
+      : {};
     return mflDraftPicks({ idx, draftResults: dr, mplayers });
   }
   if (res === 'traded_picks') return [];
@@ -464,3 +484,58 @@ export function handleMflViaSleeper(request, env, url) {
 }
 
 export { mflStartersToSlots };
+
+// ── The Record Book (PlatformLeagues entrypoint, src/platform-leagues.js) ─────
+// Reads a league as `user` (the account that opened it in the Record Book), with
+// no "my team" — every owner is mfl:{leagueId}:{franchiseId}.
+//   op 'league'  → resource(res, arg)        op 'draft' → draftResource(res)
+//   op 'trades'  → Sleeper trade transactions op 'seasons' → {seasons, name, key}
+// `key` may be mfl_{year}_{id} or, for 'seasons', a bare mfl_{id}: the newest
+// season the user's saved list has it in, else this season or last (public).
+export async function mflForRecordBook(env, user, op, key, res, arg) {
+  if (op === 'seasons') {
+    let full = parseMflKey(key) ? key : null;
+    if (!full) {
+      const lid = (String(key).match(/^mfl_(\d+)$/) || [])[1];
+      if (!lid) throw new MflError('Bad MFL league id', 400);
+      const row = await userRow(env, user);
+      const mine = (row ? JSON.parse(row.leagues || '[]') : []).filter(l => String(l.id) === lid).sort((a, b) => b.year - a.year)[0];
+      const years = mine ? [+mine.year] : [mflSeasonYear(), mflSeasonYear() - 1];
+      for (const y of years) {
+        const ctx = await leagueCtxFor(env, user, `mfl_${y}_${lid}`, { anyLeague: true });
+        const ok = await cachedExport(env, ctx, 'league', {}, TTL.league).then(d => !!d?.league?.franchises).catch(e => {
+          if (e.status === 429) throw e;
+          return false;
+        });
+        if (ok) { full = `mfl_${y}_${lid}`; break; }
+      }
+      if (!full) throw new MflError('MFL has no league with that id this season or last — or it is private and your MFL account isn’t connected', 404);
+    }
+    const ctx = await leagueCtxFor(env, user, full, { anyLeague: true });
+    const base = await leagueBase(env, ctx);
+    return { key: full, seasons: mflSeasonKeys(base.league, ctx.year, ctx.lid), league: base.lg, member: ctx.member };
+  }
+  const ctx = await leagueCtxFor(env, user, key, { anyLeague: true });
+  ctx.lite = true;
+  if (op === 'league') return resource(env, ctx, res || null, arg, null);
+  if (op === 'draft') return draftResource(env, ctx, res || null);
+  if (op === 'trades') {
+    const [idx, tx, dr] = await Promise.all([
+      playerIdx(env),
+      cachedExport(env, ctx, 'transactions', { TRANS_TYPE: 'TRADE' }, pastYear(ctx) ? TTL.transactionsPast : TTL.transactions),
+      cachedExport(env, ctx, 'draftResults', {}, pastYear(ctx) ? TTL.draftResultsPast : TTL.draftResults).catch(() => null),
+    ]);
+    const draft = mflDraft({ year: ctx.year, lid: ctx.lid, draftResults: dr, nTeams: 0 });
+    const shape = { slotToRoster: draft?.slot_to_roster_id || null, snake: draft?.type === 'snake', teams: draft?.settings?.teams || 0 };
+    const trades = mflTrades({ idx, transactions: tx, year: ctx.year, ...shape });
+    // Names for players the crosswalk doesn't carry (old seasons, mostly) — one
+    // player list per season, only when a trade needs it.
+    const unnamed = trades.some(t => Object.values(t._players || {}).some(p => /^Player #/.test(p.full_name)));
+    if (!unnamed) return trades;
+    // A throttled name list fails the read rather than answering with "Player #…":
+    // the Record Book archives a past season's answer for good.
+    const mplayers = await mflPlayerNames(env, ctx.year);
+    return mflTrades({ idx, transactions: tx, year: ctx.year, ...shape, mplayers });
+  }
+  throw new MflError('Unknown operation', 404);
+}

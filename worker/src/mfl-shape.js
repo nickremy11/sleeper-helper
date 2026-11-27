@@ -481,3 +481,83 @@ export function mflWinnersBracket(bracket) {
 }
 
 export { mainBracket };
+
+// ── Trades (for the Record Book) ─────────────────────────────────────────────
+// MFL's transactions export (TRANS_TYPE=TRADE) as Sleeper trade transactions.
+// Each side lists what it gave up, comma-separated: player ids, future picks
+// FP_{originalFid}_{year}_{round} (round 1-based), current-year draft picks
+// DP_{round}_{pick} (both 0-based), and blind-bid dollars BB_{amount} (ignored).
+// A DP pick names an exact slot, so it carries `_slot` (1-based) for the page to
+// resolve the drafted player — the draft COLUMN (the round-1 slot), so in a snake
+// draft an even round's pick p of n is column n+1-p. Its roster_id is that
+// column's original owner when the draft's slot map is known, else the team that
+// gave it up.
+// `_players` names every player Sleeper doesn't carry (mfl_{id}).
+export function mflTrades({ idx, transactions, year, slotToRoster = null, mplayers = {}, snake = false, teams = 0 }) {
+  const out = [];
+  const players = {};
+  const name = id => {
+    const sid = mapPid(idx, id);
+    if (sid.startsWith('mfl_')) {
+      const mp = mplayers?.[id];
+      players[sid] = { full_name: mp ? mflDisplayName(mp.name) : `Player #${id}`,
+                       position: mp ? (MFL_POS[mp.position] || mp.position || '') : '' };
+    }
+    return sid;
+  };
+  arr(transactions?.transactions?.transaction).forEach((t, i) => {
+    if (String(t.type).toUpperCase() !== 'TRADE') return;
+    const a = rid(t.franchise), b = rid(t.franchise2);
+    if (!a || !b) return;
+    const adds = {}, drops = {}, draft_picks = [];
+    const side = (list, from, to) => {
+      for (const tok of csvIds(list)) {
+        let m = tok.match(/^FP_(\d+)_(\d{4})_(\d+)$/);
+        if (m) {
+          draft_picks.push({ season: m[2], round: parseInt(m[3], 10), roster_id: rid(m[1]), owner_id: to, previous_owner_id: from });
+          continue;
+        }
+        m = tok.match(/^DP_(\d+)_(\d+)$/);
+        if (m) {
+          const round = parseInt(m[1], 10) + 1, pos = parseInt(m[2], 10) + 1;
+          const slot = snake && teams && round % 2 === 0 ? teams + 1 - pos : pos;
+          draft_picks.push({ season: String(year), round,
+                             roster_id: slotToRoster?.[String(slot)] ?? from, owner_id: to, previous_owner_id: from, _slot: slot });
+          continue;
+        }
+        if (/^\d+$/.test(tok)) { const pid = name(tok); adds[pid] = to; drops[pid] = from; }
+      }
+    };
+    side(t.franchise1_gave_up, a, b);
+    side(t.franchise2_gave_up, b, a);
+    if (!Object.keys(adds).length && !draft_picks.length) return;
+    const ts = parseInt(t.timestamp, 10) * 1000 || null;
+    out.push({
+      transaction_id: `mfl_${year}_${t.timestamp || ''}_${t.franchise}_${t.franchise2}_${i}`, type: 'trade', status: 'complete',
+      roster_ids: [a, b], adds, drops, draft_picks, waiver_budget: [],
+      status_updated: ts, created: ts, leg: null,
+    });
+  });
+  out.forEach(tx => {
+    const own = {};
+    for (const pid of Object.keys(tx.adds)) if (players[pid]) own[pid] = players[pid];
+    if (Object.keys(own).length) tx._players = own;
+  });
+  return out.sort((x, y) => (x.status_updated || 0) - (y.status_updated || 0));
+}
+
+// Every season of a league, oldest first: {year: 'mfl_{year}_{id}'} from the
+// league export's history list (each year's own league id), plus this season.
+export function mflSeasonKeys(league, year, lid) {
+  const ids = mflHistoryIds(league);
+  ids[year] = String(lid);
+  const out = {};
+  Object.keys(ids).map(Number).sort((a, b) => a - b).forEach(y => { out[y] = `mfl_${y}_${ids[y]}`; });
+  return out;
+}
+
+// The draft's slot map turned around (roster → slot), the shape the Record Book's
+// /draft resource carries as draft_order.
+export function slotOrder(slotToRoster) {
+  return Object.fromEntries(Object.entries(slotToRoster || {}).map(([slot, r]) => [String(r), parseInt(slot, 10)]));
+}

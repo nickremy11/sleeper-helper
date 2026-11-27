@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Hand-made in the shape of Yahoo's league/{key}/transactions;type=trade response
+     (Yahoo's docs carry no trade sample): one player-for-player trade with a draft
+     pick, one vetoed trade that must be skipped. -->
+<fantasy_content xmlns="http://fantasysports.yahooapis.com/fantasy/v2/base.rng">
+ <league>
+  <league_key>390.l.1000</league_key>
+  <league_id>1000</league_id>
+  <transactions count="2">
+   <transaction>
+    <transaction_key>390.l.1000.tr.40</transaction_key>
+    <transaction_id>40</transaction_id>
+    <type>trade</type>
+    <status>successful</status>
+    <timestamp>1568000000</timestamp>
+    <trader_team_key>390.l.1000.t.1</trader_team_key>
+    <tradee_team_key>390.l.1000.t.2</tradee_team_key>
+    <picks>
+     <pick>
+      <source_team_key>390.l.1000.t.2</source_team_key>
+      <destination_team_key>390.l.1000.t.1</destination_team_key>
+      <original_team_key>390.l.1000.t.3</original_team_key>
+      <round>4</round>
+     </pick>
+    </picks>
+    <players count="2">
+     <player>
+      <player_key>390.p.6762</player_key>
+      <player_id>6762</player_id>
+      <name><full>Larry Fitzgerald</full><first>Larry</first><last>Fitzgerald</last></name>
+      <editorial_team_abbr>Ari</editorial_team_abbr>
+      <display_position>WR</display_position>
+      <transaction_data>
+       <type>trade</type>
+       <source_type>team</source_type>
+       <source_team_key>390.l.1000.t.1</source_team_key>
+       <destination_type>team</destination_type>
+       <destination_team_key>390.l.1000.t.2</destination_team_key>
+      </transaction_data>
+     </player>
+     <player>
+      <player_key>390.p.99999</player_key>
+      <player_id>99999</player_id>
+      <name><full>Nobody Known</full><first>Nobody</first><last>Known</last></name>
+      <editorial_team_abbr>GB</editorial_team_abbr>
+      <display_position>RB</display_position>
+      <transaction_data>
+       <type>trade</type>
+       <source_type>team</source_type>
+       <source_team_key>390.l.1000.t.2</source_team_key>
+       <destination_type>team</destination_type>
+       <destination_team_key>390.l.1000.t.1</destination_team_key>
+      </transaction_data>
+     </player>
+    </players>
+   </transaction>
+   <transaction>
+    <transaction_key>390.l.1000.tr.41</transaction_key>
+    <transaction_id>41</transaction_id>
+    <type>trade</type>
+    <status>vetoed</status>
+    <timestamp>1568100000</timestamp>
+    <players count="1">
+     <player>
+      <player_key>390.p.8447</player_key><player_id>8447</player_id>
+      <name><full>Mason Crosby</full></name><display_position>K</display_position>
+      <transaction_data><type>trade</type><source_team_key>390.l.1000.t.1</source_team_key><destination_team_key>390.l.1000.t.3</destination_team_key></transaction_data>
+     </player>
+    </players>
+   </transaction>
+  </transactions>
+ </league>
+</fantasy_content>

@@ -176,6 +176,8 @@ export function yahooLeague({ league, gameToSeason = {} }) {
 // discovery), never from Yahoo's is_owned_by_current_login: league data is
 // cached and shared between members, so that flag describes whoever's token
 // fetched it, not the person reading.
+// A manager's Yahoo guid — the same person across seasons (team ids are per season).
+export const guidOf = t => { const g = arr(t?.managers?.manager)[0]?.guid; return g && g !== '--' ? String(g) : null; };
 const ownerOf = (lid, t, me, mine) => (mine != null && String(t.team_id) === String(mine) ? me : `yh:${lid}:${t.team_id}`);
 
 export function yahooUsers({ lid, teams, me, mine }) {
@@ -184,7 +186,8 @@ export function yahooUsers({ lid, teams, me, mine }) {
     return {
       user_id: ownerOf(lid, t, me, mine), display_name: String(m.nickname && m.nickname !== '--hidden--' ? m.nickname : t.name || `Team ${t.team_id}`),
       avatar: null, is_owner: String(m.is_commissioner) === '1',
-      metadata: { team_name: String(t.name || ''), yahoo_team: t.team_key, avatar: arr(t.team_logos?.team_logo)[0]?.url || null },
+      metadata: { team_name: String(t.name || ''), yahoo_team: t.team_key, avatar: arr(t.team_logos?.team_logo)[0]?.url || null,
+                  ...(guidOf(t) ? { yahoo_guid: guidOf(t) } : {}) },
     };
   });
 }
@@ -212,7 +215,8 @@ export function yahooRosters({ lid, idx, standingsTeams, rosterTeams, rosterPosi
         division: divisions[t.division_id] || parseInt(t.division_id, 10) || 0,
         rank: parseInt(s.rank, 10) || null, playoff_seed: parseInt(s.playoff_seed, 10) || null,
       },
-      metadata: { yahoo_team: t.team_key, team_name: String(t.name || '') },
+      metadata: { yahoo_team: t.team_key, team_name: String(t.name || ''),
+                  ...(guidOf(t) || guidOf(st[t.team_key]) ? { yahoo_guid: guidOf(t) || guidOf(st[t.team_key]) } : {}) },
     };
   });
 }
@@ -291,16 +295,25 @@ export function yahooDraftPicks({ idx, draftResults, players = {} }) {
 export function yahooWinnersBracket(weeks) {
   const out = [];
   const list = arr(weeks).filter(Boolean);
+  const out_ = new Set();          // teams that have lost a bracket game
   list.forEach((sb, ri) => {
+    const last = ri === list.length - 1;
     const ms = arr(sb?.matchups?.matchup).filter(m => String(m.is_playoffs) === '1' && String(m.is_consolation) !== '1');
-    ms.forEach((m, mi) => {
+    const lost = [];
+    ms.forEach(m => {
       const [a, b] = arr(m.teams?.team);
       const t1 = a ? parseInt(a.team_id, 10) : null, t2 = b ? parseInt(b.team_id, 10) : null;
       const done = String(m.status) === 'postevent';
       const w = done && m.winner_team_key ? teamIdOf(m.winner_team_key) : null;
-      out.push({ r: ri + 1, m: out.length + 1, t1, t2, w, l: w == null ? null : (w === t1 ? t2 : t1),
-                 ...(ri === list.length - 1 && mi === 0 ? { p: 1 } : {}) });
+      const l = w == null ? null : (w === t1 ? t2 : t1);
+      // A game between teams already knocked out is a placement game (3rd, 5th),
+      // never on the title path — the Record Book counts only p:1 / untagged games.
+      const placement = out_.has(t1) || out_.has(t2);
+      out.push({ r: ri + 1, m: out.length + 1, t1, t2, w, l,
+                 ...(placement ? { p: last ? 3 : 5 } : last ? { p: 1 } : {}) });
+      if (l != null) lost.push(l);
     });
+    lost.forEach(t => out_.add(t));
   });
   return out;
 }
@@ -316,4 +329,56 @@ export function yahooUserLeagues(doc) {
     });
   }
   return out;
+}
+
+// ── Trades (for the Record Book) ─────────────────────────────────────────────
+// league/{key}/transactions;type=trade as Sleeper trade transactions. Players move
+// source_team_key → destination_team_key; traded draft picks (Yahoo only trades
+// the current season's) carry original_team_key + round. A pick's `_slot` is the
+// original team's round-1 slot when the draft's slot map is known.
+export function yahooTrades({ idx, transactions, season, slotToRoster = null }) {
+  const slotOf = Object.fromEntries(Object.entries(slotToRoster || {}).map(([s, r]) => [String(r), parseInt(s, 10)]));
+  const out = [];
+  for (const t of arr(transactions)) {
+    if (String(t.type) !== 'trade' || String(t.status) !== 'successful') continue;
+    const adds = {}, drops = {}, draft_picks = [], players = {};
+    const teams = new Set();
+    for (const p of arr(t.players?.player)) {
+      const td = arr(p.transaction_data)[0] || {};
+      const from = teamIdOf(td.source_team_key), to = teamIdOf(td.destination_team_key);
+      if (!from || !to) continue;
+      const pid = yahooPid(idx, p);
+      adds[pid] = to; drops[pid] = from; teams.add(from); teams.add(to);
+      if (pid.startsWith('yh_')) players[pid] = { full_name: String(p.name?.full || `Player #${p.player_id}`), position: yahooPos(p.display_position) || '' };
+    }
+    for (const k of arr(t.picks?.pick)) {
+      const from = teamIdOf(k.source_team_key), to = teamIdOf(k.destination_team_key);
+      const orig = teamIdOf(k.original_team_key || k.source_team_key);
+      if (!from || !to) continue;
+      teams.add(from); teams.add(to);
+      draft_picks.push({ season: String(season), round: parseInt(k.round, 10), roster_id: orig, owner_id: to, previous_owner_id: from,
+                         ...(slotOf[orig] ? { _slot: slotOf[orig] } : {}) });
+    }
+    if (teams.size < 2) continue;
+    const ts = parseInt(t.timestamp, 10) * 1000 || null;
+    out.push({
+      transaction_id: `yh_${t.transaction_key || t.transaction_id}`, type: 'trade', status: 'complete',
+      roster_ids: [...teams], adds, drops, draft_picks, waiver_budget: [],
+      status_updated: ts, created: ts, leg: null, ...(Object.keys(players).length ? { _players: players } : {}),
+    });
+  }
+  return out.sort((a, b) => (a.status_updated || 0) - (b.status_updated || 0));
+}
+
+// The previous / next season's league from a league's renew / renewed fields
+// ("{gameId}_{leagueId}"). gameToSeason maps known game ids; otherwise ±1 year.
+export function yahooLinks(league, gameToSeason = {}) {
+  const season = parseInt(league?.season, 10);
+  const one = (v, dir) => {
+    const m = String(v || '').match(/^(\d+)_(\d+)$/);
+    if (!m) return null;
+    const s = gameToSeason[m[1]] || season + dir;
+    return { season: s, game_id: m[1], id: m[2], key: `yh_${s}_${m[2]}`, league_key: leagueKeyOf(m[1], m[2]) };
+  };
+  return { prev: one(league?.renew, -1), next: one(league?.renewed, 1) };
 }

@@ -61,6 +61,7 @@
 
 export { DispersalRoom } from './dispersal.js';
 export { EspnCookies } from './espn-cookies.js';
+export { PlatformLeagues } from './platform-leagues.js';
 import { handleAuth, getAuthUser, decryptStoredToken, sealSecret, openSecret, encryptLegacyEspnRows, requireAdmin } from './auth.js';
 import { handleDataSite } from './data.js';
 import { handleEliteFFL, syncEliteFFL } from './eliteffl.js';

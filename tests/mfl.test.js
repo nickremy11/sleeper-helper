@@ -155,3 +155,50 @@ test('picks, draft, bracket', async () => {
   assert.equal(final.w, 8);   // 134.78 beat 87.36
   assert.equal(wb.length, 5);
 });
+
+// ── Record Book: trades + season list ──
+test('trades: players, future picks and current-year picks in Sleeper trade shape', async () => {
+  const { mflTrades } = await shape();
+  const idx = { mfl: { 14832: '4984' } };
+  const t = mflTrades({ idx, transactions: fx('transactions-trade'), year: 2025, slotToRoster: { 3: 6 },
+                        mplayers: { 16627: { name: 'Doe, John', position: 'WR' } } });
+  assert.equal(t.length, 8);
+  assert.ok(t.every((x, i) => !i || x.status_updated >= t[i - 1].status_updated), 'oldest first');
+  const a = t.find(x => x.status_updated === 1762584470000);
+  assert.deepEqual(a.roster_ids, [4, 1]);
+  assert.equal(a.adds['4984'], 1);                 // 0004 gave up 14832 → franchise 1
+  assert.equal(a.adds.mfl_16627, 4);
+  assert.equal(a.drops.mfl_16627, 1);
+  assert.deepEqual(a.draft_picks, [{ season: '2027', round: 1, roster_id: 1, owner_id: 4, previous_owner_id: 1 }]);
+  assert.deepEqual(a._players.mfl_16627, { full_name: 'John Doe', position: 'WR' });
+  assert.equal(a._players['4984'], undefined);
+  // DP_2_4 (0-based) = round 3, slot 5; unknown slot owner → the team that gave it up
+  const b = t.find(x => x.status_updated === 1751558329000);
+  assert.deepEqual(b.draft_picks, [{ season: '2025', round: 3, roster_id: 6, owner_id: 3, previous_owner_id: 6, _slot: 5 }]);
+  // DP_2_2 → slot 3, whose original owner is known from the slot map
+  const c = t.find(x => x.status_updated === 1753481260000);
+  assert.equal(c.draft_picks[0]._slot, 3);
+  assert.equal(c.draft_picks[0].roster_id, 6);
+});
+
+test('season keys: every year of the history list with its own league id', async () => {
+  const { mflSeasonKeys, slotOrder } = await shape();
+  const league = { league: { history: { league: [
+    { year: '2025', url: 'https://www48.myfantasyleague.com/2025/home/10005' },
+    { year: '2004', url: 'https://www43.myfantasyleague.com/2004/home/30571' },
+    { year: '2017', url: 'http://www47.myfantasyleague.com/2017/home/10005' },
+  ] } } };
+  const s = mflSeasonKeys(league, 2026, '10005');
+  assert.deepEqual(Object.keys(s), ['2004', '2017', '2025', '2026']);
+  assert.equal(s[2004], 'mfl_2004_30571');
+  assert.equal(s[2026], 'mfl_2026_10005');
+  assert.deepEqual(slotOrder({ 1: 7, 2: 3 }), { 7: 1, 3: 2 });
+});
+
+test('trades: a snake draft\'s even-round DP pick resolves to its column', async () => {
+  const { mflTrades } = await shape();
+  const tx = { transactions: { transaction: { type: 'TRADE', franchise: '0001', franchise2: '0002', timestamp: '1700000000',
+    franchise1_gave_up: 'DP_1_0,', franchise2_gave_up: 'DP_0_0,' } } };
+  const t = mflTrades({ idx: {}, transactions: tx, year: 2025, snake: true, teams: 10 });
+  assert.deepEqual(t[0].draft_picks.map(p => [p.round, p._slot]), [[2, 10], [1, 1]]);
+});

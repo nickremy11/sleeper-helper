@@ -109,3 +109,87 @@ test('crosswalk: Sleeper yahoo_id + DynastyProcess rows, overrides win', async (
   assert.equal(m['30121'], undefined);
   assert.deepEqual(sleeperNameIndex(sleeper)['kyler murray|QB'], [['2', 'ARI']]);
 });
+
+// ── Record Book: trades, season links, title path ──
+test('trades: players + picks in Sleeper trade shape; vetoed trades skipped', async () => {
+  const { yahooTrades } = await shape();
+  const tx = (await doc('trades')).league.transactions.transaction;
+  const t = yahooTrades({ idx: { yahoo: { 6762: '2133' }, names: {} }, transactions: tx, season: 2019, slotToRoster: { 7: 3 } });
+  assert.equal(t.length, 1);
+  assert.deepEqual(t[0].roster_ids.sort(), [1, 2]);
+  assert.equal(t[0].adds['2133'], 2);
+  assert.equal(t[0].adds.yh_99999, 1);
+  assert.deepEqual(t[0]._players, { yh_99999: { full_name: 'Nobody Known', position: 'RB' } });
+  assert.deepEqual(t[0].draft_picks, [{ season: '2019', round: 4, roster_id: 3, owner_id: 1, previous_owner_id: 2, _slot: 7 }]);
+  assert.equal(t[0].status_updated, 1568000000000);
+});
+
+test('season links from renew / renewed', async () => {
+  const { yahooLinks } = await shape();
+  const l = yahooLinks({ season: '2019', renew: '380_555', renewed: '399_777' }, { 380: 2018 });
+  assert.equal(l.prev.key, 'yh_2018_555');
+  assert.equal(l.prev.league_key, '380.l.555');
+  assert.equal(l.next.key, 'yh_2020_777');
+  assert.equal(yahooLinks({ season: '2019', renew: '' }).prev, null);
+});
+
+test('bracket: a game between knocked-out teams is placement, not the title path', async () => {
+  const { yahooWinnersBracket } = await shape();
+  const g = (a, b, w) => ({ is_playoffs: '1', is_consolation: '0', status: 'postevent', winner_team_key: `x.l.1.t.${w}`,
+                            teams: { team: [{ team_id: String(a) }, { team_id: String(b) }] } });
+  const b = yahooWinnersBracket([{ matchups: { matchup: [g(1, 4, 1), g(2, 3, 2)] } },
+                                 { matchups: { matchup: [g(3, 4, 3), g(1, 2, 2)] } }]);
+  assert.equal(b.find(x => x.t1 === 3 && x.t2 === 4).p, 3);
+  assert.equal(b.find(x => x.t1 === 1 && x.t2 === 2).p, 1);
+  assert.equal(b.filter(x => x.r === 1).every(x => x.p == null), true);
+});
+
+test('users carry the manager guid when Yahoo sends one', async () => {
+  const { yahooUsers } = await shape();
+  const u = yahooUsers({ lid: '1', teams: [{ team_id: '2', name: 'T', managers: { manager: { nickname: 'n', guid: 'ABC' } } }] });
+  assert.equal(u[0].metadata.yahoo_guid, 'ABC');
+});
+
+// ── The Record Book read path (yahooForRecordBook) against a mocked Yahoo API ──
+// No live Yahoo access yet, so this runs the real fetch → parse → shape plumbing
+// over the doc fixtures: a two-season chain linked by renew/renewed, and trades.
+test('record book: season chain via renew/renewed, trades read with the opener\'s token', async () => {
+  const { yahooForRecordBook } = await import(path.join(__dirname, '../worker/src/yahoo.js'));
+  const kvStore = new Map([
+    ['yh_at_u1', 'plain-token'],                       // an access token in KV (openSecret passes unsealed values through)
+    ['pidx:yahoo:v1', JSON.stringify({ yahoo: { 6762: '2133' }, names: {} })],
+  ]);
+  const env = {
+    YAHOO_CLIENT_ID: 'x', YAHOO_CLIENT_SECRET: 'y',
+    SLEEPER_KV: {
+      get: async (k, t) => { const v = kvStore.get(k); return v == null ? null : t === 'json' ? JSON.parse(v) : v; },
+      put: async (k, v) => { kvStore.set(k, v); }, delete: async k => { kvStore.delete(k); },
+    },
+    DB: { prepare: () => ({ bind: () => ({ first: async () => ({ leagues: JSON.stringify([{ id: '1000', season: 2019, game_id: '390', league_key: '390.l.1000' }]) }) }) }) },
+  };
+  const settings = xml('settings');
+  const settings2018 = settings.replace(/390\.l\.1000/g, '380.l.555').replace('<league_id>1000</league_id>', '<league_id>555</league_id>')
+    .replace('<season>2019</season>', '<season>2018</season>').replace('<renewed/>', '<renewed>390_1000</renewed>');
+  const seen = [];
+  const realFetch = global.fetch;
+  global.fetch = async url => {
+    const u = String(url); seen.push(u);
+    const body = u.includes('/league/390.l.1000/settings') ? settings.replace('<renew/>', '<renew>380_555</renew>')
+      : u.includes('/league/380.l.555/settings') ? settings2018
+      : u.includes('/league/390.l.1000/transactions;type=trade') ? xml('trades')
+      : u.includes('/draftresults') ? '<fantasy_content><league><draft_results count="0"/></league></fantasy_content>'
+      : null;
+    return new Response(body || '<error><description>not mocked</description></error>', { status: body ? 200 : 404 });
+  };
+  try {
+    const user = { user_id: 'u1' };
+    const s = await yahooForRecordBook(env, user, 'seasons', 'yh_1000');
+    assert.deepEqual(s.seasons, { 2018: 'yh_2018_555', 2019: 'yh_2019_1000' });
+    assert.equal(s.key, 'yh_2019_1000');
+    const t = await yahooForRecordBook(env, user, 'trades', 'yh_2019_1000');
+    assert.equal(t.length, 1);
+    assert.equal(t[0].adds['2133'], 2);
+    assert.ok(seen.every(u => u.startsWith('https://fantasysports.yahooapis.com/fantasy/v2/')));
+    await assert.rejects(yahooForRecordBook({ ...env, YAHOO_CLIENT_ID: '' }, user, 'seasons', 'yh_1000'), /set up/);
+  } finally { global.fetch = realFetch; }
+});

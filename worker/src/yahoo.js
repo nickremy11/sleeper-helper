@@ -33,7 +33,7 @@ import { getYahooIdx } from './player-ids.js';
 import { parseXml, arr } from './yahoo-xml.js';
 import {
   YAHOO_NFL_GAME, leagueKeyOf, teamIdOf, yahooLeague, yahooUsers, yahooRosters, yahooMatchups,
-  yahooDraft, yahooDraftPicks, yahooWinnersBracket, yahooUserLeagues,
+  yahooDraft, yahooDraftPicks, yahooWinnersBracket, yahooUserLeagues, yahooTrades, yahooLinks,
 } from './yahoo-shape.js';
 
 const SITE = 'https://ffhistorian.com';
@@ -42,7 +42,7 @@ const AUTH_URL = 'https://api.login.yahoo.com/oauth2/request_auth';
 const TOKEN_URL = 'https://api.login.yahoo.com/oauth2/get_token';
 const API = 'https://fantasysports.yahooapis.com/fantasy/v2';
 const STATE_TTL = 600;
-const TTL = { league: 6 * 3600, standings: 600, teams: 600, scoreboard: 300, scoreboardPast: 7 * 86400,
+const TTL = { trades: 1800, tradesPast: 30 * 86400, league: 6 * 3600, standings: 600, teams: 600, scoreboard: 300, scoreboardPast: 7 * 86400,
               roster: 300, rosterPast: 7 * 86400, draft: 600, draftPast: 7 * 86400, games: 30 * 86400 };
 const ALLOWED_NEXT_HOSTS = new Set(['ffhistorian.com', 'helper.ffhistorian.com']);
 
@@ -247,16 +247,27 @@ async function sleeperIdFor(env, user) {
 }
 
 async function leagueCtx(env, request, key) {
-  const k = parseYahooKey(key);
-  if (!k) throw new YahooError('Bad Yahoo league id', 400);
   if (!yahooAvailable(env)) throw new YahooError('Yahoo isn’t set up yet', 503);
   const user = await getAuthUser(request, env).catch(() => null);
   if (!user) throw new YahooError('Sign in to read Yahoo leagues', 401);
+  return leagueCtxFor(env, user, key);
+}
+
+// `anyLeague`: read a league that isn't on the user's saved list (the Record Book
+// reads every past season with the opener's token; Yahoo decides what it sees).
+// `gameId` skips the season → game lookup when the caller already knows it (a
+// league's renew field names it).
+async function leagueCtxFor(env, user, key, { anyLeague = false, gameId: knownGame = null } = {}) {
+  const k = parseYahooKey(key);
+  if (!k) throw new YahooError('Bad Yahoo league id', 400);
+  if (!yahooAvailable(env)) throw new YahooError('Yahoo isn’t set up yet', 503);
+  if (!user) throw new YahooError('Sign in to read Yahoo leagues', 401);
   const row = await getRow(env, user.user_id);
   const entry = (row ? JSON.parse(row.leagues || '[]') : []).find(l => l.id === k.lid && +l.season === k.season);
-  if (!entry) throw new YahooError('That Yahoo league isn’t on your account — find your leagues again on your profile', 403);
-  const gameId = entry.game_id || await gameIdFor(env, user.user_id, k.season);
-  return { ...k, key, user, userId: user.user_id, gameId, lkey: entry.league_key || leagueKeyOf(gameId, k.lid), mine: entry.team_id ?? null };
+  if (!entry && !anyLeague) throw new YahooError('That Yahoo league isn’t on your account — find your leagues again on your profile', 403);
+  const gameId = entry?.game_id || knownGame || await gameIdFor(env, user.user_id, k.season);
+  return { ...k, key, user, userId: user.user_id, gameId, lkey: entry?.league_key || leagueKeyOf(gameId, k.lid),
+           mine: anyLeague ? null : entry?.team_id ?? null };
 }
 
 const past = ctx => ctx.season < nflSeason();
@@ -436,4 +447,65 @@ export async function handleYahoo(request, env, url) {
     if (status >= 500) console.error('[yahoo]', url.pathname, e.message);
     return json(request, { error: e.message }, status);
   }
+}
+
+// ── The Record Book (PlatformLeagues entrypoint, src/platform-leagues.js) ─────
+// Reads a league with `user`'s token (the account that opened it in the Record
+// Book), with no "my team".
+//   op 'league' → resource(res, arg)   op 'draft' → draftResource(res)
+//   op 'trades' → Sleeper trade transactions
+//   op 'seasons' → {key, seasons: {year: key}, league}: walks renew back and
+//                  renewed forward. `key` may be bare yh_{id}: the newest season
+//                  the user's saved list has it in.
+export async function yahooForRecordBook(env, user, op, key, res, arg) {
+  if (!yahooAvailable(env)) throw new YahooError('Yahoo isn’t set up yet', 503);
+  if (op === 'seasons') {
+    let full = parseYahooKey(key) ? key : null;
+    if (!full) {
+      const lid = (String(key).match(/^yh_(\d+)$/) || [])[1];
+      if (!lid) throw new YahooError('Bad Yahoo league id', 400);
+      const row = user ? await getRow(env, user.user_id) : null;
+      const mine = (row ? JSON.parse(row.leagues || '[]') : []).filter(l => String(l.id) === lid).sort((a, b) => b.season - a.season)[0];
+      if (!mine) throw new YahooError('That Yahoo league isn’t on your account — connect Yahoo on your profile and find your leagues', 404);
+      full = `yh_${mine.season}_${lid}`;
+    }
+    const g2s = gameToSeason();
+    const seasons = {};
+    let leagueObj = null;
+    const walk = async (startKey, gameId, dir) => {
+      let k = startKey, g = gameId;
+      for (let i = 0; i < 25 && k; i++) {
+        const ctx = await leagueCtxFor(env, user, k, { anyLeague: true, gameId: g });
+        const { L, lg } = await leagueBase(env, ctx).catch(e => { if (i === 0 || e.status === 429) throw e; return {}; });
+        if (!lg) break;
+        if (seasons[lg.season] && i) break;
+        seasons[lg.season] = lg.league_id;
+        if (!leagueObj || +lg.season > +leagueObj.season) leagueObj = lg;
+        const next = yahooLinks(L, g2s)[dir];
+        k = next?.key || null; g = next?.game_id || null;
+      }
+    };
+    await walk(full, null, 'prev');
+    const start = await leagueBase(env, await leagueCtxFor(env, user, full, { anyLeague: true }));
+    const fwd = yahooLinks(start.L, g2s).next;
+    if (fwd) await walk(fwd.key, fwd.game_id, 'next').catch(() => {});
+    const sorted = Object.fromEntries(Object.keys(seasons).sort().map(y => [y, seasons[y]]));
+    return { key: leagueObj?.league_id || full, seasons: sorted, league: leagueObj };
+  }
+  const ctx = await leagueCtxFor(env, user, key, { anyLeague: true });
+  if (op === 'league') return resource(env, ctx, res || null, arg, null);
+  if (op === 'draft') return draftResource(env, ctx, res || null);
+  if (op === 'trades') {
+    const idx = await getYahooIdx(env);
+    const ttl = past(ctx) ? TTL.tradesPast : TTL.trades;
+    const [tx, dr] = await Promise.all([
+      cached(env, ctx.userId, kv(ctx, 'trades'), `/league/${ctx.lkey}/transactions;type=trade`, ttl),
+      cached(env, ctx.userId, kv(ctx, 'draft'), `/league/${ctx.lkey}/draftresults`, past(ctx) ? TTL.draftPast : TTL.draft).catch(() => null),
+    ]);
+    const { L } = await leagueBase(env, ctx);
+    const draft = yahooDraft({ season: ctx.season, lid: ctx.lid, league: L, draftResults: dr?.league?.draft_results?.draft_result });
+    return yahooTrades({ idx, transactions: tx.league?.transactions?.transaction, season: ctx.season,
+                         slotToRoster: draft.slot_to_roster_id });
+  }
+  throw new YahooError('Unknown operation', 404);
 }
