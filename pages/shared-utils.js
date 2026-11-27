@@ -708,8 +708,11 @@ function tradeAssetsFromParam(str) {
 // agents and inflates every availability count downstream.
 //   espnId   — the NUMERIC ESPN id (not the 'espn_' prefixed one)
 //   rosters  — an already-fetched Sleeper /rosters array, to skip the fetch
+// copies: how many teams may roster the same player (MFL's rostersPerPlayer; 1
+// everywhere else). `owned` holds players with no copy left to add, so "not in
+// owned" still means "available" in a multi-copy league.
 async function crLoadLeagueOwnership({ apiBase, leagueId, espn, espnId, season, swid,
-                                       byName, sleeperUserId, rosters }) {
+                                       byName, sleeperUserId, rosters, copies = 1 }) {
   try {
     const owned = new Set(), mine = new Set();
     if (espn) {
@@ -737,10 +740,12 @@ async function crLoadLeagueOwnership({ apiBase, leagueId, espn, espnId, season, 
         if (!r.ok) return null;
         list = await r.json() || [];
       }
+      const count = {};
       for (const roster of list) {
         const isMine = !!sleeperUserId && roster.owner_id === sleeperUserId;
         for (const pid of (roster.players || [])) {
-          owned.add(String(pid));
+          count[pid] = (count[pid] || 0) + 1;
+          if (count[pid] >= (copies || 1)) owned.add(String(pid));
           if (isMine) mine.add(String(pid));
         }
       }
@@ -1154,7 +1159,7 @@ async function mrgEnsureLeagues() {
     MRG.leagues = MRG.leagues.map(lg => lg.id
       ? lg
       : { id: lg.league_id, name: lg.name || lg.league_id, espn: lg.source === 'espn',
-          dynasty: leagueIsDynasty(lg) });
+          dynasty: leagueIsDynasty(lg), copies: lg._mfl?.copies || 1 });
     return;
   }
   const out  = [];
@@ -1288,6 +1293,7 @@ async function mrgEnsureRosters(lgId) {
     swid: MRG.swid,
     byName: MRG.byName,
     sleeperUserId: MRG.sleeperUserId,
+    copies: lg?.copies || 1,
   });
 }
 

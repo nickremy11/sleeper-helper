@@ -316,3 +316,49 @@ CREATE TABLE IF NOT EXISTS user_identities (
   PRIMARY KEY (provider, subject)
 );
 CREATE INDEX IF NOT EXISTS idx_user_identities_user ON user_identities(user_id);
+
+-- ── Player-id crosswalk (src/player-ids.js) ───────────────────────────────────
+-- Another platform's player id → Sleeper's. Rebuilt daily from MFL's player
+-- database (which also carries ESPN/CBS/Fleaflicker/Sportradar ids). Not
+-- user-keyed, so not in deleteUserAccount(). Requests read the KV snapshot
+-- (pidx:v1); this table is the queryable record.
+CREATE TABLE IF NOT EXISTS player_ids (
+  platform       TEXT    NOT NULL,          -- 'mfl'
+  ext_id         TEXT    NOT NULL,          -- that platform's id, as a string ("0531")
+  sleeper_id     TEXT    NOT NULL,
+  espn_id        TEXT,
+  fleaflicker_id TEXT,
+  cbs_id         TEXT,
+  sportradar_id  TEXT,
+  name           TEXT,
+  position       TEXT,
+  team           TEXT,
+  how            TEXT,                      -- override | def | espn | sportradar | rotowire | stats | name
+  updated_at     INTEGER,
+  PRIMARY KEY (platform, ext_id)
+);
+CREATE INDEX IF NOT EXISTS idx_player_ids_sleeper ON player_ids (sleeper_id);
+
+-- Hand fixes. Always win over the automatic match and survive every rebuild.
+-- sleeper_id NULL = "this player has no Sleeper match; stop reporting him".
+CREATE TABLE IF NOT EXISTS player_id_overrides (
+  platform   TEXT NOT NULL,
+  ext_id     TEXT NOT NULL,
+  sleeper_id TEXT,
+  note       TEXT,
+  updated_at INTEGER,
+  PRIMARY KEY (platform, ext_id)
+);
+
+-- ── MyFantasyLeague connection (src/mfl.js) ───────────────────────────────────
+-- cookie is MFL's MFL_USER_ID login cookie, sealed with TOKEN_ENCRYPTION_KEY
+-- (enc:v1:…). The MFL password is never stored. leagues = the last discovery:
+-- [{id, year, name, franchise_id, franchise_name, host}].
+CREATE TABLE IF NOT EXISTS mfl_settings (
+  user_id    TEXT    PRIMARY KEY,
+  username   TEXT,
+  cookie     TEXT,
+  leagues    TEXT    NOT NULL DEFAULT '[]',
+  hidden     TEXT    NOT NULL DEFAULT '[]',  -- league ids the user switched off
+  updated_at INTEGER
+);

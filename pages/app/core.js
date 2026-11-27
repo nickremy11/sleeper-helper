@@ -283,7 +283,8 @@ async function loadUser() {
     // Load ESPN leagues (non-blocking — they append to S.leagues after Sleeper leagues).
     // The promise is kept so a loader that snapshots S.leagues and caches the
     // result (luEnsureLineupData) can wait for them instead of caching without them.
-    S.espnReady = loadEspnLeagues(season);
+    // MFL leagues load the same way, after ESPN's (see loadMflLeagues).
+    S.espnReady = Promise.all([loadEspnLeagues(season), loadMflLeagues(season)]);
     // Whatever tab the URL names (it tracks every switch, so this is also the
     // tab the user was on before a refresh).
     sw(new URLSearchParams(location.search).get('tab') || S.tab, { history: 'replace' });
@@ -313,7 +314,7 @@ async function loadEspnLeagues(season) {
     // Update the status text to reflect ESPN leagues
     const st = document.getElementById('u-status');
     if (st && st.className.includes('ok')) {
-      const sleeperCount = S.leagues.filter(l => !l.source).length;
+      const sleeperCount = S.leagues.filter(l => !l.source || l.source === 'sleeper').length;
       const espnCount    = S.leagues.filter(l => l.source === 'espn').length;
       if (espnCount > 0) st.textContent = st.textContent.replace(/^\d+ leagues/, `${sleeperCount} Sleeper + ${espnCount} ESPN leagues`);
     }
@@ -347,6 +348,61 @@ async function loadEspnLeagues(season) {
     }
   } catch {}
 }
+
+// ── MFL leagues ───────────────────────────────────────────────────────────────
+// The worker serves an MFL league in Sleeper's shapes, players already in Sleeper
+// ids, under the normal /api/sleeper/league/mfl_{year}_{id}/… paths (worker
+// src/mfl.js) — so once a league is in S.leagues every read-only tool reads it
+// like a Sleeper league. `source: 'mfl'` is what keeps the write tools (lineup
+// Apply, trades, mass offers) and Sleeper-account tools away from it.
+async function loadMflLeagues(season) {
+  if (!S.auth) return;
+  try {
+    const r = await fetch('/api/mfl/leagues?season=' + encodeURIComponent(season), { credentials: 'include' });
+    if (!r.ok) return;
+    const d = await r.json();
+    S.mflErrors = d.errors || [];
+    const added = [];
+    for (const lg of d.leagues || []) {
+      if (S.leagues.some(l => l.league_id === lg.league_id)) continue;
+      const entry = { ...lg, source: 'mfl' };
+      S.leagues.push(entry);
+      S.leagueDetails[lg.league_id] = entry;
+      RS.prefs[lg.league_id] = RS._storedPrefs?.[lg.league_id] ?? null;
+      added.push(entry);
+    }
+    if (!added.length) return;
+    const st = document.getElementById('u-status');
+    if (st && st.className.includes('ok')) {
+      const n = c => S.leagues.filter(l => (l.source || 'sleeper') === c).length;
+      const parts = [['sleeper', 'Sleeper'], ['espn', 'ESPN'], ['mfl', 'MFL']].filter(([c]) => n(c)).map(([c, t]) => `${n(c)} ${t}`);
+      st.textContent = st.textContent.replace(/^[\d\s+A-Za-z]*? leagues/, parts.join(' + ') + ' leagues');
+    }
+    if (S.tab === 'rostership' && RS.selectedLeagues !== null) {
+      for (const lg of added) RS.selectedLeagues.add(lg.league_id);
+      rsDrawFull();
+    }
+    if (S.tab === 'tracker') populateDraftSelector();
+    // Same backfill as ESPN's: Summaries may have loaded before these arrived.
+    if (LS.loaded) {
+      const fresh = added.filter(l => !LS.leagueData[l.league_id]);
+      if (fresh.length && typeof lsLoadData === 'function') {
+        await lsLoadData({ only: fresh.map(l => l.league_id) }).catch(() => {});
+        lsRestoreOddsCache();
+        lsRecapSnapshot();
+        if (LS.oddsLoading) LS._oddsRerun = true;
+        else if (LS.oddsLoaded) { LS._oddsUseCache = true; lsSimulateAllLeagues(); }
+        lsDrawTable();
+      }
+    }
+  } catch {}
+}
+
+// Lineups this app reads but doesn't write back: ESPN, and MFL until its writes
+// are built. The platform name is what the card tells you to go set it in.
+function luReadOnly(fix) { return !!(fix?._espn || fix?._mfl); }
+function luPlatform(fix) { return fix?._espn ? 'ESPN' : fix?._mfl ? 'MFL' : 'Sleeper'; }
+const isMfl = lgOrId => (typeof lgOrId === 'string' ? /^mfl_/.test(lgOrId) : lgOrId?.source === 'mfl');
 
 async function loadOneEspnLeague(leagueId, season) {
   try {

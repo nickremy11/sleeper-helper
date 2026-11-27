@@ -466,6 +466,7 @@ async function wvLoadLeagueRosters(lg) {
     sleeperUserId: S.userId,
     // Rostership may already hold every team for this league — skip the refetch.
     rosters: RS.leagueRosters[lg.league_id],
+    copies: S.leagueDetails[lg.league_id]?._mfl?.copies || 1,
   });
   WV.rosteredByLeague[lg.league_id] = res && res.owned;
   WV.myByLeague[lg.league_id]       = res && res.mine;

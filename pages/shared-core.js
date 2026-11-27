@@ -8,6 +8,20 @@ const SH_API = (location.hostname === 'helper.ffhistorian.com' || /(^|\.)sleeper
   : 'https://helper.ffhistorian.com/api';
 const MYRANKS_API = 'https://myranks.ffhistorian.com';
 
+// This account's MFL leagues for a season, straight from the saved list (no MFL
+// reads), as [{league_id: 'mfl_{year}_{id}', name}]. For league pickers.
+async function shMflLeagueList(season) {
+  try {
+    const r = await fetch(`${SH_API}/mfl/settings`, { credentials: 'include' });
+    if (!r.ok) return [];
+    const d = await r.json();
+    const hidden = new Set(d.hidden || []);
+    const yr = parseInt(season, 10) || Math.max(0, ...(d.leagues || []).map(l => +l.year));
+    return (d.leagues || []).filter(l => +l.year === yr && !hidden.has(`${l.year}_${l.id}`))
+      .map(l => ({ league_id: `mfl_${l.year}_${l.id}`, name: l.name || `MFL ${l.id}` }));
+  } catch { return []; }
+}
+
 function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }

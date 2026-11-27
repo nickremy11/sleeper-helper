@@ -34,7 +34,7 @@ function renderTradePartners() {
 // /users read per league, shared with every other caller via leagueUsers().
 async function tpLoadManagers() {
   if (TP.managers) return TP.managers;
-  const lgs = S.leagues.filter(l => l.source !== 'espn');
+  const lgs = S.leagues.filter(l => !l.source || l.source === 'sleeper')   // Sleeper users only;
   const lists = await Promise.all(lgs.map(l => leagueUsers(l.league_id)));
   const byId = {};
   lists.forEach(users => (users || []).forEach(u => {

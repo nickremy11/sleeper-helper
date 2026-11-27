@@ -321,8 +321,8 @@
   </div>
 
   <script src="/shared-nav.js?v=20261122"></script>
-  <script src="/shared-core.js?v=20261124"></script>
-  <script src="/shared-utils.js?v=20261124"></script>
+  <script src="/shared-core.js?v=20261129"></script>
+  <script src="/shared-utils.js?v=20261129"></script>
   <script src="/league-engine.js?v=20261127"></script>
   <script src="/shared-auth.js?v=20261124"></script>
   <script>
@@ -1220,6 +1220,11 @@
         }
       }
     } catch {}
+    for (const lg of await shMflLeagueList()) {
+      cards.push(`<a class="ta-team-card" href="/trade-analyzer?league=${encodeURIComponent(lg.league_id)}" style="text-decoration:none;">
+        <div class="ta-team-name">${esc(lg.name)} <span style="font-family:var(--font-display),serif;font-size:0.61rem;letter-spacing:0.1em;color:var(--brown-light);">(MFL)</span></div>
+      </a>`);
+    }
 
     if (!cards.length) {
       cards.push(`<div style="color:var(--brown-light);font-family:var(--font-body),serif;font-style:italic;">Sign in and set your Sleeper username or ESPN credentials in your profile to load leagues.</div>`);
@@ -1537,6 +1542,11 @@
 
   // Why the current trade can't be proposed, as display HTML — or null when it can.
   function proposeBlocker(assets) {
+    // MFL leagues read here like Sleeper ones, but proposing is a separate MFL
+    // write that isn't built yet.
+    if (/^mfl_/.test(new URLSearchParams(location.search).get('league') || '')) {
+      return 'Proposing trades in MFL isn’t available yet — send this one in MFL';
+    }
     const user = SharedAuth.getUser?.();
     if (!user) return 'Sign in to propose this trade in Sleeper';
     if (!user.has_token) return 'Add your Sleeper token in <a href="https://ffhistorian.com/profile/">your profile</a> to propose in Sleeper';

@@ -45,6 +45,8 @@
  *   POST /api/eliteffl/keeper-options/import    → bulk-insert rows (admin only)
  *   PUT/DELETE /api/eliteffl/keeper-options/:id → edit/remove one row (admin only)
  *   data.ffhistorian.com/*        → Site Lead stats explorer (page + /api/data/*), see src/data.js
+ *   *    /api/mfl/*               → MyFantasyLeague: connect, discover, leagues in Sleeper's shapes — mfl.js
+ *   *    /api/player-ids*         → player-id crosswalk stats / unmatched / overrides — player-ids.js
  *   POST /api/dispersal           → create dispersal room
  *   *    /api/dispersal/:id/*     → forward to DispersalRoom Durable Object
  *
@@ -58,7 +60,7 @@
 
 export { DispersalRoom } from './dispersal.js';
 export { EspnCookies } from './espn-cookies.js';
-import { handleAuth, getAuthUser, decryptStoredToken, sealSecret, openSecret, encryptLegacyEspnRows } from './auth.js';
+import { handleAuth, getAuthUser, decryptStoredToken, sealSecret, openSecret, encryptLegacyEspnRows, requireAdmin } from './auth.js';
 import { handleDataSite } from './data.js';
 import { handleEliteFFL, syncEliteFFL } from './eliteffl.js';
 import { handleProjections } from './projections.js';
@@ -66,6 +68,8 @@ import { handleDevy } from './devy.js';
 import { handleMadden } from './madden.js';
 import { handleOAuth } from './oauth.js';
 import { handleFeedback } from './feedback.js';
+import { handleMfl, isMflSleeperPath, handleMflViaSleeper } from './mfl.js';
+import { rebuildPlayerIds, PIDX_KEY } from './player-ids.js';
 import { parseRankLines } from './ranks-image.js';
 import { getCors, CORS, cacheFor, jsonBody, kvCachedJson } from './http.js';
 
@@ -107,6 +111,9 @@ export default {
     // Encrypts any ESPN cookie still stored in plain text (rows from before encryption).
     ctx.waitUntil(encryptLegacyEspnRows(env).then(n => { if (n) console.log('[espn encrypt]', n, 'rows'); })
       .catch(e => console.error('[espn encrypt] failed:', e.message)));
+    // Player-id crosswalk (MFL → Sleeper), rebuilt daily — see player-ids.js.
+    ctx.waitUntil(rebuildPlayerIds(env).then(s => console.log('[player ids]', JSON.stringify(s)))
+      .catch(e => console.error('[player ids] failed:', e.message)));
   },
 
   async fetch(request, env, ctx) {
@@ -152,6 +159,7 @@ export default {
     }
 
     if (url.pathname.startsWith('/api/sleeper/') && request.method === 'GET') {
+      if (isMflSleeperPath(url.pathname)) return handleMflViaSleeper(request, env, url);
       return handleProxy(url, env);
     }
 
@@ -195,6 +203,14 @@ export default {
       return handleEspnFantasy(request, env, url);
     }
 
+    if (url.pathname.startsWith('/api/mfl/')) {
+      return handleMfl(request, env, url);
+    }
+
+    if (url.pathname.startsWith('/api/player-ids')) {
+      return handlePlayerIds(request, env, url);
+    }
+
     if (url.pathname === '/api/rootforme/prefs') {
       return handleRootformePrefs(request, env);
     }
@@ -230,6 +246,44 @@ export default {
     return new Response('Not found', { status: 404 });
   },
 };
+
+// ── Player-id crosswalk (player-ids.js) ───────────────────────────────────────
+//   GET  /api/player-ids            build stats + when it was built (public)
+//   GET  /api/player-ids/unmatched  MFL players with no Sleeper match (Site Lead)
+//   POST /api/player-ids/override   {platform:'mfl', ext_id, sleeper_id|null, note} (Site Lead)
+//   POST /api/player-ids/rebuild    rebuild now (Site Lead)
+async function handlePlayerIds(request, env, url) {
+  const cors = getCors(request);
+  const out = (b, status = 200) => new Response(JSON.stringify(b), { status, headers: { ...cors, 'Content-Type': 'application/json;charset=UTF-8' } });
+  const snap = await env.SLEEPER_KV.get(PIDX_KEY, 'json').catch(() => null);
+  if (url.pathname === '/api/player-ids' && request.method === 'GET') {
+    return out({ built: snap?.built || null, year: snap?.year || null, stats: snap?.stats || null });
+  }
+  const admin = await requireAdmin(request, env).catch(() => null);
+  if (!admin) return out({ error: 'Forbidden' }, 403);
+  if (url.pathname === '/api/player-ids/unmatched' && request.method === 'GET') {
+    const ovr = await env.DB.prepare('SELECT platform, ext_id, sleeper_id, note FROM player_id_overrides ORDER BY updated_at DESC').all();
+    return out({ built: snap?.built || null, stats: snap?.stats || null, unmatched: snap?.unmatched || [], overrides: ovr.results || [] });
+  }
+  if (url.pathname === '/api/player-ids/override' && request.method === 'POST') {
+    const b = await request.json().catch(() => ({}));
+    const extId = String(b.ext_id || '').trim();
+    if (b.platform !== 'mfl' || !extId) return out({ error: 'platform "mfl" and ext_id required' }, 400);
+    if (b.delete) {
+      await env.DB.prepare('DELETE FROM player_id_overrides WHERE platform = ? AND ext_id = ?').bind('mfl', extId).run();
+    } else {
+      await env.DB.prepare(
+        `INSERT INTO player_id_overrides (platform, ext_id, sleeper_id, note, updated_at) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(platform, ext_id) DO UPDATE SET sleeper_id=excluded.sleeper_id, note=excluded.note, updated_at=excluded.updated_at`
+      ).bind('mfl', extId, b.sleeper_id ? String(b.sleeper_id) : null, String(b.note || '').slice(0, 200), Date.now()).run();
+    }
+    return out({ ok: true, stats: await rebuildPlayerIds(env) });
+  }
+  if (url.pathname === '/api/player-ids/rebuild' && request.method === 'POST') {
+    return out({ ok: true, stats: await rebuildPlayerIds(env) });
+  }
+  return out({ error: 'Not found' }, 404);
+}
 
 // ── FantasyCalc ───────────────────────────────────────────────────────────────
 

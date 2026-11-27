@@ -12,7 +12,7 @@ async function tradesLoad(force = false) {
   TR.inflight = (async () => {
     await loadPlayers();
     const rosterIds = {};
-    await Promise.all(S.leagues.filter(lg => lg.source !== 'espn').map(async lg => {
+    await Promise.all(S.leagues.filter(lg => !lg.source || lg.source === 'sleeper').map(async lg => {
       try {
         const rosters = await api('/league/' + lg.league_id + '/rosters');
         const mine = (rosters || []).find(r => r.owner_id === S.userId);

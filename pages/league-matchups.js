@@ -7,13 +7,31 @@
 
 async function loadEspnLeagues() {
   if (!S.auth) return;
+  await Promise.all([
+    (async () => {
+      try {
+        const r = await fetch(`${API}/espn/settings`, { credentials: 'include' });
+        if (!r.ok) return;
+        const cfg = await r.json();
+        S.espnSettings = cfg;
+        if (!cfg.has_credentials || !cfg.league_ids?.length) return;
+        await Promise.all(cfg.league_ids.map(id => loadOneEspnLeague(id)));
+      } catch {}
+    })(),
+    loadMflLeaguesLite(),
+  ]);
+}
+
+// MFL leagues: the worker serves them in Sleeper's shapes under the normal
+// /sleeper/league/mfl_… paths, so after this they read like Sleeper leagues.
+async function loadMflLeaguesLite() {
   try {
-    const r = await fetch(`${API}/espn/settings`, { credentials: 'include' });
-    if (!r.ok) return;
-    const cfg = await r.json();
-    S.espnSettings = cfg;
-    if (!cfg.has_credentials || !cfg.league_ids?.length) return;
-    await Promise.all(cfg.league_ids.map(id => loadOneEspnLeague(id)));
+    const list = await shMflLeagueList(S.season);
+    await Promise.all(list.map(async l => {
+      if (S.leagues.some(x => x.league_id === l.league_id)) return;
+      const lg = await fetch(`${API}/sleeper/league/${l.league_id}`, { credentials: 'include' }).then(r => r.ok ? r.json() : null).catch(() => null);
+      if (lg?.league_id) S.leagues.push({ ...lg, source: 'mfl' });
+    }));
   } catch {}
 }
 

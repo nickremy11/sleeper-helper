@@ -98,7 +98,7 @@ function rgApplyBarHtml(fix) {
   const swaps = x.ins.length || x.outs.length
     ? `<span class="rg-ap-grp"><b>In</b> ${names(x.ins) || '—'}</span><span class="rg-ap-grp"><b>Out</b> ${names(x.outs) || '—'}</span>`
     : `<span class="rg-ap-grp">same players, slots reshuffled</span>`;
-  const act = fix._espn ? '<span style="color:var(--brown-light);">set it in ESPN</span>'
+  const act = luReadOnly(fix) ? `<span style="color:var(--brown-light);">set it in ${luPlatform(fix)}</span>`
     : luCanWrite() ? `<button class="setup-btn" style="padding:5px 12px;font-size:0.6rem;" onclick="rgApply()">Apply this lineup</button>`
     : '<span style="color:var(--brown-light);">preview only — <a href="https://ffhistorian.com/profile/">add a Sleeper token</a> to apply</span>';
   return `<div class="rg-apply">
@@ -110,7 +110,7 @@ function rgApplyBarHtml(fix) {
 
 async function rgApply() {
   const fix = LU.lineups[RG.leagueIdx];
-  if (!fix || fix._espn || !luCanWrite() || RG.mode === 'current') return;
+  if (!fix || luReadOnly(fix) || !luCanWrite() || RG.mode === 'current') return;
   const prop = luProposal(fix, RG.mode === 'ranks' ? 'ranks' : 'projections');
   if (!prop) return;
   RG.msg = { leagueId: fix.leagueId, color: 'var(--brown-light)', text: 'applying…' };
@@ -292,7 +292,7 @@ function rgDraw() {
 
   const leagueSel = LU.lineups.length
     ? `<select onchange="rgSetLeague(this.value)" style="max-width:280px;">
-         ${LU.lineups.map((f, i) => `<option value="${i}" ${i === RG.leagueIdx ? 'selected' : ''}>${esc(f.leagueName)}${f._espn ? ' (ESPN)' : ''}</option>`).join('')}
+         ${LU.lineups.map((f, i) => `<option value="${i}" ${i === RG.leagueIdx ? 'selected' : ''}>${esc(f.leagueName)}${luReadOnly(f) ? ` (${luPlatform(f)})` : ''}</option>`).join('')}
        </select>`
     : `<span style="font-size:0.7rem;color:var(--brown-light);">No leagues loaded</span>`;
 
@@ -409,7 +409,7 @@ function rgSwapHtml(fix, pid) {
   const p        = S.players[pid] || {};
   const slotIdx  = fix.starters.map(String).indexOf(pid);
   const starting = slotIdx >= 0;
-  const canSwap  = luCanWrite() && !fix._espn;
+  const canSwap  = luCanWrite() && !luReadOnly(fix);
   const btn = (j, inPid, label) => canSwap
     ? `<button class="ghost-btn" style="font-size:0.64rem;padding:2px 6px;" onclick="rgSwapDo(${j},'${inPid}')">${label}</button>` : '';
   const close = `<button class="ghost-btn" style="font-size:0.64rem;" onclick="rgCloseSwap()">Close</button>`;
@@ -417,7 +417,7 @@ function rgSwapHtml(fix, pid) {
   const foot = msg => `<div class="rg-swap-pad" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;font-size:0.64rem;color:var(--brown-light);">
       <span id="rg-swap-msg">${msg || ''}</span>
       <span style="flex:1;"></span>
-      ${fix._espn ? '<span>read-only — set it in ESPN</span>' : luCanWrite() ? '' : '<span>preview only — <a href="https://ffhistorian.com/profile/">add a Sleeper token</a> to swap</span>'}
+      ${luReadOnly(fix) ? `<span>read-only — set it in ${luPlatform(fix)}</span>` : luCanWrite() ? '' : '<span>preview only — <a href="https://ffhistorian.com/profile/">add a Sleeper token</a> to swap</span>'}
       ${close}
     </div>`;
   const empty = text => `${title}<div class="rg-swap-pad" style="font-size:0.75rem;color:var(--c-amber);">${text}</div>${foot('')}`;
@@ -459,7 +459,7 @@ function rgSwapHtml(fix, pid) {
 
 async function rgSwapDo(slotIdx, inPid) {
   const fix = LU.lineups[RG.leagueIdx];
-  if (!fix || fix._espn || !luCanWrite()) return;
+  if (!fix || luReadOnly(fix) || !luCanWrite()) return;
   const msg = document.getElementById('rg-swap-msg');
   const say = (c, t) => { if (msg) msg.innerHTML = `<span style="color:${c};">${t}</span>`; };
   const plan = lswPlanFor(fix, slotIdx, inPid);

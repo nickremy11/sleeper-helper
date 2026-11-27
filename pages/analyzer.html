@@ -393,8 +393,8 @@
   </div>
 
   <script src="/shared-nav.js?v=20261122"></script>
-  <script src="/shared-core.js?v=20261124"></script>
-  <script src="/shared-utils.js?v=20261124"></script>
+  <script src="/shared-core.js?v=20261129"></script>
+  <script src="/shared-utils.js?v=20261129"></script>
   <script src="/league-engine.js?v=20261127"></script>
   <script src="/shared-auth.js?v=20261124"></script>
   <script>
@@ -2381,6 +2381,8 @@
         for (const lg of espnLeagues) if (lg) found.push(lg);
       }
     } catch (e) { errs.push('ESPN: ' + (e.message || e)); }
+    // MFL leagues (served in Sleeper's shapes, so the Sleeper loader opens them).
+    for (const lg of await shMflLeagueList()) found.push({ id: lg.league_id, name: lg.name, mfl: true });
 
     _switcherLeagues = found;
     _switcherErr     = errs.join(' · ');
@@ -2403,7 +2405,7 @@
     }
     list.innerHTML = errLine + filtered.map(lg => {
       const cur = lg.id === lgId;
-      const tag = lg.espn ? '<span class="az-switcher-tag">ESPN</span>' : '';
+      const tag = lg.espn ? '<span class="az-switcher-tag">ESPN</span>' : lg.mfl ? '<span class="az-switcher-tag">MFL</span>' : '';
       return `<a class="az-switcher-item${cur ? ' current' : ''}" href="/analyzer?league=${encodeURIComponent(lg.id)}">${esc(lg.name)}${tag}</a>`;
     }).join('');
   }

@@ -28,7 +28,8 @@ const MO_SEND_GAP_MS  = 700;   // pause between sends — this is ~70 writes in 
 const MO_ROUNDS       = [1, 2, 3, 4, 5];
 const MO_POS_ORDER    = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB'];
 
-function moLeagues() { return S.leagues.filter(lg => lg.source !== 'espn'); }
+// Sends real Sleeper offers — Sleeper leagues only (MFL trade writes come later).
+function moLeagues() { return S.leagues.filter(lg => !lg.source || lg.source === 'sleeper'); }
 function moOrd(n) { return n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : n + 'th'; }
 
 // My roster in a league — owner or co-owner.

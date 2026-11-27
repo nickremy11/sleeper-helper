@@ -1407,7 +1407,7 @@ function luSlotOptionsHtml(fix, idx, slotIdx) {
       : `Nobody on the bench is eligible for a ${esc(slot)} slot.`}</div>`);
   }
 
-  const canSwap  = luCanWrite() && !fix._espn;
+  const canSwap  = luCanWrite() && !luReadOnly(fix);
   const row  = (pid, opts) => luOptRow(fix, pid, { landSlot: slot, ...opts });
   const head = luOptHead(esc(slot) + ' — options');
 
@@ -1430,7 +1430,7 @@ function luSlotOptionsHtml(fix, idx, slotIdx) {
   // sheet, and PPG is what he HAS done — they are allowed to disagree.
   const note = `<div class="lc-opts-note">
       <span>${cands.length} option${cands.length === 1 ? '' : 's'} · ordered by the ranking sheet${luHaveRankings() ? '' : ' (none loaded — ordered by projection)'}</span>
-      ${fix._espn ? '<span>read-only — set it in ESPN</span>'
+      ${luReadOnly(fix) ? `<span>read-only — set it in ${luPlatform(fix)}</span>`
         : luCanWrite() ? '' : '<span>preview only — <a href="/myprofile" style="color:var(--gold-light);">add a Sleeper token</a> to start one</span>'}
       ${cur === '0' ? '' : `<span style="margin-left:auto;"><a href="#lu-swap-q" style="color:var(--gold-light);" onclick="event.preventDefault();luSwapEverywhere('${cur}')">Replace him in every league →</a></span>`}
     </div>`;
@@ -1453,7 +1453,7 @@ function luSwapEverywhere(pid) {
 // since the panel opened can't leave a stale slot index behind.
 async function luSlotSwap(idx, slotIdx, pid) {
   const fix = LU.lineups[idx];
-  if (!fix || fix._espn || !luCanWrite()) return false;
+  if (!fix || luReadOnly(fix) || !luCanWrite()) return false;
   const msg = document.getElementById('lc-opts-msg-' + idx);
   const say = (c, t) => { if (msg) msg.innerHTML = `<span style="color:${c};">${t}</span>`; };
   const plan = lswPlanFor(fix, slotIdx, pid);
@@ -1515,7 +1515,7 @@ function optimizeLineup(idx, src) {
   const dc = d >= 0.05 ? 'var(--c-green)' : d <= -0.05 ? 'var(--c-amber)' : 'var(--brown-light)';
   box.innerHTML = `<div style="padding:6px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--brown-mid);">
     <span style="font-size:0.72rem;color:var(--gold-light);">by ${label} · ${cur.toFixed(1)} → <span style="color:${dc};">${opt.toFixed(1)}</span> proj pts (<span style="color:${dc};">${d >= 0 ? '+' : ''}${d.toFixed(1)}</span>)</span>
-    ${fix._espn ? '<span style="font-size:0.65rem;color:var(--brown-light);">set it in ESPN</span>'
+    ${luReadOnly(fix) ? `<span style="font-size:0.65rem;color:var(--brown-light);">set it in ${luPlatform(fix)}</span>`
                 : luCanWrite() ? `<button class="setup-btn" onclick="applyLineup(${idx})">Apply this lineup</button>`
                 : '<span style="font-size:0.65rem;color:var(--brown-light);">preview only — add a Sleeper token to apply</span>'}
     <button class="ghost-btn" style="font-size:0.64rem;" onclick="revertLineupView(${idx})">Cancel</button>
@@ -1546,7 +1546,7 @@ async function luPutStarters(fix, prop) {
 // Write the previewed lineup to Sleeper. Returns true on confirmed success.
 async function applyLineup(idx) {
   const fix = LU.lineups[idx];
-  if (!fix || fix._espn) return false;   // ESPN lineups are read-only here
+  if (!fix || luReadOnly(fix)) return false;   // ESPN lineups are read-only here
   const src  = fix._shown || 'projections';
   const prop = luProposal(fix, src);
   if (!prop) return false;
@@ -1598,7 +1598,7 @@ async function applyAll() {
   const status = document.getElementById('lu-allstatus');
   const setS = (c, t) => { if (status) { status.style.color = c; status.textContent = t; } };
   const targets = LU.lineups.map((fix, idx) => ({ fix, idx })).filter(({ fix }) => {
-    if (fix._espn) return false;         // not writable — see luLoadEspnLineup
+    if (luReadOnly(fix)) return false;         // not writable — see luLoadEspnLineup
     const prop = luProposal(fix, src);
     return prop && prop.some((p, i) => String(p) !== String(fix.starters[i]));
   });
@@ -1823,7 +1823,7 @@ function lswPlanFor(fix, slotIdx, replPid) {
 // A target still worth writing: writable, has a replacement chosen, and hasn't
 // already been applied successfully (re-sending it would just be a no-op write).
 function lswPending(t) {
-  return luCanWrite() && !t.fix._espn && !!LSW.picks[t.leagueId] && LSW.done[t.leagueId] !== 'ok' &&
+  return luCanWrite() && !luReadOnly(t.fix) && !!LSW.picks[t.leagueId] && LSW.done[t.leagueId] !== 'ok' &&
          !luLocked(String(t.fix.starters[t.slotIdx] || '0'));
 }
 
@@ -1959,7 +1959,7 @@ function lswChoose(leagueId, pid) {
 // One league. Writes fix.starters with just the one slot replaced.
 async function lswApplyOne(idx, slotIdx) {
   const fix = LU.lineups[idx];
-  if (!fix || fix._espn) return false;
+  if (!fix || luReadOnly(fix)) return false;
   const repl = LSW.picks[fix.leagueId];
   if (!repl) return false;
   const next = fix.starters.map(String);
@@ -2069,14 +2069,14 @@ function lswLeagueBlock(t) {
 
   const head = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 12px;background:var(--brown-mid);">
       <span style="font-family:var(--font-head),serif;font-weight:700;font-size:0.9rem;color:var(--cream);">${esc(fix.leagueName)}</span>
-      ${fix._espn ? `<span style="font-family:var(--font-display),serif;font-size:0.62rem;letter-spacing:0.1em;color:var(--gold-light);">ESPN</span>` : ''}
+      ${luReadOnly(fix) ? `<span style="font-family:var(--font-display),serif;font-size:0.62rem;letter-spacing:0.1em;color:var(--gold-light);">${luPlatform(fix)}</span>` : ''}
       <span class="diff-slot" style="flex:0 0 auto;">${esc(t.slot)}</span>
       ${!applied && !pick && cands.length ? `<span style="font-size:0.65rem;color:var(--parchment);">${cands.length} on the bench — pick one</span>` : ''}
       ${state === 'ok'   ? `<span style="font-size:0.65rem;color:var(--c-green);">✓ applied</span>` : ''}
       ${state === 'fail' ? `<span style="font-size:0.65rem;color:var(--c-red);">✗ failed</span>` : ''}
       <span style="margin-left:auto;display:flex;gap:8px;align-items:center;">
-        ${fix._espn
-          ? `<span style="font-size:0.65rem;color:var(--parchment);">set it in ESPN</span>`
+        ${luReadOnly(fix)
+          ? `<span style="font-size:0.65rem;color:var(--parchment);">set it in ${luPlatform(fix)}</span>`
           : lswPending(t) ? `<button class="setup-btn" onclick="lswApplySingle(${t.idx},${t.slotIdx})">Apply</button>` : ''}
       </span>
     </div>`;
@@ -2186,7 +2186,7 @@ function lswSectionHead(title, sub) {
 
 function lswStarterSectionHtml(rows) {
   const pickCount = rows.filter(lswPending).length;
-  const writable  = rows.filter(t => !t.fix._espn).length;
+  const writable  = rows.filter(t => !luReadOnly(t.fix)).length;
   const canWrite  = luCanWrite();
   // .setup-btn already carries a gold border, so the active mode has to be marked
   // by fill (the page's own :hover look), not by border colour.
@@ -2220,7 +2220,7 @@ function lswBenchTargets() {
 }
 
 function lswBenchPending(t) {
-  return luCanWrite() && !t.fix._espn && !!LSW.bPicks[t.leagueId] && LSW.bDone[t.leagueId] !== 'ok';
+  return luCanWrite() && !luReadOnly(t.fix) && !!LSW.bPicks[t.leagueId] && LSW.bDone[t.leagueId] !== 'ok';
 }
 
 // How much better `pid` is than the starter `out` he'd replace — positive means
@@ -2282,7 +2282,7 @@ function lswBenchChoose(leagueId, out) {
 
 async function lswBenchApplyOne(idx) {
   const fix = LU.lineups[idx];
-  if (!fix || fix._espn) return false;
+  if (!fix || luReadOnly(fix)) return false;
   const out = LSW.bPicks[fix.leagueId];
   if (!out) return false;
   const next = fix.starters.map(String);
@@ -2375,12 +2375,12 @@ function lswBenchLeagueBlock(t) {
   const pick  = LSW.bPicks[t.leagueId];
   const head = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 12px;background:var(--brown-mid);">
       <span style="font-family:var(--font-head),serif;font-weight:700;font-size:0.9rem;color:var(--cream);">${esc(fix.leagueName)}</span>
-      ${fix._espn ? `<span style="font-family:var(--font-display),serif;font-size:0.62rem;letter-spacing:0.1em;color:var(--gold-light);">ESPN</span>` : ''}
+      ${luReadOnly(fix) ? `<span style="font-family:var(--font-display),serif;font-size:0.62rem;letter-spacing:0.1em;color:var(--gold-light);">${luPlatform(fix)}</span>` : ''}
       <span class="diff-slot" style="flex:0 0 auto;">BN</span>
       ${state === 'ok'   ? `<span style="font-size:0.65rem;color:var(--c-green);">✓ applied</span>` : ''}
       ${state === 'fail' ? `<span style="font-size:0.65rem;color:var(--c-red);">✗ failed</span>` : ''}
       <span style="margin-left:auto;display:flex;gap:8px;align-items:center;">
-        ${fix._espn ? `<span style="font-size:0.65rem;color:var(--parchment);">set it in ESPN</span>`
+        ${luReadOnly(fix) ? `<span style="font-size:0.65rem;color:var(--parchment);">set it in ${luPlatform(fix)}</span>`
           : lswBenchPending(t) ? `<button class="setup-btn" onclick="lswBenchApplySingle(${t.idx})">Apply</button>` : ''}
       </span>
     </div>`;
@@ -3042,8 +3042,12 @@ async function luEnsureLineupData(force = false) {
       // already in hand. A league whose draft hasn't finished would report almost
       // the whole NFL as "available", so a thin roster set disables the scan
       // rather than flooding the card.
-      const rostered = new Set();
-      for (const r of (rosters || [])) for (const p of (r.players || [])) rostered.add(String(p));
+      // MFL leagues can roster several copies of each player (detail._mfl.copies):
+      // there a player is gone only once every copy is owned.
+      const copies = detail?._mfl?.copies || 1;
+      const owned = {};
+      for (const r of (rosters || [])) for (const p of (r.players || [])) owned[p] = (owned[p] || 0) + 1;
+      const rostered = new Set(Object.keys(owned).filter(p => owned[p] >= copies));
 
       // The week's matchup is the source of truth for what update_matchup_leg writes.
       // mine.starters (from /rosters) is the generic roster lineup and can lag a
@@ -3067,9 +3071,10 @@ async function luEnsureLineupData(force = false) {
         players: mine.players || [],
         excluded: new Set([...(mine.reserve || []), ...(mine.taxi || [])].map(String)),  // IR + taxi — never auto-start
         scoringSettings: detail?.scoring_settings || {},
-        rostered: rostered.size >= (rosters || []).length * 8 ? rostered : null,
+        rostered: Object.keys(owned).length >= (rosters || []).length * 8 / copies ? rostered : null,
         _redraft: rsLeagueCategory(lg.league_id) === 'redraft',
         _pts: weekPts,             // {pid: points scored this week} — see luActualPts
+        ...(lg.source === 'mfl' ? { _mfl: true } : {}),   // read-only for now — see luReadOnly
       };
     } catch(_) { return null; }
   }));
@@ -3144,8 +3149,8 @@ function luCardsHtml() {
       // Every card gets the Optimize buttons — they only ever preview. What varies
       // is the trailing note: ESPN can't be written at all, and a Sleeper league
       // without a token can be previewed but not applied.
-      const note = fix._espn
-        ? `<span style="font-size:0.65rem;color:var(--brown-light);">preview only — set this lineup in ESPN</span>`
+      const note = luReadOnly(fix)
+        ? `<span style="font-size:0.65rem;color:var(--brown-light);">preview only — set this lineup in ${luPlatform(fix)}</span>`
         : canWrite
         ? `<button class="ghost-btn" style="font-size:0.64rem;" onclick="event.preventDefault();testSetLineup(${idx})">↻ Re-set current (test)</button>
            <span id="lc-result-test-${idx}" style="font-size:0.65rem;color:var(--brown-light);"></span>`
@@ -3158,7 +3163,7 @@ function luCardsHtml() {
 
     return `<details class="lineup-card" id="lc-${idx}">
       <summary>
-        <span class="lc-name" style="font-family:var(--font-head),serif;font-weight:700;font-size:0.95rem;color:var(--cream);flex-shrink:0;margin-right:12px;">${esc(fix.leagueName)}${fix._espn ? ' <span style="font-family:var(--font-display),serif;font-size:0.62rem;letter-spacing:0.1em;color:var(--brown-light);">ESPN</span>' : ''}</span>
+        <span class="lc-name" style="font-family:var(--font-head),serif;font-weight:700;font-size:0.95rem;color:var(--cream);flex-shrink:0;margin-right:12px;">${esc(fix.leagueName)}${luReadOnly(fix) ? ` <span style="font-family:var(--font-display),serif;font-size:0.62rem;letter-spacing:0.1em;color:var(--brown-light);">${luPlatform(fix)}</span>` : ''}</span>
         ${luSummaryMeta(fix, idx)}
       </summary>
       <div id="lc-body-${idx}">${luBodyRows(fix, 'current')}</div>

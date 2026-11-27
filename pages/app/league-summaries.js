@@ -41,15 +41,17 @@ async function renderLeagueSummaries() {
   }
 }
 
-async function lsLoadData() {
+// opts.only: just these league ids (MFL leagues that arrived after a load).
+async function lsLoadData(opts = {}) {
   await getNflState();
   await loadPlayers(); // ESPN roster→Sleeper-id name matching below needs S._playersByName ready
+  const lgs = opts.only ? S.leagues.filter(l => opts.only.includes(l.league_id)) : S.leagues;
   // loadUser() fires the league-detail fetches without awaiting them, but banked
   // weeks (median games), the recap filters and the sim all read settings.
-  await Promise.all(S.leagues
+  await Promise.all(lgs
     .filter(lg => lg.source !== 'espn' && !S.leagueDetails[lg.league_id])
     .map(lg => api('/league/' + lg.league_id).then(dd => { if (dd) S.leagueDetails[lg.league_id] = dd; }).catch(() => {})));
-  await Promise.allSettled(S.leagues.map(async lg => {
+  await Promise.allSettled(lgs.map(async lg => {
     if (lg.source === 'espn') return lsLoadEspnLeague(lg);
     try {
       const rosters = await api('/league/' + lg.league_id + '/rosters');
@@ -102,7 +104,7 @@ async function lsLoadData() {
   }));
   // Per-week results + all-play (Sleeper — ESPN builds its own in lsLoadEspnLeague
   // from the schedule it already fetched)
-  await Promise.allSettled(S.leagues.map(async lg => {
+  await Promise.allSettled(lgs.map(async lg => {
     if (lg.source === 'espn') return;
     const d = LS.leagueData[lg.league_id];
     if (!d) return;
@@ -112,12 +114,15 @@ async function lsLoadData() {
   // ESPN leagues append to S.leagues whenever they finish loading, and the list above
   // was read long ago. Pick up any that landed during this load: loadEspnLeagues()
   // only backfills once LS.loaded is set, so nothing else would ever fill them in.
+  if (opts.only) { lsRecapSnapshot(); return; }
   const tried = new Set();
   for (;;) {
-    const late = S.leagues.filter(lg => lg.source === 'espn' && !LS.leagueData[lg.league_id] && !tried.has(lg.league_id));
+    const late = S.leagues.filter(lg => (lg.source === 'espn' || lg.source === 'mfl') && !LS.leagueData[lg.league_id] && !tried.has(lg.league_id));
     if (!late.length) break;
     late.forEach(lg => tried.add(lg.league_id));
-    await Promise.all(late.map(lsLoadEspnLeague));
+    const lateMfl = late.filter(lg => lg.source === 'mfl').map(lg => lg.league_id);
+    await Promise.all([...late.filter(lg => lg.source === 'espn').map(lsLoadEspnLeague),
+                       lateMfl.length ? lsLoadData({ only: lateMfl }) : null]);
   }
   lsRecapSnapshot();
 }
